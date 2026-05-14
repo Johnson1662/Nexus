@@ -63,7 +63,8 @@ export struct ChatPage {
                   msgContent: msg.content,
                   msgType: msg.type,
                   msgToolName: msg.toolName,
-                  msgToolStatus: msg.toolStatus
+                  msgToolStatus: msg.toolStatus,
+                  streaming: this.turnActive && msg.role === 'assistant' && msg.type === 'text'
                 })
                   .margin({ bottom: Spacing.xs })
               }

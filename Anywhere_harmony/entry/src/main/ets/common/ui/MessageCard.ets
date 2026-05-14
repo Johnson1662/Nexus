@@ -4,7 +4,6 @@ import { ThinkingSection } from './ThinkingSection';
 import { ToolCallCard } from './ToolCallCard';
 import { MarkdownRender } from './MarkdownRender';
 import pasteboard from '@ohos.pasteboard';
-import promptAction from '@ohos.promptAction';
 
 @Component
 export struct MessageCard {
@@ -15,12 +14,13 @@ export struct MessageCard {
   @Prop msgType: string = 'text';
   @Prop msgToolName: string = '';
   @Prop msgToolStatus: string = '';
+  @Prop streaming: boolean = false;
 
   copyContent() {
     let pasteData = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, this.msgContent);
     let systemPasteboard = pasteboard.getSystemPasteboard();
     systemPasteboard.setData(pasteData).then(() => {
-      promptAction.showToast({ message: 'Copied to clipboard', bottom: 80 });
+      this.getUIContext().getPromptAction().openToast({ message: 'Copied to clipboard' });
     });
   }
 
@@ -49,12 +49,20 @@ export struct MessageCard {
             })
           } else {
             if (this.msgContent.length > 0) {
-              MarkdownRender({
-                text: this.msgContent,
-                mathEnabled: true
-              })
-                .width('100%')
-                .padding({ top: Spacing.sm, bottom: Spacing.sm })
+              if (this.streaming) {
+                Text(this.msgContent)
+                  .fontSize(FontSize.base)
+                  .fontColor(Colors.foreground)
+                  .lineHeight(24)
+                  .width('100%')
+                  .padding({ top: Spacing.sm, bottom: Spacing.sm })
+              } else {
+                MarkdownRender({
+                  text: this.msgContent
+                })
+                  .width('100%')
+                  .padding({ top: Spacing.sm, bottom: Spacing.sm })
+              }
             }
           }
         }

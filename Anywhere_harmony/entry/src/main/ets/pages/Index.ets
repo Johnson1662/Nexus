@@ -49,15 +49,24 @@ struct Index {
       ChatStore.connected = v; 
       this.connected = v; 
       if (!v) {
-        // Only treat as real error if we weren't mid-connection
         if (!this.connecting && this.connectError.length === 0) {
-          this.connectError = 'Could not connect. Make sure the bridge server is running.';
+          if (this.selectedAgentName.length > 0 && this.messages.length > 0) {
+            // Silent reconnect - don't show error, will auto-reconnect
+          } else {
+            this.connectError = 'Could not connect. Make sure the bridge server is running.';
+          }
         }
         this.connecting = false;
       } else {
         this.connecting = false;
-        this.awaitingAgents = true;
-        this.ws.send({ type: 'list_agents' } as ClientMessage);
+        this.connectError = '';
+        if (this.selectedAgentName.length > 0 && this.messages.length > 0) {
+          // Auto-reconnected, restore session
+          this.ws.send({ type: 'start', agent: this.selectedAgentName } as ClientMessage);
+        } else if (this.selectedAgentName.length === 0) {
+          this.awaitingAgents = true;
+          this.ws.send({ type: 'list_agents' } as ClientMessage);
+        }
       }
     });
     this.ws.onAgentList((agents) => {
@@ -369,13 +378,13 @@ struct Index {
               
             Image($r('app.media.ic_clear')).fillColor(Colors.foreground).width(24).height(24).margin({ right: Spacing.lg })
               .onClick(() => { 
-                import('@ohos.promptAction').then(p => p.default.showToast({ message: 'Session Cleared', bottom: 80 }));
+                this.getUIContext().getPromptAction().openToast({ message: 'Session Cleared' });
                 this.messages = []; 
                 this.planEntries = [];
               })
             Image($r('app.media.ic_terminal')).fillColor(Colors.foregroundMuted).width(24).height(24)
               .onClick(() => {
-                import('@ohos.promptAction').then(p => p.default.showToast({ message: 'ACP Bridge Online', bottom: 80 }));
+                this.getUIContext().getPromptAction().openToast({ message: 'ACP Bridge Online' });
               })
           }
           .width('100%').height(56)

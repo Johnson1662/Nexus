@@ -1,6 +1,7 @@
 import { webSocket } from '@kit.NetworkKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
+import { backgroundTaskManager } from '@kit.BackgroundTasksKit';
 import { ChatStore } from '../model/ChatState';
 import { ServerSession } from '../model/WorkspaceInfo';
 import { ClientMessage, ServerMessage, AcpUpdate, ModelItem, ModeItem, AgentInfo } from './WSProtocol';
@@ -23,15 +24,29 @@ export class WSClient {
   private updateListeners: AcpUpdateCallback[] = [];
   private agentListListeners: AgentListCallback[] = [];
   private sessionStartedListeners: EmptyCallback[] = [];
+  private lastUrl: string = '';
+  private reconnectTimer: number | null = null;
+  private reconnectAttempts: number = 0;
+  private intentionalClose: boolean = false;
+  private suspendRequestId: number | null = null;
 
   connect(url: string): void {
-    this.disconnect();
+    this.lastUrl = url;
+    this.intentionalClose = false;
+    this.reconnectAttempts = 0;
+    this.doConnect(url);
+  }
+
+  private doConnect(url: string): void {
+    this.disconnectInternal();
     this.ws = webSocket.createWebSocket();
 
     this.ws.on('open', () => {
       hilog.info(DOMAIN, TAG, 'connected');
       ChatStore.connected = true;
+      this.reconnectAttempts = 0;
       this.notifyState(true);
+      this.requestBgTask();
     });
 
     this.ws.on('message', (_err: BusinessError, data: string | ArrayBuffer) => {
@@ -43,13 +58,21 @@ export class WSClient {
     this.ws.on('close', () => {
       hilog.info(DOMAIN, TAG, 'disconnected');
       ChatStore.connected = false;
+      this.cancelBgTask();
       this.notifyState(false);
+      if (!this.intentionalClose) {
+        this.scheduleReconnect();
+      }
     });
 
     this.ws.on('error', (err: BusinessError) => {
       hilog.error(DOMAIN, TAG, 'error: ' + JSON.stringify(err));
       ChatStore.connected = false;
+      this.cancelBgTask();
       this.notifyState(false);
+      if (!this.intentionalClose) {
+        this.scheduleReconnect();
+      }
     });
 
     this.ws.connect(url, (err: BusinessError) => {
@@ -57,8 +80,50 @@ export class WSClient {
         hilog.error(DOMAIN, TAG, 'connect failed: ' + JSON.stringify(err));
         ChatStore.connected = false;
         this.notifyState(false);
+        if (!this.intentionalClose) {
+          this.scheduleReconnect();
+        }
       }
     });
+  }
+
+  private scheduleReconnect(): void {
+    if (this.intentionalClose || !this.lastUrl) return;
+    this.cancelReconnect();
+    this.reconnectAttempts++;
+    const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts - 1), 30000);
+    hilog.info(DOMAIN, TAG, `reconnect in ${delay}ms (attempt ${this.reconnectAttempts})`);
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      this.doConnect(this.lastUrl);
+    }, delay);
+  }
+
+  private cancelReconnect(): void {
+    if (this.reconnectTimer !== null) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+  }
+
+  private requestBgTask(): void {
+    try {
+      const info = backgroundTaskManager.requestSuspendDelay('Keep WebSocket alive', () => {
+        hilog.info(DOMAIN, TAG, 'bg task about to expire');
+      });
+      this.suspendRequestId = info.requestId;
+    } catch (err) {
+      hilog.error(DOMAIN, TAG, 'bg task failed: ' + JSON.stringify(err));
+    }
+  }
+
+  private cancelBgTask(): void {
+    if (this.suspendRequestId !== null) {
+      try {
+        backgroundTaskManager.cancelSuspendDelay(this.suspendRequestId);
+      } catch {}
+      this.suspendRequestId = null;
+    }
   }
 
   send(msg: ClientMessage): void {
@@ -73,12 +138,20 @@ export class WSClient {
   }
 
   disconnect(): void {
+    this.intentionalClose = true;
+    this.cancelReconnect();
+    this.cancelBgTask();
+    this.disconnectInternal();
+  }
+
+  private disconnectInternal(): void {
     if (this.ws) {
-      this.ws.close();
+      try {
+        this.ws.close();
+      } catch {}
       this.ws = null;
     }
     ChatStore.connected = false;
-    this.notifyState(false);
   }
 
   onStateChange(cb: StateChangeCallback): void {

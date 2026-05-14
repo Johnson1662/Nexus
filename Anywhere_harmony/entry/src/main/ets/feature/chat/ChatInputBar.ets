@@ -1,5 +1,4 @@
 import { Colors, FontSize, Spacing, Radius } from '../../constants/Colors';
-import promptAction from '@ohos.promptAction';
 
 interface SelectOption {
   value: string;
@@ -46,7 +45,7 @@ export struct ChatInputBar {
           Image($r('app.media.ic_attachment'))
             .fillColor(Colors.foreground)
             .width(24).height(24)
-            .onClick(() => { promptAction.showToast({ message: 'File picker invoked (Coming soon)', bottom: 80 }) })
+            .onClick(() => { this.getUIContext().getPromptAction().openToast({ message: 'File picker (Coming soon)' }) })
 
           Row() {
             Image($r('app.media.ic_model'))
@@ -71,10 +70,10 @@ export struct ChatInputBar {
           } else {
             Image($r('app.media.ic_mic'))
               .fillColor(Colors.foreground).width(24).height(24).margin({ right: Spacing.md })
-              .onClick(() => { promptAction.showToast({ message: 'Start voice input (Coming soon)', bottom: 80 }) })
+              .onClick(() => { this.getUIContext().getPromptAction().openToast({ message: 'Voice input (Coming soon)' }) })
             Image($r('app.media.ic_waveform'))
               .fillColor(Colors.foreground).width(24).height(24)
-              .onClick(() => { promptAction.showToast({ message: 'Start voice input (Coming soon)', bottom: 80 }) })
+              .onClick(() => { this.getUIContext().getPromptAction().openToast({ message: 'Voice input (Coming soon)' }) })
           }
         }
         .width('100%')

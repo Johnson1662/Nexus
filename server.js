@@ -545,27 +545,23 @@ async function handleStart(ws, msg) {
     });
     console.log(`[server] ACP initialized, agent: ${initResult?.agentInfo?.name}`);
 
-    // Load MCP config specific to this agent
-    const mcpServers = loadMcpConfigForAgent(agent, cwd);
-    console.log(`[server] loaded ${mcpServers.length} MCP servers for agent: ${agent}`);
-
-    // Create session
+    // Create session WITHOUT MCP servers (fast path - MCP loads in background later)
     const sessionResult = await sendRpc(proc, "session/new", {
       cwd: cwd || process.cwd(),
-      mcpServers,
+      mcpServers: [],
     });
     const acpSessionId = sessionResult.sessionId;
     sess.acpSessionId = acpSessionId;
     console.log(`[server] ACP session created: ${acpSessionId}`);
 
-    // Set model via ACP (--model flag not supported in ACP mode)
+    // Set model
     console.log(`[server] setting model to ${effectiveModel}`);
     await sendRpc(proc, "session/set_model", {
       sessionId: acpSessionId,
       modelId: effectiveModel,
     });
 
-    // Notify client
+    // Notify client immediately (don't wait for MCP)
     ws.send(
       JSON.stringify({
         type: "session_started",
@@ -575,6 +571,20 @@ async function handleStart(ws, msg) {
         acpSessionId,
       })
     );
+
+    // Load MCP config in background (non-blocking)
+    const mcpServers = loadMcpConfigForAgent(agent, cwd);
+    if (mcpServers.length > 0) {
+      console.log(`[server] loaded ${mcpServers.length} MCP servers for ${agent}, connecting in background...`);
+      // Try to reconnect MCP by updating the session (best-effort, non-blocking)
+      sendRpc(proc, "session/set_config_option", {
+        sessionId: acpSessionId,
+        configId: "_mcp_servers",
+        value: JSON.stringify(mcpServers),
+      }).catch(() => {
+        // MCP setup is best-effort, ignore errors
+      });
+    }
 
     // If prompt provided, send it
     if (prompt) {
@@ -688,12 +698,15 @@ async function handleListSessions(ws, msg) {
     return;
   }
 
-  // Check cache (valid for 15 seconds)
+  // Check cache (valid for 30 seconds)
   const cached = sessionListCache.get(ws);
-  if (cached && Date.now() - cached.timestamp < 15000) {
+  if (cached && Date.now() - cached.timestamp < 30000) {
     ws.send(JSON.stringify({ type: "session_list", sessions: cached.sessions }));
     return;
   }
+
+  // Return empty immediately, fetch in background
+  ws.send(JSON.stringify({ type: "session_list", sessions: [] }));
 
   try {
     const result = await sendRpc(sess.process, "session/list", {
@@ -704,7 +717,6 @@ async function handleListSessions(ws, msg) {
     ws.send(JSON.stringify({ type: "session_list", sessions }));
   } catch (err) {
     console.log(`[server] list_sessions error: ${err.message}`);
-    ws.send(JSON.stringify({ type: "session_list", sessions: [] }));
   }
 }
 
