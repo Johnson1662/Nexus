@@ -1,0 +1,28 @@
+{
+  "string": [
+    {
+      "name": "app_name",
+      "value": "Anywhere"
+    },
+    {
+      "name": "app_desc",
+      "value": "AI Agent Client for HarmonyOS"
+    },
+    {
+      "name": "module_desc",
+      "value": "Anywhere entry module"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "Main ability"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "Anywhere"
+    },
+    {
+      "name": "reason_internet",
+      "value": "Need internet permission to connect to remote AI agent bridge"
+    }
+  ]
+}

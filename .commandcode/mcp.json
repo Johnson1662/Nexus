@@ -1,0 +1,33 @@
+{
+  "mcpServers": {
+    "context7": {
+      "transport": "stdio",
+      "enabled": true,
+      "command": "cmd",
+      "args": [
+        "/c",
+        "npx",
+        "-y",
+        "@upstash/context7-mcp"
+      ]
+    },
+    "fetch": {
+      "transport": "stdio",
+      "enabled": true,
+      "command": "uvx",
+      "args": [
+        "mcp-server-fetch"
+      ]
+    },
+    "tavily": {
+      "transport": "http",
+      "enabled": true,
+      "url": "https://mcp.tavily.com/mcp/?tavilyApiKey=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"
+    },
+    "harmonyos": {
+      "transport": "stdio",
+      "enabled": true,
+      "command": "mcp-harmonyos"
+    }
+  }
+}

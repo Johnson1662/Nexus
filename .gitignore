@@ -1,0 +1,24 @@
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build outputs
+Anywhere_harmony/**/build/
+Anywhere_harmony/**/oh_modules/
+Anywhere_harmony/**/.hvigor/
+Anywhere_harmony/entry/build/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+*.local

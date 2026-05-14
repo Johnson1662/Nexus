@@ -1,0 +1,13 @@
+{
+  "name": "entry",
+  "version": "0.2.0",
+  "description": "Anywhere HarmonyOS App - Entry Module",
+  "main": "",
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@luvi/lv-markdown-in": "^3.4.1"
+  },
+  "devDependencies": {},
+  "dynamicDependencies": {}
+}
