@@ -69,7 +69,7 @@ export struct ChatPage {
                   .margin({ bottom: Spacing.xs })
               }
             }
-          }, (msg: MessageData) => msg.id + msg.content.length)
+          }, (msg: MessageData) => msg.id)
         }
         .layoutWeight(1)
         .width('100%')

@@ -3,7 +3,7 @@ import { Colors, FontSize, Spacing, Radius } from '../../constants/Colors';
 @Component
 export struct ThinkingSection {
   @Prop thinking: string = '';
-  @State expanded: boolean = false;
+  @State expanded: boolean = true;
 
   build() {
     Column() {

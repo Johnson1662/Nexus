@@ -49,20 +49,19 @@ export struct MessageCard {
             })
           } else {
             if (this.msgContent.length > 0) {
-              if (this.streaming) {
+              Stack() {
                 Text(this.msgContent)
                   .fontSize(FontSize.base)
                   .fontColor(Colors.foreground)
                   .lineHeight(24)
                   .width('100%')
-                  .padding({ top: Spacing.sm, bottom: Spacing.sm })
-              } else {
-                MarkdownRender({
-                  text: this.msgContent
-                })
+                  .opacity(this.streaming ? 1.0 : 0.0)
+                MarkdownRender({ text: this.msgContent })
                   .width('100%')
-                  .padding({ top: Spacing.sm, bottom: Spacing.sm })
+                  .opacity(this.streaming ? 0.0 : 1.0)
               }
+              .padding({ top: Spacing.sm, bottom: Spacing.sm })
+              .alignContent(Alignment.TopStart)
             }
           }
         }

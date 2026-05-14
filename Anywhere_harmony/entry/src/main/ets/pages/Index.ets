@@ -122,12 +122,10 @@ struct Index {
     if (msgs.length > 0) {
       let last = msgs[msgs.length - 1];
       if (last.role === 'assistant' && last.type === 'text') {
-        let u = new MessageData('assistant', last.content + t, 'text');
-        u.id = last.id; u.timestamp = last.timestamp;
-        let r = [...msgs]; r[r.length - 1] = u; return r;
+        last.content += t
+        return [...msgs]
       }
     }
-    // Trim leading newlines from first chunk — agents often prepend \n
     let cleaned = t.replace(/^\n+/, '');
     return [...msgs, new MessageData('assistant', cleaned, 'text')];
   }
@@ -136,25 +134,20 @@ struct Index {
     if (msgs.length > 0) {
       let last = msgs[msgs.length - 1];
       if (last.role === 'assistant' && last.type === 'thinking') {
-        let u = new MessageData('assistant', last.content + t, 'thinking');
-        u.id = last.id; u.timestamp = last.timestamp;
-        let r = [...msgs]; r[r.length - 1] = u; return r;
+        last.content += t
+        return [...msgs]
       }
     }
     return [...msgs, new MessageData('assistant', t, 'thinking')];
   }
 
   updateStatus(msgs: MessageData[], id: string, s: string): MessageData[] {
-    let r = [...msgs];
-    for (let i = 0; i < r.length; i++) {
-      if (r[i].toolCallId === id) {
-        let u = new MessageData(r[i].role, r[i].content, r[i].type);
-        u.id = r[i].id; u.timestamp = r[i].timestamp;
-        u.toolName = r[i].toolName; u.toolStatus = s; u.toolCallId = r[i].toolCallId;
-        r[i] = u; break;
+    for (let i = 0; i < msgs.length; i++) {
+      if (msgs[i].toolCallId === id) {
+        msgs[i].toolStatus = s; break;
       }
     }
-    return r;
+    return [...msgs];
   }
 
   sendMessage(text: string): void {
@@ -391,42 +384,6 @@ struct Index {
           .padding({ left: Spacing.lg, right: Spacing.lg })
           .border({ width: { bottom: 1 }, color: { bottom: Colors.borderLight } })
 
-          // Empty state
-          if (this.messages.length === 0) {
-            Column() {
-              Image($r('app.media.ic_terminal')).fillColor(Colors.foregroundMuted).width(48).height(48).margin({ bottom: Spacing.md })
-              Text('Anywhere Workspace')
-                .fontSize(FontSize.lg).fontFamily('monospace').fontWeight(FontWeight.Bold).fontColor(Colors.foreground)
-              Text('Agent Client Protocol (ACP) Active')
-                .fontSize(FontSize.sm).fontFamily('monospace').fontColor(Colors.accent).margin({ top: Spacing.sm })
-              Text('Awaiting command execution...')
-                .fontSize(FontSize.sm).fontFamily('monospace').fontColor(Colors.foregroundLight).margin({ top: Spacing.xs })
-            }
-            .width('100%')
-            .layoutWeight(1)
-            .justifyContent(FlexAlign.Center)
-            .alignItems(HorizontalAlign.Center)
-          } else {
-            ChatPage({
-              messages: this.messages,
-              planEntries: this.planEntries,
-              turnActive: this.turnActive,
-              models: this.allModels,
-              modes: this.allModes,
-              onSendMessage: (t: string) => { this.sendMessage(t) },
-              onSwitchModel: (i: number) => { 
-                if (ChatStore.sessionId && i > 0 && i - 1 < this.allModels.length) {
-                  this.ws.send({ type: 'switch_model', sessionId: ChatStore.sessionId, model: this.allModels[i-1].modelId } as ClientMessage)
-                }
-              },
-              onSwitchMode: (i: number) => {
-                if (ChatStore.sessionId && i > 0 && i - 1 < this.allModes.length) {
-                  this.ws.send({ type: 'set_mode', sessionId: ChatStore.sessionId, modeId: this.allModes[i-1].value } as ClientMessage)
-                }
-              }
-            }).layoutWeight(1)
-          }
-
           Row() {
             Image($r('app.media.ic_panel')).fillColor(Colors.foreground).width(20).height(20).margin({ right: Spacing.sm })
             Select(this.getSessionOpts()).selected(0).value('Loading...')
@@ -452,10 +409,19 @@ struct Index {
             turnActive: this.turnActive,
             models: this.allModels,
             modes: this.allModes,
-            onSendMessage: (t) => { this.sendMessage(t) },
-            onSwitchModel: () => {},
-            onSwitchMode: () => {}
-          })
+            onSendMessage: (t: string) => { this.sendMessage(t) },
+            onSwitchModel: (i: number) => { 
+              if (ChatStore.sessionId && i > 0 && i - 1 < this.allModels.length) {
+                this.ws.send({ type: 'switch_model', sessionId: ChatStore.sessionId, model: this.allModels[i-1].modelId } as ClientMessage)
+              }
+            },
+            onSwitchMode: (i: number) => {
+              if (ChatStore.sessionId && i > 0 && i - 1 < this.allModes.length) {
+                this.ws.send({ type: 'set_mode', sessionId: ChatStore.sessionId, modeId: this.allModes[i-1].value } as ClientMessage)
+              }
+            }
+          }).layoutWeight(1)
+
         }
         .width('100%').height('100%')
       }

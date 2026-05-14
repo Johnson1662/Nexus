@@ -1,6 +1,11 @@
 {
   "apiType": "stageMode",
   "buildOption": {
+    "sourceOption": {
+      "workers": [
+        "./src/main/ets/vendor/lv-md/workers/worker.ets"
+      ]
+    },
     "resOptions": {
       "copyCodeResource": {
         "enable": false

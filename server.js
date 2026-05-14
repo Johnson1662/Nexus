@@ -300,7 +300,7 @@ const pendingRequests = new Map(); // rpcId -> { resolve, reject }
 function sendRpc(proc, method, params) {
   return new Promise((resolve, reject) => {
     const id = nextRpcId++;
-    pendingRequests.set(id, { resolve, reject });
+    pendingRequests.set(id, { resolve, reject, proc });
     const msg = JSON.stringify({ jsonrpc: "2.0", id, method, params });
     console.log(`[ACP →] ${msg}`);
     proc.stdin.write(msg + "\n");
@@ -329,9 +329,12 @@ function handleAcpMessage(sess, line) {
     console.log(`[ACP ←] ${line}`);
   }
 
-  // Response to our request
+  // Response to our request — match proc to prevent cross‑session ID collisions
   if (msg.id !== undefined && pendingRequests.has(msg.id)) {
     const pending = pendingRequests.get(msg.id);
+    if (pending.proc !== sess.process) {
+      return;
+    }
     pendingRequests.delete(msg.id);
     if (msg.error) {
       pending.reject(new Error(msg.error.message || JSON.stringify(msg.error)));
@@ -790,12 +793,13 @@ async function handleLoadSession(ws, msg) {
     }
   }
 
-  // Spawn new opencode process
-  const args = [OPENCODE_BIN, "acp"];
-  const proc = spawn("node", args, {
+  // Spawn agent process (same as handleStart)
+  const agent = msg.agent || "opencode";
+  const proc = spawn(agent, ["acp"], {
     cwd: cwd || process.cwd(),
     env: { ...process.env, FORCE_COLOR: "0", NO_COLOR: "1" },
     stdio: ["pipe", "pipe", "pipe"],
+    shell: true,
   });
 
   const bridgeSessionId = `acp-${Date.now()}`;
