@@ -3,11 +3,20 @@
   "version": "0.1.0",
   "description": "Agent bridge - WebSocket server + terminal chat client",
   "scripts": {
-    "server": "node server.js",
+    "build": "cd server && tsc",
+    "start": "node server/dist/server.mjs",
+    "server:old": "node server/server.js",
     "chat": "node client.js",
-    "demo": "echo '1. Run: npm run server  (in terminal 1)\n2. Run: npm run chat    (in terminal 2)\n3. Type a prompt to start opencode\n4. Commands: /quit /cancel /model <name>\n5. Prefix with claude/codex to use other agents'"
+    "demo": "echo '1. Run: npm run start   (in terminal 1)\n2. Run: npm run chat    (in terminal 2)\n3. Type a prompt to start opencode\n4. Commands: /quit /cancel /model <name>\n5. Prefix with claude/codex to use other agents'"
   },
   "dependencies": {
+    "@agentclientprotocol/sdk": "^0.21.1",
     "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.7.0",
+    "@types/ws": "^8.18.1",
+    "tree-kill": "^1.2.2",
+    "typescript": "^6.0.3"
   }
 }

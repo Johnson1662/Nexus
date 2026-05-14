@@ -1,11 +1,9 @@
-import { Markdown } from '../../vendor/lv-md/enhance/index';
-import { MarkdownController } from '../../vendor/lv-md/enhance/controller/MarkdonwController';
+import { Markdown, MarkdownController } from '@luvi/lv-markdown-in';
 import { Colors } from '../../constants/Colors';
 
 @Component
 export struct MarkdownRender {
   @Prop text: string = '';
-  @Prop streaming: boolean = false;
 
   private controller: MarkdownController = new MarkdownController();
 
@@ -31,8 +29,7 @@ export struct MarkdownRender {
   build() {
     Markdown({
       text: this.text,
-      controller: this.controller,
-      streaming: this.streaming
+      controller: this.controller
     })
       .width('100%')
   }

@@ -8,7 +8,7 @@ import { AgentModel, AgentMode } from '../../common/model/AgentConfig';
 
 @Component
 export struct ChatPage {
-  @Prop messages: MessageData[] = [];
+  @Prop @Watch('onMessagesChange') messages: MessageData[] = [];
   @Prop planEntries: PlanEntry[] = [];
   @Prop turnActive: boolean = false;
   @Prop models: AgentModel[] = [];
@@ -16,6 +16,14 @@ export struct ChatPage {
   onSendMessage?: (text: string) => void;
   onSwitchModel?: (index: number) => void;
   onSwitchMode?: (index: number) => void;
+
+  private scroller: Scroller = new Scroller();
+
+  onMessagesChange(): void {
+    setTimeout(() => {
+      this.scroller.scrollEdge(Edge.Bottom);
+    }, 50);
+  }
 
   build() {
     Column() {
@@ -44,7 +52,7 @@ export struct ChatPage {
         .justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center)
         .padding({ left: Spacing.xxl, right: Spacing.xxl })
       } else {
-        List() {
+        List({ scroller: this.scroller }) {
           ForEach(this.messages, (msg: MessageData) => {
             ListItem() {
               if (msg.type === 'plan') {
@@ -69,7 +77,7 @@ export struct ChatPage {
                   .margin({ bottom: Spacing.xs })
               }
             }
-          }, (msg: MessageData) => msg.id)
+          }, (msg: MessageData) => msg.id + msg.content.length)
         }
         .layoutWeight(1)
         .width('100%')

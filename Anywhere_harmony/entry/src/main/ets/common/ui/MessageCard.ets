@@ -43,25 +43,21 @@ export struct MessageCard {
           if (this.msgType === 'thinking') {
             ThinkingSection({ thinking: this.msgContent })
           } else if (this.msgType === 'tool_call') {
-            ToolCallCard({
-              name: this.msgToolName,
-              status: this.msgToolStatus
-            })
+            ToolCallCard({ name: this.msgToolName, status: this.msgToolStatus })
           } else {
             if (this.msgContent.length > 0) {
-              Stack() {
+              if (this.streaming) {
                 Text(this.msgContent)
                   .fontSize(FontSize.base)
                   .fontColor(Colors.foreground)
                   .lineHeight(24)
                   .width('100%')
-                  .opacity(this.streaming ? 1.0 : 0.0)
+                  .padding({ top: Spacing.sm, bottom: Spacing.sm })
+              } else {
                 MarkdownRender({ text: this.msgContent })
                   .width('100%')
-                  .opacity(this.streaming ? 0.0 : 1.0)
+                  .padding({ top: Spacing.sm, bottom: Spacing.sm })
               }
-              .padding({ top: Spacing.sm, bottom: Spacing.sm })
-              .alignContent(Alignment.TopStart)
             }
           }
         }
@@ -77,11 +73,10 @@ export struct MessageCard {
       .width('100%')
       .justifyContent(this.isUser ? FlexAlign.End : FlexAlign.Start)
       .padding({ top: Spacing.xs, bottom: Spacing.md })
-
     }
     .width('100%')
     .padding({ left: Spacing.lg, right: Spacing.lg })
-    .border({ 
+    .border({
       width: { left: this.isUser ? 0 : 3, right: this.isUser ? 3 : 0 },
       color: { left: Colors.borderLight, right: Colors.accent }
     })

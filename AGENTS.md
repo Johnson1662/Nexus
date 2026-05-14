@@ -110,9 +110,15 @@ hdc -t 2NP0224627054426 shell aa start -a EntryAbility -b com.anywhere.app
 ```
 
 ### Bridge Server (must be running on PC)
+
+Server is now built with `@agentclientprotocol/sdk` (TypeScript).
+
 ```powershell
 cd Anywhere
-node server.js
+npm run build        # Compile TypeScript → server/dist/
+npm start            # Start SDK-based server (server/dist/server.mjs)
+# OR use fallback:
+npm run server:old   # Old hand-written server (keep for rollback)
 ```
 
 ## Current State
@@ -135,6 +141,8 @@ node server.js
 - Session list caching (30s) + background async load
 - MCP config loaded asynchronously (non-blocking session creation)
 - Disabled input during turnActive
+- Auto-scroll to bottom on new messages and agent replies
+- Working directory passed via workspace path (`cwd` in `start` message)
 
 ### Not Working / TODO
 - File upload (Toast placeholder currently bound to `ic_attachment.svg`)
@@ -144,7 +152,6 @@ node server.js
 - Host list management (saving multiple bridge servers)
 - Cancel current turn
 - Error recovery on message send failure (turn stays active)
-- Scrolling to bottom on new messages
 
 ## Documentation
 

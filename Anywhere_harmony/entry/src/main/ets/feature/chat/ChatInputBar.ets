@@ -86,7 +86,7 @@ export struct ChatInputBar {
       .width('100%')
     }
     .width('100%')
-    .padding({ left: Spacing.md, right: Spacing.md, top: Spacing.md, bottom: 84 })
+    .padding({ left: Spacing.md, right: Spacing.md, top: Spacing.md, bottom: 100 })
     .backgroundColor(Colors.surface0)
   }
 

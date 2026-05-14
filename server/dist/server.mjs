@@ -1,0 +1,97 @@
+import { WebSocketServer } from "ws";
+import { discoverAgents } from "./discovery/agents.mjs";
+import { handleStart } from "./handlers/start.mjs";
+import { handleInput } from "./handlers/input.mjs";
+import { handleCancel } from "./handlers/cancel.mjs";
+import { handleListModels } from "./handlers/list-models.mjs";
+import { handleListSessions, clearSessionListCache } from "./handlers/list-sessions.mjs";
+import { handleSetMode } from "./handlers/set-mode.mjs";
+import { handleSwitchModel } from "./handlers/switch-model.mjs";
+import { handleLoadSession } from "./handlers/load-session.mjs";
+import { handlePermissionResponse } from "./handlers/permission.mjs";
+import { cleanupWsSessions } from "./session.mjs";
+const PORT = 6767;
+const HOST = "0.0.0.0";
+const wss = new WebSocketServer({ host: HOST, port: PORT });
+console.log(`[server] listening on ws://${HOST}:${PORT}`);
+wss.on("connection", (ws) => {
+    console.log("[server] client connected");
+    ws.on("message", (raw) => {
+        let msg;
+        try {
+            msg = JSON.parse(raw.toString());
+        }
+        catch {
+            ws.send(JSON.stringify({ type: "error", text: "invalid json" }));
+            return;
+        }
+        const logPrefix = `[server] ← ${msg.type}`;
+        const logDetails = msg.text ? ` text="${msg.text.slice(0, 60)}"` :
+            msg.sessionId ? ` sessionId="${msg.sessionId?.slice(0, 20)}"` : '';
+        console.log(`${logPrefix}${logDetails}`);
+        switch (msg.type) {
+            case "start":
+                console.log(`[server] handleStart agent="${msg.agent || "opencode"}" cwd="${msg.cwd || process.cwd()}"`);
+                handleStart(ws, msg).catch((err) => {
+                    console.log(`[server] handleStart error: ${err.message}`);
+                });
+                break;
+            case "list_agents": {
+                const agents = discoverAgents();
+                console.log(`[server] → agent_list (${agents.length} agents)`);
+                ws.send(JSON.stringify({ type: "agent_list", agents }));
+                break;
+            }
+            case "input":
+                console.log(`[server] handleInput session="${msg.sessionId?.slice(0, 20)}" text="${msg.text?.slice(0, 80)}"`);
+                handleInput(ws, msg.sessionId, msg.text);
+                break;
+            case "cancel":
+                console.log(`[server] handleCancel session="${msg.sessionId?.slice(0, 20)}"`);
+                handleCancel(ws, msg.sessionId);
+                break;
+            case "switch_model":
+                console.log(`[server] handleSwitchModel session="${msg.sessionId?.slice(0, 20)}" model="${msg.model}"`);
+                handleSwitchModel(ws, msg.sessionId, msg.model).catch((err) => {
+                    console.log(`[server] handleSwitchModel error: ${err.message}`);
+                });
+                break;
+            case "list_models":
+                console.log(`[server] handleListModels`);
+                handleListModels(ws).catch((err) => {
+                    console.log(`[server] handleListModels error: ${err.message}`);
+                });
+                break;
+            case "list_sessions":
+                console.log(`[server] handleListSessions cwd="${msg.cwd || ""}"`);
+                handleListSessions(ws, msg.cwd).catch((err) => {
+                    console.log(`[server] handleListSessions error: ${err.message}`);
+                });
+                break;
+            case "set_mode":
+                console.log(`[server] handleSetMode session="${msg.sessionId?.slice(0, 20)}" mode="${msg.modeId}"`);
+                handleSetMode(ws, msg.sessionId, msg.modeId).catch((err) => {
+                    console.log(`[server] handleSetMode error: ${err.message}`);
+                });
+                break;
+            case "load_session":
+                console.log(`[server] handleLoadSession target="${msg.sessionId?.slice(0, 20)}" agent="${msg.agent || "opencode"}"`);
+                handleLoadSession(ws, msg).catch((err) => {
+                    console.log(`[server] handleLoadSession error: ${err.message}`);
+                });
+                break;
+            case "permission_response":
+                console.log(`[server] handlePermissionResponse session="${msg.sessionId?.slice(0, 20)}" outcome="${msg.outcome}"`);
+                handlePermissionResponse(ws, msg.sessionId, msg.requestId, msg.outcome, msg.optionId);
+                break;
+            default:
+                console.log(`[server] unknown message type: ${msg.type}`);
+        }
+    });
+    ws.on("close", () => {
+        console.log("[server] client disconnected, cleaning up sessions");
+        clearSessionListCache(ws);
+        cleanupWsSessions(ws);
+    });
+});
+//# sourceMappingURL=server.mjs.map

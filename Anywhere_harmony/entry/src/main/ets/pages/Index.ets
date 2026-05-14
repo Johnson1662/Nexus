@@ -94,7 +94,8 @@ struct Index {
     this.showAgentPicker = false;
     this.messages = [];
     this.planEntries = [];
-    this.ws.send({ type: 'start', agent: agent.name } as ClientMessage);
+    let cwd = WorkspaceStore.currentIndex >= 0 ? WorkspaceStore.workspaces[WorkspaceStore.currentIndex].path : '';
+    this.ws.send({ type: 'start', agent: agent.name, cwd: cwd } as ClientMessage);
   }
 
   handleUpdate(u: AcpUpdate): void {
@@ -122,8 +123,9 @@ struct Index {
     if (msgs.length > 0) {
       let last = msgs[msgs.length - 1];
       if (last.role === 'assistant' && last.type === 'text') {
-        last.content += t
-        return [...msgs]
+        let u = new MessageData('assistant', last.content + t, 'text');
+        u.id = last.id; u.timestamp = last.timestamp;
+        let r = [...msgs]; r[r.length - 1] = u; return r;
       }
     }
     let cleaned = t.replace(/^\n+/, '');
@@ -134,20 +136,25 @@ struct Index {
     if (msgs.length > 0) {
       let last = msgs[msgs.length - 1];
       if (last.role === 'assistant' && last.type === 'thinking') {
-        last.content += t
-        return [...msgs]
+        let u = new MessageData('assistant', last.content + t, 'thinking');
+        u.id = last.id; u.timestamp = last.timestamp;
+        let r = [...msgs]; r[r.length - 1] = u; return r;
       }
     }
     return [...msgs, new MessageData('assistant', t, 'thinking')];
   }
 
   updateStatus(msgs: MessageData[], id: string, s: string): MessageData[] {
-    for (let i = 0; i < msgs.length; i++) {
-      if (msgs[i].toolCallId === id) {
-        msgs[i].toolStatus = s; break;
+    let r = [...msgs];
+    for (let i = 0; i < r.length; i++) {
+      if (r[i].toolCallId === id) {
+        let u = new MessageData(r[i].role, r[i].content, r[i].type);
+        u.id = r[i].id; u.timestamp = r[i].timestamp;
+        u.toolName = r[i].toolName; u.toolStatus = s; u.toolCallId = r[i].toolCallId;
+        r[i] = u; break;
       }
     }
-    return [...msgs];
+    return r;
   }
 
   sendMessage(text: string): void {
@@ -156,7 +163,8 @@ struct Index {
     if (ChatStore.sessionId) {
       this.ws.send({ type: 'input', sessionId: ChatStore.sessionId, text } as ClientMessage);
     } else {
-      this.ws.send({ type: 'start', agent: this.agentType, prompt: text } as ClientMessage);
+      let cwd = WorkspaceStore.currentIndex >= 0 ? WorkspaceStore.workspaces[WorkspaceStore.currentIndex].path : '';
+      this.ws.send({ type: 'start', agent: this.agentType, prompt: text, cwd: cwd } as ClientMessage);
     }
   }
 

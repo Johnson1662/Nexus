@@ -1,0 +1,140 @@
+import { spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
+import type { WebSocket } from "ws";
+import { AcpClient } from "../acp/client.mjs";
+import {
+  setSession,
+  deleteSession,
+  getSession,
+  killSessionProcess,
+  killOldWsSessions,
+} from "../session.mjs";
+import type { SessionState } from "../acp/types.mjs";
+
+export async function handleLoadSession(
+  ws: WebSocket,
+  params: {
+    sessionId: string;
+    cwd?: string;
+    agent?: string;
+    model?: string;
+  },
+): Promise<void> {
+  const { sessionId: targetSessionId, cwd, agent = "opencode", model } = params;
+
+  if (!targetSessionId) {
+    ws.send(JSON.stringify({ type: "error", text: "sessionId is required" }));
+    return;
+  }
+
+  killOldWsSessions(ws);
+
+  const proc = spawn(agent, ["acp"], {
+    cwd: cwd || process.cwd(),
+    env: { ...process.env, FORCE_COLOR: "0", NO_COLOR: "1" },
+    stdio: ["pipe", "pipe", "pipe"],
+    shell: true,
+  });
+
+  const bridgeSessionId = `acp-${Date.now()}`;
+
+  const sess: Partial<SessionState> = {
+    ws,
+    sessionId: bridgeSessionId,
+    process: proc,
+    agent,
+    pendingPermission: null,
+  };
+
+  const client = new AcpClient(proc, {
+    onSessionUpdate: async (update) => {
+      try {
+        ws.send(
+          JSON.stringify({
+            type: "agent_event",
+            sessionId: bridgeSessionId,
+            event: update.update,
+          }),
+        );
+      } catch {}
+    },
+    onPermissionRequest: (params) => {
+      return new Promise((resolve) => {
+        const requestId = randomUUID();
+        const currentSess = getSession(bridgeSessionId);
+        if (currentSess) {
+          currentSess.pendingPermission = { requestId, resolve };
+        }
+        try {
+          ws.send(
+            JSON.stringify({
+              type: "permission_request",
+              sessionId: bridgeSessionId,
+              requestId,
+              toolCall: params.toolCall,
+              options: params.options,
+            }),
+          );
+        } catch {}
+      });
+    },
+  });
+
+  sess.client = client;
+  setSession(bridgeSessionId, sess as SessionState);
+
+  proc.stderr.on("data", (chunk: Buffer) => {
+    console.log(`[server] stderr: ${chunk.toString().slice(0, 200)}`);
+    try {
+      ws.send(
+        JSON.stringify({
+          type: "agent_stderr",
+          sessionId: bridgeSessionId,
+          text: chunk.toString(),
+        }),
+      );
+    } catch {}
+  });
+
+  proc.on("error", (err: Error) => {
+    console.log(`[server] ${bridgeSessionId} spawn error: ${err.message}`);
+    deleteSession(bridgeSessionId);
+  });
+
+  proc.on("exit", (code: number | null) => {
+    console.log(`[server] ${bridgeSessionId} exited with code ${code}`);
+    deleteSession(bridgeSessionId);
+  });
+
+  try {
+    console.log(`[server] initializing ACP for load session ${targetSessionId}...`);
+    await client.initialize();
+
+    console.log(`[server] loading session ${targetSessionId}`);
+    await client.loadSession(targetSessionId, cwd || process.cwd());
+
+    if (model) {
+      await client.setSessionModel(targetSessionId, model).catch(() => {});
+    }
+
+    ws.send(
+      JSON.stringify({
+        type: "session_started",
+        sessionId: bridgeSessionId,
+        agent,
+        loadedSessionId: targetSessionId,
+      }),
+    );
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.log(`[server] load_session error: ${msg}`);
+    ws.send(
+      JSON.stringify({
+        type: "error",
+        text: `load session failed: ${msg}`,
+      }),
+    );
+    killSessionProcess(sess as SessionState);
+    deleteSession(bridgeSessionId);
+  }
+}
