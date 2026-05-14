@@ -7,7 +7,12 @@
         "compileSdkVersion": "6.0.2(22)",
         "targetSdkVersion": "6.0.2(22)",
         "compatibleSdkVersion": "5.0.0(12)",
-        "runtimeOS": "HarmonyOS"
+        "runtimeOS": "HarmonyOS",
+        "buildOption": {
+          "strictMode": {
+            "useNormalizedOHMUrl": true
+          }
+        }
       }
     ],
     "buildModeSet": [

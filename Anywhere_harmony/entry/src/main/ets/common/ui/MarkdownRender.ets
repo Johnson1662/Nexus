@@ -21,21 +21,10 @@ export struct MarkdownRender {
     // ── Tables ──
     this.controller.setTableBackgroundColor('#FFFFFF');
     this.controller.setTableInterleaveBackgroundColor('#F5F5F5');
-    this.controller.setTableBorderRadius(6);
 
     // ── Blockquotes ──
     this.controller.setQuoteBackgroundColor('#F8F9FA');
     this.controller.setQuoteBorderColor('#20744A');
-
-    // ── Layout ──
-    this.controller.setBlockSpacing(8);
-
-    // ── Math formulas ──
-    if (this.mathEnabled) {
-      this.controller.setLatexEnable(true);
-      this.controller.setLatexTextColor('#333333');
-      this.controller.setLatexFontSize(16);
-    }
 
     // ── Worker thread for performance ──
     this.controller.setThreadRenderEnable(true);
