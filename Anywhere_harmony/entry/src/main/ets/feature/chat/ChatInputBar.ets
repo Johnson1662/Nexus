@@ -1,20 +1,10 @@
 import { Colors, FontSize, Spacing, Radius } from '../../constants/DesignTokens';
 
-interface SelectOption {
-  value: string;
-}
-
 @Component
 export struct ChatInputBar {
   @State text: string = '';
-  @State selectedModel: number = 0;
-  @State selectedMode: number = 0;
-  @Prop models: string[] = [];
-  @Prop modes: string[] = [];
   @Prop disabled: boolean = false;
   onSend?: (text: string) => void;
-  onModelChange?: (index: number) => void;
-  onModeChange?: (index: number) => void;
 
   @State isFocused: boolean = false;
   private textAreaController: TextAreaController = new TextAreaController();
@@ -23,13 +13,6 @@ export struct ChatInputBar {
     Column() {
       Column() {
         Row() {
-          Text('>')
-            .fontFamily('monospace')
-            .fontSize(FontSize.md)
-            .fontColor(Colors.accent)
-            .fontWeight(FontWeight.Bold)
-            .margin({ left: Spacing.md, top: Spacing.sm })
-
           TextArea({
             placeholder: 'Enter command or message...',
             text: this.text,
@@ -50,16 +33,6 @@ export struct ChatInputBar {
         .alignItems(VerticalAlign.Top)
 
         Row() {
-          if (this.models.length > 0) {
-            Select(this.buildOpts(this.models))
-              .value('Model')
-              .font({ size: FontSize.xs }).fontColor(Colors.foregroundMuted)
-              .selectedOptionFont({ size: FontSize.xs }).selectedOptionFontColor(Colors.accent)
-              .selectedOptionBgColor(Colors.accentLight)
-              .backgroundColor('transparent')
-              .onSelect((i) => { this.selectedModel = i; if (this.onModelChange) this.onModelChange(i) })
-          }
-
           Blank()
 
           if (this.text.length > 0 && !this.disabled) {
@@ -94,11 +67,5 @@ export struct ChatInputBar {
     if (t.length === 0) return;
     if (this.onSend) this.onSend(t);
     this.text = '';
-  }
-
-  buildOpts(items: string[]): SelectOption[] {
-    let o: SelectOption[] = [{ value: '—' }];
-    for (let i = 0; i < items.length; i++) o.push({ value: items[i] });
-    return o;
   }
 }

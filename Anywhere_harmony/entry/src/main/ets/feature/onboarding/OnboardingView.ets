@@ -220,32 +220,31 @@ export struct OnboardingView {
           SymbolGlyph($r('sys.symbol.ohos_wifi'))
                 .fontSize(48)
                 .fontColor([Colors.accent])
-                .margin({ bottom: Spacing.xl })
+                .margin({ bottom: Spacing.xxl })
 
               Text('ACP Bridge Configuration')
-                .fontFamily('monospace').fontSize(20).fontWeight(FontWeight.Bold).fontColor(Colors.foreground)
+                .fontSize(FontSize.xxl).fontWeight(FontWeight.Bold).fontColor(Colors.foreground)
               Text('Connect to a remote agent via IP and Port')
-                .fontSize(FontSize.sm).fontColor(Colors.foregroundMuted).margin({ top: Spacing.sm, bottom: 40 })
+                .fontSize(FontSize.sm).fontColor(Colors.foregroundMuted).margin({ top: Spacing.sm, bottom: Spacing.xxxl })
 
               Column() {
-                Text('SERVER ADDRESS')
-                  .fontFamily('monospace').fontSize(FontSize.xs).fontColor(Colors.foregroundMuted)
+                Text('Server Address')
+                  .fontSize(FontSize.xs).fontColor(Colors.foregroundMuted)
                   .width('100%').margin({ bottom: Spacing.xs })
                 TextInput({ text: this.serverUrl, placeholder: 'ws://ip:port' })
                   .height(48).backgroundColor(Colors.surface1).borderRadius(Radius.md)
-                  .fontSize(FontSize.base).fontFamily('monospace')
+                  .fontSize(FontSize.base)
                   .onChange((val: string) => { this.serverUrl = val })
                   .margin({ bottom: Spacing.lg })
 
                 Text('The server will auto-discover installed ACP agents')
-                  .fontFamily('monospace').fontSize(FontSize.xs).fontColor(Colors.foregroundLight)
-                  .width('100%').margin({ bottom: 40 })
+                  .fontSize(FontSize.xs).fontColor(Colors.foregroundLight)
+                  .width('100%').margin({ bottom: Spacing.xxl })
 
                 Button('Connect')
-                  .width('100%').height(54)
+                  .width('100%').height(48)
                   .backgroundColor(Colors.accent).fontColor(Color.White)
-                  .fontFamily('monospace')
-                  .fontSize(FontSize.md).fontWeight(FontWeight.Bold).borderRadius(Radius.md)
+                  .fontSize(FontSize.base).fontWeight(FontWeight.Medium).borderRadius(Radius.md)
                   .onClick(() => { this.tryConnect() })
               }
 

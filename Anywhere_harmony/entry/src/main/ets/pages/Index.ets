@@ -28,11 +28,6 @@ export struct Index {
             this.ws.send({ type: 'set_mode', sessionId: ChatStore.sessionId, modeId: ChatStore.modes[i-1].value } as ClientMessage)
           }
         },
-        onClearSession: () => {
-          this.getUIContext().getPromptAction().openToast({ message: 'Session Cleared' });
-          ChatStore.messages = [];
-          ChatStore.planEntries = [];
-        },
         onSelectSession: (i: number) => {
           if (i > 0 && i - 1 < ChatStore.sessions.length) {
             ChatStore.sessionId = ChatStore.sessions[i - 1].sessionId;
@@ -41,16 +36,16 @@ export struct Index {
             this.ws.send({ type: 'load_session', sessionId: ChatStore.sessions[i - 1].sessionId, cwd: p } as ClientMessage);
           }
         },
-        onWorkspaceSelect: (index: number) => {
-          this.ws.send({ type: 'list_sessions', cwd: WorkspaceStore.workspaces[index].path } as ClientMessage);
-        },
-        onDisconnect: () => {
-          this.ws.disconnect();
+        onNewSession: () => {
           ChatStore.messages = [];
           ChatStore.planEntries = [];
+          ChatStore.turnActive = false;
           ChatStore.sessionId = '';
-          ChatStore.sessions = [];
-          this.navStack.pop();
+          let cwd = WorkspaceStore.currentIndex >= 0 ? WorkspaceStore.workspaces[WorkspaceStore.currentIndex].path : '';
+          this.ws.send({ type: 'start', agent: ChatStore.agentType, cwd: cwd } as ClientMessage);
+        },
+        onWorkspaceSelect: (index: number) => {
+          this.ws.send({ type: 'list_sessions', cwd: WorkspaceStore.workspaces[index].path } as ClientMessage);
         },
       })
     }

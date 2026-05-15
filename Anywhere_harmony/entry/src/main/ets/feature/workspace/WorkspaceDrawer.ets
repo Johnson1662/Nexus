@@ -20,24 +20,9 @@ export struct WorkspaceDrawer {
     Column() {
       Row() {
         Text('Workspaces')
-          .fontSize(FontSize.md)
-          .fontWeight(FontWeight.Medium)
+          .fontSize(FontSize.lg)
+          .fontWeight(FontWeight.Bold)
           .fontColor(Colors.foreground)
-          .layoutWeight(1)
-
-        Row() {
-SymbolGlyph($r('sys.symbol.xmark')).fontColor([Colors.foregroundMuted]).fontSize(24)
-        }
-        .width(36)
-        .height(36)
-        .backgroundColor(Colors.surface1)
-        .borderRadius(Radius.md)
-        .justifyContent(FlexAlign.Center)
-        .onClick(() => {
-          if (this.onClose) {
-            this.onClose();
-          }
-        })
       }
       .width('100%')
       .padding({ left: Spacing.xl, right: Spacing.xl, top: Spacing.xl, bottom: Spacing.lg })
@@ -50,22 +35,21 @@ SymbolGlyph($r('sys.symbol.xmark')).fontColor([Colors.foregroundMuted]).fontSize
             Row() {
               if (index === this.currentIndex) {
                 Column()
-                  .width(3)
-                  .height(16)
+                  .width(3).height(20)
                   .backgroundColor(Colors.accent)
                   .borderRadius(Radius.full)
                   .margin({ right: Spacing.md })
               } else {
-                Column().width(3).margin({ right: Spacing.md }) // Placeholder
+                Column().width(3).margin({ right: Spacing.md })
               }
 
               Row() {
                 Text(ws.name.charAt(0).toUpperCase())
-                  .fontSize(14)
+                  .fontSize(16)
                   .fontWeight(FontWeight.Bold)
                   .fontColor(index === this.currentIndex ? Colors.accent : Colors.foregroundMuted)
               }
-              .width(32).height(32)
+              .width(36).height(36)
               .backgroundColor(index === this.currentIndex ? Colors.accentLight : Colors.surface1)
               .borderRadius(Radius.md)
               .justifyContent(FlexAlign.Center)
@@ -84,27 +68,19 @@ SymbolGlyph($r('sys.symbol.xmark')).fontColor([Colors.foregroundMuted]).fontSize
                   .fontColor(Colors.foregroundMuted)
                   .maxLines(1)
                   .textOverflow({ overflow: TextOverflow.Ellipsis })
-                  .margin({ top: 1 })
+                  .margin({ top: 2 })
               }
               .alignItems(HorizontalAlign.Start)
               .layoutWeight(1)
             }
             .width('100%')
-            .padding({ left: Spacing.md, right: Spacing.lg, top: Spacing.lg, bottom: Spacing.lg })
+            .padding({ left: Spacing.md, right: Spacing.lg, top: Spacing.md, bottom: Spacing.md })
             .backgroundColor(index === this.currentIndex ? Colors.accentTransparent : 'transparent')
             .borderRadius(Radius.md)
-            .onClick(() => {
-              if (this.onSelect) {
-                this.onSelect(index);
-              }
-            })
+            .onClick(() => { if (this.onSelect) this.onSelect(index) })
             .gesture(
               LongPressGesture({ repeat: false, duration: 600 })
-                .onAction(() => {
-                  if (this.onDelete) {
-                    this.onDelete(index);
-                  }
-                })
+                .onAction(() => { if (this.onDelete) this.onDelete(index) })
             )
           }
           .padding({ left: Spacing.sm, right: Spacing.md, bottom: Spacing.xs })
@@ -112,18 +88,14 @@ SymbolGlyph($r('sys.symbol.xmark')).fontColor([Colors.foregroundMuted]).fontSize
       }
       .width('100%')
       .layoutWeight(1)
-      .padding({ top: Spacing.sm, bottom: Spacing.sm })
+      .padding({ top: Spacing.sm })
 
-        Button('Add workspace')
-          .width('100%').height(44)
-          .backgroundColor(Colors.accentLight).fontColor(Colors.accent)
-          .borderRadius(Radius.sm).fontSize(FontSize.sm)
-          .margin({ left: Spacing.md, right: Spacing.md, bottom: Spacing.sm })
-          .onClick(() => { 
-            this.getUIContext()?.animateTo({ duration: 250, curve: Curve.Friction }, () => {
-              this.showForm = !this.showForm; 
-            })
-          })
+      Button('+ Add workspace')
+        .width('100%').height(44)
+        .backgroundColor(Colors.accentLight).fontColor(Colors.accent)
+        .borderRadius(Radius.md).fontSize(FontSize.sm)
+        .margin({ left: Spacing.md, right: Spacing.md, bottom: Spacing.sm })
+        .onClick(() => { this.showForm = !this.showForm })
 
       if (this.showForm) {
         Column() {
@@ -132,51 +104,42 @@ SymbolGlyph($r('sys.symbol.xmark')).fontColor([Colors.foregroundMuted]).fontSize
             .backgroundColor(Colors.surface1).borderRadius(Radius.sm)
             .padding({ left: Spacing.md, right: Spacing.md })
             .fontSize(FontSize.sm)
-            .onChange((v: string) => { this.newPath = v; })
+            .onChange((v: string) => { this.newPath = v })
 
-          Button('Add')
-            .width('100%')
-            .height(44)
-            .margin({ top: Spacing.md })
-            .backgroundColor(Colors.accent)
-            .fontColor(Color.White)
-            .borderRadius(Radius.md)
-            .onClick(() => {
-              if (this.newPath.length > 0 && this.onAddWorkspace) {
-                this.onAddWorkspace(this.newPath);
-                this.newPath = '';
-                this.getUIContext()?.animateTo({ duration: 250, curve: Curve.Friction }, () => {
+          Row() {
+            Button('Cancel')
+              .layoutWeight(1).height(36)
+              .backgroundColor(Colors.surface2).fontColor(Colors.foreground)
+              .borderRadius(Radius.sm).fontSize(FontSize.xs)
+              .onClick(() => { this.showForm = false; this.newPath = '' })
+            Button('Add')
+              .layoutWeight(1).height(36).margin({ left: Spacing.sm })
+              .backgroundColor(Colors.accent).fontColor(Color.White)
+              .borderRadius(Radius.sm).fontSize(FontSize.xs)
+              .onClick(() => {
+                if (this.newPath.length > 0 && this.onAddWorkspace) {
+                  this.onAddWorkspace(this.newPath);
+                  this.newPath = '';
                   this.showForm = false;
-                })
-                if (this.onClose) {
-                  this.onClose();
                 }
-              }
-            })
+              })
+          }
+          .width('100%').margin({ top: Spacing.sm })
         }
-        .transition(TransitionEffect.OPACITY.combine(TransitionEffect.scale({ x: 0.95, y: 0.95 })))
-        .width('100%')
         .padding(Spacing.md)
         .backgroundColor(Colors.surfaceElevated)
         .borderRadius(Radius.md)
         .margin({ left: Spacing.md, right: Spacing.md, bottom: Spacing.sm })
+        .transition(TransitionEffect.OPACITY)
       }
 
-      Column() {
-        Row() {
-          Circle().width(6).height(6).fill(Colors.success)
-          Text(this.agentType).fontSize(FontSize.sm).fontColor(Colors.foregroundMuted)
-            .margin({ left: Spacing.sm }).layoutWeight(1)
-          Button('Disconnect')
-            .height(28).borderRadius(Radius.sm).fontSize(FontSize.xs)
-            .backgroundColor('transparent').fontColor(Colors.foregroundLight)
-            .onClick(() => { if (this.onSwitchHost) this.onSwitchHost(); })
-        }
-        .width('100%')
-        .alignItems(VerticalAlign.Center)
+      Row() {
+        Circle().width(6).height(6).fill(Colors.success)
+        Text(this.agentType).fontSize(FontSize.sm).fontColor(Colors.foregroundMuted)
+          .margin({ left: Spacing.sm }).layoutWeight(1)
       }
       .width('100%')
-      .padding({ left: Spacing.lg, right: Spacing.lg, top: Spacing.md, bottom: Spacing.md })
+      .padding({ left: Spacing.xl, right: Spacing.xl, top: Spacing.md, bottom: Spacing.xl })
     }
     .width('100%')
     .height('100%')

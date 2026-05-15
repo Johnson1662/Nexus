@@ -96,12 +96,8 @@ export struct ChatPage {
       }
 
       ChatInputBar({
-        models: this.getModelNames(),
-        modes: this.getModeNames(),
         disabled: this.turnActive,
-        onSend: (text) => { if (this.onSendMessage) this.onSendMessage(text); },
-        onModelChange: (i) => { if (this.onSwitchModel) this.onSwitchModel(i); },
-        onModeChange: (i) => { if (this.onSwitchMode) this.onSwitchMode(i); }
+        onSend: (text) => { if (this.onSendMessage) this.onSendMessage(text); }
       })
     }
     .width('100%').height('100%')
