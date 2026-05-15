@@ -1,3 +1,35 @@
+export class Colors {
+  static readonly surface0: string = '#FFFFFF';
+  static readonly surface1: string = '#F4F5F7';
+  static readonly surface2: string = '#E5E7EB';
+  static readonly surfaceElevated: string = '#FFFFFF';
+  static readonly userBubble: string = '#1A7F4B';
+
+  static readonly foreground: string = '#1C1E21';
+  static readonly foregroundMuted: string = '#6B717A';
+  static readonly foregroundLight: string = '#9CA3AB';
+
+  static readonly accent: string = '#1A7F4B';
+  static readonly accentDark: string = '#126839';
+  static readonly accentLight: string = '#E2F3E9';
+  static readonly accentTransparent: string = '#1A7F4B12';
+
+  static readonly success: string = '#059669';
+  static readonly successLight: string = '#DCFCE7';
+  static readonly warning: string = '#D97706';
+  static readonly warningLight: string = '#FEF3C7';
+  static readonly error: string = '#DC2626';
+  static readonly errorLight: string = '#FEE2E2';
+
+  static readonly border: string = '#D4D6DA';
+  static readonly borderLight: string = '#EFEFEF';
+  static readonly borderFocus: string = '#1A7F4B';
+
+  static readonly shadowColor: string = '#00000008';
+  static readonly shadowColorStrong: string = '#00000014';
+  static readonly shadowAccent: string = '#1A7F4B14';
+}
+
 export class Spacing {
   static readonly xxs: number = 2;
   static readonly xs: number = 4;

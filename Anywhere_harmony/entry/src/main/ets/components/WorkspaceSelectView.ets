@@ -1,5 +1,4 @@
-import { Colors } from '../constants/Colors';
-import { FontSize, Spacing, Radius } from '../constants/DesignTokens';
+import { Colors, FontSize, Spacing, Radius } from '../constants/DesignTokens';
 
 @Component
 export struct WorkspaceSelectView {

@@ -1,5 +1,4 @@
-import { Colors } from '../constants/Colors';
-import { FontSize, Spacing, Duration, Radius } from '../constants/DesignTokens';
+import { Colors, FontSize, Spacing, Duration, Radius } from '../constants/DesignTokens';
 
 @Component
 export struct ThinkingSection {
@@ -11,9 +10,9 @@ export struct ThinkingSection {
     Column() {
       Row() {
         Row() {
-          Text('⚡')
-            .fontSize(FontSize.xs)
-            .fontColor(Colors.warning)
+          SymbolGlyph($r('sys.symbol.sparkles'))
+            .fontSize(FontSize.sm)
+            .fontColor([Colors.warning])
         }
         .width(20)
         .height(20)
@@ -29,9 +28,9 @@ export struct ThinkingSection {
           .fontWeight(FontWeight.Medium)
           .layoutWeight(1)
 
-        Text('▾')
-          .fontSize(FontSize.xxs)
-          .fontColor(Colors.foregroundLight)
+        SymbolGlyph($r('sys.symbol.chevron_down'))
+          .fontSize(FontSize.sm)
+          .fontColor([Colors.foregroundLight])
           .rotate({ angle: this.expanded ? 180 : 0 })
           .animation({
             duration: Duration.fast,
@@ -65,6 +64,8 @@ export struct ThinkingSection {
         .borderRadius(Radius.md)
         .margin({ top: Spacing.xs })
         .border({ width: 1, color: Colors.borderLight })
+        .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: -8 })))
+        .animation({ duration: Duration.fast, curve: Curve.EaseOut })
       }
     }
     .width('100%')

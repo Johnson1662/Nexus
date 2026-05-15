@@ -1,4 +1,4 @@
-import { Colors, FontSize, Spacing, Radius } from '../../constants/Colors';
+import { Colors, FontSize, Spacing, Radius } from '../../constants/DesignTokens';
 
 interface SelectOption {
   value: string;
@@ -17,6 +17,7 @@ export struct ChatInputBar {
   onModeChange?: (index: number) => void;
 
   @State isFocused: boolean = false;
+  private textAreaController: TextAreaController = new TextAreaController();
 
   build() {
     Column() {
@@ -29,51 +30,48 @@ export struct ChatInputBar {
             .fontWeight(FontWeight.Bold)
             .margin({ left: Spacing.md, top: Spacing.sm })
 
-          TextInput({ placeholder: 'Enter command or message...', text: this.text })
+          TextArea({
+            placeholder: 'Enter command or message...',
+            text: this.text,
+            controller: this.textAreaController
+          })
             .layoutWeight(1)
-            .height(48)
             .backgroundColor('transparent')
-            .padding({ left: Spacing.sm, right: Spacing.md, top: Spacing.sm })
+            .padding({ left: Spacing.sm, right: Spacing.md })
             .fontSize(FontSize.base)
             .enabled(!this.disabled)
+            .maxLines(6)
+            .minLines(1)
+            .enterKeyType(EnterKeyType.Send)
             .onChange((val: string) => { this.text = val })
             .onSubmit(() => { this.doSend() })
         }
         .width('100%')
+        .alignItems(VerticalAlign.Top)
 
         Row() {
-          Image($r('app.media.ic_attachment'))
-            .fillColor(Colors.foreground)
-            .width(24).height(24)
-            .onClick(() => { this.getUIContext().getPromptAction().openToast({ message: 'File picker (Coming soon)' }) })
-
-          Row() {
-            Image($r('app.media.ic_model'))
-              .fillColor(Colors.foregroundMuted).width(18).height(18).margin({ right: Spacing.xs })
-            if (this.models.length > 0) {
-              Select(this.buildOpts(this.models))
-                .value('Select model')
-                .font({ size: FontSize.sm })
-                .fontColor(Colors.foregroundMuted)
-                .backgroundColor('transparent')
-                .onSelect((i) => { this.selectedModel = i; if (this.onModelChange) this.onModelChange(i) })
-            } else {
-              Text('Select model').fontSize(FontSize.sm).fontColor(Colors.foregroundMuted)
-            }
-          }.margin({ left: Spacing.md })
+          if (this.models.length > 0) {
+            Select(this.buildOpts(this.models))
+              .value('Model')
+              .font({ size: FontSize.xs }).fontColor(Colors.foregroundMuted)
+              .selectedOptionFont({ size: FontSize.xs }).selectedOptionFontColor(Colors.accent)
+              .selectedOptionBgColor(Colors.accentLight)
+              .backgroundColor('transparent')
+              .onSelect((i) => { this.selectedModel = i; if (this.onModelChange) this.onModelChange(i) })
+          }
 
           Blank()
 
           if (this.text.length > 0 && !this.disabled) {
-            Image($r('app.media.ic_send_active'))
-              .fillColor(Colors.foreground).width(28).height(28).onClick(() => { this.doSend() })
+            SymbolGlyph($r('sys.symbol.arrow_up_circle_fill'))
+              .fontColor([Colors.accent])
+              .fontSize(FontSize.xxxl)
+              .onClick(() => { this.doSend() })
           } else {
-            Image($r('app.media.ic_mic'))
-              .fillColor(Colors.foreground).width(24).height(24).margin({ right: Spacing.md })
-              .onClick(() => { this.getUIContext().getPromptAction().openToast({ message: 'Voice input (Coming soon)' }) })
-            Image($r('app.media.ic_waveform'))
-              .fillColor(Colors.foreground).width(24).height(24)
-              .onClick(() => { this.getUIContext().getPromptAction().openToast({ message: 'Voice input (Coming soon)' }) })
+            Text('agent')
+              .fontFamily('monospace')
+              .fontSize(FontSize.xs)
+              .fontColor(Colors.foregroundLight)
           }
         }
         .width('100%')
@@ -86,7 +84,7 @@ export struct ChatInputBar {
       .width('100%')
     }
     .width('100%')
-    .padding({ left: Spacing.md, right: Spacing.md, top: Spacing.md, bottom: 100 })
+    .padding({ left: Spacing.md, right: Spacing.md, top: Spacing.md, bottom: 10 })
     .backgroundColor(Colors.surface0)
   }
 

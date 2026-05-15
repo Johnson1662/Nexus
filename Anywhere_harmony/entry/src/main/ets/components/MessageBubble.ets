@@ -1,8 +1,7 @@
-import { Colors } from '../constants/Colors';
+import { Colors, FontSize, Spacing, Radius, Duration } from '../constants/DesignTokens';
 import { MessageData } from '../store/SessionStore';
 import { ToolCallCard } from './ToolCallCard';
 import { ThinkingSection } from './ThinkingSection';
-import { FontSize, Spacing, Radius, Duration } from '../constants/DesignTokens';
 
 @Component
 export struct MessageBubble {

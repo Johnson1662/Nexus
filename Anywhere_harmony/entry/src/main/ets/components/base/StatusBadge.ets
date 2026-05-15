@@ -1,5 +1,4 @@
-import { Colors } from '../../constants/Colors';
-import { Radius, FontSize, Spacing } from '../../constants/DesignTokens';
+import { Colors, Radius, FontSize, Spacing } from '../../constants/DesignTokens';
 
 @Component
 export struct StatusBadge {

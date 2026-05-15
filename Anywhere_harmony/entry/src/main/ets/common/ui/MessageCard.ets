@@ -1,4 +1,4 @@
-import { Colors, FontSize, Spacing, Radius } from '../../constants/Colors';
+import { Colors, FontSize, Spacing, Radius, Duration } from '../../constants/DesignTokens';
 import { CardHeader } from './CardHeader';
 import { ThinkingSection } from './ThinkingSection';
 import { ToolCallCard } from './ToolCallCard';
@@ -6,15 +6,27 @@ import { MarkdownRender } from './MarkdownRender';
 import pasteboard from '@ohos.pasteboard';
 
 @Component
+@Reusable
 export struct MessageCard {
-  @Prop isUser: boolean = false;
-  @Prop time: string = '';
-  @Prop status: string = '';
-  @Prop msgContent: string = '';
-  @Prop msgType: string = 'text';
-  @Prop msgToolName: string = '';
-  @Prop msgToolStatus: string = '';
-  @Prop streaming: boolean = false;
+  @State isUser: boolean = false;
+  @State time: string = '';
+  @State status: string = '';
+  @State msgContent: string = '';
+  @State msgType: string = 'text';
+  @State msgToolName: string = '';
+  @State msgToolStatus: string = '';
+  @State streaming: boolean = false;
+
+  aboutToReuse(params: Record<string, object>): void {
+    this.isUser = Boolean(params['isUser']);
+    this.time = String(params['time']);
+    this.status = String(params['status']);
+    this.msgContent = String(params['msgContent']);
+    this.msgType = String(params['msgType']) || 'text';
+    this.msgToolName = String(params['msgToolName']);
+    this.msgToolStatus = String(params['msgToolStatus']);
+    this.streaming = Boolean(params['streaming']);
+  }
 
   copyContent() {
     let pasteData = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, this.msgContent);
@@ -34,7 +46,6 @@ export struct MessageCard {
             .fontSize(FontSize.base)
             .fontColor(Colors.foreground)
             .lineHeight(24)
-            .layoutWeight(1)
         }
         .width('100%')
         .padding({ top: Spacing.sm, bottom: Spacing.sm })
@@ -66,8 +77,9 @@ export struct MessageCard {
       }
 
       Row() {
-        Image($r('app.media.ic_copy'))
-          .fillColor(Colors.foregroundLight).width(16).height(16)
+        SymbolGlyph($r('sys.symbol.ohos_folder_badge_plus'))
+          .fontSize(FontSize.sm)
+          .fontColor([Colors.foregroundLight])
           .onClick(() => { this.copyContent() })
       }
       .width('100%')
@@ -82,5 +94,7 @@ export struct MessageCard {
     })
     .backgroundColor(this.isUser ? Colors.surface0 : Colors.surface1)
     .margin({ top: Spacing.xs, bottom: Spacing.xs })
+    .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: 12 })))
+    .animation({ duration: Duration.normal, curve: Curve.EaseOut })
   }
 }

@@ -1,4 +1,4 @@
-import { Colors, FontSize, Spacing, Radius } from '../../constants/Colors';
+import { Colors, FontSize, Spacing, Radius } from '../../constants/DesignTokens';
 import { PlanEntry } from '../model/ChatState';
 
 @Component
@@ -30,11 +30,11 @@ export struct PlanView {
             .layoutWeight(1)
             
           if (entry.status === 'completed') {
-            Image($r('app.media.ic_check')).fillColor(Colors.success).width(16).height(16).margin({ left: Spacing.sm, top: 4 })
+SymbolGlyph($r('sys.symbol.checkmark')).fontColor([Colors.success]).fontSize(16).margin({ left: Spacing.sm, top: 4 })
           } else if (entry.status === 'in_progress') {
-            Image($r('app.media.ic_dots')).fillColor(Colors.warning).width(16).height(16).margin({ left: Spacing.sm, top: 4 })
+SymbolGlyph($r('sys.symbol.ellipsis_message_1')).fontColor([Colors.warning]).fontSize(16).margin({ left: Spacing.sm, top: 4 })
           } else {
-            Image($r('app.media.ic_circle')).fillColor(Colors.foregroundLight).width(16).height(16).margin({ left: Spacing.sm, top: 4 })
+SymbolGlyph($r('sys.symbol.circle')).fontColor([Colors.foregroundLight]).fontSize(16).margin({ left: Spacing.sm, top: 4 })
           }
         }
         .width('100%')

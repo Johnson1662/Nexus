@@ -1,4 +1,4 @@
-import { Colors, FontSize, Spacing, Radius } from '../../constants/Colors';
+import { Colors, FontSize, Spacing, Radius, Duration } from '../../constants/DesignTokens';
 
 @Component
 export struct ToolCallCard {
@@ -10,11 +10,19 @@ export struct ToolCallCard {
       if (this.status === 'in_progress') {
         LoadingProgress().width(14).height(14).color(Colors.accent).margin({ right: Spacing.sm })
       } else if (this.status === 'completed') {
-        Image($r('app.media.ic_check')).fillColor(Colors.success).width(16).height(16).margin({ right: Spacing.sm })
+        SymbolGlyph($r('sys.symbol.checkmark'))
+          .fontColor([Colors.success])
+          .fontSize(FontSize.sm)
+          .margin({ right: Spacing.sm })
       } else if (this.status === 'failed') {
-        Image($r('app.media.ic_error')).fillColor(Colors.error).width(16).height(16).margin({ right: Spacing.sm })
+        SymbolGlyph($r('sys.symbol.xmark'))
+          .fontColor([Colors.error])
+          .fontSize(FontSize.sm)
+          .margin({ right: Spacing.sm })
       } else {
-        Circle().width(6).height(6).fill('transparent').stroke(Colors.border).strokeWidth(1.5)
+        SymbolGlyph($r('sys.symbol.clock'))
+          .fontColor([Colors.foregroundMuted])
+          .fontSize(FontSize.sm)
           .margin({ right: Spacing.sm })
       }
 
@@ -37,6 +45,8 @@ export struct ToolCallCard {
     .borderRadius(Radius.md)
     .border({ width: 1, color: Colors.borderLight })
     .margin({ top: Spacing.xs, bottom: Spacing.xs })
+    .transition(TransitionEffect.OPACITY)
+    .animation({ duration: Duration.fast, curve: Curve.EaseOut })
   }
 
   getText(): string {

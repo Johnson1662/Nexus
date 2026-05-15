@@ -1,6 +1,7 @@
 import { AbilityConstant, ConfigurationConstant, UIAbility, Want } from '@kit.AbilityKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { window } from '@kit.ArkUI';
+import { StorageService, PrefsKeys } from '../services/StorageService';
 
 const DOMAIN: number = 0x0000;
 const TAG: string = 'EntryAbility';
@@ -13,6 +14,20 @@ export default class EntryAbility extends UIAbility {
       hilog.error(DOMAIN, TAG, 'Failed to set color mode. Cause: %{public}s', JSON.stringify(err));
     }
     hilog.info(DOMAIN, TAG, 'Ability onCreate');
+
+    AppStorage.setOrCreate<string>('serverUrl', 'ws://100.111.77.50:6767');
+    AppStorage.setOrCreate<string>('lastAgent', '');
+    AppStorage.setOrCreate<boolean>('isConnected', false);
+
+    StorageService.getInstance().init(this.context).then(() => {
+      let storage = StorageService.getInstance();
+      storage.getString(PrefsKeys.SERVER_URL, 'ws://100.111.77.50:6767').then((url) => {
+        AppStorage.setOrCreate<string>('serverUrl', url);
+      });
+      storage.getString(PrefsKeys.LAST_AGENT, '').then((agent) => {
+        AppStorage.setOrCreate<string>('lastAgent', agent);
+      });
+    });
   }
 
   onDestroy(): void {

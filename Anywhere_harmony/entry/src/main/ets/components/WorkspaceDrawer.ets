@@ -1,6 +1,5 @@
-import { Colors } from '../constants/Colors';
+import { Colors, FontSize, Spacing, Radius, Duration } from '../constants/DesignTokens';
 import { WorkspaceInfo } from '../store/SessionStore';
-import { FontSize, Spacing, Radius, Duration } from '../constants/DesignTokens';
 
 @Component
 export struct WorkspaceDrawer {
@@ -26,9 +25,9 @@ export struct WorkspaceDrawer {
           .layoutWeight(1)
 
         Row() {
-          Text('✕')
-            .fontSize(18)
-            .fontColor(Colors.foregroundMuted)
+          SymbolGlyph($r('sys.symbol.xmark'))
+            .fontSize(FontSize.lg)
+            .fontColor([Colors.foregroundMuted])
         }
         .width(36)
         .height(36)
@@ -61,8 +60,9 @@ export struct WorkspaceDrawer {
                   .margin({ right: Spacing.md })
               }
 
-              Text('📁')
-                .fontSize(20)
+              SymbolGlyph($r('sys.symbol.ohos_folder'))
+                .fontSize(FontSize.xl)
+                .fontColor([Colors.foregroundMuted])
                 .margin({ right: Spacing.md })
 
               Column() {

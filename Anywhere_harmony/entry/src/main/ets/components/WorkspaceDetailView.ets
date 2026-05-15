@@ -1,8 +1,7 @@
 import { MessageData, PlanEntry, WorkspaceInfo, ServerSession } from '../store/SessionStore';
 import { MessageBubble } from './MessageBubble';
 import { PlanView } from './PlanView';
-import { Colors } from '../constants/Colors';
-import { FontSize, Spacing, Radius } from '../constants/DesignTokens';
+import { Colors, FontSize, Spacing, Radius } from '../constants/DesignTokens';
 
 interface ModelInfo {
   modelId: string;

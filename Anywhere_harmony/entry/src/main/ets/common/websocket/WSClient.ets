@@ -4,7 +4,8 @@ import { hilog } from '@kit.PerformanceAnalysisKit';
 import { backgroundTaskManager } from '@kit.BackgroundTasksKit';
 import { ChatStore } from '../model/ChatState';
 import { ServerSession } from '../model/WorkspaceInfo';
-import { ClientMessage, ServerMessage, AcpUpdate, ModelItem, ModeItem, AgentInfo } from './WSProtocol';
+import { ClientMessage, ServerMessage, AcpUpdate, AgentInfo } from './WSProtocol';
+import { ModelItem, ModeItem } from '../model/ChatState';
 
 const DOMAIN: number = 0x0000;
 const TAG: string = 'WSClient';

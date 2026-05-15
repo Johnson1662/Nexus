@@ -1,4 +1,15 @@
 import { MessageData } from './MessageData';
+import { ServerSession } from './WorkspaceInfo';
+
+export interface ModelItem {
+  modelId: string;
+  name: string;
+}
+
+export interface ModeItem {
+  value: string;
+  name: string;
+}
 
 @ObservedV2
 export class PlanEntry {
@@ -15,6 +26,11 @@ export class ChatStoreModel {
   @Trace sessionId: string = '';
   @Trace loadedSessionId: string = '';
   @Trace connected: boolean = false;
+  @Trace sessions: ServerSession[] = [];
+  @Trace models: ModelItem[] = [];
+  @Trace modes: ModeItem[] = [];
+  @Trace selectedAgentName: string = '';
+  @Trace agentType: string = '';
 }
 
 export const ChatStore: ChatStoreModel = new ChatStoreModel();

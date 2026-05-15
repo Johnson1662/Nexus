@@ -1,10 +1,11 @@
-import { Colors, FontSize, Spacing, Radius } from '../../constants/Colors';
+import { Colors, FontSize, Spacing, Radius, Duration } from '../../constants/DesignTokens';
 import { MessageData } from '../../common/model/MessageData';
 import { PlanEntry } from '../../common/model/ChatState';
 import { MessageCard } from '../../common/ui/MessageCard';
 import { PlanView } from '../../common/ui/PlanView';
 import { ChatInputBar } from './ChatInputBar';
 import { AgentModel, AgentMode } from '../../common/model/AgentConfig';
+import { MessageDataSource } from '../../common/ui/MessageDataSource';
 
 @Component
 export struct ChatPage {
@@ -18,8 +19,14 @@ export struct ChatPage {
   onSwitchMode?: (index: number) => void;
 
   private scroller: Scroller = new Scroller();
+  private dataSource: MessageDataSource = new MessageDataSource([]);
+
+  aboutToAppear(): void {
+    this.dataSource = new MessageDataSource(this.messages);
+  }
 
   onMessagesChange(): void {
+    this.dataSource.updateData(this.messages);
     setTimeout(() => {
       this.scroller.scrollEdge(Edge.Bottom);
     }, 50);
@@ -28,32 +35,34 @@ export struct ChatPage {
   build() {
     Column() {
       if (this.messages.length === 0) {
-        Column() {
-          if (this.turnActive) {
-            Column() {
-              LoadingProgress().width(20).height(20).color(Colors.accent)
-              Text('Waiting for response')
-                .fontSize(FontSize.sm).fontColor(Colors.foregroundLight)
-                .margin({ top: Spacing.sm })
+          Column() {
+            if (this.turnActive) {
+              Column() {
+                LoadingProgress().width(20).height(20).color(Colors.accent)
+                Text('Waiting for response')
+                  .fontSize(FontSize.sm).fontColor(Colors.foregroundLight)
+                  .margin({ top: Spacing.sm })
+              }
+              .alignItems(HorizontalAlign.Center)
+              .transition(TransitionEffect.OPACITY)
+              .animation({ duration: Duration.fast, curve: Curve.EaseInOut })
+            } else {
+              Column() {
+                Text('No active task')
+                  .fontSize(FontSize.base).fontColor(Colors.foreground).fontWeight(FontWeight.Medium)
+                Text('Type a message below to start a new session.')
+                  .fontSize(FontSize.sm).fontColor(Colors.foregroundMuted)
+                  .margin({ top: Spacing.xs })
+              }
+              .alignItems(HorizontalAlign.Center)
             }
-            .alignItems(HorizontalAlign.Center)
-          } else {
-            Column() {
-              Text('No active task')
-                .fontSize(FontSize.base).fontColor(Colors.foreground).fontWeight(FontWeight.Medium)
-              Text('Type a message below to start a new session.')
-                .fontSize(FontSize.sm).fontColor(Colors.foregroundMuted)
-                .margin({ top: Spacing.xs })
-            }
-            .alignItems(HorizontalAlign.Center)
           }
-        }
         .width('100%').layoutWeight(1)
         .justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center)
         .padding({ left: Spacing.xxl, right: Spacing.xxl })
       } else {
         List({ scroller: this.scroller }) {
-          ForEach(this.messages, (msg: MessageData) => {
+          LazyForEach(this.dataSource, (msg: MessageData) => {
             ListItem() {
               if (msg.type === 'plan') {
                 PlanView({ entries: this.planEntries })
@@ -77,10 +86,13 @@ export struct ChatPage {
                   .margin({ bottom: Spacing.xs })
               }
             }
+            .height('auto')
           }, (msg: MessageData) => msg.id + msg.content.length)
         }
         .layoutWeight(1)
         .width('100%')
+        .edgeEffect(EdgeEffect.Spring)
+        .clip(false)
       }
 
       ChatInputBar({

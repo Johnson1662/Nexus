@@ -16,16 +16,16 @@ Anywhere is a HarmonyOS App that connects to any ACP (Agent Client Protocol) com
 Phone (HarmonyOS ArkTS App)             PC (Node.js Bridge)
 ┌───────────────────────────┐          ┌──────────────────────────┐
 │  Index.ets (@Entry)       │    WS    │  server.js               │
-│  ├─ connecting view       │────────→│  监听 ws://0.0.0.0:6767  │
-│  ├─ disconnected/onboard  │         │                          │
-│  ├─ workspace select      │         │  ACP Agent (子进程)       │
-│  └─ chat view             │←───────│  ├─ JSON-RPC 2.0          │
-│      ├─ MessageCard[]     │  agent  │  │   over stdio           │
-│      ├─ PlanView          │  event  │  ├─ session/new          │
-│      ├─ ChatInputBar      │         │  ├─ session/prompt       │
-│         ├─ TextInput      │         │  ├─ session/set_model    │
-│         ├─ [Model ▼]      │         │  └─ session/set_mode     │
-│         └─ [Mode ▼] Send  │         └──────────────────────────┘
+│  └─ Navigation            │────────→│  监听 ws://0.0.0.0:6767  │
+│     ├─ OnboardingView     │         │                          │
+│     │  (form/connecting/  │         │  ACP Agent (子进程)       │
+│     │   discovering/      │         │  ├─ JSON-RPC 2.0          │
+│     │   agent picker)     │←───────│  │   over stdio            │
+│     └─ NavDestination     │  agent  │  ├─ session/new           │
+│        "chat": ChatView   │  event  │  ├─ session/prompt        │
+│         (workspace select │         │  ├─ session/set_model     │
+│          + session select │         │  └─ session/set_mode      │
+│          + ChatPage)      │         └──────────────────────────┘
 └───────────────────────────┘
 ```
 
@@ -33,69 +33,174 @@ Phone (HarmonyOS ArkTS App)             PC (Node.js Bridge)
 
 **ACP protocol:** Agent-agnostic by design. ANY agent implementing ACP (JSON-RPC 2.0 over stdio) works.
 
-## Key Design Decisions (The "Terminal" Aesthetic)
-
-The UI has undergone a massive architectural shift from a generic "chat messenger" to a **Developer Workspace / Terminal Console**.
+## Key Design Decisions
 
 ### Visual Design Principles
-- **Aesthetic:** Cyber-minimalist, structural, precision-driven.
-- **Message Cards:** Replaced traditional rounded "chat bubbles" with full-width structural blocks. User commands are highlighted with a right-side green border (`Colors.accent`), while agent responses have a left-side gray border (`Colors.borderLight`).
-- **Typography:** System font (HarmonyOS Sans) for body text, but strictly `monospace` for headers, metadata, terminal paths, and UI component labels to reinforce the coding environment feel.
-- **Identity Tags:** Instead of generic "User/Assistant" labels, headers use terminal-style prompts: `user@local ~$` and `agent@remote ~$`.
-- **Empty States:** Displays "Anywhere Workspace" and "Agent Client Protocol (ACP) Active" instead of generic chat placeholders.
-- **Safe Area:** Bottom input padding is strictly bound to `84px` to avoid occlusion by the phone's bottom gesture bar and rounded corners.
+- **Aesthetic:** Cyber-minimalist, terminal-inspired monospace UI
+- **Message Cards:** Full-width blocks with right-side green border (`Colors.accent`) for user, left-side gray border (`Colors.borderLight`) for agent
+- **Typography:** Strictly `monospace` throughout for terminal feel
+- **Color Palette:** Single green accent + grays, no secondary colors
 
 ### Component Implementations
 
-1. **Icons (CRITICAL):**
-   - **Do NOT use `Path().commands(...)` with absolute pixel values in ArkUI.** It fails to auto-scale on high-density displays (resulting in 2x2 px dots).
-   - **ALWAYS** use `<svg>` files placed in `resources/base/media` and loaded via `Image($r('app.media.ic_name')).fillColor(...)`. This ensures crisp, `vp` (virtual pixel) based scaling across all devices.
-   - All interactive icons now have actual functions (e.g., Copy icon uses `@ohos.pasteboard`, Clear icon wipes the session, top bar icons invoke `getUIContext().getPromptAction().openToast()`).
+1. **Icons — SymbolGlyph (CRITICAL):**
+   - **ALWAYS** use `SymbolGlyph($r('sys.symbol.xxx'))` for icons — NOT SVG files, NOT Unicode characters.
+   - `Image` with `$r('app.media.ic_xxx')` is the OLD approach. SymbolGlyph is native, auto-scales, and supports color/fontWeight/effects.
+   - **Verified working symbol names:**
+     - `sys.symbol.ohos_trash` (trash/delete)
+     - `sys.symbol.ohos_wifi` (connection/wifi)
+     - `sys.symbol.ohos_folder_badge_plus` (add folder)
+     - `sys.symbol.ohos_folder` (folder)
+     - `sys.symbol.checkmark` (check/done)
+     - `sys.symbol.circle` (circle/empty)
+     - `sys.symbol.chevron_down` (dropdown arrow)
+     - `sys.symbol.xmark` (close/cancel)
+     - `sys.symbol.xmark_circle` (error/fail)
+     - `sys.symbol.ellipsis_message_1` (loading/thinking)
+     - `sys.symbol.arrow_up_circle_fill` (send)
+     - `sys.symbol.paperclip` (attachment)
+     - `sys.symbol.mic` (microphone)
+     - `sys.symbol.waveform` (waveform)
+     - `sys.symbol.clock` (pending/waiting)
+     - `sys.symbol.doc` (document/copy)
+     - `sys.symbol.AI` (AI/sparkles)
+     - `sys.symbol.square` (session indicator)
+   - **Names that do NOT exist** (common mistakes): `sparkles`, `terminal`, `gear`, `ellipsis`, `rectangle_fill`, `ohos_command` — verify before use.
+   - Full list at: https://developer.huawei.com/consumer/cn/design/harmonyos-symbol/
 
-2. **Onboarding / Connection Screen:**
-   - Pure "ACP Bridge Configuration" form with `IP:Port` (WebSocket URL) input and Connect button.
-   - After connecting, `list_agents` is sent to server → server scans PATH for ~55 hardcoded ACP agent binaries → returns list → user picks one → session starts.
-   - No manual agent type input needed.
+2. **Navigation (Routing):**
+   - Uses `Navigation(NavPathStack)` with `navDestination(this.PagesMap)` — a `@Builder` reference, NOT a lambda.
+   - The `@Builder PagesMap(name: string)` matches names to `@Component` structs.
+   - Each destination must be a `@Component` with `NavDestination()` as root.
+   - Home content (OnboardingView) goes inside `Navigation(stack) { ... }` as default child.
+   - `NavigationMode.Stack` mode is set explicitly.
 
-3. **Markdown Rendering:**
-   - Uses `@luvi/lv-markdown-in` (v3.4.1, Gitee: `https://gitee.com/luvi/lv-markdown-in.git`) for rendering tables, code blocks, LaTeX formulas, links.
-   - **Streaming fallback:** During `turnActive`, agent message chunks render as plain `Text()` to avoid flickering. On `turn_ended`, switches to `MarkdownRender` for full rich rendering.
-   - Math formulas enabled via `@cangjie-tpc/formula_hybrid@1.2.7`.
+3. **State Management (V1 + V2 hybrid + Persistence):**
+   - Model classes use `@ObservedV2`/`@Trace` (V2 decorators): `ChatStoreModel`, `WorkspaceStoreModel`, `PlanEntry`.
+   - UI components use V1: `@Component`/`@State`/`@Prop`.
+   - Global singletons (`ChatStore`, `WorkspaceStore`) are `@ObservedV2` instances.
+   - UI state that needs global access (messages, sessions, models, etc.) lives in `ChatStore`.
+   - Local UI state (showPathInput, showDrawer) stays as `@State` in the component.
+   - **Persistence layer:** `StorageService` wraps `@kit.ArkData` preferences for serverUrl, lastAgent, workspaces.
+   - `AppStorage` for cross-component state (`serverUrl`, `lastAgent`, `isConnected`).
+   - `@StorageLink('serverUrl')` in OnboardingView for automatic sync with AppStorage.
 
-4. **State Management (V1 @Component + @State + @Prop):**
-   - We use V1 `@Component`/`@State`/`@Prop` pattern, NOT `@ComponentV2`/`@ObservedV2` (V2 decorators caused reactivity issues with ForEach).
-   - **Streaming Updates:** `@State` arrays MUST be re-assigned with new references (e.g., `this.messages = [...this.messages]`) to trigger reactivity. `ForEach` keys must include content length (e.g., `msg.id + msg.content.length`) to force re-rendering during token-by-token streaming.
+4. **ChatStore Global State:**
+   - `ChatStore.messages` — array of MessageData
+   - `ChatStore.planEntries` — array of PlanEntry
+   - `ChatStore.turnActive`, `ChatStore.sessionId`, `ChatStore.connected`
+   - `ChatStore.sessions`, `ChatStore.models`, `ChatStore.modes`
+   - `ChatStore.selectedAgentName`, `ChatStore.agentType`
+    - Streaming updates: reassign arrays with `ChatStore.messages = [...ChatStore.messages, newMsg]`
+    - **CRITICAL: LazyForEach key for streaming messages MUST be `msg.id + msg.content.length`** — NOT just `msg.id`. During streaming, text appends to the same message (same id, longer content). If the key is only `msg.id`, LazyForEach won't detect the change and won't re-render, so the message gets stuck at truncated text. The `+ msg.content.length` ensures the key changes on each append, forcing re-render. This bug has been introduced by multiple agents independently.
 
-5. **ACP Data Structure (FLAT):**
-   - The ACP `session/update` notification has a **flat** structure. The `sessionUpdate` field IS the type string directly (e.g., `"sessionUpdate": "agent_message_chunk"`). It is NOT nested inside an `event` object.
+5. **Markdown Rendering:**
+   - Uses `@luvi/lv-markdown-in` (v3.4.1, Gitee: `https://gitee.com/luvi/lv-markdown-in.git`).
+   - During `turnActive`, agent message chunks render as plain `Text()`. On `turn_ended`, switches to `MarkdownRender`.
 
-6. **Server Configuration (Dynamic Spawning):**
-   - The bridge server (`server.js`) no longer hardcodes the path to a specific agent's binary. Instead, it dynamically interprets the `agent` parameter received from the client app's connection form (e.g., `opencode` or `claude-code`). It utilizes Node's `child_process.spawn` with `shell: true` to invoke the specified agent directly from the system's `PATH`. This enables true "plug-and-play" ACP-agnosticism.
+6. **Workspace Management:**
+   - Managed via inline `Select` dropdown in `ChatView`, not a drawer overlay.
+   - Workspace data in `WorkspaceStore` (global `@ObservedV2` singleton).
 
-7. **Agent Discovery:**
-   - `server.js` has a hardcoded list of ~55 known ACP agents (from https://agentclientprotocol.com/get-started/agents).
-   - On `list_agents` request, scans each binary name in system PATH using `fs.existsSync`.
-   - Returns discovered agents to the app for user selection.
+7. **Auto-Reconnect:**
+   - `WSClient` with exponential backoff (1s → 2s → 4s → ... → 30s max).
+   - `backgroundTaskManager.requestSuspendDelay()` for ~3min background keepalive.
 
-8. **Auto-Reconnect:**
-   - `WSClient` implements automatic reconnection with exponential backoff (1s → 2s → 4s → ... → 30s max).
-   - Uses `backgroundTaskManager.requestSuspendDelay()` for ~3min background keepalive.
-   - `intentionalClose` flag prevents reconnect when user explicitly disconnects.
-   - Reconnect is silent (no error message) when already in an active session.
+8. **Animations & Transitions:**
+   - View transitions: `TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: 20 }))` with `.animation({ duration: Duration.normal, curve: Curve.EaseOut })`.
+   - Message cards: slide-in on appear with `TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: 12 }))`.
+   - Button press feedback: `@State scale` with `.scale({ x: this.scale, y: this.scale })` on `TouchType.Down/Up`.
+   - Thinking section expand/collapse: `animateTo()` with `Curve.EaseInOut`.
+   - Agent list items: staggered entry with `delay: index * 50`.
 
-9. **Performance Optimizations:**
-   - MCP config loading is non-blocking: session created without MCP servers first, then loaded in background.
-   - Session list caching (30s TTL) with background async fetch—returns empty immediately then updates.
-   - All `showToast()` calls migrated to `getUIContext().getPromptAction().openToast()` (non-deprecated API).
+## ⚠️ ArkTS Syntax Pitfalls (Critical — Read Before Coding)
 
-### Known Compilation Notes
+### Type System Restrictions
+| Rule | What NOT to do | Correct approach |
+|------|---------------|-----------------|
+| `arkts-no-any-unknown` | `x as unknown as string` | `String(x)` or `Boolean(x)` |
+| `arkts-no-typing-with-this` | `this: Type` in function params | Remove `this` param |
+| object-to-primitive cast | `params.isUser as boolean` | `Boolean(params['isUser'])` |
+| object-to-primitive compare | `params['isUser'] === true` | `Boolean(params['isUser'])` |
+| arrow-ts-parameter | `const fn = (x: number) => x` | `const fn = (x: number): number => x` |
+| untyped object literals | `const prefs = { key: 'val' }` | Define explicit interface first |
 
-- `Text.fontColor()` not `.color()` — ArkTS API
-- `LoadingProgress.color()` not `.fontColor()`
-- `Button.backgroundColor()` + `.fontColor()` not `.color()`
-- `Select` doesn't support `fontSize` — keep defaults
-- `@Builder` inside `@Component` can't have variable declarations
-- **Border Syntax:** `border({ left: { width: 3 } })` is invalid syntax. The correct, strongly-typed format is `border({ width: { left: 3 }, color: { left: ... } })`.
+### Navigation API (Most Common Failure)
+| Mistake | Wrong | Correct |
+|---------|-------|---------|
+| navDestination arg type | `.navDestination((name, param) => {})` | Create a `@Builder PagesMap(name: string)` and use `.navDestination(this.PagesMap)` |
+| Destination content | Inline `Column() { ... }` | Create a separate `@Component` struct with `NavDestination()` as root |
+| param type | `param: unknown` or `param: any` | `param: Object` (but `unknown`/`any` are banned) |
+
+### bindSheet
+- `bindSheet($$state, content, options)` — DOES work on a top-level component like `Navigation`.
+- Does NOT work when chained inside a `@Builder` function (parser fails with "unexpected token").
+- `$$` binding only works with `@State`, NOT `@Prop`.
+
+### SideBarContainer
+| Constraint | Explanation |
+|-----------|-------------|
+| No `if/else` as direct child | Must wrap content in a `@Builder` or `@Component` |
+| Only 2 children allowed | Exactly 1 sidebar + 1 content |
+| `$$showSideBar` binding | Works with `@State`, NOT in `@Builder` context reliably |
+| Preferred alternative | Use `Stack` + `position({x:0,y:0}).zIndex(100)` + conditional rendering instead |
+
+### @Reusable + aboutToReuse
+- `aboutToReuse(params: Record<string, object>)` — must convert types via `String()` and `Boolean()`, NOT `as` cast.
+- `@State` (not `@Prop`) must be used for variables that update on reuse.
+- `as unknown as Type` is BANNED — use `String(params['key'])` or `Boolean(params['key'])`.
+
+### Conditional Rendering in NavDestination
+- `if (this.stateVar)` conditional inside `NavDestination` may NOT re-render when `@State` changes.
+- **Workaround:** Use `Visibility` property instead of conditional `if`:
+  ```ets
+  Row() { ... }
+  .visibility(this.showDrawer ? Visibility.Visible : Visibility.None)
+  ```
+- This applies specifically to `NavDestination` children, not regular `@Component` structs.
+
+### Text.onClick / Button.onClick
+- `Text('\u2630').onClick(...)` — onClick may NOT fire on plain `Text` in some contexts.
+- **Always use `Button()` for clickable elements**, or wrap `Text` in a `Row()` with `.onClick()`.
+
+### Input Components
+| Component | onSubmit signature | Notes |
+|-----------|-------------------|-------|
+| `TextInput` | `(value: string, event: SubmitEvent) => void` | ArkTS API |
+| `TextArea` | `() => void` or `(EnterKeyType, SubmitEvent)` | Use `enterKeyType(EnterKeyType.Send)` |
+
+### Border Syntax
+```ets
+// WRONG — won't compile:
+.border({ left: { width: 3 } })
+
+// CORRECT:
+.border({ width: { left: 3 }, color: { left: Colors.accent } })
+```
+
+### Imports
+- `import` statements MUST be at the TOP of the file, before any other declarations.
+- Circular imports: `A → B → A` causes compiler errors. Break cycles by inlining simple types or creating a shared types file.
+- **Single source of truth:** All design tokens imported from `../constants/DesignTokens` (Colors, FontSize, Spacing, Radius, Duration, Shadow all in one file).
+
+### SymbolGlyph Resource Names
+- Pattern: `$r('sys.symbol.ohos_xxx')` or `$r('sys.symbol.xxx')`
+- **NOT all SF Symbol names work** — many common names like `sparkles`, `terminal`, `gear`, `ellipsis` do NOT exist in HarmonyOS SDK.
+- If a symbol name fails with "Unknown resource name", verify at https://developer.huawei.com/consumer/cn/design/harmonyos-symbol/ or use a known working alternative.
+- `fontColor` requires an **array**: `fontColor([Colors.accent])`, NOT `fontColor(Colors.accent)`.
+
+### @Provide/@Consume
+- `@Provide('key')` in parent, `@Consume('key')` in child — key string must match exactly.
+- Alternative: use `AppStorage.setOrCreate()` for simple global state.
+
+### LazyForEach + IDataSource
+- `IDataSource` requires explicit `registerDataChangeListener` / `unregisterDataChangeListener` implementations.
+- `LazyForEach` key function must return a **unique string** per item (e.g., `msg.id`).
+- Data source `updateData()` must call `notifyDataReload()` on all registered listeners.
+
+### @StorageLink
+- `@StorageLink('key')` requires the key to be pre-initialized via `AppStorage.setOrCreate()` **before** the component is created.
+- Best place: `EntryAbility.onCreate()`.
 
 ## Build & Deploy
 
@@ -111,7 +216,7 @@ hdc -t 2NP0224627054426 shell aa start -a EntryAbility -b com.anywhere.app
 
 ### Bridge Server (must be running on PC)
 
-Server is now built with `@agentclientprotocol/sdk` (TypeScript).
+Server is built with `@agentclientprotocol/sdk` (TypeScript).
 
 ```powershell
 cd Anywhere
@@ -124,40 +229,114 @@ npm run server:old   # Old hand-written server (keep for rollback)
 ## Current State
 
 ### Working
-- WebSocket connection to bridge server via manual IP/Port configuration
+- WebSocket connection to bridge server via manual IP/Port configuration (onboarding form)
 - ACP session creation and streaming chat
-- Agent auto-discovery: server scans PATH for 55+ known ACP agents, app shows picker
-- Terminal-style message blocks with `user@local` and `agent@remote` headers
-- Thinking content (folded by default) + tool call cards + agent message text
+- Agent auto-discovery + inline agent picker list (after connection)
+- Navigation + NavPathStack routing (native HarmonyOS page transitions with OnboardingView as home)
+- Terminal-style message blocks with monospace text
+- Thinking content + tool call cards + agent message text
 - Markdown rendering (tables, code blocks, LaTeX math, links) on turn completion
-- Streaming text via plain `Text()` during active turn (no flickering)
-- Workspace management (add/select/delete via drawer)
-- Model and Mode lists (fetched after session_started)
-- Native SVG scaling using `Image` component and local resource files
-- Message text copying via system pasteboard (`ic_copy.svg`)
-- Session clearing functionality (`ic_clear.svg`)
-- Auto-reconnect with exponential backoff (silent for active sessions)
+- Streaming text via plain `Text()` during active turn
+- Workspace management (add/select via inline `Select` dropdown)
+- Model and Mode selection (`Select` dropdowns)
+- Native SymbolGlyph icons (system built-in, no SVG files needed, no Unicode characters)
+- Message text copying via system pasteboard
+- Session clearing functionality
+- Auto-reconnect with exponential backoff
 - Background task keepalive (~3min)
-- Session list caching (30s) + background async load
-- MCP config loaded asynchronously (non-blocking session creation)
+- Session list with load/switch via dropdown
 - Disabled input during turnActive
-- Auto-scroll to bottom on new messages and agent replies
-- Working directory passed via workspace path (`cwd` in `start` message)
+- Auto-scroll to bottom on new messages
+- Working directory passed via workspace path
+- TextArea multi-line input (1-6 lines, Enter to send)
+- MessageCard @Reusable component recycling
+- ChatStore global state (observable across components)
+- **View transition animations** (fade + slide on state changes)
+- **Message card entry animations** (slide-in on appear)
+- **Button press feedback** (scale animation on touch)
+- **LazyForEach** message list with IDataSource (performance optimized)
+- **AppStorage persistence** for serverUrl, lastAgent
+- **Preferences persistence** via StorageService for serverUrl, lastAgent, workspaces
+- **Unified design tokens** (single DesignTokens.ets file, no Colors.ets)
 
 ### Not Working / TODO
-- File upload (Toast placeholder currently bound to `ic_attachment.svg`)
-- Microphone/Voice input (Toast placeholder currently bound to `ic_mic.svg`)
-- Permission request dialog (Allow/Deny)
+- File upload (placeholder)
+- Microphone/Voice input (placeholder)
+- Permission request dialog
 - Session renaming
 - Host list management (saving multiple bridge servers)
 - Cancel current turn
 - Error recovery on message send failure (turn stays active)
+- Workspace drawer overlay (broken inside NavDestination — replaced with inline Select)
+- bindSheet (doesn't work inside @Builder — agent picker is inline instead)
+- SideBarContainer ($$ binding broken in NavDestination context)
+- Workspace delete (needs UI for deletion)
+
+## File Structure
+
+```
+entry/src/main/ets/
+├── pages/
+│   └── Index.ets                    # Navigation root + PagesMap builder
+├── feature/
+│   ├── onboarding/
+│   │   └── OnboardingView.ets       # NavDestination: connect + agent picker (home)
+│   ├── chat/
+│   │   ├── ChatPage.ets             # Message list + input bar
+│   │   └── ChatInputBar.ets         # TextArea + model/mode selects
+│   └── workspace/
+│       └── WorkspaceDrawer.ets      # Drawer overlay component
+├── components/
+│   ├── ChatView.ets                 # NavDestination: workspace + session selects
+│   ├── DisconnectedView.ets         # Reconnect prompt page
+│   ├── ConnectingView.ets           # Connecting state page
+│   ├── WorkspaceSelectView.ets      # Workspace selection page
+│   ├── WorkspaceDetailView.ets      # Workspace detail page
+│   ├── WorkspaceDrawer.ets          # Workspace drawer component
+│   ├── MessageBubble.ets            # Bubble-style message component
+│   ├── ThinkingSection.ets          # Collapsible thinking content
+│   ├── ToolCallCard.ets             # Tool call status card
+│   ├── PlanView.ets                 # Plan entries display
+│   └── base/
+│       ├── AppButton.ets            # Reusable button with variants
+│       └── StatusBadge.ets          # Online/offline status badge
+├── common/
+│   ├── model/
+│   │   ├── ChatState.ets            # ChatStore, ModelItem, ModeItem, PlanEntry
+│   │   ├── WorkspaceInfo.ets        # WorkspaceStore, WorkspaceInfo
+│   │   ├── MessageData.ets          # MessageData class
+│   │   └── AgentConfig.ets          # AgentModel, AgentMode
+│   ├── ui/
+│   │   ├── MessageCard.ets          # @Reusable message card component
+│   │   ├── ThinkingSection.ets      # Thinking content section
+│   │   ├── ToolCallCard.ets         # Tool call status card
+│   │   ├── PlanView.ets             # Plan entries display
+│   │   ├── MarkdownRender.ets       # Markdown rendering wrapper
+│   │   ├── CardHeader.ets           # Message card header
+│   │   └── MessageDataSource.ets    # IDataSource for LazyForEach
+│   └── websocket/
+│       ├── WSClient.ets             # WebSocket client with auto-reconnect
+│       └── WSProtocol.ets           # Protocol types (ClientMessage, AcpUpdate)
+├── services/
+│   ├── WebSocketService.ets         # WebSocket service layer
+│   └── StorageService.ets           # Preferences persistence service
+├── store/
+│   ├── AppState.ets                 # Application state management
+│   └── SessionStore.ets             # Session state management
+├── constants/
+│   └── DesignTokens.ets             # Unified: Colors, Spacing, Radius, FontSize, Shadow, Duration
+├── entryability/
+│   └── EntryAbility.ets             # App entry, AppStorage initialization
+└── entrybackupability/
+    └── EntryBackupAbility.ets       # Backup ability
+```
 
 ## Documentation
 
-- **ACP Protocol Spec:** `docs/acp-protocol.md` — Full 19-chapter reference based on official docs
+- **ACP Protocol Spec:** `docs/acp-protocol.md` — Full 19-chapter reference
 - **Frontend Architecture:** `docs/app-frontend-architecture.md`
 - **Plans:** `docs/plans/` — Implementation plans and design docs
+- **Native Component Improvement Plan:** `docs/plans/2026-05-15-native-component-improvement-plan.md`
 
 ## API Reference
 

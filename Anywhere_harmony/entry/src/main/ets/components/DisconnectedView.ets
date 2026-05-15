@@ -1,5 +1,4 @@
-import { Colors } from '../constants/Colors';
-import { FontSize, Spacing, Radius } from '../constants/DesignTokens';
+import { Colors, FontSize, Spacing, Radius } from '../constants/DesignTokens';
 
 @Component
 export struct DisconnectedView {
@@ -13,9 +12,9 @@ export struct DisconnectedView {
     Column() {
       Column() {
         Row() {
-          Text('✦')
-            .fontSize(40)
-            .fontColor(Colors.accent)
+          SymbolGlyph($r('sys.symbol.AI'))
+            .fontSize(FontSize.xxxl)
+            .fontColor([Colors.accent])
           
           Text('Anywhere')
             .fontSize(32)

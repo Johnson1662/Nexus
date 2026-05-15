@@ -1,5 +1,4 @@
-import { Colors } from '../constants/Colors';
-import { Radius, FontSize } from '../constants/DesignTokens';
+import { Colors, Radius, FontSize, Duration } from '../constants/DesignTokens';
 
 export enum ButtonVariant {
   Primary = 'primary',
@@ -21,6 +20,7 @@ export struct AppButton {
   @Prop size: ButtonSize = ButtonSize.Medium;
   @Prop disabled: boolean = false;
   @Prop fullWidth: boolean = false;
+  @State scale: number = 1.0;
   onClick?: () => void;
   
   private getBackgroundColor(): string {
@@ -64,6 +64,15 @@ export struct AppButton {
       .fontWeight(FontWeight.Medium)
       .borderRadius(Radius.md)
       .enabled(!this.disabled)
+      .scale({ x: this.scale, y: this.scale })
+      .animation({ duration: Duration.fast, curve: Curve.EaseOut })
+      .onTouch((event: TouchEvent) => {
+        if (event.type === TouchType.Down && !this.disabled) {
+          this.scale = 0.96;
+        } else if ((event.type === TouchType.Up || event.type === TouchType.Cancel) && !this.disabled) {
+          this.scale = 1.0;
+        }
+      })
       .onClick(() => {
         if (this.onClick && !this.disabled) {
           this.onClick();

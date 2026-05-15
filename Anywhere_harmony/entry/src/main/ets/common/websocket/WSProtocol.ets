@@ -1,4 +1,4 @@
-import { PlanEntry } from '../model/ChatState';
+import { PlanEntry, ModelItem, ModeItem } from '../model/ChatState';
 import { ServerSession } from '../model/WorkspaceInfo';
 
 export interface AcpUpdate {
@@ -44,16 +44,6 @@ export interface ServerMessage {
   requestId?: string;
   toolCall?: object;
   options?: object;
-}
-
-export interface ModelItem {
-  modelId: string;
-  name: string;
-}
-
-export interface ModeItem {
-  value: string;
-  name: string;
 }
 
 export interface AgentInfo {

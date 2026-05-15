@@ -1,4 +1,4 @@
-import { Colors, FontSize, Spacing, Radius } from '../../constants/Colors';
+import { Colors, FontSize, Spacing, Radius } from '../../constants/DesignTokens';
 import { WorkspaceInfo } from '../../common/model/WorkspaceInfo';
 
 @Component
@@ -26,7 +26,7 @@ export struct WorkspaceDrawer {
           .layoutWeight(1)
 
         Row() {
-          Image($r('app.media.ic_close')).fillColor(Colors.foregroundMuted).width(24).height(24)
+SymbolGlyph($r('sys.symbol.xmark')).fontColor([Colors.foregroundMuted]).fontSize(24)
         }
         .width(36)
         .height(36)

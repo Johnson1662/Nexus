@@ -1,4 +1,4 @@
-import { Colors, FontSize, Spacing } from '../../constants/Colors';
+import { Colors, FontSize, Spacing } from '../../constants/DesignTokens';
 
 @Component
 export struct CardHeader {

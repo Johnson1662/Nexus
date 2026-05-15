@@ -1,6 +1,5 @@
-import { Colors } from '../constants/Colors';
+import { Colors, FontSize, Spacing, Radius, Duration } from '../constants/DesignTokens';
 import { PlanEntry } from '../store/SessionStore';
-import { FontSize, Spacing, Radius, Duration } from '../constants/DesignTokens';
 
 @Component
 export struct PlanView {

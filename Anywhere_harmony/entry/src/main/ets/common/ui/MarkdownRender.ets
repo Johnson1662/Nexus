@@ -1,5 +1,5 @@
 import { Markdown, MarkdownController } from '@luvi/lv-markdown-in';
-import { Colors } from '../../constants/Colors';
+import { Colors } from '../../constants/DesignTokens';
 
 @Component
 export struct MarkdownRender {

@@ -1,17 +1,9 @@
-import { Colors } from '../constants/Colors';
-import { FontSize, Spacing, Radius, Duration } from '../constants/DesignTokens';
+import { Colors, FontSize, Spacing, Radius, Duration } from '../constants/DesignTokens';
 
 @Component
 export struct ToolCallCard {
   @Prop name: string = 'Tool';
   @Prop status: string = 'pending';
-
-  private getStatusMark(): string {
-    if (this.status === 'completed') return '✓';
-    if (this.status === 'failed') return '✗';
-    if (this.status === 'in_progress') return '⚙';
-    return '⏱';
-  }
 
   private getStatusColor(): string {
     if (this.status === 'completed') return Colors.success;
@@ -35,6 +27,27 @@ export struct ToolCallCard {
     return this.status;
   }
 
+  @Builder
+  statusIcon(): void {
+    if (this.status === 'completed') {
+      SymbolGlyph($r('sys.symbol.checkmark'))
+        .fontSize(FontSize.md)
+        .fontColor([this.getStatusColor()])
+    } else if (this.status === 'failed') {
+      SymbolGlyph($r('sys.symbol.xmark'))
+        .fontSize(FontSize.md)
+        .fontColor([this.getStatusColor()])
+    } else if (this.status === 'in_progress') {
+      SymbolGlyph($r('sys.symbol.gearshape'))
+        .fontSize(FontSize.md)
+        .fontColor([this.getStatusColor()])
+    } else {
+      SymbolGlyph($r('sys.symbol.clock'))
+        .fontSize(FontSize.md)
+        .fontColor([this.getStatusColor()])
+    }
+  }
+
   build() {
     Row() {
       Column() {
@@ -44,10 +57,7 @@ export struct ToolCallCard {
             .height(18)
             .color(this.getStatusColor())
         } else {
-          Text(this.getStatusMark())
-            .fontSize(FontSize.md)
-            .fontColor(this.getStatusColor())
-            .fontWeight(FontWeight.Bold)
+          this.statusIcon()
         }
       }
       .width(36)
@@ -56,6 +66,8 @@ export struct ToolCallCard {
       .borderRadius(Radius.lg)
       .justifyContent(FlexAlign.Center)
       .margin({ right: Spacing.md })
+      .transition(TransitionEffect.OPACITY.combine(TransitionEffect.scale({ x: 0.8, y: 0.8 })))
+      .animation({ duration: Duration.fast, curve: Curve.EaseOut })
 
       Column() {
         Text(this.name)
