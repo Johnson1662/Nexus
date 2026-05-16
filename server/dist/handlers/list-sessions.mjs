@@ -7,7 +7,7 @@ export async function handleListSessions(ws, cwd) {
         return;
     }
     const cached = sessionListCache.get(ws);
-    if (cached && Date.now() - cached.timestamp < 30000) {
+    if (cached && cached.cwd === cwd && Date.now() - cached.timestamp < 30000) {
         ws.send(JSON.stringify({ type: "session_list", sessions: cached.sessions }));
         return;
     }
@@ -15,7 +15,7 @@ export async function handleListSessions(ws, cwd) {
     try {
         const result = await sess.client.listSessions(cwd);
         const sessions = result.sessions || [];
-        sessionListCache.set(ws, { sessions, timestamp: Date.now() });
+        sessionListCache.set(ws, { sessions, timestamp: Date.now(), cwd });
         ws.send(JSON.stringify({ type: "session_list", sessions }));
     }
     catch (err) {

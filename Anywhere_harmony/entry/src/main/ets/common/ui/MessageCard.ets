@@ -92,8 +92,9 @@ export struct MessageCard {
       width: { left: this.isUser ? 0 : 3, right: this.isUser ? 3 : 0 },
       color: { left: Colors.borderLight, right: Colors.accent }
     })
-    .backgroundColor(this.isUser ? Colors.surface0 : Colors.surface1)
+    .backgroundColor(this.isUser ? Colors.surface0 : Colors.surfaceElevated)
     .margin({ top: Spacing.xs, bottom: Spacing.xs })
+    .shadow({ radius: 4, color: '#00000006', offsetY: 1 })
     .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: 12 })))
     .animation({ duration: Duration.normal, curve: Curve.EaseOut })
   }

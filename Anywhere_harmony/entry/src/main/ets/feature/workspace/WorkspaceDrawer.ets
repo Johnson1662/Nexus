@@ -20,46 +20,34 @@ export struct WorkspaceDrawer {
     Column() {
       Row() {
         Text('Workspaces')
-          .fontSize(FontSize.lg)
+          .fontSize(FontSize.xl)
           .fontWeight(FontWeight.Bold)
           .fontColor(Colors.foreground)
       }
       .width('100%')
-      .padding({ left: Spacing.xl, right: Spacing.xl, top: Spacing.xl, bottom: Spacing.lg })
-
-      Divider().color(Colors.borderLight).width('100%')
+      .padding({ left: Spacing.xl, right: Spacing.xl, top: Spacing.xl, bottom: Spacing.md })
 
       List() {
         ForEach(this.workspaces, (ws: WorkspaceInfo, index: number) => {
           ListItem() {
             Row() {
-              if (index === this.currentIndex) {
-                Column()
-                  .width(3).height(20)
-                  .backgroundColor(Colors.accent)
-                  .borderRadius(Radius.full)
-                  .margin({ right: Spacing.md })
-              } else {
-                Column().width(3).margin({ right: Spacing.md })
-              }
-
               Row() {
                 Text(ws.name.charAt(0).toUpperCase())
-                  .fontSize(16)
+                  .fontSize(18)
                   .fontWeight(FontWeight.Bold)
-                  .fontColor(index === this.currentIndex ? Colors.accent : Colors.foregroundMuted)
+                  .fontColor(index === this.currentIndex ? Color.White : Colors.accent)
               }
-              .width(36).height(36)
-              .backgroundColor(index === this.currentIndex ? Colors.accentLight : Colors.surface1)
-              .borderRadius(Radius.md)
+              .width(40).height(40)
+              .backgroundColor(index === this.currentIndex ? Colors.accent : Colors.accentLight)
+              .borderRadius(Radius.lg)
               .justifyContent(FlexAlign.Center)
               .margin({ right: Spacing.md })
 
               Column() {
                 Text(ws.name)
                   .fontSize(FontSize.base)
-                  .fontColor(index === this.currentIndex ? Colors.accent : Colors.foreground)
-                  .fontWeight(index === this.currentIndex ? FontWeight.Medium : FontWeight.Regular)
+                  .fontColor(Colors.foreground)
+                  .fontWeight(FontWeight.Medium)
                   .maxLines(1)
                   .textOverflow({ overflow: TextOverflow.Ellipsis })
 
@@ -74,48 +62,59 @@ export struct WorkspaceDrawer {
               .layoutWeight(1)
             }
             .width('100%')
-            .padding({ left: Spacing.md, right: Spacing.lg, top: Spacing.md, bottom: Spacing.md })
-            .backgroundColor(index === this.currentIndex ? Colors.accentTransparent : 'transparent')
-            .borderRadius(Radius.md)
+            .padding({ left: Spacing.lg, right: Spacing.lg, top: Spacing.md, bottom: Spacing.md })
+            .backgroundColor(index === this.currentIndex ? Colors.surface1 : 'transparent')
+            .borderRadius(Radius.lg)
             .onClick(() => { if (this.onSelect) this.onSelect(index) })
             .gesture(
               LongPressGesture({ repeat: false, duration: 600 })
                 .onAction(() => { if (this.onDelete) this.onDelete(index) })
             )
           }
-          .padding({ left: Spacing.sm, right: Spacing.md, bottom: Spacing.xs })
+          .padding({ left: Spacing.sm, right: Spacing.sm, bottom: Spacing.sm })
         }, (ws: WorkspaceInfo, index: number) => ws.id + index.toString())
       }
       .width('100%')
       .layoutWeight(1)
       .padding({ top: Spacing.sm })
 
-      Button('+ Add workspace')
-        .width('100%').height(44)
-        .backgroundColor(Colors.accentLight).fontColor(Colors.accent)
-        .borderRadius(Radius.md).fontSize(FontSize.sm)
-        .margin({ left: Spacing.md, right: Spacing.md, bottom: Spacing.sm })
-        .onClick(() => { this.showForm = !this.showForm })
+      Button({ type: ButtonType.Normal, stateEffect: true }) {
+        Row() {
+          SymbolGlyph($r('sys.symbol.plus'))
+            .fontSize(FontSize.sm)
+            .fontColor([Colors.accent])
+          Text(' Add workspace')
+            .fontSize(FontSize.sm)
+            .fontColor(Colors.accent)
+        }
+        .alignItems(VerticalAlign.Center)
+        .justifyContent(FlexAlign.Center)
+      }
+      .width('100%').height(48)
+      .backgroundColor(Colors.accentLight)
+      .borderRadius(Radius.lg)
+      .margin({ left: Spacing.lg, right: Spacing.lg, bottom: Spacing.sm })
+      .onClick(() => { this.showForm = !this.showForm })
 
       if (this.showForm) {
         Column() {
-          TextInput({ placeholder: 'Project path', text: this.newPath })
-            .width('100%').height(40)
-            .backgroundColor(Colors.surface1).borderRadius(Radius.sm)
+          TextInput({ placeholder: 'Enter project path...', text: this.newPath })
+            .width('100%').height(44)
+            .backgroundColor(Colors.surface0).borderRadius(Radius.md)
             .padding({ left: Spacing.md, right: Spacing.md })
             .fontSize(FontSize.sm)
             .onChange((v: string) => { this.newPath = v })
 
           Row() {
             Button('Cancel')
-              .layoutWeight(1).height(36)
+              .layoutWeight(1).height(40)
               .backgroundColor(Colors.surface2).fontColor(Colors.foreground)
-              .borderRadius(Radius.sm).fontSize(FontSize.xs)
+              .borderRadius(Radius.md).fontSize(FontSize.sm)
               .onClick(() => { this.showForm = false; this.newPath = '' })
             Button('Add')
-              .layoutWeight(1).height(36).margin({ left: Spacing.sm })
+              .layoutWeight(1).height(40).margin({ left: Spacing.md })
               .backgroundColor(Colors.accent).fontColor(Color.White)
-              .borderRadius(Radius.sm).fontSize(FontSize.xs)
+              .borderRadius(Radius.md).fontSize(FontSize.sm)
               .onClick(() => {
                 if (this.newPath.length > 0 && this.onAddWorkspace) {
                   this.onAddWorkspace(this.newPath);
@@ -124,22 +123,15 @@ export struct WorkspaceDrawer {
                 }
               })
           }
-          .width('100%').margin({ top: Spacing.sm })
+          .width('100%').margin({ top: Spacing.md })
         }
-        .padding(Spacing.md)
+        .padding(Spacing.lg)
         .backgroundColor(Colors.surfaceElevated)
-        .borderRadius(Radius.md)
-        .margin({ left: Spacing.md, right: Spacing.md, bottom: Spacing.sm })
+        .borderRadius(Radius.lg)
+        .margin({ left: Spacing.lg, right: Spacing.lg, bottom: Spacing.sm })
+        .shadow({ radius: 8, color: '#00000010', offsetY: 4 })
         .transition(TransitionEffect.OPACITY)
       }
-
-      Row() {
-        Circle().width(6).height(6).fill(Colors.success)
-        Text(this.agentType).fontSize(FontSize.sm).fontColor(Colors.foregroundMuted)
-          .margin({ left: Spacing.sm }).layoutWeight(1)
-      }
-      .width('100%')
-      .padding({ left: Spacing.xl, right: Spacing.xl, top: Spacing.md, bottom: Spacing.xl })
     }
     .width('100%')
     .height('100%')

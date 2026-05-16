@@ -22,8 +22,9 @@ export struct ChatView {
   onWorkspaceSelect?: (index: number) => void;
 
   getSessionTitle(): string {
+    let targetId = ChatStore.loadedSessionId || ChatStore.sessionId;
     for (let i = 0; i < ChatStore.sessions.length; i++) {
-      if (ChatStore.sessions[i].sessionId === ChatStore.sessionId) {
+      if (ChatStore.sessions[i].sessionId === targetId) {
         return ChatStore.sessions[i].title || ChatStore.sessions[i].sessionId.substring(0, 8);
       }
     }
@@ -31,8 +32,8 @@ export struct ChatView {
   }
 
   getModelName(): string {
-    if (ChatStore.models.length > 0) {
-      return ChatStore.models[0].name;
+    if (ChatStore.modelIndex >= 0 && ChatStore.modelIndex < ChatStore.models.length) {
+      return ChatStore.models[ChatStore.modelIndex].name;
     }
     return '';
   }
@@ -194,6 +195,7 @@ export struct ChatView {
                 .margin({ top: Spacing.md, bottom: Spacing.xs })
                 .onClick(() => { this.showPicker = false })
             }
+            .constraintSize({ maxHeight: '80%' })
             .width('75%').padding({ left: Spacing.xl, right: Spacing.xl, bottom: Spacing.xl })
             .backgroundColor(Colors.surfaceElevated).borderRadius(Radius.xl)
             .shadow({ radius: 32, color: '#00000020', offsetY: 8 })

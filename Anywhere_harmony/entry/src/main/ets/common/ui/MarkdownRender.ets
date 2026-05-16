@@ -19,7 +19,7 @@ export struct MarkdownRender {
     this.controller.setTableInterleaveBackgroundColor('#F5F5F5');
     this.controller.setTableBorderRadius(6);
     this.controller.setQuoteBackgroundColor('#F8F9FA');
-    this.controller.setQuoteBorderColor('#20744A');
+    this.controller.setQuoteBorderColor(Colors.accent);
     this.controller.setHyperlinkTextColor(Colors.accent);
     this.controller.setHyperlinkUnderlineState(true);
     this.controller.setThreadRenderEnable(true);

@@ -4,7 +4,7 @@ const fs = require("fs");
 const path = require("path");
 const os = require("os");
 
-const PORT = 6767;
+const PORT = 12138;
 const HOST = "0.0.0.0";
 
 const wss = new WebSocketServer({ host: HOST, port: PORT });

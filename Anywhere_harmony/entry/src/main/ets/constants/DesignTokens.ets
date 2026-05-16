@@ -1,33 +1,33 @@
 export class Colors {
-  static readonly surface0: string = '#FFFFFF';
-  static readonly surface1: string = '#F4F5F7';
-  static readonly surface2: string = '#E5E7EB';
+  static readonly surface0: string = '#FAFBFC';
+  static readonly surface1: string = '#F0F2F5';
+  static readonly surface2: string = '#E2E5EA';
   static readonly surfaceElevated: string = '#FFFFFF';
-  static readonly userBubble: string = '#1A7F4B';
+  static readonly userBubble: string = '#6366F1';
 
-  static readonly foreground: string = '#1C1E21';
-  static readonly foregroundMuted: string = '#6B717A';
-  static readonly foregroundLight: string = '#9CA3AB';
+  static readonly foreground: string = '#1A1D23';
+  static readonly foregroundMuted: string = '#6B7280';
+  static readonly foregroundLight: string = '#9CA3AF';
 
-  static readonly accent: string = '#1A7F4B';
-  static readonly accentDark: string = '#126839';
-  static readonly accentLight: string = '#E2F3E9';
-  static readonly accentTransparent: string = '#1A7F4B12';
+  static readonly accent: string = '#6366F1';
+  static readonly accentDark: string = '#4F46E5';
+  static readonly accentLight: string = '#EEF2FF';
+  static readonly accentTransparent: string = '#6366F112';
 
-  static readonly success: string = '#059669';
-  static readonly successLight: string = '#DCFCE7';
-  static readonly warning: string = '#D97706';
+  static readonly success: string = '#10B981';
+  static readonly successLight: string = '#D1FAE5';
+  static readonly warning: string = '#F59E0B';
   static readonly warningLight: string = '#FEF3C7';
-  static readonly error: string = '#DC2626';
+  static readonly error: string = '#EF4444';
   static readonly errorLight: string = '#FEE2E2';
 
-  static readonly border: string = '#D4D6DA';
-  static readonly borderLight: string = '#EFEFEF';
-  static readonly borderFocus: string = '#1A7F4B';
+  static readonly border: string = '#D1D5DB';
+  static readonly borderLight: string = '#E5E7EB';
+  static readonly borderFocus: string = '#6366F1';
 
   static readonly shadowColor: string = '#00000008';
   static readonly shadowColorStrong: string = '#00000014';
-  static readonly shadowAccent: string = '#1A7F4B14';
+  static readonly shadowAccent: string = '#6366F114';
 }
 
 export class Spacing {

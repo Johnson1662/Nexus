@@ -20,11 +20,13 @@ export struct Index {
         onSendMessage: (t: string) => { this.sendMessage(t) },
         onSwitchModel: (i: number) => {
           if (ChatStore.sessionId && i > 0 && i - 1 < ChatStore.models.length) {
+            ChatStore.modelIndex = i - 1;
             this.ws.send({ type: 'switch_model', sessionId: ChatStore.sessionId, model: ChatStore.models[i-1].modelId } as ClientMessage)
           }
         },
         onSwitchMode: (i: number) => {
           if (ChatStore.sessionId && i > 0 && i - 1 < ChatStore.modes.length) {
+            ChatStore.modeIndex = i - 1;
             this.ws.send({ type: 'set_mode', sessionId: ChatStore.sessionId, modeId: ChatStore.modes[i-1].value } as ClientMessage)
           }
         },
@@ -42,7 +44,9 @@ export struct Index {
           ChatStore.turnActive = false;
           ChatStore.sessionId = '';
           let cwd = WorkspaceStore.currentIndex >= 0 ? WorkspaceStore.workspaces[WorkspaceStore.currentIndex].path : '';
-          this.ws.send({ type: 'start', agent: ChatStore.agentType, cwd: cwd } as ClientMessage);
+          let model = (ChatStore.modelIndex >= 0 && ChatStore.modelIndex < ChatStore.models.length)
+            ? ChatStore.models[ChatStore.modelIndex].modelId : undefined;
+          this.ws.send({ type: 'start', agent: ChatStore.agentType, cwd: cwd, model: model } as ClientMessage);
         },
         onWorkspaceSelect: (index: number) => {
           this.ws.send({ type: 'list_sessions', cwd: WorkspaceStore.workspaces[index].path } as ClientMessage);
@@ -74,7 +78,7 @@ export struct Index {
     .navDestination(this.PagesMap)
     .hideTitleBar(true)
     .width('100%').height('100%')
-    .backgroundColor(Colors.surface0)
+    .backgroundColor(Colors.surface1)
     .mode(NavigationMode.Stack)
   }
 }

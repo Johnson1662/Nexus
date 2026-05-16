@@ -28,7 +28,6 @@ export struct ToolCallCard {
 
       Text(this.name)
         .fontSize(FontSize.sm)
-        .fontFamily('monospace')
         .fontColor(Colors.foreground)
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })

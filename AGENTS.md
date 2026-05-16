@@ -204,6 +204,7 @@ Phone (HarmonyOS ArkTS App)             PC (Node.js Bridge)
 
 ## Build & Deploy
 
+### USB / 无线部署
 ```powershell
 # Build
 cd Anywhere_harmony
@@ -213,6 +214,21 @@ node "D:\DevEco Studio\tools\hvigor\bin\hvigorw.js" --mode module -p module=entr
 hdc -t 2NP0224627054426 install "entry/build/default/outputs/default/entry-default-signed.hap"
 hdc -t 2NP0224627054426 shell aa start -a EntryAbility -b com.anywhere.app
 ```
+
+### 无线调试（Wi-Fi）
+手机和电脑连同一局域网后，在手机开发者选项中开启"无线调试"获取 IP:端口：
+```powershell
+# 1. 建立 TCP 连接（IP:端口每次可能不同）
+hdc tconn 192.168.x.x:xxxxx
+
+# 2. 确认设备已连接
+hdc list targets
+
+# 3. 部署 / 启动
+hdc install "entry/build/default/outputs/default/entry-default-signed.hap"
+hdc shell aa start -a EntryAbility -b com.anywhere.app
+```
+注意：无线首次连接建议先用 USB 连一次再切无线，更稳定。断线后重新 `hdc tconn` 即可。
 
 ### Bridge Server (must be running on PC)
 
@@ -258,6 +274,8 @@ npm run server:old   # Old hand-written server (keep for rollback)
 - **AppStorage persistence** for serverUrl, lastAgent
 - **Preferences persistence** via StorageService for serverUrl, lastAgent, workspaces
 - **Unified design tokens** (single DesignTokens.ets file, no Colors.ets)
+- **Title bar session title** correctly resolved using `loadedSessionId` fallback when loading history sessions
+- **Title bar model name** tracks `ChatStore.modelIndex` instead of always showing first model
 
 ### Not Working / TODO
 - File upload (placeholder)
@@ -269,7 +287,6 @@ npm run server:old   # Old hand-written server (keep for rollback)
 - Error recovery on message send failure (turn stays active)
 - Workspace drawer overlay (broken inside NavDestination — replaced with inline Select)
 - bindSheet (doesn't work inside @Builder — agent picker is inline instead)
-- SideBarContainer ($$ binding broken in NavDestination context)
 - Workspace delete (needs UI for deletion)
 
 ## File Structure

@@ -10,7 +10,7 @@ import { handleSwitchModel } from "./handlers/switch-model.mjs";
 import { handleLoadSession } from "./handlers/load-session.mjs";
 import { handlePermissionResponse } from "./handlers/permission.mjs";
 import { cleanupWsSessions } from "./session.mjs";
-const PORT = 6767;
+const PORT = 12138;
 const HOST = "0.0.0.0";
 const wss = new WebSocketServer({ host: HOST, port: PORT });
 console.log(`[server] listening on ws://${HOST}:${PORT}`);

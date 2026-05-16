@@ -31,6 +31,9 @@ export class ChatStoreModel {
   @Trace modes: ModeItem[] = [];
   @Trace selectedAgentName: string = '';
   @Trace agentType: string = '';
+  @Trace modelIndex: number = 0;
+  @Trace modeIndex: number = 0;
+  @Trace sessionCurrentModelId: string = '';
 }
 
 export const ChatStore: ChatStoreModel = new ChatStoreModel();

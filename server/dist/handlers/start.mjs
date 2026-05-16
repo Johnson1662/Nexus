@@ -97,6 +97,7 @@ export async function handleStart(ws, params) {
                 agent,
                 prompt,
                 acpSessionId,
+                model: effectiveModel,
             }));
         }
         catch { }

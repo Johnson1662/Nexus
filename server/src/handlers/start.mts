@@ -135,6 +135,7 @@ export async function handleStart(
           agent,
           prompt,
           acpSessionId,
+          model: effectiveModel,
         }),
       );
     } catch {}

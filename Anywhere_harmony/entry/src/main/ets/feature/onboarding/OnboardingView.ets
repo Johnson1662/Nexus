@@ -20,7 +20,7 @@ export struct OnboardingView {
   @State discoveredAgents: AgentInfo[] = [];
   @State showAgentSheet: boolean = false;
   @State awaitingAgents: boolean = false;
-  @StorageLink('serverUrl') serverUrl: string = 'ws://100.111.77.50:6767';
+  @StorageLink('serverUrl') serverUrl: string = 'ws://100.111.77.50:12138';
 
   private ws: WSClient = new WSClient();
   callbacks: OnboardingCallbacks = { onNavigateToChat: () => {}, onWsClientReady: () => {} };
@@ -67,7 +67,18 @@ export struct OnboardingView {
         this.connectError = 'No ACP agents discovered on the server. Install one (e.g., opencode) and try again.';
       }
     });
-    this.ws.onModelList((models: ModelItem[], modes: ModeItem[]) => { ChatStore.models = models; ChatStore.modes = modes; });
+    this.ws.onModelList((models: ModelItem[], modes: ModeItem[]) => {
+      ChatStore.models = models;
+      ChatStore.modes = modes;
+      if (ChatStore.sessionCurrentModelId) {
+        for (let i = 0; i < models.length; i++) {
+          if (models[i].modelId === ChatStore.sessionCurrentModelId) {
+            ChatStore.modelIndex = i;
+            break;
+          }
+        }
+      }
+    });
     this.ws.onSessionList((sessions: ServerSession[]) => { ChatStore.sessions = sessions; });
     this.ws.onAcpUpdate((update: AcpUpdate) => { this.handleUpdate(update); });
     this.ws.onSessionStarted(() => {
@@ -182,10 +193,10 @@ export struct OnboardingView {
               .fontSize(36)
               .fontColor([Colors.accent])
               .margin({ bottom: Spacing.md })
-            Text('Select ACP Agent')
-              .fontFamily('monospace').fontSize(20).fontWeight(FontWeight.Bold).fontColor(Colors.foreground)
-            Text('Discovered agents on the remote machine')
-              .fontSize(FontSize.sm).fontColor(Colors.foregroundMuted).margin({ bottom: 24 })
+              Text('Select ACP Agent')
+                .fontSize(20).fontWeight(FontWeight.Bold).fontColor(Colors.foreground)
+              Text('Discovered agents on the remote machine')
+                .fontSize(FontSize.sm).fontColor(Colors.foregroundMuted).margin({ bottom: 24 })
 
             List() {
               ForEach(this.discoveredAgents, (agent: AgentInfo, index: number) => {
@@ -194,9 +205,9 @@ export struct OnboardingView {
                     Circle().width(8).height(8).fill(Colors.success).margin({ right: Spacing.md })
                     Column() {
                       Text(agent.title || agent.name)
-                        .fontFamily('monospace').fontSize(FontSize.base).fontWeight(FontWeight.Bold).fontColor(Colors.foreground)
+                        .fontSize(FontSize.base).fontWeight(FontWeight.Bold).fontColor(Colors.foreground)
                       Text(agent.name)
-                        .fontFamily('monospace').fontSize(FontSize.xs).fontColor(Colors.foregroundMuted)
+                        .fontSize(FontSize.xs).fontColor(Colors.foregroundMuted)
                     }
                     .layoutWeight(1)
                   }
@@ -250,7 +261,7 @@ export struct OnboardingView {
 
               if (this.connectError.length > 0) {
                 Text(this.connectError)
-                  .fontFamily('monospace').fontSize(FontSize.xs).fontColor(Colors.error)
+                  .fontSize(FontSize.xs).fontColor(Colors.error)
                   .textAlign(TextAlign.Center).margin({ top: Spacing.lg })
                   .transition(TransitionEffect.OPACITY)
                   .animation({ duration: Duration.fast, curve: Curve.EaseOut })

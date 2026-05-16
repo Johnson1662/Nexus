@@ -203,6 +203,9 @@ export class WSClient {
         if (msg.loadedSessionId) {
           ChatStore.loadedSessionId = msg.loadedSessionId;
         }
+        if (msg.model) {
+          ChatStore.sessionCurrentModelId = msg.model;
+        }
         for (let cb of this.sessionStartedListeners) {
           cb();
         }

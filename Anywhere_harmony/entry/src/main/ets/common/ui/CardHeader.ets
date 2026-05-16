@@ -9,33 +9,27 @@ export struct CardHeader {
 
   build() {
     Row() {
-      if (this.role === 'user') {
-        Text('user@local ~$')
-          .fontFamily('monospace')
-          .fontSize(FontSize.xs)
-          .fontColor(Colors.accent)
-          .fontWeight(FontWeight.Bold)
-      } else {
-        Text('agent@remote ~$')
-          .fontFamily('monospace')
-          .fontSize(FontSize.xs)
-          .fontColor(Colors.foregroundMuted)
-          .fontWeight(FontWeight.Bold)
-      }
+      Circle()
+        .width(8).height(8)
+        .fill(this.role === 'user' ? Colors.accent : Colors.foregroundMuted)
+        .margin({ right: Spacing.sm })
+
+      Text(this.role === 'user' ? 'You' : 'Assistant')
+        .fontSize(FontSize.sm)
+        .fontColor(this.role === 'user' ? Colors.accent : Colors.foregroundMuted)
+        .fontWeight(FontWeight.Medium)
 
       Blank()
 
       if (this.status.length > 0) {
         Text(this.status)
           .fontSize(FontSize.xs)
-          .fontFamily('monospace')
           .fontColor(Colors.warning)
           .margin({ right: Spacing.sm })
       }
 
       Text(this.time)
         .fontSize(FontSize.xs)
-        .fontFamily('monospace')
         .fontColor(Colors.foregroundLight)
     }
     .width('100%')
