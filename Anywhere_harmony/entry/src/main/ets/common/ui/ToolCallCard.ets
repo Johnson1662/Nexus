@@ -39,7 +39,7 @@ export struct ToolCallCard {
         .margin({ left: Spacing.sm })
     }
     .width('100%')
-    .padding({ left: Spacing.md, right: Spacing.md, top: 10, bottom: 10 })
+    .padding({ left: Spacing.md, right: Spacing.md, top: Spacing.sm, bottom: Spacing.sm })
     .backgroundColor(Colors.surfaceElevated)
     .borderRadius(Radius.md)
     .border({ width: 1, color: Colors.borderLight })
@@ -49,10 +49,10 @@ export struct ToolCallCard {
   }
 
   getText(): string {
-    if (this.status === 'pending') return '等待'
-    if (this.status === 'in_progress') return '执行'
-    if (this.status === 'completed') return '完成'
-    if (this.status === 'failed') return '失败'
+    if (this.status === 'pending') return 'Pending'
+    if (this.status === 'in_progress') return 'Running'
+    if (this.status === 'completed') return 'Done'
+    if (this.status === 'failed') return 'Failed'
     return this.status
   }
 }

@@ -309,19 +309,7 @@ entry/src/main/ets/
 │   └── workspace/
 │       └── WorkspaceDrawer.ets      # Drawer overlay component
 ├── components/
-│   ├── ChatView.ets                 # NavDestination: workspace + session selects
-│   ├── DisconnectedView.ets         # Reconnect prompt page
-│   ├── ConnectingView.ets           # Connecting state page
-│   ├── WorkspaceSelectView.ets      # Workspace selection page
-│   ├── WorkspaceDetailView.ets      # Workspace detail page
-│   ├── WorkspaceDrawer.ets          # Workspace drawer component
-│   ├── MessageBubble.ets            # Bubble-style message component
-│   ├── ThinkingSection.ets          # Collapsible thinking content
-│   ├── ToolCallCard.ets             # Tool call status card
-│   ├── PlanView.ets                 # Plan entries display
-│   └── base/
-│       ├── AppButton.ets            # Reusable button with variants
-│       └── StatusBadge.ets          # Online/offline status badge
+│   └── ChatView.ets                 # NavDestination: workspace + session selects
 ├── common/
 │   ├── model/
 │   │   ├── ChatState.ets            # ChatStore, ModelItem, ModeItem, PlanEntry
@@ -340,11 +328,7 @@ entry/src/main/ets/
 │       ├── WSClient.ets             # WebSocket client with auto-reconnect
 │       └── WSProtocol.ets           # Protocol types (ClientMessage, AcpUpdate)
 ├── services/
-│   ├── WebSocketService.ets         # WebSocket service layer
 │   └── StorageService.ets           # Preferences persistence service
-├── store/
-│   ├── AppState.ets                 # Application state management
-│   └── SessionStore.ets             # Session state management
 ├── constants/
 │   └── DesignTokens.ets             # Unified: Colors, Spacing, Radius, FontSize, Shadow, Duration
 ├── entryability/

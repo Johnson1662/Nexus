@@ -56,6 +56,10 @@ export struct Index {
   }
 
   sendMessage(text: string): void {
+    if (!ChatStore.connected) {
+      ChatStore.turnActive = false;
+      return;
+    }
     ChatStore.messages = [...ChatStore.messages, new MessageData('user', text, 'text')];
     ChatStore.turnActive = true;
     if (ChatStore.sessionId) {

@@ -1,4 +1,4 @@
-import { Colors, FontSize, Spacing, Radius } from '../constants/DesignTokens';
+import { Colors, FontSize, Spacing, Radius, Duration } from '../constants/DesignTokens';
 import { ChatStore } from '../common/model/ChatState';
 import { WorkspaceStore } from '../common/model/WorkspaceInfo';
 import { WorkspaceInfo } from '../common/model/WorkspaceInfo';
@@ -86,8 +86,14 @@ export struct ChatView {
           agentType: ChatStore.agentType,
           onSelect: (i: number) => {
             WorkspaceStore.currentIndex = i;
-            animateTo({ duration: 300 }, () => { this.showDrawer = false });
+            this.getUIContext()?.animateTo({ duration: Duration.normal }, () => { this.showDrawer = false });
             if (this.onWorkspaceSelect) this.onWorkspaceSelect(i);
+          },
+          onDelete: (i: number) => {
+            WorkspaceStore.workspaces.splice(i, 1);
+            if (WorkspaceStore.currentIndex >= WorkspaceStore.workspaces.length) {
+              WorkspaceStore.currentIndex = WorkspaceStore.workspaces.length - 1;
+            }
           },
           onAddWorkspace: (p: string) => {
             let ws = new WorkspaceInfo();
@@ -96,7 +102,7 @@ export struct ChatView {
             ws.path = p;
             WorkspaceStore.workspaces.push(ws);
             WorkspaceStore.currentIndex = WorkspaceStore.workspaces.length - 1;
-            animateTo({ duration: 300 }, () => { this.showDrawer = false });
+            this.getUIContext()?.animateTo({ duration: Duration.normal }, () => { this.showDrawer = false });
             if (this.onWorkspaceSelect) this.onWorkspaceSelect(WorkspaceStore.workspaces.length - 1);
           }
         })
@@ -134,13 +140,7 @@ export struct ChatView {
 
           ChatPage({
             messages: ChatStore.messages,
-            planEntries: ChatStore.planEntries,
-            turnActive: ChatStore.turnActive,
-            models: ChatStore.models,
-            modes: ChatStore.modes,
-            onSendMessage: (t: string) => { if (this.onSendMessage) this.onSendMessage(t) },
-            onSwitchModel: (i: number) => { if (this.onSwitchModel) this.onSwitchModel(i) },
-            onSwitchMode: (i: number) => { if (this.onSwitchMode) this.onSwitchMode(i) }
+            onSendMessage: (t: string) => { if (this.onSendMessage) this.onSendMessage(t) }
           }).layoutWeight(1)
         }
         .width('100%').height('100%')
@@ -152,6 +152,7 @@ export struct ChatView {
     }
     .title(this.TitleBar)
     .hideBackButton(true)
+    .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ x: 30 })))
     .bindSheet($$this.showPicker, this.PickerContent, { detents: [SheetSize.FIT_CONTENT], preferType: SheetType.BOTTOM })
     .width('100%').height('100%')
     .backgroundColor(Colors.surface0)
@@ -192,7 +193,7 @@ export struct ChatView {
       SymbolGlyph(this.showDrawer ? $r('sys.symbol.close_sidebar') : $r('sys.symbol.open_sidebar'))
         .fontSize(24)
         .fontColor([Colors.foreground])
-        .onClick(() => { animateTo({ duration: 300 }, () => { this.showDrawer = !this.showDrawer }) })
+        .onClick(() => { this.getUIContext()?.animateTo({ duration: Duration.normal }, () => { this.showDrawer = !this.showDrawer }) })
 
       Column() {
         Text(this.getSessionTitle())

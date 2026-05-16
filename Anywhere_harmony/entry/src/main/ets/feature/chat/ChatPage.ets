@@ -1,22 +1,15 @@
 import { Colors, FontSize, Spacing, Radius, Duration } from '../../constants/DesignTokens';
+import { ChatStore } from '../../common/model/ChatState';
 import { MessageData } from '../../common/model/MessageData';
-import { PlanEntry } from '../../common/model/ChatState';
 import { MessageCard } from '../../common/ui/MessageCard';
 import { PlanView } from '../../common/ui/PlanView';
 import { ChatInputBar } from './ChatInputBar';
-import { AgentModel, AgentMode } from '../../common/model/AgentConfig';
 import { MessageDataSource } from '../../common/ui/MessageDataSource';
 
 @Component
 export struct ChatPage {
   @Prop @Watch('onMessagesChange') messages: MessageData[] = [];
-  @Prop planEntries: PlanEntry[] = [];
-  @Prop turnActive: boolean = false;
-  @Prop models: AgentModel[] = [];
-  @Prop modes: AgentMode[] = [];
   onSendMessage?: (text: string) => void;
-  onSwitchModel?: (index: number) => void;
-  onSwitchMode?: (index: number) => void;
 
   private scroller: Scroller = new Scroller();
   private dataSource: MessageDataSource = new MessageDataSource([]);
@@ -36,7 +29,7 @@ export struct ChatPage {
     Column() {
       if (this.messages.length === 0) {
           Column() {
-            if (this.turnActive) {
+            if (ChatStore.turnActive) {
               Column() {
                 LoadingProgress().width(20).height(20).color(Colors.accent)
                 Text('Waiting for response')
@@ -65,7 +58,7 @@ export struct ChatPage {
           LazyForEach(this.dataSource, (msg: MessageData) => {
             ListItem() {
               if (msg.type === 'plan') {
-                PlanView({ entries: this.planEntries })
+                PlanView({ entries: ChatStore.planEntries })
                   .width('100%')
                   .padding(Spacing.lg)
                   .backgroundColor(Colors.surfaceElevated)
@@ -76,17 +69,19 @@ export struct ChatPage {
                   isUser: msg.role === 'user',
                   time: this.formatTime(msg.timestamp),
                   status: (msg.role === 'assistant' && msg.type === 'text'
-                    && this.turnActive) ? 'Running' : '',
+                    && ChatStore.turnActive) ? 'Running' : '',
                   msgContent: msg.content,
                   msgType: msg.type,
                   msgToolName: msg.toolName,
                   msgToolStatus: msg.toolStatus,
-                  streaming: this.turnActive && msg.role === 'assistant' && msg.type === 'text'
+                  streaming: ChatStore.turnActive && msg.role === 'assistant' && msg.type === 'text'
                 })
                   .margin({ bottom: Spacing.xs })
               }
             }
             .height('auto')
+            .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: 12 })))
+            .animation({ duration: Duration.normal, curve: Curve.EaseOut })
           }, (msg: MessageData) => msg.id + msg.content.length)
         }
         .layoutWeight(1)
@@ -96,24 +91,12 @@ export struct ChatPage {
       }
 
       ChatInputBar({
-        disabled: this.turnActive,
+        disabled: ChatStore.turnActive,
         onSend: (text) => { if (this.onSendMessage) this.onSendMessage(text); }
       })
     }
     .width('100%').height('100%')
     .backgroundColor(Colors.surface0)
-  }
-
-  getModelNames(): string[] {
-    let n: string[] = [];
-    for (let i = 0; i < this.models.length; i++) n.push(this.models[i].name);
-    return n;
-  }
-
-  getModeNames(): string[] {
-    let n: string[] = [];
-    for (let i = 0; i < this.modes.length; i++) n.push(this.modes[i].name);
-    return n;
   }
 
   formatTime(ts: number): string {

@@ -1,4 +1,4 @@
-import { Colors, FontSize, Spacing, Radius } from '../../constants/DesignTokens';
+import { Colors, FontSize, Spacing, Radius, Shadow } from '../../constants/DesignTokens';
 
 @Component
 export struct ChatInputBar {
@@ -54,7 +54,7 @@ export struct ChatInputBar {
       .backgroundColor(Colors.surfaceElevated)
       .borderRadius(Radius.xl)
       .border({ width: 1, color: Colors.borderLight })
-      .shadow({ radius: 8, color: '#00000008', offsetY: 2 })
+      .shadow(Shadow.sm)
       .width('100%')
     }
     .width('100%')

@@ -1,4 +1,4 @@
-import { Colors, FontSize, Spacing, Radius, Duration } from '../../constants/DesignTokens';
+import { Colors, FontSize, Spacing, Radius, Duration, Shadow } from '../../constants/DesignTokens';
 import { CardHeader } from './CardHeader';
 import { ThinkingSection } from './ThinkingSection';
 import { ToolCallCard } from './ToolCallCard';
@@ -77,7 +77,7 @@ export struct MessageCard {
       }
 
       Row() {
-        SymbolGlyph($r('sys.symbol.ohos_folder_badge_plus'))
+        SymbolGlyph($r('sys.symbol.doc'))
           .fontSize(FontSize.sm)
           .fontColor([Colors.foregroundLight])
           .onClick(() => { this.copyContent() })
@@ -94,7 +94,7 @@ export struct MessageCard {
     })
     .backgroundColor(this.isUser ? Colors.surface0 : Colors.surfaceElevated)
     .margin({ top: Spacing.xs, bottom: Spacing.xs })
-    .shadow({ radius: 4, color: '#00000006', offsetY: 1 })
+    .shadow(Shadow.sm)
     .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: 12 })))
     .animation({ duration: Duration.normal, curve: Curve.EaseOut })
   }

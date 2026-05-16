@@ -33,7 +33,7 @@ export struct WorkspaceDrawer {
             Row() {
               Row() {
                 Text(ws.name.charAt(0).toUpperCase())
-                  .fontSize(18)
+                  .fontSize(FontSize.xl)
                   .fontWeight(FontWeight.Bold)
                   .fontColor(index === this.currentIndex ? Color.White : Colors.accent)
               }
@@ -56,7 +56,7 @@ export struct WorkspaceDrawer {
                   .fontColor(Colors.foregroundMuted)
                   .maxLines(1)
                   .textOverflow({ overflow: TextOverflow.Ellipsis })
-                  .margin({ top: 2 })
+                  .margin({ top: Spacing.xxs })
               }
               .alignItems(HorizontalAlign.Start)
               .layoutWeight(1)

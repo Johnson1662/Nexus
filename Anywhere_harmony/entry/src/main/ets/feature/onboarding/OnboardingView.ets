@@ -199,7 +199,7 @@ export struct OnboardingView {
               Text('Select ACP Agent')
                 .fontSize(20).fontWeight(FontWeight.Bold).fontColor(Colors.foreground)
               Text('Discovered agents on the remote machine')
-                .fontSize(FontSize.sm).fontColor(Colors.foregroundMuted).margin({ bottom: 24 })
+                .fontSize(FontSize.sm).fontColor(Colors.foregroundMuted).margin({ bottom: Spacing.xxl })
 
             List() {
               ForEach(this.discoveredAgents, (agent: AgentInfo, index: number) => {
@@ -272,7 +272,7 @@ export struct OnboardingView {
             }
             .width('100%').layoutWeight(1)
             .justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center)
-            .padding({ left: 32, right: 32 })
+            .padding({ left: Spacing.xxxl, right: Spacing.xxxl })
           }
           .width('100%').height('100%')
           .transition(TransitionEffect.OPACITY.combine(TransitionEffect.scale({ x: 0.95, y: 0.95 })))
@@ -282,6 +282,7 @@ export struct OnboardingView {
       .width('100%').height('100%').backgroundColor(Colors.surface0)
     }
     .hideTitleBar(true)
+    .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ x: -30 })))
     .width('100%').height('100%')
     .backgroundColor(Colors.surface0)
   }
