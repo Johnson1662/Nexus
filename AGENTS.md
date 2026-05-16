@@ -1,5 +1,9 @@
 # Anywhere — Remote AI Coding Agent Client for HarmonyOS
 
+## ⚠️ Golden Rule: Always use native ArkUI components
+
+Prefer ArkUI built-in components (SideBarContainer, bindSheet, bindMenu, Navigation, etc.) over hand-written overlays, modals, or custom implementations. Native components get free system-level behaviors: animations, accessibility, multirender lifecycle, and OS upgrades. Always wrap state changes in `animateTo()` to ensure smooth transitions — native components animate by default when triggered via their built-in interaction, but programmatic toggles need explicit `animateTo()`.
+
 ## ⚠️ CRITICAL: Always Use huawei-docs MCP
 
 **Before writing ANY HarmonyOS/ArkTS code, you MUST use the `huawei-docs` MCP tools to look up the official API.** Never guess ArkTS API signatures, decorator behavior, or component names. The `huawei-docs_get_page`, `huawei-docs_search_docs`, and `huawei-docs_get_category` tools provide direct access to developer.huawei.com official docs.
@@ -142,7 +146,8 @@ Phone (HarmonyOS ArkTS App)             PC (Node.js Bridge)
 |-----------|-------------|
 | No `if/else` as direct child | Must wrap content in a `@Builder` or `@Component` |
 | Only 2 children allowed | Exactly 1 sidebar + 1 content |
-| `$$showSideBar` binding | Works with `@State`, NOT in `@Builder` context reliably |
+| Animation | Built-in slide animation ONLY via `showControlButton(true)`. For programmatic toggle (custom button), use `animateTo({ duration: 300 }, () => { this.showDrawer = val })` AND set `.showSideBar(this.showDrawer)` (NO `$$`). `$$` bypasses animation system. |
+| `showSideBar` | Use direct property `.showSideBar(this.showDrawer)` NOT `$$` when you need animation |
 | Preferred alternative | Use `Stack` + `position({x:0,y:0}).zIndex(100)` + conditional rendering instead |
 
 ### @Reusable + aboutToReuse

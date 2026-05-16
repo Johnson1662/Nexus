@@ -91,6 +91,7 @@ export async function handleStart(ws, params) {
         console.log(`[server] setting model to ${effectiveModel}`);
         await client.setSessionModel(acpSessionId, effectiveModel);
         try {
+            const sessionTitle = prompt ? prompt.slice(0, 50) + (prompt.length > 50 ? "\u2026" : "") : "New Session";
             ws.send(JSON.stringify({
                 type: "session_started",
                 sessionId,
@@ -98,6 +99,7 @@ export async function handleStart(ws, params) {
                 prompt,
                 acpSessionId,
                 model: effectiveModel,
+                title: sessionTitle,
             }));
         }
         catch { }

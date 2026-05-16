@@ -58,6 +58,12 @@ export struct ChatView {
     this.showPicker = true;
   }
 
+  aboutToAppear(): void {
+    if (WorkspaceStore.currentIndex >= 0 && this.onWorkspaceSelect) {
+      this.onWorkspaceSelect(WorkspaceStore.currentIndex);
+    }
+  }
+
   doPickerSelect(index: number): void {
     this.showPicker = false;
     if (this.pickerMode === 0 && this.onSelectSession) {
@@ -69,151 +75,115 @@ export struct ChatView {
     }
   }
 
-  showMenu(): void {
-    this.pickerTitle = 'Menu';
-    this.pickerItems = ['Switch Session', 'Switch Model', 'Switch Agent Mode'];
-    this.pickerMode = -1;
-    this.showPicker = true;
-  }
-
-  onMenuSelect(index: number): void {
-    if (index === 0) this.openPicker(0);
-    else if (index === 1) this.openPicker(1);
-    else if (index === 2) this.openPicker(2);
-  }
-
   build() {
     NavDestination() {
-      Stack() {
-        SideBarContainer(SideBarContainerType.Overlay) {
-          WorkspaceDrawer({
-            workspaces: WorkspaceStore.workspaces,
-            currentIndex: WorkspaceStore.currentIndex,
-            hostName: 'host',
-            hostUrl: 'ws://...',
-            agentType: ChatStore.agentType,
-            onSelect: (i: number) => {
-              WorkspaceStore.currentIndex = i;
-              this.showDrawer = false;
-              if (this.onWorkspaceSelect) this.onWorkspaceSelect(i);
-            },
-            onClose: () => { this.showDrawer = false; },
-            onAddWorkspace: (p: string) => {
-              let ws = new WorkspaceInfo();
-              ws.id = Date.now().toString();
-              ws.name = p.split('\\').pop() || p.split('/').pop() || 'Project';
-              ws.path = p;
-              WorkspaceStore.workspaces.push(ws);
-              WorkspaceStore.currentIndex = WorkspaceStore.workspaces.length - 1;
-              this.showDrawer = false;
-              if (this.onWorkspaceSelect) this.onWorkspaceSelect(WorkspaceStore.workspaces.length - 1);
-            }
-          })
-          Column() {
-            if (this.showPathInput) {
-              Row() {
-                TextInput({ placeholder: '/path/to/project', text: this.newPath })
-                  .layoutWeight(1).height(36)
-                  .backgroundColor(Colors.surface1).borderRadius(Radius.sm)
-                  .padding({ left: Spacing.md, right: Spacing.md })
-                  .fontSize(FontSize.xs)
-                  .onChange((v: string) => { this.newPath = v })
-                Button('Add').height(36).backgroundColor(Colors.accent).fontColor(Color.White)
-                  .borderRadius(Radius.sm).fontSize(FontSize.xs)
-                  .onClick(() => {
-                    let p = this.newPath.trim();
-                    if (p.length > 0) {
-                      let ws = new WorkspaceInfo();
-                      ws.id = Date.now().toString();
-                      ws.name = p.split('\\').pop() || p.split('/').pop() || 'Project';
-                      ws.path = p;
-                      WorkspaceStore.workspaces.push(ws);
-                      WorkspaceStore.currentIndex = WorkspaceStore.workspaces.length - 1;
-                      this.newPath = '';
-                      this.showPathInput = false;
-                      if (this.onWorkspaceSelect) this.onWorkspaceSelect(WorkspaceStore.workspaces.length - 1);
-                    }
-                  })
-              }
-              .width('100%').padding({ left: Spacing.md, right: Spacing.md, top: Spacing.xs, bottom: Spacing.xs })
-              .backgroundColor(Colors.surfaceElevated)
-              .transition(TransitionEffect.OPACITY)
-            }
-
-            ChatPage({
-              messages: ChatStore.messages,
-              planEntries: ChatStore.planEntries,
-              turnActive: ChatStore.turnActive,
-              models: ChatStore.models,
-              modes: ChatStore.modes,
-              onSendMessage: (t: string) => { if (this.onSendMessage) this.onSendMessage(t) },
-              onSwitchModel: (i: number) => { if (this.onSwitchModel) this.onSwitchModel(i) },
-              onSwitchMode: (i: number) => { if (this.onSwitchMode) this.onSwitchMode(i) }
-            }).layoutWeight(1)
+      SideBarContainer(SideBarContainerType.Overlay) {
+        WorkspaceDrawer({
+          workspaces: WorkspaceStore.workspaces,
+          currentIndex: WorkspaceStore.currentIndex,
+          hostName: 'host',
+          hostUrl: 'ws://...',
+          agentType: ChatStore.agentType,
+          onSelect: (i: number) => {
+            WorkspaceStore.currentIndex = i;
+            animateTo({ duration: 300 }, () => { this.showDrawer = false });
+            if (this.onWorkspaceSelect) this.onWorkspaceSelect(i);
+          },
+          onAddWorkspace: (p: string) => {
+            let ws = new WorkspaceInfo();
+            ws.id = Date.now().toString();
+            ws.name = p.split('\\').pop() || p.split('/').pop() || 'Project';
+            ws.path = p;
+            WorkspaceStore.workspaces.push(ws);
+            WorkspaceStore.currentIndex = WorkspaceStore.workspaces.length - 1;
+            animateTo({ duration: 300 }, () => { this.showDrawer = false });
+            if (this.onWorkspaceSelect) this.onWorkspaceSelect(WorkspaceStore.workspaces.length - 1);
           }
-          .width('100%').height('100%')
-        }
-        .showSideBar($$this.showDrawer)
-        .showControlButton(false)
-        .sideBarWidth(300)
-        .width('100%').height('100%')
+        })
 
-        if (this.showPicker) {
-          Column() {
-            Column() {
-              Text(this.pickerTitle)
-                .fontSize(FontSize.xl).fontWeight(FontWeight.Bold).fontColor(Colors.foreground)
-                .margin({ top: Spacing.xl, bottom: Spacing.lg })
-                .alignSelf(ItemAlign.Start)
-
-              List() {
-                ForEach(this.pickerItems, (item: string, index: number) => {
-                  ListItem() {
-                    Text(item)
-                      .fontSize(FontSize.base).fontColor(Colors.foreground)
-                      .padding({ top: Spacing.md, bottom: Spacing.md, left: Spacing.md, right: Spacing.md })
-                      .width('100%')
+        Column() {
+          if (this.showPathInput) {
+            Row() {
+              TextInput({ placeholder: '/path/to/project', text: this.newPath })
+                .layoutWeight(1).height(36)
+                .backgroundColor(Colors.surface1).borderRadius(Radius.sm)
+                .padding({ left: Spacing.md, right: Spacing.md })
+                .fontSize(FontSize.xs)
+                .onChange((v: string) => { this.newPath = v })
+              Button('Add').height(36).backgroundColor(Colors.accent).fontColor(Color.White)
+                .borderRadius(Radius.sm).fontSize(FontSize.xs)
+                .onClick(() => {
+                  let p = this.newPath.trim();
+                  if (p.length > 0) {
+                    let ws = new WorkspaceInfo();
+                    ws.id = Date.now().toString();
+                    ws.name = p.split('\\').pop() || p.split('/').pop() || 'Project';
+                    ws.path = p;
+                    WorkspaceStore.workspaces.push(ws);
+                    WorkspaceStore.currentIndex = WorkspaceStore.workspaces.length - 1;
+                    this.newPath = '';
+                    this.showPathInput = false;
+                    if (this.onWorkspaceSelect) this.onWorkspaceSelect(WorkspaceStore.workspaces.length - 1);
                   }
-                  .width('100%').borderRadius(Radius.md)
-                  .backgroundColor(Colors.surface1)
-                  .margin({ bottom: Spacing.xs })
-                  .onClick(() => {
-                    if (this.pickerMode === -1) {
-                      this.onMenuSelect(index);
-                    } else {
-                      this.doPickerSelect(index);
-                    }
-                  })
-                }, (item: string) => item)
-              }
-              .width('100%').layoutWeight(1)
-
-              Button('Cancel')
-                .width('100%').height(44)
-                .backgroundColor(Colors.surface2).fontColor(Colors.foreground)
-                .borderRadius(Radius.md).fontSize(FontSize.base)
-                .margin({ top: Spacing.md, bottom: Spacing.xs })
-                .onClick(() => { this.showPicker = false })
+                })
             }
-            .constraintSize({ maxHeight: '80%' })
-            .width('75%').padding({ left: Spacing.xl, right: Spacing.xl, bottom: Spacing.xl })
-            .backgroundColor(Colors.surfaceElevated).borderRadius(Radius.xl)
-            .shadow({ radius: 32, color: '#00000020', offsetY: 8 })
+            .width('100%').padding({ left: Spacing.md, right: Spacing.md, top: Spacing.xs, bottom: Spacing.xs })
+            .backgroundColor(Colors.surfaceElevated)
+            .transition(TransitionEffect.OPACITY)
           }
-          .width('100%').height('100%')
-          .justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center)
-          .backgroundColor('#00000040')
-          .onClick(() => { this.showPicker = false })
-          .transition(TransitionEffect.OPACITY)
-          .animation({ duration: 200, curve: Curve.FastOutSlowIn })
+
+          ChatPage({
+            messages: ChatStore.messages,
+            planEntries: ChatStore.planEntries,
+            turnActive: ChatStore.turnActive,
+            models: ChatStore.models,
+            modes: ChatStore.modes,
+            onSendMessage: (t: string) => { if (this.onSendMessage) this.onSendMessage(t) },
+            onSwitchModel: (i: number) => { if (this.onSwitchModel) this.onSwitchModel(i) },
+            onSwitchMode: (i: number) => { if (this.onSwitchMode) this.onSwitchMode(i) }
+          }).layoutWeight(1)
         }
+        .width('100%').height('100%')
       }
+      .showSideBar(this.showDrawer)
+      .showControlButton(false)
+      .sideBarWidth(280)
       .width('100%').height('100%')
     }
     .title(this.TitleBar)
     .hideBackButton(true)
+    .bindSheet($$this.showPicker, this.PickerContent, { detents: [SheetSize.FIT_CONTENT], preferType: SheetType.BOTTOM })
     .width('100%').height('100%')
     .backgroundColor(Colors.surface0)
+  }
+
+  @Builder
+  PickerContent() {
+    Column() {
+      Text(this.pickerTitle)
+        .fontSize(FontSize.xl).fontWeight(FontWeight.Bold).fontColor(Colors.foreground)
+        .alignSelf(ItemAlign.Start)
+        .margin({ top: Spacing.xl, bottom: Spacing.lg })
+
+      List() {
+        ForEach(this.pickerItems, (item: string, index: number) => {
+          ListItem() {
+            Text(item)
+              .fontSize(FontSize.base).fontColor(Colors.foreground)
+              .padding({ top: Spacing.md, bottom: Spacing.md, left: Spacing.md, right: Spacing.md })
+              .width('100%')
+          }
+          .width('100%').borderRadius(Radius.md)
+          .backgroundColor(Colors.surface1)
+          .margin({ bottom: Spacing.xs })
+          .onClick(() => {
+            this.doPickerSelect(index);
+          })
+        }, (item: string) => item)
+      }
+      .width('100%')
+    }
+    .width('100%').padding({ left: Spacing.xl, right: Spacing.xl, bottom: Spacing.xl })
   }
 
   @Builder
@@ -222,7 +192,7 @@ export struct ChatView {
       SymbolGlyph(this.showDrawer ? $r('sys.symbol.close_sidebar') : $r('sys.symbol.open_sidebar'))
         .fontSize(24)
         .fontColor([Colors.foreground])
-        .onClick(() => { this.showDrawer = !this.showDrawer })
+        .onClick(() => { animateTo({ duration: 300 }, () => { this.showDrawer = !this.showDrawer }) })
 
       Column() {
         Text(this.getSessionTitle())
@@ -245,7 +215,11 @@ export struct ChatView {
 
       SymbolGlyph($r('sys.symbol.dot_grid_2x2'))
         .fontColor([Colors.foreground]).fontSize(24)
-        .onClick(() => { this.showMenu() })
+        .bindMenu([
+          { value: 'Switch Session', action: () => { this.openPicker(0) } },
+          { value: 'Switch Model', action: () => { this.openPicker(1) } },
+          { value: 'Switch Agent Mode', action: () => { this.openPicker(2) } },
+        ])
     }
     .width('100%').height('100%')
     .padding({ left: Spacing.lg, right: Spacing.lg })

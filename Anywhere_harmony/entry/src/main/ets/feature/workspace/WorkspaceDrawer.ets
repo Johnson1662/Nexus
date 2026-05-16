@@ -1,4 +1,4 @@
-import { Colors, FontSize, Spacing, Radius } from '../../constants/DesignTokens';
+import { Colors, FontSize, Spacing, Radius, Shadow } from '../../constants/DesignTokens';
 import { WorkspaceInfo } from '../../common/model/WorkspaceInfo';
 
 @Component
@@ -129,12 +129,13 @@ export struct WorkspaceDrawer {
         .backgroundColor(Colors.surfaceElevated)
         .borderRadius(Radius.lg)
         .margin({ left: Spacing.lg, right: Spacing.lg, bottom: Spacing.sm })
-        .shadow({ radius: 8, color: '#00000010', offsetY: 4 })
+        .shadow(Shadow.md)
         .transition(TransitionEffect.OPACITY)
       }
     }
     .width('100%')
     .height('100%')
-    .backgroundColor(Colors.surface0)
+    .backgroundColor(Colors.surfaceElevated)
+    .padding({ bottom: Spacing.xl })
   }
 }

@@ -119,6 +119,9 @@ export struct OnboardingView {
       ChatStore.messages = [...ChatStore.messages, new MessageData('user', u.content.text, 'text')];
     } else if (t === 'turn_ended') {
       ChatStore.turnActive = false;
+      if (WorkspaceStore.currentIndex >= 0) {
+        this.ws.send({ type: 'list_sessions', cwd: WorkspaceStore.workspaces[WorkspaceStore.currentIndex].path } as ClientMessage);
+      }
     }
   }
 

@@ -4,6 +4,7 @@ import { hilog } from '@kit.PerformanceAnalysisKit';
 import { backgroundTaskManager } from '@kit.BackgroundTasksKit';
 import { ChatStore } from '../model/ChatState';
 import { ServerSession } from '../model/WorkspaceInfo';
+import { WorkspaceStore } from '../model/WorkspaceInfo';
 import { ClientMessage, ServerMessage, AcpUpdate, AgentInfo } from './WSProtocol';
 import { ModelItem, ModeItem } from '../model/ChatState';
 
@@ -205,6 +206,25 @@ export class WSClient {
         }
         if (msg.model) {
           ChatStore.sessionCurrentModelId = msg.model;
+        }
+        {
+          let sess = new ServerSession();
+          sess.sessionId = msg.sessionId || '';
+          sess.title = String(msg.title || '');
+          let found: boolean = false;
+          for (let i = 0; i < ChatStore.sessions.length; i++) {
+            if (ChatStore.sessions[i].sessionId === sess.sessionId) {
+              ChatStore.sessions[i].title = sess.title;
+              found = true;
+              break;
+            }
+          }
+          if (!found) {
+            if (WorkspaceStore.currentIndex >= 0) {
+              sess.cwd = WorkspaceStore.workspaces[WorkspaceStore.currentIndex].path;
+            }
+            ChatStore.sessions = [...ChatStore.sessions, sess];
+          }
         }
         for (let cb of this.sessionStartedListeners) {
           cb();

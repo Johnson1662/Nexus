@@ -35,6 +35,7 @@ export interface ServerMessage {
   loadedSessionId?: string;
   agent?: string;
   model?: string;
+  title?: string;
   event?: AcpUpdate;
   exitCode?: number;
   models?: ModelItem[];

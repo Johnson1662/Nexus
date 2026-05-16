@@ -32,6 +32,7 @@ wss.on("connection", (ws) => {
         switch (msg.type) {
             case "start":
                 console.log(`[server] handleStart agent="${msg.agent || "opencode"}" cwd="${msg.cwd || process.cwd()}"`);
+                clearSessionListCache(ws);
                 handleStart(ws, msg).catch((err) => {
                     console.log(`[server] handleStart error: ${err.message}`);
                 });
