@@ -13,12 +13,14 @@ console.log(`[server] listening on ws://${HOST}:${PORT}`);
 // active ACP agent sessions: sessionId -> { process, ws, acpSessionId, pendingPermission }
 const sessions = new Map();
 
-// ── ACP Agent Registry (hardcoded from https://agentclientprotocol.com/get-started/agents) ──
+// ── ACP Agent Registry ──
 // Each entry: [binary_name_to_find_in_PATH, display_title]
 const ACP_AGENTS = [
   ["opencode", "OpenCode"],
   ["claude-code", "Claude Code"],
+  ["claude", "Claude Code"],
   ["gemini", "Gemini CLI"],
+  ["claude", "Claude Code"],
   ["cline", "Cline"],
   ["kimi", "Kimi CLI"],
   ["qwen-code", "Qwen Code"],
@@ -40,6 +42,7 @@ const ACP_AGENTS = [
   ["fount", "fount"],
   ["hermes", "Hermes Agent"],
   ["kiro", "Kiro CLI"],
+  ["kiro-cli", "Kiro CLI"],
   ["junie", "Junie"],
   ["copilot", "GitHub Copilot"],
   ["docker-cagent", "Docker cagent"],
@@ -76,6 +79,81 @@ const ACP_AGENTS = [
   ["ferngeist", "Ferngeist"],
   ["mobvibe", "Mobvibe"],
 ];
+
+// ── ACP Agent Launch Args (from official registry) ──
+const AGENT_LAUNCH_ARGS = {
+  opencode: ["acp"],
+  "claude-code": ["acp"],
+  claude: ["acp"],
+  gemini: ["--acp"],
+  cline: ["--acp"],
+  kimi: ["acp"],
+  "qwen-code": ["--acp", "--experimental-skills"],
+  "mistral-vibe": ["acp"],
+  goose: ["acp"],
+  "minion-code": ["acp"],
+  openclaw: ["acp"],
+  qoder: ["--acp"],
+  vtcode: ["acp"],
+  crow: ["acp"],
+  codex: ["acp"],
+  "codex-acp": [],
+  "code-assistant": ["acp"],
+  stakpak: ["acp"],
+  poolside: ["acp"],
+  cursor: ["acp"],
+  "cursor-agent": ["acp"],
+  auggie: ["--acp"],
+  "augment-code": ["--acp"],
+  blackbox: ["acp"],
+  "fast-agent": ["acp"],
+  fount: ["acp"],
+  hermes: ["acp"],
+  kiro: ["acp"],
+  "kiro-cli": ["acp"],
+  junie: ["--acp=true"],
+  copilot: ["--acp"],
+  "docker-cagent": ["acp"],
+  pi: ["acp"],
+  "pi-acp": [],
+  "factory-droid": ["acp"],
+  openhands: ["acp"],
+  agoragentic: ["--acp"],
+  amp: ["acp"],
+  "amp-acp": [],
+  "autohand-code": [],
+  codebuddy: ["--acp"],
+  "cortex-code": ["acp", "serve"],
+  "corust-agent-acp": [],
+  deepagents: [],
+  dimcode: ["acp"],
+  dirac: ["--acp"],
+  kilo: ["acp"],
+  nova: ["acp"],
+  sigit: [],
+  "sigit-code": [],
+  "glm-agent": [],
+  rayclaw: ["acp"],
+  "stdio-bus": ["acp"],
+  "iflow-cli": ["acp"],
+  lody: ["acp"],
+  toad: ["acp"],
+  pixi: ["acp"],
+  tidewave: ["acp"],
+  mitto: ["acp"],
+  "nori-cli": ["acp"],
+  ngent: ["acp"],
+  "rlm-code": ["acp"],
+  happy: ["acp"],
+  jockey: ["acp"],
+  agente: ["acp"],
+  ferngeist: ["acp"],
+  mobvibe: ["acp"],
+};
+
+function getAgentLaunchArgs(agentName) {
+  return AGENT_LAUNCH_ARGS[agentName] || ["acp"];
+}
 
 // ── Agent config file location patterns ──
 function getAgentConfigPaths(agentName, cwd) {
@@ -485,13 +563,9 @@ async function handleStart(ws, msg) {
 
   // Since we are running on Windows, cross-platform spawning requires setting shell: true
   // to resolve the global executable (e.g., 'opencode.cmd') automatically from PATH.
-  const args = ["acp"];
-  let commandToRun = agent;
+  const args = getAgentLaunchArgs(agent);
   
-  // A simple fallback map for known node-based agents to try to run them via npx if needed,
-  // but using shell:true typically resolves global npm packages correctly.
-  
-  const proc = spawn(commandToRun, args, {
+  const proc = spawn(agent, args, {
     cwd: cwd || process.cwd(),
     env: { ...process.env, FORCE_COLOR: "0", NO_COLOR: "1" },
     stdio: ["pipe", "pipe", "pipe"],
@@ -795,7 +869,8 @@ async function handleLoadSession(ws, msg) {
 
   // Spawn agent process (same as handleStart)
   const agent = msg.agent || "opencode";
-  const proc = spawn(agent, ["acp"], {
+  const args = getAgentLaunchArgs(agent);
+  const proc = spawn(agent, args, {
     cwd: cwd || process.cwd(),
     env: { ...process.env, FORCE_COLOR: "0", NO_COLOR: "1" },
     stdio: ["pipe", "pipe", "pipe"],

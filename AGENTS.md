@@ -40,10 +40,12 @@ Phone (HarmonyOS ArkTS App)             PC (Node.js Bridge)
 ## Key Design Decisions
 
 ### Visual Design Principles
-- **Aesthetic:** Cyber-minimalist, terminal-inspired monospace UI
-- **Message Cards:** Full-width blocks with right-side green border (`Colors.accent`) for user, left-side gray border (`Colors.borderLight`) for agent
-- **Typography:** Strictly `monospace` throughout for terminal feel
-- **Color Palette:** Single green accent + grays, no secondary colors
+- **Aesthetic:** ChatGPT-like, clean monochrome (black/white/gray)
+- **Message Cards:** User messages = right-aligned light gray bubble (`Colors.userBubble`), agent messages = full-width no background
+- **Typography:** System sans-serif, no forced monospace
+- **Color Palette:** Black/white/gray (`#202123`, `#F4F4F4`, `#6B7280`, etc.)
+- **Thinking/ToolCall:** Italic muted gray text, no icons/borders/backgrounds, breathing opacity animation (0.4↔1.0) via declarative `.animation()`
+- **PlanView (TODO):** Plain numbered list like "1." in markdown, no card wrapper
 
 ### Component Implementations
 
@@ -89,12 +91,13 @@ Phone (HarmonyOS ArkTS App)             PC (Node.js Bridge)
    - `AppStorage` for cross-component state (`serverUrl`, `lastAgent`, `isConnected`).
    - `@StorageLink('serverUrl')` in OnboardingView for automatic sync with AppStorage.
 
-4. **ChatStore Global State:**
-   - `ChatStore.messages` — array of MessageData
-   - `ChatStore.planEntries` — array of PlanEntry
-   - `ChatStore.turnActive`, `ChatStore.sessionId`, `ChatStore.connected`
-   - `ChatStore.sessions`, `ChatStore.models`, `ChatStore.modes`
-   - `ChatStore.selectedAgentName`, `ChatStore.agentType`
+ 4. **ChatStore Global State:**
+    - `ChatStore.messages` — array of MessageData
+    - `ChatStore.planEntries` — array of PlanEntry
+    - `ChatStore.turnActive`, `ChatStore.sessionId`, `ChatStore.connected`
+    - `ChatStore.sessions`, `ChatStore.models`, `ChatStore.modes`
+    - `ChatStore.selectedAgentName`, `ChatStore.agentType`
+    - `ChatStore.loadingSession` — true while loading history session messages
     - Streaming updates: reassign arrays with `ChatStore.messages = [...ChatStore.messages, newMsg]`
     - **CRITICAL: LazyForEach key for streaming messages MUST be `msg.id + msg.content.length`** — NOT just `msg.id`. During streaming, text appends to the same message (same id, longer content). If the key is only `msg.id`, LazyForEach won't detect the change and won't re-render, so the message gets stuck at truncated text. The `+ msg.content.length` ensures the key changes on each append, forcing re-render. This bug has been introduced by multiple agents independently.
 
@@ -102,9 +105,10 @@ Phone (HarmonyOS ArkTS App)             PC (Node.js Bridge)
    - Uses `@luvi/lv-markdown-in` (v3.4.1, Gitee: `https://gitee.com/luvi/lv-markdown-in.git`).
    - During `turnActive`, agent message chunks render as plain `Text()`. On `turn_ended`, switches to `MarkdownRender`.
 
-6. **Workspace Management:**
-   - Managed via inline `Select` dropdown in `ChatView`, not a drawer overlay.
-   - Workspace data in `WorkspaceStore` (global `@ObservedV2` singleton).
+ 6. **Workspace Management:**
+    - Managed via `SideBarContainer` sidebar overlay in `ChatView` (full-screen WorkspaceDrawer).
+    - Workspace selection & add via `WorkspaceSelectView` (forced before entering chat).
+    - Workspace data in `WorkspaceStore` (global `@ObservedV2` singleton).
 
 7. **Auto-Reconnect:**
    - `WSClient` with exponential backoff (1s → 2s → 4s → ... → 30s max).
@@ -140,6 +144,7 @@ Phone (HarmonyOS ArkTS App)             PC (Node.js Bridge)
 - `bindSheet($$state, content, options)` — DOES work on a top-level component like `Navigation`.
 - Does NOT work when chained inside a `@Builder` function (parser fails with "unexpected token").
 - `$$` binding only works with `@State`, NOT `@Prop`.
+- **CRITICAL: `bindSheet` content is NOT reactive** — it renders once when the sheet opens and does NOT re-render when `@ObservedV2`/`@State` dependencies change. For reactive overlays, use `Stack` + conditional `if` rendering with a `@Component` child instead.
 
 ### SideBarContainer
 | Constraint | Explanation |
@@ -254,12 +259,12 @@ npm run server:old   # Old hand-written server (keep for rollback)
 - ACP session creation and streaming chat
 - Agent auto-discovery + inline agent picker list (after connection)
 - Navigation + NavPathStack routing (native HarmonyOS page transitions with OnboardingView as home)
-- Terminal-style message blocks with monospace text
-- Thinking content + tool call cards + agent message text
+- ChatGPT-style message blocks with bubble for user, borderless for agent
+- Thinking content + tool call cards + agent message text (all italic muted gray, breathing opacity)
 - Markdown rendering (tables, code blocks, LaTeX math, links) on turn completion
 - Streaming text via plain `Text()` during active turn
-- Workspace management (add/select via inline `Select` dropdown)
-- Model and Mode selection (`Select` dropdowns)
+- Workspace management (add/select via full-screen SideBarContainer drawer)
+- Model and Mode selection (bottom sheet pickers)
 - Native SymbolGlyph icons (system built-in, no SVG files needed, no Unicode characters)
 - Message text copying via system pasteboard
 - Session clearing functionality
@@ -281,6 +286,9 @@ npm run server:old   # Old hand-written server (keep for rollback)
 - **Unified design tokens** (single DesignTokens.ets file, no Colors.ets)
 - **Title bar session title** correctly resolved using `loadedSessionId` fallback when loading history sessions
 - **Title bar model name** tracks `ChatStore.modelIndex` instead of always showing first model
+- **Reactive picker sheet** using `Stack` + conditional rendering (not `bindSheet`) — observes `@ObservedV2 ChatStore` changes live
+- **Auto session creation** on workspace select — ensures models/modes populate before first message
+- **LoadingProgress spinners** at all loading gaps (connecting, session/model/mode loading, session switch)
 
 ### Not Working / TODO
 - File upload (placeholder)
@@ -290,8 +298,6 @@ npm run server:old   # Old hand-written server (keep for rollback)
 - Host list management (saving multiple bridge servers)
 - Cancel current turn
 - Error recovery on message send failure (turn stays active)
-- Workspace drawer overlay (broken inside NavDestination — replaced with inline Select)
-- bindSheet (doesn't work inside @Builder — agent picker is inline instead)
 - Workspace delete (needs UI for deletion)
 
 ## File Structure
@@ -353,7 +359,7 @@ entry/src/main/ets/
 | `start` | `agent`, `prompt?`, `cwd?`, `model?` | Connect / new session / first message |
 | `input` | `sessionId`, `text` | Send message in existing session |
 | `list_agents` | — | After WebSocket connects (auto) |
-| `list_models` | — | After `session_started` |
+| `list_models` | — | After agent selected (pre-fetch) + after `session_started` |
 | `list_sessions` | `cwd` | After workspace selected |
 | `switch_model` | `sessionId`, `model` | Model select change |
 | `set_mode` | `sessionId`, `modeId` | Mode select change |

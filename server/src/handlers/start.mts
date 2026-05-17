@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { AcpClient } from "../acp/client.mjs";
+import { getAgentLaunchArgs } from "../discovery/agents.mjs";
 import {
   setSession,
   deleteSession,
@@ -31,7 +32,8 @@ export async function handleStart(
 
   killOldWsSessions(ws);
 
-  const proc = spawn(agent, ["acp"], {
+  const args = getAgentLaunchArgs(agent);
+  const proc = spawn(agent, args, {
     cwd: cwd || process.cwd(),
     env: { ...process.env, FORCE_COLOR: "0", NO_COLOR: "1" },
     stdio: ["pipe", "pipe", "pipe"],
