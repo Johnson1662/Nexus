@@ -34,6 +34,7 @@ export class ChatStoreModel {
   @Trace modelIndex: number = 0;
   @Trace modeIndex: number = 0;
   @Trace sessionCurrentModelId: string = '';
+  @Trace loadingSession: boolean = false;
 }
 
 export const ChatStore: ChatStoreModel = new ChatStoreModel();

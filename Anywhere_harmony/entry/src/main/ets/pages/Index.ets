@@ -50,6 +50,7 @@ export struct Index {
           if (i > 0 && i - 1 < ChatStore.sessions.length) {
             ChatStore.sessionId = ChatStore.sessions[i - 1].sessionId;
             ChatStore.messages = []; ChatStore.planEntries = []; ChatStore.turnActive = false;
+            ChatStore.loadingSession = true;
             let p = WorkspaceStore.workspaces[WorkspaceStore.currentIndex].path;
             this.ws.send({ type: 'load_session', sessionId: ChatStore.sessions[i - 1].sessionId, cwd: p } as ClientMessage);
           }
@@ -66,6 +67,10 @@ export struct Index {
         },
         onWorkspaceSelect: (index: number) => {
           this.ws.send({ type: 'list_sessions', cwd: WorkspaceStore.workspaces[index].path } as ClientMessage);
+          if (ChatStore.models.length === 0) {
+            let cwd = WorkspaceStore.workspaces[index].path;
+            this.ws.send({ type: 'start', agent: ChatStore.agentType, cwd: cwd } as ClientMessage);
+          }
         },
       })
     }

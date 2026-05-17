@@ -41,9 +41,9 @@ export struct OnboardingView {
         }
         this.connecting = false;
       } else {
-        this.connecting = false;
         this.connectError = '';
         if (ChatStore.selectedAgentName.length > 0 && ChatStore.messages.length > 0) {
+          this.connecting = false;
           this.ws.send({ type: 'start', agent: ChatStore.selectedAgentName } as ClientMessage);
         } else if (ChatStore.selectedAgentName.length === 0) {
           this.ws.send({ type: 'list_agents' } as ClientMessage);
@@ -52,6 +52,7 @@ export struct OnboardingView {
     });
     this.ws.onAgentList((agents: AgentInfo[]) => {
       this.discoveredAgents = agents;
+      this.connecting = false;
       if (agents.length > 0) {
         this.connectError = '';
       } else {
@@ -87,10 +88,14 @@ export struct OnboardingView {
     ChatStore.messages = [];
     ChatStore.planEntries = [];
     ChatStore.sessionId = '';
+    this.ws.send({ type: 'list_models' } as ClientMessage);
     this.callbacks.onNavigateToWorkspaceSelect();
   }
 
   handleUpdate(u: AcpUpdate): void {
+    if (ChatStore.loadingSession) {
+      ChatStore.loadingSession = false;
+    }
     let t: string = u.sessionUpdate;
     if (t === 'agent_message_chunk' && u.content?.text) {
       ChatStore.messages = this.appendText(ChatStore.messages, u.content.text);

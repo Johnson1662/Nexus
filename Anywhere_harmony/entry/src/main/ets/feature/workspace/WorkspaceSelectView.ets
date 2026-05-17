@@ -1,4 +1,4 @@
-import { Colors, FontSize, Spacing, Radius, Shadow, Duration } from '../../constants/DesignTokens';
+import { Colors, FontSize, Spacing, Radius } from '../../constants/DesignTokens';
 import { WorkspaceStore, WorkspaceInfo } from '../../common/model/WorkspaceInfo';
 
 @Component
@@ -11,174 +11,135 @@ export struct WorkspaceSelectView {
   build() {
     NavDestination() {
       Column() {
+        // 头部
         Row() {
-          Text('Select Workspace')
-            .fontSize(FontSize.xxl)
-            .fontWeight(FontWeight.Bold)
+          Text('Workspaces')
+            .fontSize(FontSize.xl)
+            .fontWeight(FontWeight.Medium)
             .fontColor(Colors.foreground)
+          Blank()
         }
         .width('100%')
-        .padding({ left: Spacing.xl, right: Spacing.xl, top: Spacing.xl, bottom: Spacing.md })
+        .padding({ left: Spacing.lg, right: Spacing.lg, top: Spacing.lg, bottom: Spacing.lg })
 
+        // 空状态
         if (WorkspaceStore.workspaces.length === 0) {
           Column() {
-            SymbolGlyph($r('sys.symbol.doc'))
-              .fontSize(48)
-              .fontColor([Colors.foregroundLight])
-              .margin({ bottom: Spacing.xxl })
-
             Text('No Workspaces')
-              .fontSize(FontSize.xxl).fontWeight(FontWeight.Bold)
-              .fontColor(Colors.foreground)
-
+              .fontSize(FontSize.base).fontColor(Colors.foregroundMuted)
             Text('Add a project path to get started')
-              .fontSize(FontSize.sm).fontColor(Colors.foregroundMuted)
-              .margin({ top: Spacing.sm, bottom: Spacing.xxl })
+              .fontSize(FontSize.sm).fontColor(Colors.foregroundLight)
+              .margin({ top: Spacing.xs })
           }
           .width('100%')
           .layoutWeight(1)
           .justifyContent(FlexAlign.Center)
           .alignItems(HorizontalAlign.Center)
         } else {
-          Column() {
-            Text('Select a workspace to continue')
-              .fontSize(FontSize.sm)
-              .fontColor(Colors.foregroundMuted)
-              .width('100%').padding({ left: Spacing.xl, right: Spacing.xl, top: Spacing.md, bottom: Spacing.md })
-
-            Scroll() {
-              Column() {
-                ForEach(WorkspaceStore.workspaces, (ws: WorkspaceInfo, index: number) => {
-                  Row() {
-                    Row() {
-                      Text(ws.name.charAt(0).toUpperCase())
-                        .fontSize(FontSize.xl)
-                        .fontWeight(FontWeight.Bold)
-                        .fontColor(index === WorkspaceStore.currentIndex ? Color.White : Colors.accent)
-                    }
-                    .width(44).height(44)
-                    .backgroundColor(index === WorkspaceStore.currentIndex ? Colors.accent : Colors.accentLight)
-                    .borderRadius(Radius.lg)
-                    .justifyContent(FlexAlign.Center)
+          // 工作区列表
+          List() {
+            ForEach(WorkspaceStore.workspaces, (ws: WorkspaceInfo, index: number) => {
+              ListItem() {
+                Row() {
+                  SymbolGlyph($r('sys.symbol.folder'))
+                    .fontSize(22)
+                    .fontColor([index === WorkspaceStore.currentIndex ? Colors.accent : Colors.foregroundMuted])
                     .margin({ right: Spacing.md })
 
-                    Column() {
-                      Text(ws.name)
-                        .fontSize(FontSize.base)
-                        .fontColor(Colors.foreground)
-                        .fontWeight(FontWeight.Medium)
-                        .maxLines(1)
-                        .textOverflow({ overflow: TextOverflow.Ellipsis })
+                  Column() {
+                    Text(ws.name)
+                      .fontSize(FontSize.base)
+                      .fontColor(index === WorkspaceStore.currentIndex ? Colors.accent : Colors.foreground)
+                      .fontWeight(index === WorkspaceStore.currentIndex ? FontWeight.Medium : FontWeight.Normal)
+                      .maxLines(1)
+                      .textOverflow({ overflow: TextOverflow.Ellipsis })
 
-                      Text(ws.path)
-                        .fontSize(FontSize.xs)
-                        .fontColor(Colors.foregroundMuted)
-                        .maxLines(1)
-                        .textOverflow({ overflow: TextOverflow.Ellipsis })
-                        .margin({ top: Spacing.xxs })
-                    }
-                    .alignItems(HorizontalAlign.Start)
-                    .layoutWeight(1)
-
-                    if (index === WorkspaceStore.currentIndex) {
-                      SymbolGlyph($r('sys.symbol.checkmark'))
-                        .fontSize(FontSize.lg)
-                        .fontColor([Colors.accent])
-                    }
-
-                    SymbolGlyph($r('sys.symbol.chevron_right'))
-                      .fontSize(FontSize.sm)
-                      .fontColor([Colors.foregroundLight])
-                      .margin({ left: Spacing.sm })
+                    Text(ws.path)
+                      .fontSize(FontSize.xs)
+                      .fontColor(Colors.foregroundMuted)
+                      .maxLines(1)
+                      .textOverflow({ overflow: TextOverflow.Ellipsis })
+                      .margin({ top: Spacing.xxs })
                   }
-                  .width('100%')
-                  .padding({ left: Spacing.xl, right: Spacing.xl, top: Spacing.md, bottom: Spacing.md })
-                  .backgroundColor(index === WorkspaceStore.currentIndex ? Colors.surface1 : 'transparent')
-                  .borderRadius(Radius.lg)
-                  .onClick(() => {
-                    WorkspaceStore.currentIndex = index;
-                    if (this.onSelect) this.onSelect(index);
-                  })
-                  .margin({ bottom: Spacing.sm })
-                }, (ws: WorkspaceInfo, index: number): string => ws.id + index.toString())
+                  .alignItems(HorizontalAlign.Start)
+                  .layoutWeight(1)
+
+                  if (index === WorkspaceStore.currentIndex) {
+                    SymbolGlyph($r('sys.symbol.checkmark'))
+                      .fontSize(16)
+                      .fontColor([Colors.accent])
+                  }
+                }
+                .width('100%')
+                .padding({ left: Spacing.xl, right: Spacing.xl, top: Spacing.md, bottom: Spacing.md })
+                .backgroundColor(index === WorkspaceStore.currentIndex ? Colors.surface1 : 'transparent')
+                .onClick(() => {
+                  WorkspaceStore.currentIndex = index;
+                  if (this.onSelect) this.onSelect(index);
+                })
               }
-              .width('100%')
-              .padding({ left: Spacing.lg, right: Spacing.lg })
-            }
-            .layoutWeight(1)
-            .width('100%')
+            }, (ws: WorkspaceInfo, index: number) => ws.id + index.toString())
           }
           .width('100%')
+          .layoutWeight(1)
+          .divider({ strokeWidth: 0.5, color: Colors.borderLight, startMargin: Spacing.xl, endMargin: Spacing.xl })
         }
 
-        Button({ type: ButtonType.Normal, stateEffect: true }) {
-          Row() {
-            SymbolGlyph($r('sys.symbol.plus'))
-              .fontSize(FontSize.sm)
-              .fontColor([Colors.accent])
-            Text(' Add Workspace')
-              .fontSize(FontSize.sm)
-              .fontColor(Colors.accent)
-          }
-          .alignItems(VerticalAlign.Center)
-          .justifyContent(FlexAlign.Center)
-        }
-        .width('100%').height(48)
-        .backgroundColor(Colors.surface1)
-        .borderRadius(Radius.lg)
-        .margin({ left: Spacing.xl, right: Spacing.xl, top: Spacing.xs, bottom: Spacing.sm })
-        .onClick(() => {
-          this.showForm = !this.showForm;
-        })
+        // 底部区域
+        Column() {
+          if (this.showForm) {
+            Column() {
+              TextInput({ placeholder: '/path/to/project', text: this.newPath })
+                .width('100%').height(44)
+                .backgroundColor(Colors.surface1).borderRadius(Radius.sm)
+                .padding({ left: Spacing.md, right: Spacing.md })
+                .fontSize(FontSize.sm)
+                .onChange((v: string) => { this.newPath = v })
 
-        if (this.showForm) {
-          Column() {
-            TextInput({ placeholder: 'Enter project path...', text: this.newPath })
-              .width('100%').height(44)
-              .backgroundColor(Colors.surface0).borderRadius(Radius.md)
-              .padding({ left: Spacing.md, right: Spacing.md })
-              .fontSize(FontSize.sm)
-              .onChange((v: string) => {
-                this.newPath = v;
-              })
-
-            Row() {
-              Button('Cancel')
-                .layoutWeight(1).height(40)
-                .backgroundColor(Colors.surface2).fontColor(Colors.foreground)
-                .borderRadius(Radius.md).fontSize(FontSize.sm)
-                .onClick(() => {
-                  this.showForm = false;
-                  this.newPath = '';
-                })
-              Button('Add')
-                .layoutWeight(1).height(40).margin({ left: Spacing.md })
-                .backgroundColor(Colors.accent).fontColor(Color.White)
-                .borderRadius(Radius.md).fontSize(FontSize.sm)
-                .onClick(() => {
-                  if (this.newPath.length > 0 && this.onAddWorkspace) {
-                    this.onAddWorkspace(this.newPath);
-                    this.newPath = '';
-                    this.showForm = false;
-                  }
-                })
+              Row() {
+                Button('Cancel')
+                  .layoutWeight(1).height(40)
+                  .backgroundColor('transparent').fontColor(Colors.foregroundMuted)
+                  .fontSize(FontSize.sm)
+                  .onClick(() => { this.showForm = false; this.newPath = '' })
+                Button('Add')
+                  .layoutWeight(1).height(40)
+                  .backgroundColor(Colors.accent).fontColor(Color.White)
+                  .borderRadius(Radius.md).fontSize(FontSize.sm)
+                  .onClick(() => {
+                    if (this.newPath.length > 0 && this.onAddWorkspace) {
+                      this.onAddWorkspace(this.newPath);
+                      this.newPath = '';
+                      this.showForm = false;
+                    }
+                  })
+              }
+              .width('100%').margin({ top: Spacing.md })
             }
-            .width('100%').margin({ top: Spacing.md })
+            .padding({ left: Spacing.xl, right: Spacing.xl, bottom: Spacing.xl, top: Spacing.sm })
+            .transition(TransitionEffect.OPACITY)
+          } else {
+            Row() {
+              SymbolGlyph($r('sys.symbol.plus'))
+                .fontSize(18)
+                .fontColor([Colors.foregroundMuted])
+                .margin({ right: Spacing.sm })
+              Text('Add Workspace')
+                .fontSize(FontSize.base)
+                .fontColor(Colors.foregroundMuted)
+            }
+            .width('100%')
+            .padding({ left: Spacing.xl, right: Spacing.xl, bottom: Spacing.xxl, top: Spacing.lg })
+            .onClick(() => { this.showForm = true })
           }
-          .padding(Spacing.lg)
-          .backgroundColor(Colors.surfaceElevated)
-          .borderRadius(Radius.lg)
-          .margin({ left: Spacing.xl, right: Spacing.xl, bottom: Spacing.sm })
-          .shadow(Shadow.md)
-          .transition(TransitionEffect.OPACITY)
         }
+        .width('100%')
       }
       .width('100%').height('100%')
-      .padding({ bottom: Spacing.xl })
-      .backgroundColor(Colors.surface0)
+      .backgroundColor(Colors.surfaceElevated)
     }
     .hideTitleBar(true)
     .width('100%').height('100%')
-    .backgroundColor(Colors.surface0)
+    .backgroundColor(Colors.surfaceElevated)
   }
 }

@@ -29,7 +29,16 @@ export struct ChatPage {
     Column() {
       if (this.messages.length === 0) {
           Column() {
-            if (ChatStore.turnActive) {
+            if (ChatStore.loadingSession) {
+              Column() {
+                LoadingProgress().width(24).height(24).color(Colors.accent)
+                Text('Loading session...')
+                  .fontSize(FontSize.sm).fontColor(Colors.foregroundLight)
+                  .margin({ top: Spacing.sm })
+              }
+              .alignItems(HorizontalAlign.Center)
+              .transition(TransitionEffect.OPACITY)
+            } else if (ChatStore.turnActive) {
               Column() {
                 LoadingProgress().width(20).height(20).color(Colors.accent)
                 Text('Waiting for response')
@@ -85,7 +94,6 @@ export struct ChatPage {
         .layoutWeight(1)
         .width('100%')
         .edgeEffect(EdgeEffect.Spring)
-        .clip(false)
       }
 
       ChatInputBar({
