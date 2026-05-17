@@ -1,95 +1,69 @@
-import { Colors, FontSize, Spacing, Radius, Duration } from '../constants/DesignTokens';
+import { Colors, FontSize, Spacing, Duration } from '../constants/DesignTokens';
 
 @Component
 export struct ToolCallCard {
   @Prop name: string = 'Tool';
   @Prop status: string = 'pending';
+  @Prop kind: string = '';
 
-  private getStatusColor(): string {
-    if (this.status === 'completed') return Colors.success;
-    if (this.status === 'failed') return Colors.error;
-    if (this.status === 'in_progress') return Colors.warning;
-    return Colors.foregroundMuted;
-  }
+  @State breathFlag: boolean = false;
+  @State shimmerOffset: number = -120;
 
-  private getStatusBg(): string {
-    if (this.status === 'completed') return Colors.successLight;
-    if (this.status === 'failed') return Colors.errorLight;
-    if (this.status === 'in_progress') return Colors.warningLight;
-    return Colors.surface1;
-  }
-
-  private getStatusText(): string {
-    if (this.status === 'pending') return '等待中...';
-    if (this.status === 'in_progress') return '执行中...';
-    if (this.status === 'completed') return '已完成';
-    if (this.status === 'failed') return '失败';
-    return this.status;
-  }
-
-  @Builder
-  statusIcon(): void {
-    if (this.status === 'completed') {
-      SymbolGlyph($r('sys.symbol.checkmark'))
-        .fontSize(FontSize.md)
-        .fontColor([this.getStatusColor()])
-    } else if (this.status === 'failed') {
-      SymbolGlyph($r('sys.symbol.xmark'))
-        .fontSize(FontSize.md)
-        .fontColor([this.getStatusColor()])
-    } else if (this.status === 'in_progress') {
-      SymbolGlyph($r('sys.symbol.gearshape'))
-        .fontSize(FontSize.md)
-        .fontColor([this.getStatusColor()])
-    } else {
-      SymbolGlyph($r('sys.symbol.clock'))
-        .fontSize(FontSize.md)
-        .fontColor([this.getStatusColor()])
+  aboutToAppear(): void {
+    if (this.status === 'in_progress') {
+      setTimeout(() => {
+        this.breathFlag = true;
+        this.shimmerOffset = 600;
+      }, 50);
     }
+  }
+
+  getDisplayText(): string {
+    let k: string = this.kind.toLowerCase();
+    if (k === 'skill') return 'Skill: ' + this.name;
+    return this.name;
   }
 
   build() {
-    Row() {
-      Column() {
-        if (this.status === 'in_progress') {
-          LoadingProgress()
-            .width(18)
-            .height(18)
-            .color(this.getStatusColor())
-        } else {
-          this.statusIcon()
-        }
-      }
-      .width(36)
-      .height(36)
-      .backgroundColor(this.getStatusBg())
-      .borderRadius(Radius.lg)
-      .justifyContent(FlexAlign.Center)
-      .margin({ right: Spacing.md })
-      .transition(TransitionEffect.OPACITY.combine(TransitionEffect.scale({ x: 0.8, y: 0.8 })))
-      .animation({ duration: Duration.fast, curve: Curve.EaseOut })
+    Stack() {
+      // Base text
+      Text(this.getDisplayText())
+        .fontSize(FontSize.sm)
+        .fontColor(Colors.foregroundMuted)
+        .fontFamily('monospace')
+        .fontStyle(FontStyle.Italic)
+        .fontWeight(FontWeight.Medium)
+        .opacity(this.status === 'in_progress' ? (this.breathFlag ? 0.35 : 0.85) : 0.65)
+        .animation(this.status === 'in_progress' ? {
+          duration: 1200,
+          curve: Curve.EaseInOut,
+          playMode: PlayMode.Alternate,
+          iterations: -1
+        } : { duration: 0 })
 
-      Column() {
-        Text(this.name)
-          .fontSize(FontSize.base)
-          .fontColor(Colors.foreground)
-          .fontWeight(FontWeight.Medium)
-
-        Text(this.getStatusText())
-          .fontSize(FontSize.sm)
-          .fontColor(this.getStatusColor())
-          .margin({ top: 2 })
+      // Shimmer sweep (only during active)
+      if (this.status === 'in_progress') {
+        Row()
+          .width(80)
+          .height(18)
+          .borderRadius(9)
+          .linearGradient({
+            direction: GradientDirection.Right,
+            colors: [["#00FFFFFF", 0], ["#35FFFFFF", 0.5], ["#00FFFFFF", 1]]
+          })
+          .position({ x: this.shimmerOffset, y: 2 })
+          .animation({
+            duration: 1500,
+            curve: Curve.Linear,
+            playMode: PlayMode.Alternate,
+            iterations: -1
+          })
       }
-      .layoutWeight(1)
-      .alignItems(HorizontalAlign.Start)
     }
     .width('100%')
-    .padding({ left: Spacing.lg, right: Spacing.lg, top: Spacing.md, bottom: Spacing.md })
-    .backgroundColor(Colors.surfaceElevated)
-    .borderRadius(Radius.lg)
-    .border({ width: 1, color: this.status === 'in_progress' ? Colors.accentLight : Colors.borderLight })
-    .constraintSize({ maxWidth: '90%' })
-    .margin({ left: Spacing.lg })
-    .shadow({ radius: 4, color: Colors.shadowColor, offsetY: 2 })
+    .height(24)
+    .clip(true)
+    .padding({ top: Spacing.xs, bottom: Spacing.xs })
+    .alignContent(Alignment.Start)
   }
 }

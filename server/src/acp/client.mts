@@ -12,10 +12,29 @@ import type {
   RequestPermissionResponse,
   ListSessionsResponse,
   LoadSessionResponse,
+  ResumeSessionResponse,
+  AuthenticateResponse,
   SetSessionModeResponse,
   SetSessionModelResponse,
   SetSessionConfigOptionResponse,
+  CloseSessionResponse,
   McpServer,
+} from "@agentclientprotocol/sdk";
+import type {
+  ReadTextFileRequest,
+  ReadTextFileResponse,
+  WriteTextFileRequest,
+  WriteTextFileResponse,
+  CreateTerminalRequest,
+  CreateTerminalResponse,
+  TerminalOutputRequest,
+  TerminalOutputResponse,
+  WaitForTerminalExitRequest,
+  WaitForTerminalExitResponse,
+  KillTerminalRequest,
+  KillTerminalResponse,
+  ReleaseTerminalRequest,
+  ReleaseTerminalResponse,
 } from "@agentclientprotocol/sdk";
 import { type ChildProcess } from "node:child_process";
 import { Writable, Readable } from "node:stream";
@@ -26,6 +45,27 @@ export interface AcpClientCallbacks {
   onPermissionRequest: (
     params: RequestPermissionRequest,
   ) => Promise<RequestPermissionResponse>;
+  onReadTextFile?: (
+    params: ReadTextFileRequest,
+  ) => Promise<ReadTextFileResponse>;
+  onWriteTextFile?: (
+    params: WriteTextFileRequest,
+  ) => Promise<WriteTextFileResponse>;
+  onCreateTerminal?: (
+    params: CreateTerminalRequest,
+  ) => Promise<CreateTerminalResponse>;
+  onTerminalOutput?: (
+    params: TerminalOutputRequest,
+  ) => Promise<TerminalOutputResponse>;
+  onWaitForTerminalExit?: (
+    params: WaitForTerminalExitRequest,
+  ) => Promise<WaitForTerminalExitResponse>;
+  onKillTerminal?: (
+    params: KillTerminalRequest,
+  ) => Promise<KillTerminalResponse | void>;
+  onReleaseTerminal?: (
+    params: ReleaseTerminalRequest,
+  ) => Promise<ReleaseTerminalResponse | void>;
 }
 
 function toMcpServers(configs: McpServerConfig[]): McpServer[] {
@@ -50,6 +90,7 @@ function toMcpServers(configs: McpServerConfig[]): McpServer[] {
 export class AcpClient {
   private conn: ClientSideConnection;
   public agentInfo: { name: string; version?: string } | null = null;
+  public cwd: string = "";
 
   constructor(proc: ChildProcess, callbacks: AcpClientCallbacks) {
     const input = Writable.toWeb(proc.stdin!) as WritableStream<Uint8Array>;
@@ -57,16 +98,63 @@ export class AcpClient {
     const stream = ndJsonStream(input, output);
 
     const client = {
-      requestPermission: (params: RequestPermissionRequest) =>
-        callbacks.onPermissionRequest(params),
-      sessionUpdate: (params: SessionNotification) =>
-        callbacks.onSessionUpdate(params),
+      requestPermission: (params: RequestPermissionRequest) => {
+        console.log(`[acp] agent→bridge: requestPermission toolCallId=${params.toolCall?.toolCallId}`);
+        return callbacks.onPermissionRequest(params);
+      },
+      sessionUpdate: (params: SessionNotification) => {
+        console.log(`[acp] agent→bridge: sessionUpdate type=${params.update?.sessionUpdate} id=${params.sessionId?.slice(0, 20)}`);
+        return callbacks.onSessionUpdate(params);
+      },
+      readTextFile: callbacks.onReadTextFile
+        ? (params: ReadTextFileRequest) => {
+            console.log(`[acp] agent→bridge: readTextFile path="${params.path}"`);
+            return callbacks.onReadTextFile!(params);
+          }
+        : undefined,
+      writeTextFile: callbacks.onWriteTextFile
+        ? (params: WriteTextFileRequest) => {
+            console.log(`[acp] agent→bridge: writeTextFile path="${params.path}"`);
+            return callbacks.onWriteTextFile!(params);
+          }
+        : undefined,
+      createTerminal: callbacks.onCreateTerminal
+        ? (params: CreateTerminalRequest) => {
+            console.log(`[acp] agent→bridge: createTerminal command="${params.command}"`);
+            return callbacks.onCreateTerminal!(params);
+          }
+        : undefined,
+      terminalOutput: callbacks.onTerminalOutput
+        ? (params: TerminalOutputRequest) => {
+            console.log(`[acp] agent→bridge: terminalOutput terminalId="${params.terminalId}"`);
+            return callbacks.onTerminalOutput!(params);
+          }
+        : undefined,
+      waitForTerminalExit: callbacks.onWaitForTerminalExit
+        ? (params: WaitForTerminalExitRequest) => {
+            console.log(`[acp] agent→bridge: waitForTerminalExit terminalId="${params.terminalId}"`);
+            return callbacks.onWaitForTerminalExit!(params);
+          }
+        : undefined,
+      killTerminal: callbacks.onKillTerminal
+        ? (params: KillTerminalRequest) => {
+            console.log(`[acp] agent→bridge: killTerminal terminalId="${params.terminalId}"`);
+            return callbacks.onKillTerminal!(params);
+          }
+        : undefined,
+      releaseTerminal: callbacks.onReleaseTerminal
+        ? (params: ReleaseTerminalRequest) => {
+            console.log(`[acp] agent→bridge: releaseTerminal terminalId="${params.terminalId}"`);
+            return callbacks.onReleaseTerminal!(params);
+          }
+        : undefined,
     };
 
     this.conn = new ClientSideConnection(() => client, stream);
   }
 
   async initialize(): Promise<InitializeResponse> {
+    console.log(`[acp] bridge→agent: initialize (fs=true, terminal=true)`);
     const result = await this.conn.initialize({
       protocolVersion: PROTOCOL_VERSION,
       clientCapabilities: {
@@ -79,6 +167,7 @@ export class AcpClient {
       },
     });
     this.agentInfo = result.agentInfo ?? null;
+    console.log(`[acp] agent→bridge: initialized agent=${result?.agentInfo?.name} v=${result?.agentInfo?.version}`);
     return result;
   }
 
@@ -86,6 +175,8 @@ export class AcpClient {
     cwd: string,
     mcpServers?: McpServerConfig[],
   ): Promise<NewSessionResponse> {
+    this.cwd = cwd;
+    console.log(`[acp] bridge→agent: newSession cwd="${cwd}"`);
     return await this.conn.newSession({
       cwd,
       mcpServers: mcpServers ? toMcpServers(mcpServers) : [],
@@ -97,7 +188,23 @@ export class AcpClient {
     cwd: string,
     mcpServers?: McpServerConfig[],
   ): Promise<LoadSessionResponse> {
+    this.cwd = cwd;
+    console.log(`[acp] bridge→agent: loadSession id="${sessionId.slice(0, 20)}"`);
     return await this.conn.loadSession({
+      sessionId,
+      cwd,
+      mcpServers: mcpServers ? toMcpServers(mcpServers) : [],
+    });
+  }
+
+  async resumeSession(
+    sessionId: string,
+    cwd: string,
+    mcpServers?: McpServerConfig[],
+  ): Promise<ResumeSessionResponse> {
+    this.cwd = cwd;
+    console.log(`[acp] bridge→agent: resumeSession id="${sessionId.slice(0, 20)}"`);
+    return await this.conn.resumeSession({
       sessionId,
       cwd,
       mcpServers: mcpServers ? toMcpServers(mcpServers) : [],
@@ -108,6 +215,7 @@ export class AcpClient {
     sessionId: string,
     text: string,
   ): Promise<PromptResponse> {
+    console.log(`[acp] bridge→agent: prompt sessionId="${sessionId.slice(0, 20)}" text="${text.slice(0, 50)}"`);
     return await this.conn.prompt({
       sessionId,
       prompt: [{ type: "text", text }],
@@ -115,7 +223,20 @@ export class AcpClient {
   }
 
   async cancel(sessionId: string): Promise<void> {
+    console.log(`[acp] bridge→agent: cancel sessionId="${sessionId.slice(0, 20)}"`);
     await this.conn.cancel({ sessionId });
+  }
+
+  async closeSession(sessionId: string): Promise<CloseSessionResponse> {
+    console.log(`[acp] bridge→agent: closeSession sessionId="${sessionId.slice(0, 20)}"`);
+    return await this.conn.closeSession({ sessionId });
+  }
+
+  async authenticate(
+    methodId: string,
+  ): Promise<AuthenticateResponse | void> {
+    console.log(`[acp] bridge→agent: authenticate methodId="${methodId}"`);
+    return await this.conn.authenticate({ methodId });
   }
 
   async setSessionMode(
@@ -150,6 +271,14 @@ export class AcpClient {
 
   get closed(): Promise<void> {
     return this.conn.closed;
+  }
+
+  get connected(): boolean {
+    try {
+      return !(this.conn as any).signal?.aborted;
+    } catch {
+      return false;
+    }
   }
 
   destroy(): void {

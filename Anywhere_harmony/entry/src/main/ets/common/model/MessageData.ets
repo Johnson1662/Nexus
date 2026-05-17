@@ -7,6 +7,7 @@ export class MessageData {
   @Trace toolName: string = '';
   @Trace toolStatus: string = '';
   @Trace toolCallId: string = '';
+  @Trace toolKind: string = '';
   @Trace timestamp: number = 0;
 
   constructor(role: string, content: string, type: string = 'text') {

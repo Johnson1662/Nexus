@@ -81,6 +81,7 @@ export struct ChatPage {
                   msgType: msg.type,
                   msgToolName: msg.toolName,
                   msgToolStatus: msg.toolStatus,
+                  msgToolKind: msg.toolKind,
                   streaming: ChatStore.turnActive && msg.role === 'assistant' && msg.id === ChatStore.messages[ChatStore.messages.length - 1]?.id
                 })
                   .margin({ bottom: msg.role === 'user' ? Spacing.lg : 0 })
@@ -98,7 +99,8 @@ export struct ChatPage {
 
       ChatInputBar({
         disabled: ChatStore.turnActive,
-        onSend: (text) => { if (this.onSendMessage) this.onSendMessage(text); }
+        onSend: (text) => { if (this.onSendMessage) this.onSendMessage(text); },
+        onCancel: () => { if (this.onSendMessage) this.onSendMessage('__cancel__'); }
       })
     }
     .width('100%').height('100%')

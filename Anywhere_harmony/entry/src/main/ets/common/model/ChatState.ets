@@ -11,6 +11,32 @@ export interface ModeItem {
   name: string;
 }
 
+export interface ConfigOptionValue {
+  value: string;
+  name?: string;
+}
+
+export interface ConfigOption {
+  id: string;
+  name: string;
+  description?: string;
+  type: string;
+  currentValue: string;
+  options: ConfigOptionValue[];
+}
+
+export interface AvailableCommand {
+  name: string;
+  description: string;
+  hint?: string;
+}
+
+export interface UsageInfo {
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+}
+
 @ObservedV2
 export class PlanEntry {
   @Trace content: string = '';
@@ -35,6 +61,10 @@ export class ChatStoreModel {
   @Trace modeIndex: number = 0;
   @Trace sessionCurrentModelId: string = '';
   @Trace loadingSession: boolean = false;
+  @Trace sessionTitle: string = '';
+  @Trace configOptions: ConfigOption[] = [];
+  @Trace availableCommands: AvailableCommand[] = [];
+  @Trace lastUsage: UsageInfo | null = null;
 }
 
 export const ChatStore: ChatStoreModel = new ChatStoreModel();

@@ -1,4 +1,4 @@
-import { PlanEntry, ModelItem, ModeItem } from '../model/ChatState';
+import { PlanEntry, ModelItem, ModeItem, ConfigOption, UsageInfo, AvailableCommand } from '../model/ChatState';
 import { ServerSession } from '../model/WorkspaceInfo';
 
 export interface AcpUpdate {
@@ -8,7 +8,14 @@ export interface AcpUpdate {
   toolCallId?: string;
   title?: string;
   status?: string;
+  kind?: string;
   entries?: PlanEntry[];
+  currentModeId?: string;
+  currentValue?: string;
+  configOptions?: ConfigOption[];
+  availableCommands?: AvailableCommand[];
+  usage?: UsageInfo;
+  configId?: string;
 }
 
 export interface AcpContent {
@@ -27,10 +34,15 @@ export interface ClientMessage {
   requestId?: string;
   outcome?: string;
   prompt?: string;
+  configId?: string;
+  value?: string;
+  optionId?: string;
+  methodId?: string;
 }
 
 export interface ServerMessage {
   type: string;
+  text?: string;
   sessionId?: string;
   loadedSessionId?: string;
   agent?: string;
@@ -46,6 +58,7 @@ export interface ServerMessage {
   requestId?: string;
   toolCall?: object;
   options?: object;
+  configOptions?: ConfigOption[];
 }
 
 export interface AgentInfo {

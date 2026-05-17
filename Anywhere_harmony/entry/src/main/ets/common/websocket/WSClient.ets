@@ -16,6 +16,7 @@ export type ModelListCallback = (models: ModelItem[], modes: ModeItem[]) => void
 export type SessionListCallback = (sessions: ServerSession[]) => void;
 export type AcpUpdateCallback = (update: AcpUpdate) => void;
 export type AgentListCallback = (agents: AgentInfo[]) => void;
+export type ErrorCallback = (text: string) => void;
 export type EmptyCallback = () => void;
 
 export class WSClient {
@@ -25,6 +26,7 @@ export class WSClient {
   private sessionListeners: SessionListCallback[] = [];
   private updateListeners: AcpUpdateCallback[] = [];
   private agentListListeners: AgentListCallback[] = [];
+  private errorListeners: ErrorCallback[] = [];
   private sessionStartedListeners: EmptyCallback[] = [];
   private lastUrl: string = '';
   private reconnectTimer: number | null = null;
@@ -171,6 +173,9 @@ export class WSClient {
   onAgentList(cb: AgentListCallback): void {
     this.agentListListeners.push(cb);
   }
+  onError(cb: ErrorCallback): void {
+    this.errorListeners.push(cb);
+  }
   onSessionStarted(cb: EmptyCallback): void {
     this.sessionStartedListeners.push(cb);
   }
@@ -181,6 +186,7 @@ export class WSClient {
     this.sessionListeners = [];
     this.updateListeners = [];
     this.agentListListeners = [];
+    this.errorListeners = [];
     this.sessionStartedListeners = [];
   }
 
@@ -203,28 +209,14 @@ export class WSClient {
         ChatStore.sessionId = msg.sessionId || '';
         if (msg.loadedSessionId) {
           ChatStore.loadedSessionId = msg.loadedSessionId;
+        } else {
+          ChatStore.loadedSessionId = '';
         }
         if (msg.model) {
           ChatStore.sessionCurrentModelId = msg.model;
         }
-        {
-          let sess = new ServerSession();
-          sess.sessionId = msg.sessionId || '';
-          sess.title = String(msg.title || '');
-          let found: boolean = false;
-          for (let i = 0; i < ChatStore.sessions.length; i++) {
-            if (ChatStore.sessions[i].sessionId === sess.sessionId) {
-              ChatStore.sessions[i].title = sess.title;
-              found = true;
-              break;
-            }
-          }
-          if (!found) {
-            if (WorkspaceStore.currentIndex >= 0) {
-              sess.cwd = WorkspaceStore.workspaces[WorkspaceStore.currentIndex].path;
-            }
-            ChatStore.sessions = [...ChatStore.sessions, sess];
-          }
+        if (msg.title) {
+          ChatStore.sessionTitle = msg.title;
         }
         for (let cb of this.sessionStartedListeners) {
           cb();
@@ -260,6 +252,23 @@ export class WSClient {
         for (let cb of this.agentListListeners) {
           cb(msg.agents || []);
         }
+        break;
+      case 'error':
+        for (let cb of this.errorListeners) {
+          cb(String(msg.text || 'Unknown error'));
+        }
+        break;
+      case 'config_option_updated':
+        if (msg.configOptions) {
+          ChatStore.configOptions = msg.configOptions;
+        }
+        break;
+      case 'session_closed':
+        ChatStore.sessionId = '';
+        ChatStore.messages = [];
+        ChatStore.planEntries = [];
+        ChatStore.sessionTitle = '';
+        ChatStore.configOptions = [];
         break;
       default:
         hilog.info(DOMAIN, TAG, 'unhandled: ' + msg.type);

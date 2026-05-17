@@ -12,6 +12,11 @@ export function setSession(id: string, sess: SessionState): void {
 }
 
 export function deleteSession(id: string): void {
+  const sess = sessions.get(id);
+  if (sess) {
+    try { sess.client.destroy(); } catch {}
+    killTerminalProcesses(sess);
+  }
   sessions.delete(id);
 }
 
@@ -24,7 +29,20 @@ export function findSessionForWs(ws: import("ws").WebSocket): SessionState | und
   return undefined;
 }
 
+export function killTerminalProcesses(sess: SessionState): void {
+  if (!sess.terminals) return;
+  for (const [, term] of sess.terminals) {
+    if (term.process && !term.process.killed) {
+      try {
+        kill(term.process.pid!, "SIGTERM");
+      } catch {}
+    }
+  }
+  sess.terminals.clear();
+}
+
 export function killSessionProcess(sess: SessionState): void {
+  try { sess.client.destroy(); } catch {}
   if (sess.process && !sess.process.killed) {
     try {
       kill(sess.process.pid!, "SIGTERM");
@@ -35,8 +53,8 @@ export function killSessionProcess(sess: SessionState): void {
 export function cleanupWsSessions(ws: import("ws").WebSocket): void {
   for (const [id, sess] of sessions) {
     if (sess.ws === ws) {
+      killTerminalProcesses(sess);
       killSessionProcess(sess);
-      sess.client.destroy();
       sessions.delete(id);
     }
   }
@@ -45,8 +63,8 @@ export function cleanupWsSessions(ws: import("ws").WebSocket): void {
 export function killOldWsSessions(ws: import("ws").WebSocket): void {
   for (const [id, sess] of sessions) {
     if (sess.ws === ws) {
+      killTerminalProcesses(sess);
       killSessionProcess(sess);
-      sess.client.destroy();
       sessions.delete(id);
     }
   }

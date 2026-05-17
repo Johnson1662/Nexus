@@ -73,6 +73,11 @@ export struct OnboardingView {
     });
     this.ws.onSessionList((sessions: ServerSession[]) => { ChatStore.sessions = sessions; });
     this.ws.onAcpUpdate((update: AcpUpdate) => { this.handleUpdate(update); });
+    this.ws.onError((text: string) => {
+      ChatStore.turnActive = false;
+      let m = new MessageData('assistant', 'Error: ' + text, 'text');
+      ChatStore.messages = [...ChatStore.messages, m];
+    });
     this.ws.onSessionStarted(() => {
       this.ws.send({ type: 'list_models' } as ClientMessage);
     });
@@ -103,7 +108,7 @@ export struct OnboardingView {
       ChatStore.messages = this.appendThinking(ChatStore.messages, u.content.text);
     } else if (t === 'tool_call' && u.toolCallId) {
       let m = new MessageData('assistant', u.title || '', 'tool_call');
-      m.toolCallId = u.toolCallId; m.toolName = u.title || ''; m.toolStatus = 'pending';
+      m.toolCallId = u.toolCallId; m.toolName = u.title || ''; m.toolStatus = 'pending'; m.toolKind = u.kind || '';
       ChatStore.messages = [...ChatStore.messages, m];
     } else if (t === 'tool_call_update' && u.toolCallId && u.status) {
       ChatStore.messages = this.updateStatus(ChatStore.messages, u.toolCallId, u.status);
@@ -111,6 +116,14 @@ export struct OnboardingView {
       ChatStore.planEntries = u.entries;
     } else if (t === 'user_message_chunk' && u.content?.text) {
       ChatStore.messages = [...ChatStore.messages, new MessageData('user', u.content.text, 'text')];
+    } else if (t === 'session_info_update' && u.title) {
+      ChatStore.sessionTitle = u.title;
+    } else if (t === 'config_option_update' && u.configOptions) {
+      ChatStore.configOptions = u.configOptions;
+    } else if (t === 'available_commands_update' && u.availableCommands) {
+      ChatStore.availableCommands = u.availableCommands;
+    } else if (t === 'usage_update' && u.usage) {
+      ChatStore.lastUsage = u.usage;
     } else if (t === 'turn_ended') {
       ChatStore.turnActive = false;
       if (WorkspaceStore.currentIndex >= 0) {

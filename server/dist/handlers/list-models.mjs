@@ -6,7 +6,7 @@ export async function handleListModels(ws) {
         return;
     }
     try {
-        const result = await sess.client.createSession(process.cwd());
+        const result = await sess.client.createSession(sess.cwd || process.cwd());
         const models = result.models?.availableModels || [];
         const modes = result.modes?.availableModes || [];
         const mappedModels = models.map((m) => ({

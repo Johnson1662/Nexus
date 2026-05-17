@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import fs from "node:fs/promises";
+import type { WebSocket } from "ws";
 import { AcpClient } from "../acp/client.mjs";
 import { getAgentLaunchArgs } from "../discovery/agents.mjs";
 import {
@@ -9,18 +10,9 @@ import {
   deleteSession,
   getSession,
   killSessionProcess,
-  killTerminalProcesses,
   killOldWsSessions,
 } from "../session.mjs";
-import type { SessionState, TerminalState } from "../acp/types.mjs";
-import type { WebSocket } from "ws";
-
-interface StartParams {
-  agent?: string;
-  prompt?: string;
-  cwd?: string;
-  model?: string;
-}
+import type { SessionState } from "../acp/types.mjs";
 
 function isPathWithinCwd(target: string, cwd: string): boolean {
   const resolved = path.resolve(target);
@@ -28,13 +20,21 @@ function isPathWithinCwd(target: string, cwd: string): boolean {
   return !relative.startsWith("..") && !path.isAbsolute(relative);
 }
 
-export async function handleStart(
+export async function handleResumeSession(
   ws: WebSocket,
-  params: StartParams,
+  params: {
+    sessionId: string;
+    cwd?: string;
+    agent?: string;
+    model?: string;
+  },
 ): Promise<void> {
-  const { agent = "opencode", prompt, cwd, model } = params;
+  const { sessionId: targetSessionId, cwd, agent = "opencode", model } = params;
 
-  console.log(`[server] starting agent: ${agent}`);
+  if (!targetSessionId) {
+    ws.send(JSON.stringify({ type: "error", text: "sessionId is required" }));
+    return;
+  }
 
   killOldWsSessions(ws);
 
@@ -46,11 +46,11 @@ export async function handleStart(
     shell: true,
   });
 
-  const sessionId = `acp-${Date.now()}`;
+  const bridgeSessionId = `acp-${Date.now()}`;
 
   const sess: Partial<SessionState> = {
     ws,
-    sessionId,
+    sessionId: bridgeSessionId,
     process: proc,
     agent,
     cwd: cwd || process.cwd(),
@@ -60,13 +60,11 @@ export async function handleStart(
 
   const client = new AcpClient(proc, {
     onSessionUpdate: async (update) => {
-      const type = update.update?.sessionUpdate || "unknown";
-      console.log(`[server] agent_event type=${type} sessionId=${sessionId?.slice(0, 20)}`);
       try {
         ws.send(
           JSON.stringify({
             type: "agent_event",
-            sessionId,
+            sessionId: bridgeSessionId,
             event: update.update,
           }),
         );
@@ -75,7 +73,7 @@ export async function handleStart(
     onPermissionRequest: (params) => {
       return new Promise((resolve) => {
         const requestId = randomUUID();
-        const currentSess = getSession(sessionId);
+        const currentSess = getSession(bridgeSessionId);
         if (currentSess) {
           currentSess.pendingPermission = { requestId, resolve };
         }
@@ -83,7 +81,7 @@ export async function handleStart(
           ws.send(
             JSON.stringify({
               type: "permission_request",
-              sessionId,
+              sessionId: bridgeSessionId,
               requestId,
               toolCall: params.toolCall,
               options: params.options,
@@ -93,7 +91,7 @@ export async function handleStart(
       });
     },
     onReadTextFile: async (params) => {
-      const currentSess = getSession(sessionId);
+      const currentSess = getSession(bridgeSessionId);
       if (!currentSess) throw new Error("session not found");
       const effectiveCwd = (client.cwd || cwd) || process.cwd();
       if (!isPathWithinCwd(params.path, effectiveCwd)) {
@@ -114,7 +112,7 @@ export async function handleStart(
       return { content };
     },
     onWriteTextFile: async (params) => {
-      const currentSess = getSession(sessionId);
+      const currentSess = getSession(bridgeSessionId);
       if (!currentSess) throw new Error("session not found");
       const effectiveCwd = (client.cwd || cwd) || process.cwd();
       if (!isPathWithinCwd(params.path, effectiveCwd)) {
@@ -125,30 +123,14 @@ export async function handleStart(
       return {};
     },
     onCreateTerminal: async (params) => {
-      const currentSess = getSession(sessionId);
+      const currentSess = getSession(bridgeSessionId);
       if (!currentSess) throw new Error("session not found");
-
       const terminalId = `term-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       const outputByteLimit = params.outputByteLimit ?? 100000;
-
       let resolveExit: (() => void) | null = null;
-      const exitPromise = new Promise<void>((resolve) => {
-        resolveExit = resolve;
-      });
-
-      const terminal: TerminalState = {
-        id: terminalId,
-        process: null as any,
-        output: "",
-        truncated: false,
-        exitStatus: null,
-        exitPromise,
-        resolveExit,
-        outputByteLimit,
-      };
-
+      const exitPromise = new Promise<void>((resolve) => { resolveExit = resolve; });
+      const terminal = { id: terminalId, process: null as any, output: "", truncated: false, exitStatus: null as { exitCode: number | null; signal: string | null } | null, exitPromise, resolveExit, outputByteLimit };
       currentSess.terminals.set(terminalId, terminal);
-
       const termProc = spawn(params.command, params.args ?? [], {
         cwd: params.cwd ?? (client.cwd || process.cwd()),
         env: params.env
@@ -157,11 +139,9 @@ export async function handleStart(
         stdio: ["pipe", "pipe", "pipe"],
         shell: true,
       });
-
       terminal.process = termProc;
-
       termProc.stdout!.on("data", (chunk: Buffer) => {
-        const sess = getSession(sessionId);
+        const sess = getSession(bridgeSessionId);
         const t = sess?.terminals.get(terminalId);
         if (!t || t.truncated) return;
         t.output += chunk.toString();
@@ -170,9 +150,8 @@ export async function handleStart(
           t.truncated = true;
         }
       });
-
       termProc.stderr!.on("data", (chunk: Buffer) => {
-        const sess = getSession(sessionId);
+        const sess = getSession(bridgeSessionId);
         const t = sess?.terminals.get(terminalId);
         if (!t || t.truncated) return;
         t.output += chunk.toString();
@@ -181,72 +160,50 @@ export async function handleStart(
           t.truncated = true;
         }
       });
-
       termProc.on("exit", (code: number | null, sig: string | null) => {
-        const sess = getSession(sessionId);
+        const sess = getSession(bridgeSessionId);
         const t = sess?.terminals.get(terminalId);
-        if (t) {
-          t.exitStatus = { exitCode: code, signal: sig ?? null };
-          if (t.resolveExit) t.resolveExit();
-        }
+        if (t) { t.exitStatus = { exitCode: code, signal: sig ?? null }; if (t.resolveExit) t.resolveExit(); }
       });
-
       termProc.on("error", () => {
-        const sess = getSession(sessionId);
+        const sess = getSession(bridgeSessionId);
         const t = sess?.terminals.get(terminalId);
-        if (t) {
-          t.exitStatus = { exitCode: -1, signal: null };
-          if (t.resolveExit) t.resolveExit();
-        }
+        if (t) { t.exitStatus = { exitCode: -1, signal: null }; if (t.resolveExit) t.resolveExit(); }
       });
-
       return { terminalId };
     },
     onTerminalOutput: async (params) => {
-      const currentSess = getSession(sessionId);
+      const currentSess = getSession(bridgeSessionId);
       if (!currentSess) throw new Error("session not found");
       const term = currentSess.terminals.get(params.terminalId);
       if (!term) throw new Error(`terminal not found: ${params.terminalId}`);
-      return {
-        output: term.output,
-        truncated: term.truncated,
-        exitStatus: term.exitStatus ?? undefined,
-      };
+      return { output: term.output, truncated: term.truncated, exitStatus: term.exitStatus ?? undefined };
     },
     onWaitForTerminalExit: async (params) => {
-      const currentSess = getSession(sessionId);
+      const currentSess = getSession(bridgeSessionId);
       if (!currentSess) throw new Error("session not found");
       const term = currentSess.terminals.get(params.terminalId);
       if (!term) throw new Error(`terminal not found: ${params.terminalId}`);
       await term.exitPromise;
-      return {
-        exitCode: term.exitStatus?.exitCode ?? null,
-        signal: term.exitStatus?.signal ?? null,
-      };
+      return { exitCode: term.exitStatus?.exitCode ?? null, signal: term.exitStatus?.signal ?? null };
     },
     onKillTerminal: async (params) => {
-      const currentSess = getSession(sessionId);
+      const currentSess = getSession(bridgeSessionId);
       if (!currentSess) throw new Error("session not found");
       const term = currentSess.terminals.get(params.terminalId);
       if (!term) throw new Error(`terminal not found: ${params.terminalId}`);
       if (!term.process!.killed) {
-        try {
-          const { default: kill } = await import("tree-kill");
-          kill(term.process.pid!, "SIGTERM");
-        } catch {}
+        try { const { default: kill } = await import("tree-kill"); kill(term.process.pid!, "SIGTERM"); } catch {}
       }
       return {};
     },
     onReleaseTerminal: async (params) => {
-      const currentSess = getSession(sessionId);
+      const currentSess = getSession(bridgeSessionId);
       if (!currentSess) throw new Error("session not found");
       const term = currentSess.terminals.get(params.terminalId);
       if (!term) throw new Error(`terminal not found: ${params.terminalId}`);
       if (!term.process!.killed) {
-        try {
-          const { default: kill } = await import("tree-kill");
-          kill(term.process.pid!, "SIGTERM");
-        } catch {}
+        try { const { default: kill } = await import("tree-kill"); kill(term.process.pid!, "SIGTERM"); } catch {}
       }
       currentSess.terminals.delete(params.terminalId);
       return {};
@@ -254,106 +211,48 @@ export async function handleStart(
   });
 
   sess.client = client;
-  setSession(sessionId, sess as SessionState);
+  setSession(bridgeSessionId, sess as SessionState);
 
   proc.stderr.on("data", (chunk: Buffer) => {
-    const text = chunk.toString();
-    console.log(`[server] stderr: ${text.slice(0, 200)}`);
+    console.log(`[server] stderr: ${chunk.toString().slice(0, 200)}`);
     try {
-      ws.send(JSON.stringify({ type: "agent_stderr", sessionId, text }));
+      ws.send(JSON.stringify({ type: "agent_stderr", sessionId: bridgeSessionId, text: chunk.toString() }));
     } catch {}
   });
 
   proc.on("error", (err: Error) => {
-    console.log(`[server] ${sessionId} spawn error: ${err.message}`);
-    try {
-      ws.send(
-        JSON.stringify({ type: "error", text: `spawn failed: ${err.message}` }),
-      );
-    } catch {}
-    deleteSession(sessionId);
+    console.log(`[server] ${bridgeSessionId} spawn error: ${err.message}`);
+    deleteSession(bridgeSessionId);
   });
 
   proc.on("exit", (code: number | null) => {
-    console.log(`[server] ${sessionId} exited with code ${code}`);
-    try {
-      ws.send(
-        JSON.stringify({ type: "session_ended", sessionId, exitCode: code }),
-      );
-    } catch {}
-    deleteSession(sessionId);
+    console.log(`[server] ${bridgeSessionId} exited with code ${code}`);
+    deleteSession(bridgeSessionId);
   });
 
   try {
-    console.log(`[server] initializing ACP for ${sessionId}...`);
-    const initResult = await client.initialize();
-    console.log(`[server] ACP initialized, agent: ${initResult?.agentInfo?.name}`);
+    console.log(`[server] initializing ACP for resume session ${targetSessionId}...`);
+    await client.initialize();
 
-    console.log(`[server] creating session for ${sessionId}...`);
-    const sessionResult = await client.createSession(cwd || process.cwd());
-    const acpSessionId = sessionResult.sessionId;
-    sess.acpSessionId = acpSessionId;
-    console.log(`[server] ACP session created: ${acpSessionId}`);
-    if (sessionResult.models) {
-      console.log(`[server] default model: ${sessionResult.models.currentModelId || "not set"}`);
-    }
-    if (sessionResult.configOptions) {
-      const modelOpt = sessionResult.configOptions.find((o: any) => o.id === "model" || o.category === "model");
-      if (modelOpt) console.log(`[server] agent default model: ${modelOpt.currentValue}`);
-    }
+    console.log(`[server] resuming session ${targetSessionId}`);
+    await client.resumeSession(targetSessionId, cwd || process.cwd());
 
     if (model) {
-      console.log(`[server] setting model to ${model}`);
-      await client.setSessionModel(acpSessionId, model);
+      await client.setSessionModel(targetSessionId, model).catch(() => {});
     }
 
-    try {
-      const sessionTitle = prompt ? prompt.slice(0, 50) + (prompt.length > 50 ? "\u2026" : "") : "New Session";
-      ws.send(
-        JSON.stringify({
-          type: "session_started",
-          sessionId,
-          agent,
-          prompt,
-          acpSessionId,
-          ...(model ? { model } : {}),
-          title: sessionTitle,
-        }),
-      );
-    } catch {}
-
-    if (prompt) {
-      client.prompt(acpSessionId, prompt).then(
-        (result) => {
-          console.log(`[server] turn ended: ${result?.stopReason}`);
-          try {
-            ws.send(
-              JSON.stringify({
-                type: "turn_ended",
-                sessionId,
-                stopReason: result?.stopReason,
-              }),
-            );
-          } catch {}
-        },
-        (err: unknown) => {
-          const msg = err instanceof Error ? err.message : String(err);
-          console.log(`[server] prompt error: ${msg}`);
-        },
-      );
-    }
+    ws.send(JSON.stringify({
+      type: "session_started",
+      sessionId: bridgeSessionId,
+      agent,
+      loadedSessionId: targetSessionId,
+      resumed: true,
+    }));
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
-    console.log(`[server] ACP init error: ${msg}`);
-    try {
-      ws.send(
-        JSON.stringify({
-          type: "error",
-          text: `ACP initialization failed: ${msg}`,
-        }),
-      );
-    } catch {}
+    console.log(`[server] resume_session error: ${msg}`);
+    ws.send(JSON.stringify({ type: "error", text: `resume session failed: ${msg}` }));
     killSessionProcess(sess as SessionState);
-    deleteSession(sessionId);
+    deleteSession(bridgeSessionId);
   }
 }

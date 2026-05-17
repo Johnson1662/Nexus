@@ -12,7 +12,7 @@ import { WorkspaceSelectView } from '../feature/workspace/WorkspaceSelectView';
 @Component
 export struct Index {
   private navStack: NavPathStack = new NavPathStack();
-  private ws: WSClient = new WSClient(); // replaced by OnboardingView's connected instance via onWsClientReady
+  private ws: WSClient = new WSClient();
 
   @Builder
   PagesMap(name: string) {
@@ -48,7 +48,6 @@ export struct Index {
         },
         onSelectSession: (i: number) => {
           if (i > 0 && i - 1 < ChatStore.sessions.length) {
-            ChatStore.sessionId = ChatStore.sessions[i - 1].sessionId;
             ChatStore.messages = []; ChatStore.planEntries = []; ChatStore.turnActive = false;
             ChatStore.loadingSession = true;
             let p = WorkspaceStore.workspaces[WorkspaceStore.currentIndex].path;
@@ -60,17 +59,20 @@ export struct Index {
           ChatStore.planEntries = [];
           ChatStore.turnActive = false;
           ChatStore.sessionId = '';
+          ChatStore.loadedSessionId = '';
           let cwd = WorkspaceStore.currentIndex >= 0 ? WorkspaceStore.workspaces[WorkspaceStore.currentIndex].path : '';
           let model = (ChatStore.modelIndex >= 0 && ChatStore.modelIndex < ChatStore.models.length)
             ? ChatStore.models[ChatStore.modelIndex].modelId : undefined;
           this.ws.send({ type: 'start', agent: ChatStore.agentType, cwd: cwd, model: model } as ClientMessage);
         },
         onWorkspaceSelect: (index: number) => {
+          ChatStore.sessionId = '';
+          ChatStore.loadedSessionId = '';
+          ChatStore.messages = [];
+          ChatStore.planEntries = [];
+          ChatStore.turnActive = false;
           this.ws.send({ type: 'list_sessions', cwd: WorkspaceStore.workspaces[index].path } as ClientMessage);
-          if (ChatStore.models.length === 0) {
-            let cwd = WorkspaceStore.workspaces[index].path;
-            this.ws.send({ type: 'start', agent: ChatStore.agentType, cwd: cwd } as ClientMessage);
-          }
+          this.ws.send({ type: 'list_models' } as ClientMessage);
         },
       })
     }
@@ -78,6 +80,14 @@ export struct Index {
 
   sendMessage(text: string): void {
     if (!ChatStore.connected) {
+      ChatStore.turnActive = false;
+      return;
+    }
+    // Cancel current turn
+    if (text === '__cancel__') {
+      if (ChatStore.sessionId) {
+        this.ws.send({ type: 'cancel', sessionId: ChatStore.sessionId } as ClientMessage);
+      }
       ChatStore.turnActive = false;
       return;
     }

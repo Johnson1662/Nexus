@@ -8,7 +8,11 @@ import { handleListSessions, clearSessionListCache } from "./handlers/list-sessi
 import { handleSetMode } from "./handlers/set-mode.mjs";
 import { handleSwitchModel } from "./handlers/switch-model.mjs";
 import { handleLoadSession } from "./handlers/load-session.mjs";
+import { handleResumeSession } from "./handlers/resume-session.mjs";
+import { handleCloseSession } from "./handlers/close-session.mjs";
+import { handleSetConfig } from "./handlers/set-config.mjs";
 import { handlePermissionResponse } from "./handlers/permission.mjs";
+import { handleAuth } from "./handlers/auth.mjs";
 import { cleanupWsSessions } from "./session.mjs";
 
 const PORT = 12138;
@@ -88,10 +92,31 @@ wss.on("connection", (ws: WebSocket) => {
         });
         break;
 
+      case "set_config":
+        console.log(`[server] handleSetConfig session="${msg.sessionId?.slice(0, 20)}" config="${msg.configId}" value="${msg.value}"`);
+        handleSetConfig(ws, msg.sessionId, msg.configId, msg.value).catch((err: Error) => {
+          console.log(`[server] handleSetConfig error: ${err.message}`);
+        });
+        break;
+
       case "load_session":
         console.log(`[server] handleLoadSession target="${msg.sessionId?.slice(0, 20)}" agent="${msg.agent || "opencode"}"`);
         handleLoadSession(ws, msg).catch((err: Error) => {
           console.log(`[server] handleLoadSession error: ${err.message}`);
+        });
+        break;
+
+      case "resume_session":
+        console.log(`[server] handleResumeSession target="${msg.sessionId?.slice(0, 20)}" agent="${msg.agent || "opencode"}"`);
+        handleResumeSession(ws, msg).catch((err: Error) => {
+          console.log(`[server] handleResumeSession error: ${err.message}`);
+        });
+        break;
+
+      case "close_session":
+        console.log(`[server] handleCloseSession session="${msg.sessionId?.slice(0, 20)}"`);
+        handleCloseSession(ws, msg.sessionId).catch((err: Error) => {
+          console.log(`[server] handleCloseSession error: ${err.message}`);
         });
         break;
 
@@ -104,6 +129,13 @@ wss.on("connection", (ws: WebSocket) => {
           msg.outcome,
           msg.optionId,
         );
+        break;
+
+      case "authenticate":
+        console.log(`[server] handleAuth session="${msg.sessionId?.slice(0, 20)}" method="${msg.methodId}"`);
+        handleAuth(ws, msg.sessionId, msg.methodId).catch((err: Error) => {
+          console.log(`[server] handleAuth error: ${err.message}`);
+        });
         break;
 
       default:

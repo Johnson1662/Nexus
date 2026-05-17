@@ -10,7 +10,7 @@ function isPathWithinCwd(target, cwd) {
     const relative = path.relative(cwd, resolved);
     return !relative.startsWith("..") && !path.isAbsolute(relative);
 }
-export async function handleLoadSession(ws, params) {
+export async function handleResumeSession(ws, params) {
     const { sessionId: targetSessionId, cwd, agent = "opencode", model } = params;
     if (!targetSessionId) {
         ws.send(JSON.stringify({ type: "error", text: "sessionId is required" }));
@@ -106,9 +106,7 @@ export async function handleLoadSession(ws, params) {
             const terminalId = `term-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
             const outputByteLimit = params.outputByteLimit ?? 100000;
             let resolveExit = null;
-            const exitPromise = new Promise((resolve) => {
-                resolveExit = resolve;
-            });
+            const exitPromise = new Promise((resolve) => { resolveExit = resolve; });
             const terminal = { id: terminalId, process: null, output: "", truncated: false, exitStatus: null, exitPromise, resolveExit, outputByteLimit };
             currentSess.terminals.set(terminalId, terminal);
             const termProc = spawn(params.command, params.args ?? [], {
@@ -220,11 +218,7 @@ export async function handleLoadSession(ws, params) {
     proc.stderr.on("data", (chunk) => {
         console.log(`[server] stderr: ${chunk.toString().slice(0, 200)}`);
         try {
-            ws.send(JSON.stringify({
-                type: "agent_stderr",
-                sessionId: bridgeSessionId,
-                text: chunk.toString(),
-            }));
+            ws.send(JSON.stringify({ type: "agent_stderr", sessionId: bridgeSessionId, text: chunk.toString() }));
         }
         catch { }
     });
@@ -237,10 +231,10 @@ export async function handleLoadSession(ws, params) {
         deleteSession(bridgeSessionId);
     });
     try {
-        console.log(`[server] initializing ACP for load session ${targetSessionId}...`);
+        console.log(`[server] initializing ACP for resume session ${targetSessionId}...`);
         await client.initialize();
-        console.log(`[server] loading session ${targetSessionId}`);
-        await client.loadSession(targetSessionId, cwd || process.cwd());
+        console.log(`[server] resuming session ${targetSessionId}`);
+        await client.resumeSession(targetSessionId, cwd || process.cwd());
         if (model) {
             await client.setSessionModel(targetSessionId, model).catch(() => { });
         }
@@ -249,17 +243,15 @@ export async function handleLoadSession(ws, params) {
             sessionId: bridgeSessionId,
             agent,
             loadedSessionId: targetSessionId,
+            resumed: true,
         }));
     }
     catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        console.log(`[server] load_session error: ${msg}`);
-        ws.send(JSON.stringify({
-            type: "error",
-            text: `load session failed: ${msg}`,
-        }));
+        console.log(`[server] resume_session error: ${msg}`);
+        ws.send(JSON.stringify({ type: "error", text: `resume session failed: ${msg}` }));
         killSessionProcess(sess);
         deleteSession(bridgeSessionId);
     }
 }
-//# sourceMappingURL=load-session.mjs.map
+//# sourceMappingURL=resume-session.mjs.map

@@ -3,8 +3,7 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 const ACP_AGENTS = [
     { binary: "opencode", title: "OpenCode", args: ["acp"] },
-    { binary: "claude-code", title: "Claude Code", args: ["acp"] },
-    { binary: "claude", title: "Claude Code", args: ["acp"] },
+    { binary: "claude-agent-acp", title: "Claude Agent (ACP)", args: [] },
     { binary: "gemini", title: "Gemini CLI", args: ["--acp"] },
     { binary: "cline", title: "Cline", args: ["--acp"] },
     { binary: "kimi", title: "Kimi CLI", args: ["acp"] },
@@ -79,6 +78,11 @@ export function getAgentLaunchArgs(agentName) {
 }
 function findInPath(binaryName) {
     const pathDirs = (process.env.PATH || "").split(path.delimiter);
+    // Also check local node_modules/.bin for npm-installed packages
+    const localBin = path.join(process.cwd(), "node_modules", ".bin");
+    if (pathDirs.indexOf(localBin) === -1) {
+        pathDirs.push(localBin);
+    }
     const extensions = [".cmd", ".exe", ".bat", ".ps1", ""];
     for (const dir of pathDirs) {
         if (!dir)

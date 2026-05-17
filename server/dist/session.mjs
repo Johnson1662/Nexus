@@ -7,6 +7,14 @@ export function setSession(id, sess) {
     sessions.set(id, sess);
 }
 export function deleteSession(id) {
+    const sess = sessions.get(id);
+    if (sess) {
+        try {
+            sess.client.destroy();
+        }
+        catch { }
+        killTerminalProcesses(sess);
+    }
     sessions.delete(id);
 }
 export function findSessionForWs(ws) {
@@ -17,7 +25,24 @@ export function findSessionForWs(ws) {
     }
     return undefined;
 }
+export function killTerminalProcesses(sess) {
+    if (!sess.terminals)
+        return;
+    for (const [, term] of sess.terminals) {
+        if (term.process && !term.process.killed) {
+            try {
+                kill(term.process.pid, "SIGTERM");
+            }
+            catch { }
+        }
+    }
+    sess.terminals.clear();
+}
 export function killSessionProcess(sess) {
+    try {
+        sess.client.destroy();
+    }
+    catch { }
     if (sess.process && !sess.process.killed) {
         try {
             kill(sess.process.pid, "SIGTERM");
@@ -28,8 +53,8 @@ export function killSessionProcess(sess) {
 export function cleanupWsSessions(ws) {
     for (const [id, sess] of sessions) {
         if (sess.ws === ws) {
+            killTerminalProcesses(sess);
             killSessionProcess(sess);
-            sess.client.destroy();
             sessions.delete(id);
         }
     }
@@ -37,8 +62,8 @@ export function cleanupWsSessions(ws) {
 export function killOldWsSessions(ws) {
     for (const [id, sess] of sessions) {
         if (sess.ws === ws) {
+            killTerminalProcesses(sess);
             killSessionProcess(sess);
-            sess.client.destroy();
             sessions.delete(id);
         }
     }

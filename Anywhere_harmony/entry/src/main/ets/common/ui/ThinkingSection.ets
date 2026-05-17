@@ -6,33 +6,61 @@ export struct ThinkingSection {
   @Prop isStreaming: boolean = false;
   @State expanded: boolean = true;
   @State breathFlag: boolean = false;
+  @State shimmerOffset: number = -120;
 
   aboutToAppear(): void {
     if (this.isStreaming) {
-      // 触发布局后改变状态以启动动画
       setTimeout(() => {
         this.breathFlag = true;
+        this.shimmerOffset = 600;
       }, 50);
     }
   }
 
   build() {
     Column() {
-      Row() {
-        Text('Thinking...')
-          .fontSize(FontSize.sm)
-          .fontColor(Colors.foregroundMuted)
-          .fontStyle(FontStyle.Italic)
-          .fontWeight(FontWeight.Medium)
-          .opacity(this.isStreaming ? (this.breathFlag ? 0.4 : 1.0) : 1.0)
-          .animation(this.isStreaming ? {
-            duration: 1000,
-            curve: Curve.EaseInOut,
-            playMode: PlayMode.Alternate,
-            iterations: -1
-          } : { duration: 0 })
+      Stack() {
+        // Thinking label
+        Row() {
+          Text('Thinking...')
+            .fontSize(FontSize.sm)
+            .fontColor(Colors.foregroundMuted)
+            .fontStyle(FontStyle.Italic)
+            .fontWeight(FontWeight.Medium)
+            .opacity(this.isStreaming ? (this.breathFlag ? 0.35 : 0.85) : 0.65)
+            .animation(this.isStreaming ? {
+              duration: 1200,
+              curve: Curve.EaseInOut,
+              playMode: PlayMode.Alternate,
+              iterations: -1
+            } : { duration: 0 })
+        }
+        .width('100%')
+        .height(24)
+        .clip(true)
+
+        // Shimmer sweep
+        if (this.isStreaming) {
+          Row()
+            .width(80)
+            .height(18)
+            .borderRadius(9)
+            .linearGradient({
+              direction: GradientDirection.Right,
+              colors: [["#00FFFFFF", 0], ["#35FFFFFF", 0.5], ["#00FFFFFF", 1]]
+            })
+            .position({ x: this.shimmerOffset, y: 2 })
+            .animation({
+              duration: 1500,
+              curve: Curve.Linear,
+              playMode: PlayMode.Alternate,
+              iterations: -1
+            })
+        }
       }
       .width('100%')
+      .height(24)
+      .clip(true)
       .padding({ top: Spacing.xs, bottom: Spacing.xs })
       .onClick(() => {
         this.getUIContext()?.animateTo({ duration: Duration.fast, curve: Curve.EaseInOut }, () => {
