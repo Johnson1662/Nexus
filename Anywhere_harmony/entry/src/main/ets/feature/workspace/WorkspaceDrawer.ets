@@ -27,7 +27,7 @@ export struct WorkspaceDrawer {
         Blank()
       }
       .width('100%')
-      .padding({ left: Spacing.xl, right: Spacing.xl, top: Spacing.xxl, bottom: Spacing.xl })
+      .padding({ left: Spacing.xl, right: Spacing.xl, top: Spacing.xxxl, bottom: Spacing.xl })
 
       // 工作区列表
       List() {

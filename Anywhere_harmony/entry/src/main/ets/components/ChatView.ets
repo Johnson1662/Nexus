@@ -108,6 +108,9 @@ export struct ChatView {
         })
 
         Column() {
+          // 自定义顶栏，作为内容区的一部分
+          this.TitleBar()
+
           if (this.showPathInput) {
             Row() {
               TextInput({ placeholder: '/path/to/project', text: this.newPath })
@@ -151,8 +154,7 @@ export struct ChatView {
       .maxSideBarWidth('100%')
       .width('100%').height('100%')
     }
-    .title(this.TitleBar)
-    .hideBackButton(true)
+    .hideTitleBar(true)
     .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ x: 30 })))
     .bindSheet($$this.showPicker, this.PickerContent, { detents: [SheetSize.FIT_CONTENT], preferType: SheetType.BOTTOM })
     .width('100%').height('100%')
@@ -223,7 +225,8 @@ export struct ChatView {
           { value: 'Switch Agent Mode', action: () => { this.openPicker(2) } },
         ])
     }
-    .width('100%').height('100%')
+    .width('100%').height(56) // 固定的标题栏高度
     .padding({ left: Spacing.lg, right: Spacing.lg })
+    .backgroundColor(Colors.surfaceElevated) // 给标题栏加个背景色，以防被内容遮挡
   }
 }
