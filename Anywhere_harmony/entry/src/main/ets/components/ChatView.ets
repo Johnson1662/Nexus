@@ -95,6 +95,7 @@ export struct ChatView {
               WorkspaceStore.currentIndex = WorkspaceStore.workspaces.length - 1;
             }
           },
+          onClose: () => { this.getUIContext()?.animateTo({ duration: Duration.normal }, () => { this.showDrawer = false }) },
           onAddWorkspace: (p: string) => {
             let ws = new WorkspaceInfo();
             ws.id = Date.now().toString();

@@ -20,6 +20,12 @@ export struct WorkspaceDrawer {
     Column() {
       // 头部
       Row() {
+        SymbolGlyph($r('sys.symbol.close_sidebar'))
+          .fontSize(24)
+          .fontColor([Colors.foreground])
+          .margin({ right: Spacing.sm })
+          .onClick(() => { if (this.onClose) this.onClose() })
+
         Text('Workspaces')
           .fontSize(FontSize.xl)
           .fontWeight(FontWeight.Bold)
