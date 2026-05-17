@@ -9,31 +9,24 @@ export struct CardHeader {
 
   build() {
     Row() {
-      Circle()
-        .width(8).height(8)
-        .fill(this.role === 'user' ? Colors.accent : Colors.foregroundMuted)
-        .margin({ right: Spacing.sm })
-
-      Text(this.role === 'user' ? 'You' : 'Assistant')
-        .fontSize(FontSize.sm)
-        .fontColor(this.role === 'user' ? Colors.accent : Colors.foregroundMuted)
+      // 在气泡设计下，我们可以更精简头部，甚至不要名字。这里保留一个小小的标识
+      Text(this.role === 'user' ? '' : 'Assistant')
+        .fontSize(FontSize.xs)
+        .fontColor(Colors.foregroundMuted)
         .fontWeight(FontWeight.Medium)
 
       Blank()
 
       if (this.status.length > 0) {
         Text(this.status)
-          .fontSize(FontSize.xs)
+          .fontSize(FontSize.xxs)
           .fontColor(Colors.warning)
           .margin({ right: Spacing.sm })
       }
-
-      Text(this.time)
-        .fontSize(FontSize.xs)
-        .fontColor(Colors.foregroundLight)
     }
     .width('100%')
-    .padding({ bottom: Spacing.xs, top: Spacing.md })
+    .padding({ bottom: Spacing.xxs })
     .alignItems(VerticalAlign.Center)
+    .visibility(this.role === 'user' ? Visibility.None : Visibility.Visible) // 用户消息不显示头部
   }
 }

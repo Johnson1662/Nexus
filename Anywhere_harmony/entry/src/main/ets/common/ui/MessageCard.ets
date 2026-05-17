@@ -1,4 +1,4 @@
-import { Colors, FontSize, Spacing, Radius, Duration, Shadow } from '../../constants/DesignTokens';
+import { Colors, FontSize, Spacing, Radius, Duration } from '../../constants/DesignTokens';
 import { CardHeader } from './CardHeader';
 import { ThinkingSection } from './ThinkingSection';
 import { ToolCallCard } from './ToolCallCard';
@@ -32,69 +32,74 @@ export struct MessageCard {
     let pasteData = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, this.msgContent);
     let systemPasteboard = pasteboard.getSystemPasteboard();
     systemPasteboard.setData(pasteData).then(() => {
-      this.getUIContext().getPromptAction().openToast({ message: 'Copied to clipboard' });
+      this.getUIContext().getPromptAction().openToast({ message: 'Copied' });
     });
   }
 
   build() {
-    Column() {
-      CardHeader({ role: this.isUser ? 'user' : 'agent', name: this.isUser ? 'You' : 'Agent', time: this.time, status: this.status })
-
+    Row() {
       if (this.isUser) {
-        Row() {
-          Text(this.msgContent)
-            .fontSize(FontSize.base)
-            .fontColor(Colors.foreground)
-            .lineHeight(24)
-        }
-        .width('100%')
-        .padding({ top: Spacing.sm, bottom: Spacing.sm })
-      } else {
-        Column() {
-          if (this.msgType === 'thinking') {
-            ThinkingSection({ thinking: this.msgContent })
-          } else if (this.msgType === 'tool_call') {
-            ToolCallCard({ name: this.msgToolName, status: this.msgToolStatus })
-          } else {
-            if (this.msgContent.length > 0) {
-              if (this.streaming) {
-                Text(this.msgContent)
-                  .fontSize(FontSize.base)
-                  .fontColor(Colors.foreground)
-                  .lineHeight(24)
-                  .width('100%')
-                  .padding({ top: Spacing.sm, bottom: Spacing.sm })
-              } else {
-                MarkdownRender({ text: this.msgContent })
-                  .width('100%')
-                  .padding({ top: Spacing.sm, bottom: Spacing.sm })
+        Blank() // Push user message to the right
+      }
+
+      Column() {
+        if (!this.isUser) {
+          // Agent message: full width, no background, no border radius
+          Column() {
+            if (this.msgType === 'thinking') {
+              ThinkingSection({ thinking: this.msgContent, isStreaming: this.streaming })
+            } else if (this.msgType === 'tool_call') {
+              ToolCallCard({ name: this.msgToolName, status: this.msgToolStatus })
+            } else {
+              if (this.msgContent.length > 0) {
+                if (this.streaming) {
+                  Text(this.msgContent)
+                    .fontSize(FontSize.base)
+                    .fontColor(Colors.foreground)
+                    .lineHeight(24)
+                } else {
+                  MarkdownRender({ text: this.msgContent })
+                }
               }
             }
           }
-        }
-        .width('100%')
-        .alignItems(HorizontalAlign.Start)
-      }
+          .padding({ 
+            top: (this.msgType === 'thinking' || this.msgType === 'tool_call') ? 0 : Spacing.xs, 
+            bottom: (this.msgType === 'thinking' || this.msgType === 'tool_call') ? 0 : Spacing.xs 
+          })
+          .alignItems(HorizontalAlign.Start)
+          .width('100%')
 
-      Row() {
-        SymbolGlyph($r('sys.symbol.doc'))
-          .fontSize(FontSize.sm)
-          .fontColor([Colors.foregroundLight])
-          .onClick(() => { this.copyContent() })
+        } else {
+          // User message: right aligned, light gray bubble
+          Column() {
+            if (this.msgContent.length > 0) {
+              Text(this.msgContent)
+                .fontSize(FontSize.base)
+                .fontColor(Colors.foreground)
+                .lineHeight(22)
+            }
+          }
+          .padding({ 
+            top: Spacing.md, 
+            bottom: Spacing.md, 
+            left: Spacing.lg, 
+            right: Spacing.lg 
+          })
+          .backgroundColor(Colors.userBubble)
+          .borderRadius({ topLeft: Radius.xl, topRight: Radius.xl, bottomLeft: Radius.xl, bottomRight: Radius.xs })
+          .alignItems(HorizontalAlign.Start)
+        }
       }
-      .width('100%')
-      .justifyContent(this.isUser ? FlexAlign.End : FlexAlign.Start)
-      .padding({ top: Spacing.xs, bottom: Spacing.md })
+      .constraintSize(this.isUser ? { maxWidth: '85%' } : { minWidth: '100%' })
     }
     .width('100%')
-    .padding({ left: Spacing.lg, right: Spacing.lg })
-    .border({
-      width: { left: this.isUser ? 0 : 3, right: this.isUser ? 3 : 0 },
-      color: { left: Colors.borderLight, right: Colors.accent }
+    .padding({ 
+      left: Spacing.lg, 
+      right: Spacing.lg, 
+      top: (this.msgType === 'thinking' || this.msgType === 'tool_call') ? 0 : Spacing.xs, 
+      bottom: (this.msgType === 'thinking' || this.msgType === 'tool_call') ? 0 : Spacing.xs 
     })
-    .backgroundColor(this.isUser ? Colors.surface0 : Colors.surfaceElevated)
-    .margin({ top: Spacing.xs, bottom: Spacing.xs })
-    .shadow(Shadow.sm)
     .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: 12 })))
     .animation({ duration: Duration.normal, curve: Curve.EaseOut })
   }

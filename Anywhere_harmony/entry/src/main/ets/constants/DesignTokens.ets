@@ -1,33 +1,33 @@
 export class Colors {
-  static readonly surface0: string = '#FAFBFC';
-  static readonly surface1: string = '#F0F2F5';
-  static readonly surface2: string = '#E2E5EA';
+  static readonly surface0: string = '#FFFFFF';
+  static readonly surface1: string = '#F4F4F4';
+  static readonly surface2: string = '#E5E5EA';
   static readonly surfaceElevated: string = '#FFFFFF';
-  static readonly userBubble: string = '#6366F1';
+  static readonly userBubble: string = '#F4F4F4';
 
   static readonly foreground: string = '#1A1D23';
   static readonly foregroundMuted: string = '#6B7280';
   static readonly foregroundLight: string = '#9CA3AF';
 
-  static readonly accent: string = '#6366F1';
-  static readonly accentDark: string = '#4F46E5';
-  static readonly accentLight: string = '#EEF2FF';
-  static readonly accentTransparent: string = '#6366F112';
+  static readonly accent: string = '#202123';
+  static readonly accentDark: string = '#000000';
+  static readonly accentLight: string = '#ECECF1';
+  static readonly accentTransparent: string = '#20212312';
 
-  static readonly success: string = '#10B981';
+  static readonly success: string = '#10A37F';
   static readonly successLight: string = '#D1FAE5';
   static readonly warning: string = '#F59E0B';
   static readonly warningLight: string = '#FEF3C7';
-  static readonly error: string = '#EF4444';
+  static readonly error: string = '#EF4146';
   static readonly errorLight: string = '#FEE2E2';
 
-  static readonly border: string = '#D1D5DB';
-  static readonly borderLight: string = '#E5E7EB';
-  static readonly borderFocus: string = '#6366F1';
+  static readonly border: string = '#D9D9E3';
+  static readonly borderLight: string = '#E5E5EA';
+  static readonly borderFocus: string = '#202123';
 
   static readonly shadowColor: string = '#00000008';
   static readonly shadowColorStrong: string = '#00000014';
-  static readonly shadowAccent: string = '#6366F114';
+  static readonly shadowAccent: string = '#20212314';
 }
 
 export class Spacing {
@@ -42,6 +42,7 @@ export class Spacing {
 }
 
 export class Radius {
+  static readonly xs: number = 4;
   static readonly sm: number = 8;
   static readonly md: number = 12;
   static readonly lg: number = 16;

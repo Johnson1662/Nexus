@@ -1,43 +1,53 @@
-import { Colors, FontSize, Spacing, Radius, Duration } from '../../constants/DesignTokens';
+import { Colors, FontSize, Spacing, Duration } from '../../constants/DesignTokens';
 
 @Component
 export struct ThinkingSection {
   @Prop thinking: string = '';
+  @Prop isStreaming: boolean = false;
   @State expanded: boolean = true;
+  @State breathFlag: boolean = false;
+
+  aboutToAppear(): void {
+    if (this.isStreaming) {
+      // 触发布局后改变状态以启动动画
+      setTimeout(() => {
+        this.breathFlag = true;
+      }, 50);
+    }
+  }
 
   build() {
     Column() {
       Row() {
-        SymbolGlyph($r('sys.symbol.ellipsis_message_1'))
-          .fontSize(FontSize.sm)
-          .fontColor([Colors.warning])
-          .margin({ right: Spacing.sm })
-
-        Text('Thinking')
+        Text('Thinking...')
           .fontSize(FontSize.sm)
           .fontColor(Colors.foregroundMuted)
+          .fontStyle(FontStyle.Italic)
           .fontWeight(FontWeight.Medium)
+          .opacity(this.isStreaming ? (this.breathFlag ? 0.4 : 1.0) : 1.0)
+          .animation(this.isStreaming ? {
+            duration: 1000,
+            curve: Curve.EaseInOut,
+            playMode: PlayMode.Alternate,
+            iterations: -1
+          } : { duration: 0 })
       }
       .width('100%')
-      .height(32)
-      .padding({ left: Spacing.md, right: Spacing.md })
-      .backgroundColor(Colors.surface0)
-      .borderRadius(Radius.md)
-      .border({ width: 1, color: Colors.borderLight })
+      .padding({ top: Spacing.xs, bottom: Spacing.xs })
       .onClick(() => {
         this.getUIContext()?.animateTo({ duration: Duration.fast, curve: Curve.EaseInOut }, () => {
           this.expanded = !this.expanded;
         });
       })
 
-      if (this.expanded) {
+      if (this.expanded && this.thinking.length > 0) {
         Row() {
           Text(this.thinking)
             .fontSize(FontSize.sm)
             .fontColor(Colors.foregroundMuted)
             .lineHeight(22)
             .width('100%')
-            .padding({ bottom: Spacing.sm, top: Spacing.xs })
+            .padding({ bottom: Spacing.xs })
         }
         .width('100%')
         .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: -6 })))
@@ -46,6 +56,6 @@ export struct ThinkingSection {
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
-    .margin({ top: Spacing.xs, bottom: Spacing.xs })
+    .margin(0)
   }
 }

@@ -38,7 +38,7 @@ export struct ChatInputBar {
 
           if (this.text.length > 0 && !this.disabled) {
             SymbolGlyph($r('sys.symbol.arrow_up_circle_fill'))
-              .fontColor([Colors.accent])
+              .fontColor([Colors.foreground])
               .fontSize(28)
               .onClick(() => { this.doSend() })
           } else {

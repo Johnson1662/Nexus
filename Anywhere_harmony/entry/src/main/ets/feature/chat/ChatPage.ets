@@ -60,9 +60,7 @@ export struct ChatPage {
               if (msg.type === 'plan') {
                 PlanView({ entries: ChatStore.planEntries })
                   .width('100%')
-                  .padding(Spacing.lg)
-                  .backgroundColor(Colors.surfaceElevated)
-                  .borderRadius(Radius.md)
+                  .padding({ left: Spacing.lg, right: Spacing.lg, top: Spacing.xs, bottom: Spacing.xs })
                   .margin({ bottom: Spacing.sm })
               } else {
                 MessageCard({
@@ -74,15 +72,15 @@ export struct ChatPage {
                   msgType: msg.type,
                   msgToolName: msg.toolName,
                   msgToolStatus: msg.toolStatus,
-                  streaming: ChatStore.turnActive && msg.role === 'assistant' && msg.type === 'text'
+                  streaming: ChatStore.turnActive && msg.role === 'assistant' && msg.id === ChatStore.messages[ChatStore.messages.length - 1]?.id
                 })
-                  .margin({ bottom: Spacing.xs })
+                  .margin({ bottom: msg.role === 'user' ? Spacing.lg : 0 })
               }
             }
             .height('auto')
             .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: 12 })))
             .animation({ duration: Duration.normal, curve: Curve.EaseOut })
-          }, (msg: MessageData) => msg.id + msg.content.length)
+          }, (msg: MessageData) => msg.id + msg.content.length + msg.toolStatus + (ChatStore.turnActive ? '_active' : '_done'))
         }
         .layoutWeight(1)
         .width('100%')

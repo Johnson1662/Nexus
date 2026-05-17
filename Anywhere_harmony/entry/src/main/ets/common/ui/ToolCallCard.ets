@@ -1,58 +1,37 @@
-import { Colors, FontSize, Spacing, Radius, Duration } from '../../constants/DesignTokens';
+import { Colors, FontSize, Spacing, Duration } from '../../constants/DesignTokens';
 
 @Component
 export struct ToolCallCard {
   @Prop name: string = '';
   @Prop status: string = 'pending';
+  @State breathFlag: boolean = false;
+
+  aboutToAppear(): void {
+    if (this.status === 'in_progress') {
+      setTimeout(() => {
+        this.breathFlag = true;
+      }, 50);
+    }
+  }
 
   build() {
     Row() {
-      if (this.status === 'in_progress') {
-        LoadingProgress().width(14).height(14).color(Colors.accent).margin({ right: Spacing.sm })
-      } else if (this.status === 'completed') {
-        SymbolGlyph($r('sys.symbol.checkmark'))
-          .fontColor([Colors.success])
-          .fontSize(FontSize.sm)
-          .margin({ right: Spacing.sm })
-      } else if (this.status === 'failed') {
-        SymbolGlyph($r('sys.symbol.xmark'))
-          .fontColor([Colors.error])
-          .fontSize(FontSize.sm)
-          .margin({ right: Spacing.sm })
-      } else {
-        SymbolGlyph($r('sys.symbol.clock'))
-          .fontColor([Colors.foregroundMuted])
-          .fontSize(FontSize.sm)
-          .margin({ right: Spacing.sm })
-      }
-
       Text(this.name)
         .fontSize(FontSize.sm)
-        .fontColor(Colors.foreground)
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-        .layoutWeight(1)
-
-      Text(this.getText())
-        .fontSize(FontSize.xs)
         .fontColor(Colors.foregroundMuted)
-        .margin({ left: Spacing.sm })
+        .fontFamily('monospace')
+        .fontStyle(FontStyle.Italic)
+        .fontWeight(FontWeight.Medium)
+        .opacity(this.status === 'in_progress' ? (this.breathFlag ? 0.4 : 1.0) : 1.0)
+        .animation(this.status === 'in_progress' ? {
+          duration: 1000,
+          curve: Curve.EaseInOut,
+          playMode: PlayMode.Alternate,
+          iterations: -1
+        } : { duration: 0 })
     }
     .width('100%')
-    .padding({ left: Spacing.md, right: Spacing.md, top: Spacing.sm, bottom: Spacing.sm })
-    .backgroundColor(Colors.surfaceElevated)
-    .borderRadius(Radius.md)
-    .border({ width: 1, color: Colors.borderLight })
-    .margin({ top: Spacing.xs, bottom: Spacing.xs })
-    .transition(TransitionEffect.OPACITY)
-    .animation({ duration: Duration.fast, curve: Curve.EaseOut })
-  }
-
-  getText(): string {
-    if (this.status === 'pending') return 'Pending'
-    if (this.status === 'in_progress') return 'Running'
-    if (this.status === 'completed') return 'Done'
-    if (this.status === 'failed') return 'Failed'
-    return this.status
+    .padding({ top: Spacing.xs, bottom: Spacing.xs })
+    .alignItems(VerticalAlign.Center)
   }
 }

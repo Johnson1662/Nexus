@@ -147,7 +147,8 @@ export struct ChatView {
       }
       .showSideBar(this.showDrawer)
       .showControlButton(false)
-      .sideBarWidth(280)
+      .sideBarWidth('100%')
+      .maxSideBarWidth('100%')
       .width('100%').height('100%')
     }
     .title(this.TitleBar)
