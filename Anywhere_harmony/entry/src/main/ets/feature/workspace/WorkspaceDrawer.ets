@@ -23,17 +23,17 @@ export struct WorkspaceDrawer {
         SymbolGlyph($r('sys.symbol.close_sidebar'))
           .fontSize(24)
           .fontColor([Colors.foreground])
-          .margin({ right: Spacing.sm })
           .onClick(() => { if (this.onClose) this.onClose() })
 
         Text('Workspaces')
           .fontSize(FontSize.xl)
           .fontWeight(FontWeight.Bold)
           .fontColor(Colors.foreground)
+          .margin({ left: Spacing.sm })
         Blank()
       }
       .width('100%')
-      .padding({ left: Spacing.xl, right: Spacing.xl, top: Spacing.xxxl, bottom: Spacing.xl })
+      .padding({ left: Spacing.lg, right: Spacing.lg, top: Spacing.lg, bottom: Spacing.lg })
 
       // 工作区列表
       List() {
