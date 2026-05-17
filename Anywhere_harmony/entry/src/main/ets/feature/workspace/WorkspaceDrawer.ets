@@ -27,7 +27,7 @@ export struct WorkspaceDrawer {
 
         Text('Workspaces')
           .fontSize(FontSize.xl)
-          .fontWeight(FontWeight.Bold)
+          .fontWeight(FontWeight.Medium)
           .fontColor(Colors.foreground)
           .margin({ left: Spacing.sm })
         Blank()

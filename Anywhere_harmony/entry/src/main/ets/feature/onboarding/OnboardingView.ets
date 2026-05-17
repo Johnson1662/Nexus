@@ -8,22 +8,19 @@ import { MessageData } from '../../common/model/MessageData';
 import { StorageService, PrefsKeys } from '../../services/StorageService';
 
 interface OnboardingCallbacks {
-  onNavigateToChat: () => void;
+  onNavigateToWorkspaceSelect: () => void;
   onWsClientReady: (ws: WSClient) => void;
 }
 
 @Component
 export struct OnboardingView {
-  @State connected: boolean = false;
   @State connecting: boolean = false;
   @State connectError: string = '';
   @State discoveredAgents: AgentInfo[] = [];
-  @State showAgentSheet: boolean = false;
-  @State awaitingAgents: boolean = false;
   @StorageLink('serverUrl') serverUrl: string = 'ws://100.111.77.50:12138';
 
   private ws: WSClient = new WSClient();
-  callbacks: OnboardingCallbacks = { onNavigateToChat: () => {}, onWsClientReady: () => {} };
+  callbacks: OnboardingCallbacks = { onNavigateToWorkspaceSelect: () => {}, onWsClientReady: () => {} };
 
   tryConnect(): void {
     AppStorage.setOrCreate<string>('serverUrl', this.serverUrl);
@@ -32,12 +29,9 @@ export struct OnboardingView {
     this.connecting = true;
     this.connectError = '';
     this.discoveredAgents = [];
-    this.showAgentSheet = false;
-    this.awaitingAgents = false;
     ChatStore.selectedAgentName = '';
     this.ws.onStateChange((v: boolean) => {
       ChatStore.connected = v;
-      this.connected = v;
       if (!v) {
         if (!this.connecting && this.connectError.length === 0) {
           if (ChatStore.selectedAgentName.length > 0 && ChatStore.messages.length > 0) {
@@ -52,17 +46,14 @@ export struct OnboardingView {
         if (ChatStore.selectedAgentName.length > 0 && ChatStore.messages.length > 0) {
           this.ws.send({ type: 'start', agent: ChatStore.selectedAgentName } as ClientMessage);
         } else if (ChatStore.selectedAgentName.length === 0) {
-          this.awaitingAgents = true;
           this.ws.send({ type: 'list_agents' } as ClientMessage);
         }
       }
     });
     this.ws.onAgentList((agents: AgentInfo[]) => {
-      this.awaitingAgents = false;
       this.discoveredAgents = agents;
       if (agents.length > 0) {
         this.connectError = '';
-        this.showAgentSheet = true;
       } else {
         this.connectError = 'No ACP agents discovered on the server. Install one (e.g., opencode) and try again.';
       }
@@ -93,12 +84,10 @@ export struct OnboardingView {
     ChatStore.agentType = agent.name;
     AppStorage.setOrCreate<string>('lastAgent', agent.name);
     StorageService.getInstance().putString(PrefsKeys.LAST_AGENT, agent.name);
-    this.showAgentSheet = false;
     ChatStore.messages = [];
     ChatStore.planEntries = [];
-    let cwd = WorkspaceStore.currentIndex >= 0 ? WorkspaceStore.workspaces[WorkspaceStore.currentIndex].path : '';
-    this.ws.send({ type: 'start', agent: agent.name, cwd: cwd } as ClientMessage);
-    this.callbacks.onNavigateToChat();
+    ChatStore.sessionId = '';
+    this.callbacks.onNavigateToWorkspaceSelect();
   }
 
   handleUpdate(u: AcpUpdate): void {
@@ -165,121 +154,97 @@ export struct OnboardingView {
 
   build() {
     NavDestination() {
-      Stack() {
-        if (!this.connected && this.connecting) {
+      Column() {
+        Scroll() {
           Column() {
-            LoadingProgress().width(28).height(28).color(Colors.accent)
-            Text('Connecting')
-              .fontSize(FontSize.sm).fontColor(Colors.foregroundMuted).margin({ top: Spacing.lg })
-          }
-          .width('100%').height('100%')
-          .justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center)
-          .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: 20 })))
-          .animation({ duration: Duration.normal, curve: Curve.EaseOut })
-
-        } else if (this.connected && this.awaitingAgents) {
-          Column() {
-            LoadingProgress().width(28).height(28).color(Colors.accent)
-            Text('Discovering Agents')
-              .fontSize(FontSize.sm).fontColor(Colors.foregroundMuted).margin({ top: Spacing.lg })
-            Text('Scanning the remote machine for installed ACP agents...')
-              .fontSize(FontSize.xs).fontColor(Colors.foregroundLight).margin({ top: Spacing.sm })
-          }
-          .width('100%').height('100%')
-          .justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center)
-          .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: 20 })))
-          .animation({ duration: Duration.normal, curve: Curve.EaseOut })
-
-        } else if (this.connected && this.showAgentSheet) {
-          Column() {
-            SymbolGlyph($r('sys.symbol.ohos_wifi'))
-              .fontSize(36)
-              .fontColor([Colors.accent])
-              .margin({ bottom: Spacing.md })
-              Text('Select ACP Agent')
-                .fontSize(20).fontWeight(FontWeight.Bold).fontColor(Colors.foreground)
-              Text('Discovered agents on the remote machine')
-                .fontSize(FontSize.sm).fontColor(Colors.foregroundMuted).margin({ bottom: Spacing.xxl })
-
-            List() {
-              ForEach(this.discoveredAgents, (agent: AgentInfo, index: number) => {
-                ListItem() {
-                  Row() {
-                    Circle().width(8).height(8).fill(Colors.success).margin({ right: Spacing.md })
-                    Column() {
-                      Text(agent.title || agent.name)
-                        .fontSize(FontSize.base).fontWeight(FontWeight.Bold).fontColor(Colors.foreground)
-                      Text(agent.name)
-                        .fontSize(FontSize.xs).fontColor(Colors.foregroundMuted)
-                    }
-                    .layoutWeight(1)
-                  }
-                  .width('100%').padding(Spacing.lg)
-                  .backgroundColor(Colors.surface1).borderRadius(Radius.md)
-                  .onClick(() => { this.selectAgent(agent) })
-                  .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ x: 30 })))
-                  .animation({ duration: Duration.normal, curve: Curve.EaseOut, delay: index * 50 })
-                }
-                .padding({ bottom: Spacing.sm })
-              }, (agent: AgentInfo) => agent.name)
-            }
-            .width('100%').layoutWeight(1)
-          }
-          .width('100%').height('100%').padding({ top: Spacing.xl })
-          .transition(TransitionEffect.OPACITY)
-          .animation({ duration: Duration.normal, curve: Curve.EaseOut })
-        } else {
-          Column() {
+            // Title
             Column() {
-          SymbolGlyph($r('sys.symbol.ohos_wifi'))
-                .fontSize(48)
-                .fontColor([Colors.accent])
-                .margin({ bottom: Spacing.xxl })
-
-              Text('ACP Bridge Configuration')
+              SymbolGlyph($r('sys.symbol.ohos_wifi'))
+                .fontSize(36).fontColor([Colors.accent]).margin({ bottom: Spacing.md })
+              Text('Bridge Configuration')
                 .fontSize(FontSize.xxl).fontWeight(FontWeight.Bold).fontColor(Colors.foreground)
-              Text('Connect to a remote agent via IP and Port')
-                .fontSize(FontSize.sm).fontColor(Colors.foregroundMuted).margin({ top: Spacing.sm, bottom: Spacing.xxxl })
-
-              Column() {
-                Text('Server Address')
-                  .fontSize(FontSize.xs).fontColor(Colors.foregroundMuted)
-                  .width('100%').margin({ bottom: Spacing.xs })
-                TextInput({ text: this.serverUrl, placeholder: 'ws://ip:port' })
-                  .height(48).backgroundColor(Colors.surface1).borderRadius(Radius.md)
-                  .fontSize(FontSize.base)
-                  .onChange((val: string) => { this.serverUrl = val })
-                  .margin({ bottom: Spacing.lg })
-
-                Text('The server will auto-discover installed ACP agents')
-                  .fontSize(FontSize.xs).fontColor(Colors.foregroundLight)
-                  .width('100%').margin({ bottom: Spacing.xxl })
-
-                Button('Connect')
-                  .width('100%').height(48)
-                  .backgroundColor(Colors.accent).fontColor(Color.White)
-                  .fontSize(FontSize.base).fontWeight(FontWeight.Medium).borderRadius(Radius.md)
-                  .onClick(() => { this.tryConnect() })
-              }
-
-              if (this.connectError.length > 0) {
-                Text(this.connectError)
-                  .fontSize(FontSize.xs).fontColor(Colors.error)
-                  .textAlign(TextAlign.Center).margin({ top: Spacing.lg })
-                  .transition(TransitionEffect.OPACITY)
-                  .animation({ duration: Duration.fast, curve: Curve.EaseOut })
-              }
+              Text('Connect to a remote AI coding agent')
+                .fontSize(FontSize.sm).fontColor(Colors.foregroundMuted)
             }
-            .width('100%').layoutWeight(1)
-            .justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center)
-            .padding({ left: Spacing.xxxl, right: Spacing.xxxl })
+            .width('100%').alignItems(HorizontalAlign.Center)
+            .padding({ top: Spacing.xxxl * 2, bottom: Spacing.xxxl })
+
+            // Form
+            Column() {
+              TextInput({ text: this.serverUrl, placeholder: 'ws://ip:port' })
+                .height(48).width('100%')
+                .backgroundColor(Colors.surface1).borderRadius(Radius.md)
+                .fontSize(FontSize.base).padding({ left: Spacing.md })
+                .onChange((val: string) => { this.serverUrl = val })
+
+              Button() {
+                Row() {
+                  if (this.connecting) {
+                    LoadingProgress().width(20).height(20).color(Color.White)
+                      .margin({ right: Spacing.sm })
+                  }
+                  Text(this.connecting ? 'Connecting...' : 'Connect')
+                    .fontColor(Color.White).fontSize(FontSize.base)
+                }
+                .alignItems(VerticalAlign.Center).justifyContent(FlexAlign.Center)
+              }
+              .width('100%').height(48)
+              .backgroundColor(Colors.accent).borderRadius(Radius.md)
+              .margin({ top: Spacing.lg })
+              .enabled(!this.connecting)
+              .onClick(() => { this.tryConnect() })
+            }
+            .width('100%')
+
+            // Error
+            if (this.connectError.length > 0) {
+              Text(this.connectError)
+                .fontSize(FontSize.xs).fontColor(Colors.error)
+                .width('100%').margin({ top: Spacing.md })
+                .transition(TransitionEffect.OPACITY)
+            }
+
+            // Agent list
+            if (this.discoveredAgents.length > 0) {
+              Text('Select Agent')
+                .fontSize(FontSize.base).fontWeight(FontWeight.Bold).fontColor(Colors.foreground)
+                .width('100%').margin({ top: Spacing.xxl, bottom: Spacing.md })
+
+              List() {
+                ForEach(this.discoveredAgents, (agent: AgentInfo, index: number) => {
+                  ListItem() {
+                    Row() {
+                      Circle().width(8).height(8).fill(Colors.success).margin({ right: Spacing.md })
+                      Column() {
+                        Text(agent.title || agent.name)
+                          .fontSize(FontSize.base).fontWeight(FontWeight.Medium).fontColor(Colors.foreground)
+                        Text(agent.name)
+                          .fontSize(FontSize.xs).fontColor(Colors.foregroundMuted)
+                      }
+                      .layoutWeight(1)
+                      SymbolGlyph($r('sys.symbol.chevron_right'))
+                        .fontSize(FontSize.sm).fontColor([Colors.foregroundLight])
+                    }
+                    .width('100%').padding(Spacing.lg)
+                    .backgroundColor(Colors.surface1).borderRadius(Radius.md)
+                    .onClick(() => { this.selectAgent(agent) })
+                    .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ x: 30 })))
+                    .animation({ duration: Duration.normal, curve: Curve.EaseOut, delay: index * 50 })
+                  }
+                  .padding({ bottom: Spacing.sm })
+                }, (agent: AgentInfo) => agent.name)
+              }
+              .width('100%').layoutWeight(1)
+            }
           }
-          .width('100%').height('100%')
-          .transition(TransitionEffect.OPACITY.combine(TransitionEffect.scale({ x: 0.95, y: 0.95 })))
-          .animation({ duration: Duration.slow, curve: Curve.EaseOut })
+          .width('100%')
+          .padding({ bottom: Spacing.xxxl })
         }
+        .layoutWeight(1).width('100%')
       }
-      .width('100%').height('100%').backgroundColor(Colors.surface0)
+      .width('100%').height('100%')
+      .padding({ left: Spacing.xxxl, right: Spacing.xxxl })
+      .backgroundColor(Colors.surface0)
     }
     .hideTitleBar(true)
     .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ x: -30 })))

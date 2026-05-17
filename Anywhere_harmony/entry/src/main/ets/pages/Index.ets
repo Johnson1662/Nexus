@@ -1,11 +1,12 @@
 import { Colors } from '../constants/DesignTokens';
 import { ChatStore } from '../common/model/ChatState';
-import { WorkspaceStore } from '../common/model/WorkspaceInfo';
+import { WorkspaceStore, WorkspaceInfo } from '../common/model/WorkspaceInfo';
 import { MessageData } from '../common/model/MessageData';
 import { WSClient } from '../common/websocket/WSClient';
 import { ClientMessage } from '../common/websocket/WSProtocol';
 import { ChatView } from '../components/ChatView';
 import { OnboardingView } from '../feature/onboarding/OnboardingView';
+import { WorkspaceSelectView } from '../feature/workspace/WorkspaceSelectView';
 
 @Entry
 @Component
@@ -15,7 +16,22 @@ export struct Index {
 
   @Builder
   PagesMap(name: string) {
-    if (name === 'chat') {
+    if (name === 'workspace-select') {
+      WorkspaceSelectView({
+        onSelect: (i: number) => {
+          this.navStack.pushPath({ name: 'chat' });
+        },
+        onAddWorkspace: (p: string) => {
+          let ws = new WorkspaceInfo();
+          ws.id = Date.now().toString();
+          ws.name = p.split('\\').pop() || p.split('/').pop() || 'Project';
+          ws.path = p;
+          WorkspaceStore.workspaces.push(ws);
+          WorkspaceStore.currentIndex = WorkspaceStore.workspaces.length - 1;
+          this.navStack.pushPath({ name: 'chat' });
+        }
+      })
+    } else if (name === 'chat') {
       ChatView({
         onSendMessage: (t: string) => { this.sendMessage(t) },
         onSwitchModel: (i: number) => {
@@ -74,7 +90,7 @@ export struct Index {
     Navigation(this.navStack) {
       OnboardingView({
         callbacks: {
-          onNavigateToChat: () => { this.navStack.pushPath({ name: 'chat' }) },
+          onNavigateToWorkspaceSelect: () => { this.navStack.pushPath({ name: 'workspace-select' }) },
           onWsClientReady: (ws: WSClient) => { this.ws = ws; }
         }
       })
