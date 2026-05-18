@@ -12,30 +12,19 @@
 
 ### 当前状态
 
-Bridge 在 `initialize` 中声明了 `fs.readTextFile: true` 和 `fs.writeTextFile: true`，但 **Bridge 的 server.mts 路由表中没有 `fs/read_text_file` 和 `fs/write_text_file` 的处理入口**。Agent 发来的文件读写请求会收到 `Method not found` 错误。
+**✅ 已实现。** Bridge 在 `initialize` 中声明了 `fs.readTextFile: true` 和 `fs.writeTextFile: true`，并且在 `server/src/handlers/start.mts` 和 `server/src/handlers/load-session.mts` 的 `AcpClient` 构造函数中已通过 `onReadTextFile` 和 `onWriteTextFile` 回调实现了完整的文件读写功能。
+
+特点：
+- 路径安全检查（`isPathWithinCwd` 限制在 cwd 范围内）
+- `ReadTextFile` 支持 `line`（1-based）和 `limit` 参数
+- `WriteTextFile` 自动创建父目录（`fs.mkdir({ recursive: true })`）
+- 两个 Session 创建入口（`start` 和 `load_session`）都有相同实现
+
+**App 端变化**：无需变化 — Agent 直接通过 ACP 调用 Bridge，Bridge 在本地执行文件操作。
 
 ### 实现方案
 
-#### Bridge 端（server/src/）
-
-1. **新增 `server/src/handlers/fs-read.mts`**
-   - 监听来自 ACP 的 `fs/read_text_file` JSON-RPC 请求
-   - 从 WS 消息中接收 agent 的请求：`{ method: "fs/read_text_file", params: { sessionId, path, line?, limit? } }`
-   - 直接用 Node.js `fs.readFile()` 读取文件内容
-   - 返回 `{ content: "..." }`
-   - 如果 `line` 和 `limit` 有值，从指定行开始截取 `limit` 行
-
-2. **新增 `server/src/handlers/fs-write.mts`**
-   - 监听来自 ACP 的 `fs/write_text_file` JSON-RPC 请求
-   - 直接用 Node.js `fs.writeFile()` 写入文件
-   - 如果文件不存在则创建
-   - 返回 `{ result: null }`
-
-3. **server.mts 注册路由**
-   - 在 `handleAcpMessage()` 中添加 `case "fs/read_text_file"` 和 `case "fs/write_text_file"` 分支
-
-**工作量**：~100 行代码，两个新 handler 文件
-**App 端变化**：无需变化 — Agent 直接通过 ACP 调用 Bridge，Bridge 在本地执行文件操作
+~~无需新增 — 已实现。~~
 
 ---
 
@@ -46,52 +35,26 @@ Bridge 在 `initialize` 中声明了 `fs.readTextFile: true` 和 `fs.writeTextFi
 
 ### 当前状态
 
-Bridge 在 `initialize` 中声明了 `terminal: true`，但 **没有终端相关的处理代码**。
+**✅ Bridge 端已完全实现。** `server/src/handlers/start.mts` 和 `server/src/handlers/load-session.mts` 中的 `AcpClient` 回调已包含：
+- `onCreateTerminal`：spawn 子进程，捕获 stdout/stderr，实现 `outputByteLimit` 截断
+- `onTerminalOutput`：返回当前 output + truncated + exitStatus
+- `onWaitForTerminalExit`：Promise 等待进程退出
+- `onKillTerminal`：使用 `tree-kill` 终止进程
+- `onReleaseTerminal`：终止并清理终端资源
+
+**App 端未实现**：终端输出在 App 上无展示。Agent 发送的工具调用（`tool_call`）中如果包含 `content.type === "terminal"`，App 端未处理此内容类型。
 
 ### 实现方案
 
-#### Bridge 端（server/src/）
-
-1. **新增 `server/src/terminals.ts`** — 终端状态管理
-   ```typescript
-   class TerminalState {
-     terminalId: string;
-     sessionId: string;
-     childProcess: ChildProcess;
-     outputBuffer: string;
-     exitStatus?: { exitCode: number | null; signal: string | null };
-   }
-   const terminals: Map<string, TerminalState> = new Map();
-   ```
-
-2. **新增 `server/src/handlers/terminal-create.mts`**
-   - 使用 `spawn(command, args, { cwd, env, shell: true })` 启动子进程
-   - 捕获 `stdout` / `stderr` 写入 `outputBuffer`
-   - 实现 `outputByteLimit` 截断（每收到数据就检查，超出限制时从开头截断）
-   - 进程退出时记录 `exitStatus`
-   - 返回 `{ terminalId }`
-
-3. **新增 `server/src/handlers/terminal-output.mts`**
-   - 返回当前 output buffer + 是否截断 + exitStatus（如已退出）
-
-4. **新增 `server/src/handlers/terminal-wait-for-exit.mts`**
-   - Promise 封装的等待逻辑，监听 `childProcess.on('exit')`
-
-5. **新增 `server/src/handlers/terminal-kill.mts`**
-   - `childProcess.kill('SIGTERM')`
-
-6. **新增 `server/src/handlers/terminal-release.mts`**
-   - Kill 进程 + 清理资源 + 从 Map 中移除
-
-**工作量**：~300 行代码，5 个新 handler + 1 个状态管理文件
-**App 端变化**：Agent 发送 `tool_call` 时如果 `content.type === "terminal"`，MessageCard 需要渲染终端输出。可先做纯文本展示，后续再做终端样式（等宽字体、颜色）
-
 #### App 端 — 终端输出展示
 
-在 `MessageCard.ets` 中处理 `ToolCallContent.type === "terminal"` 的情况：
-- 读取 `tool_call_update` 中的 `content.terminalId` 和 `content.output`
-- 用等宽字体（`fontFamily('monospace')`）展示终端输出
-- 黑色背景 + 白色文字的终端风格
+在 `MessageCard.ets` 或 `ToolCallCard.ets` 中处理 `ToolCallContent.type === "terminal"` 的情况：
+- 等宽字体展示终端输出
+- 暗色背景终端风格
+- 实时更新（通过 `tool_call_update` 刷新）
+
+**工作量**：~80 行 App 端代码
+**注意**：终端命令确实会执行，只是输出不在 App 上显示。
 
 ---
 
@@ -102,21 +65,19 @@ Bridge 在 `initialize` 中声明了 `terminal: true`，但 **没有终端相关
 
 ### 当前状态
 
-**完全未实现。** 当 Agent 需要请求用户授权时（如文件写入），Bridge 收到 `session/request_permission` 后无法处理，导致工具调用卡在 `pending` 状态。
+**Bridge 端已实现转发**，`server/src/handlers/start.mts` 和 `server/src/handlers/load-session.mts` 中的 `onPermissionRequest` 回调会：
+1. 生成 `requestId`
+2. 通过 WS 发送 `permission_request` 消息给 App
+3. 等待 App 的 `permission_response` 回复
+4. 将结果返回给 Agent
+
+**App 端未实现**：`permission_request` 消息到达后无 UI 展示，Agent 的工具调用会一直卡在 `pending` 状态。`WSClient.ets` 中没有 `permission_request` 的 case 处理。
 
 ### 实现方案
 
-#### Bridge 端（server/src/）
-
-1. **新增 `server/src/handlers/permission-request.mts`**
-   - 监听来自 ACP 的 `session/request_permission` 请求
-   - 将权限请求通过 WS 转发给 app：`{ type: "permission_request", toolCall: { ... }, options: [ ... ] }`
-   - 等待 app 的响应（通过 WS `permission_response` 消息）
-   - 将用户选择通过 ACP 返回给 Agent
-
 #### App 端
 
-1. **在 `WSClient.ets` 中新增消息处理**
+1. **WSClient.ets 新增消息处理**
    - `case "permission_request"`: 设置 `ChatStore.pendingPermission` 状态
    - 新增 `sendPermissionResponse()` 方法：`ws.send({ type: "permission_response", ... })`
 
@@ -181,28 +142,11 @@ App 仅支持纯文本输入（`{ type: "text", text: "..." }`）。图片和音
 
 ### 当前状态
 
-Agent 可以通过 `session/update` 通知发送会话标题更新，但 **App 端未处理 `session_info_update`**。
+**App 端已实现基础处理**（`OnboardingView.ets` line 119），更新 `ChatStore.sessionTitle` 和 `ChatStore.sessions[i].title`。
 
 ### 实现方案
 
-#### App 端
-
-1. **OnboardingView.ets — `handleUpdate()` 方法新增处理**
-   ```typescript
-   else if (u.sessionUpdate === 'session_info_update') {
-     if (u.title) {
-       // 更新 sessions 列表中的 title
-       for (let i = 0; i < ChatStore.sessions.length; i++) {
-         if (ChatStore.sessions[i].sessionId === ChatStore.loadedSessionId) {
-           ChatStore.sessions[i].title = u.title;
-           break;
-         }
-       }
-     }
-   }
-   ```
-
-**工作量**：~10 行代码
+~~已实现 — 2026-05-18 补充了 sessions 列表中的 title 同步更新。~~
 
 ---
 
@@ -225,20 +169,20 @@ Bridge 端：如果 `initialize` 响应中包含 `authMethods`，自动调用 `a
 
 ## 实现优先級排序
 
-| 优先級 | 功能 | 原因 |
+| 优先級 | 功能 | 状态 |
 |--------|------|------|
-| **P1** | File System (`fs/read*, fs/write*`) | Agent 最常请求的操作，缺失会导致大量工具调用失败 |
-| **P2** | Permission Request | 安全关键；没有它 Agent 的所有操作都是隐式授权 |
-| **P3** | Terminal (`terminal/*`) | 高频使用（run tests、build 等），但 Agent 通常有内置终端兜底 |
-| **P4** | Session Info Update | 小改动，体验提升明显 |
-| **P5** | Image / Audio Input | 取决于 Agent 能力声明；多数 Agent 不支持 |
-| **P6** | Auth (authenticate) | 尚无 Agent 需要 |
+| ✅ | File System (`fs/read*, fs/write*`) | Bridge 端已完成（start.mts / load-session.mts） |
+| ✅ | Terminal (`terminal/*`) | Bridge 端已完成（start.mts / load-session.mts） |
+| ✅ | Session Info Update | App 端已完成（OnboardingView.ets） |
+| **P1** | Permission Request App 端 UI | Bridge 转发已实现，App 端缺 UI |
+| **P2** | Terminal 输出 App 端展示 | ToolCall terminal 内容类型未处理 |
+| **P3** | Image / Audio Input | 取决于 Agent 能力声明 |
+| **P4** | Auth (authenticate) | 尚无 Agent 需要 |
 
 ---
 
 ## 实施顺序建议
 
-1. **Phase 1 (P1 + P4)**：File System + Session Info Update — 最小改动，最大效果
-2. **Phase 2 (P2)**：Permission Request — 安全必备
-3. **Phase 3 (P3)**：Terminal — 桥接层重头戏
-4. **Phase 4 (P5 + P6)**：富媒体输入 + Auth — 低频需求，等有需要再做
+1. **Phase 1 (P1)**：Permission Request App 端 — 安全关键，Agent 操作卡在 pending
+2. **Phase 2 (P2)**：Terminal 输出展示 — 终端确实在执行，只是输出不显示
+3. **Phase 3 (P3 + P4)**：富媒体输入 + Auth — 低频需求

@@ -13,7 +13,7 @@ import { handleCloseSession } from "./handlers/close-session.mjs";
 import { handleSetConfig } from "./handlers/set-config.mjs";
 import { handlePermissionResponse } from "./handlers/permission.mjs";
 import { handleAuth } from "./handlers/auth.mjs";
-import { cleanupWsSessions } from "./session.mjs";
+import { cleanupWsSessions, enqueueWsOp } from "./session.mjs";
 const PORT = 12138;
 const HOST = "0.0.0.0";
 const wss = new WebSocketServer({ host: HOST, port: PORT });
@@ -37,9 +37,7 @@ wss.on("connection", (ws) => {
             case "start":
                 console.log(`[server] handleStart agent="${msg.agent || "opencode"}" cwd="${msg.cwd || process.cwd()}"`);
                 clearSessionListCache(ws);
-                handleStart(ws, msg).catch((err) => {
-                    console.log(`[server] handleStart error: ${err.message}`);
-                });
+                enqueueWsOp(ws, () => handleStart(ws, msg));
                 break;
             case "list_agents": {
                 const agents = discoverAgents();
@@ -63,15 +61,11 @@ wss.on("connection", (ws) => {
                 break;
             case "list_models":
                 console.log(`[server] handleListModels`);
-                handleListModels(ws).catch((err) => {
-                    console.log(`[server] handleListModels error: ${err.message}`);
-                });
+                enqueueWsOp(ws, () => handleListModels(ws));
                 break;
             case "list_sessions":
                 console.log(`[server] handleListSessions cwd="${msg.cwd || ""}"`);
-                handleListSessions(ws, msg.cwd).catch((err) => {
-                    console.log(`[server] handleListSessions error: ${err.message}`);
-                });
+                enqueueWsOp(ws, () => handleListSessions(ws, msg.cwd));
                 break;
             case "set_mode":
                 console.log(`[server] handleSetMode session="${msg.sessionId?.slice(0, 20)}" mode="${msg.modeId}"`);

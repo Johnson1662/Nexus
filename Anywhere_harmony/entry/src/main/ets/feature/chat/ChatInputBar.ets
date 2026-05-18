@@ -5,6 +5,7 @@ import { ChatStore, AvailableCommand } from '../../common/model/ChatState';
 export struct ChatInputBar {
   @State text: string = '';
   @Prop disabled: boolean = false;
+  @Prop showCancel: boolean = false;
   onSend?: (text: string) => void;
   onCancel?: () => void;
 
@@ -71,7 +72,6 @@ export struct ChatInputBar {
             .padding({ left: Spacing.md, right: Spacing.sm })
             .fontSize(FontSize.base)
             .enabled(!this.disabled)
-            .maxLines(6)
             .minLines(1)
             .enterKeyType(EnterKeyType.Send)
             .onChange((val: string) => { this.text = val })
@@ -84,7 +84,7 @@ export struct ChatInputBar {
         Row() {
           Blank()
 
-          if (this.disabled) {
+          if (this.showCancel) {
             SymbolGlyph($r('sys.symbol.smallcircle_filled_circle'))
               .fontColor([Colors.error])
               .fontSize(28)

@@ -4,7 +4,7 @@ import { WorkspaceStore, WorkspaceInfo } from '../common/model/WorkspaceInfo';
 import { MessageData } from '../common/model/MessageData';
 import { WSClient } from '../common/websocket/WSClient';
 import { ClientMessage } from '../common/websocket/WSProtocol';
-import { ChatView } from '../components/ChatView';
+import { ChatView } from '../feature/chat/ChatView';
 import { OnboardingView } from '../feature/onboarding/OnboardingView';
 import { WorkspaceSelectView } from '../feature/workspace/WorkspaceSelectView';
 
@@ -64,6 +64,7 @@ export struct Index {
           let model = (ChatStore.modelIndex >= 0 && ChatStore.modelIndex < ChatStore.models.length)
             ? ChatStore.models[ChatStore.modelIndex].modelId : undefined;
           this.ws.send({ type: 'start', agent: ChatStore.agentType, cwd: cwd, model: model } as ClientMessage);
+          this.ws.send({ type: 'list_sessions', cwd: cwd } as ClientMessage);
         },
         onWorkspaceSelect: (index: number) => {
           ChatStore.sessionId = '';
@@ -71,8 +72,13 @@ export struct Index {
           ChatStore.messages = [];
           ChatStore.planEntries = [];
           ChatStore.turnActive = false;
-          this.ws.send({ type: 'list_sessions', cwd: WorkspaceStore.workspaces[index].path } as ClientMessage);
-          this.ws.send({ type: 'list_models' } as ClientMessage);
+          ChatStore.sessionReady = false;
+          let cwd = WorkspaceStore.workspaces[index].path;
+          this.ws.send({ type: 'start', agent: ChatStore.agentType, cwd: cwd } as ClientMessage);
+          this.ws.send({ type: 'list_sessions', cwd: cwd } as ClientMessage);
+        },
+        onPermissionResponse: (optionId: string) => {
+          this.ws.sendPermissionResponse(optionId);
         },
       })
     }

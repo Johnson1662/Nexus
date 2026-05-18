@@ -1,9 +1,9 @@
-import { Colors, FontSize, Spacing, Radius, Duration } from '../constants/DesignTokens';
-import { ChatStore } from '../common/model/ChatState';
-import { WorkspaceStore } from '../common/model/WorkspaceInfo';
-import { WorkspaceInfo } from '../common/model/WorkspaceInfo';
-import { ChatPage } from '../feature/chat/ChatPage';
-import { WorkspaceDrawer } from '../feature/workspace/WorkspaceDrawer';
+import { Colors, FontSize, Spacing, Radius, Duration } from '../../constants/DesignTokens';
+import { ChatStore, PendingPermission, PermissionOption } from '../../common/model/ChatState';
+import { WorkspaceStore } from '../../common/model/WorkspaceInfo';
+import { WorkspaceInfo } from '../../common/model/WorkspaceInfo';
+import { ChatPage } from './ChatPage';
+import { WorkspaceDrawer } from '../workspace/WorkspaceDrawer';
 
 @Component
 export struct ChatView {
@@ -19,6 +19,7 @@ export struct ChatView {
   onNewSession?: () => void;
   onSelectSession?: (i: number) => void;
   onWorkspaceSelect?: (index: number) => void;
+  onPermissionResponse?: (optionId: string) => void;
 
   getSessionTitle(): string {
     let targetId = ChatStore.loadedSessionId || ChatStore.sessionId;
@@ -35,6 +36,10 @@ export struct ChatView {
       return ChatStore.models[ChatStore.modelIndex].name;
     }
     return '';
+  }
+
+  isModelReady(): boolean {
+    return ChatStore.sessionReady && ChatStore.models.length > 0;
   }
 
   openPicker(mode: number): void {
@@ -165,6 +170,28 @@ export struct ChatView {
           .zIndex(100)
           .transition(TransitionEffect.OPACITY)
         }
+
+        // Permission request overlay
+        if (ChatStore.pendingPermission !== null) {
+          Column() {
+            Row().width('100%').layoutWeight(1)
+              .onClick(() => {
+                if (this.onPermissionResponse) this.onPermissionResponse('reject_once');
+              })
+
+            PermissionSheet({
+              permission: ChatStore.pendingPermission,
+              onSelect: (optionId: string) => {
+                if (this.onPermissionResponse) this.onPermissionResponse(optionId);
+              }
+            })
+            .width('100%')
+          }
+          .width('100%').height('100%')
+          .backgroundColor('#33000000')
+          .zIndex(110)
+          .transition(TransitionEffect.OPACITY)
+        }
       }
       .width('100%').height('100%')
     }
@@ -188,10 +215,23 @@ export struct ChatView {
           .lineHeight(20).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
           .width('100%')
 
-        Text(this.getModelName())
-          .fontSize(FontSize.xs).fontColor(Colors.foregroundMuted)
-          .lineHeight(16).maxLines(1)
+        if (this.isModelReady()) {
+          Text(this.getModelName())
+            .fontSize(FontSize.xs).fontColor(Colors.foregroundMuted)
+            .lineHeight(16).maxLines(1)
+            .width('100%')
+        } else {
+          Row() {
+            LoadingProgress()
+              .width(12).height(12).color(Colors.foregroundMuted)
+            Text('Loading model…')
+              .fontSize(FontSize.xs).fontColor(Colors.foregroundMuted)
+              .margin({ left: 4 })
+          }
+          .alignItems(VerticalAlign.Center)
+          .height(16)
           .width('100%')
+        }
       }
       .alignItems(HorizontalAlign.Start)
       .layoutWeight(1)
@@ -209,17 +249,65 @@ export struct ChatView {
           { value: 'Switch Agent Mode', action: () => { this.openPicker(2) } },
         ])
     }
-    .width('100%').height(56) // 固定的标题栏高度
+    .width('100%').height(56)
     .padding({ left: Spacing.lg, right: Spacing.lg })
-    .backgroundColor(Colors.surfaceElevated) // 给标题栏加个背景色，以防被内容遮挡
+    .backgroundColor(Colors.surfaceElevated)
+  }
+}
+
+@Component
+struct PermissionSheet {
+  @Prop permission: PendingPermission | null = null;
+  onSelect?: (optionId: string) => void;
+
+  build() {
+    Column() {
+      Row() {
+        Text('Permission Required')
+          .fontSize(FontSize.xl).fontWeight(FontWeight.Bold).fontColor(Colors.foreground)
+      }
+      .width('100%')
+      .padding({ left: Spacing.xl, right: Spacing.xl, top: Spacing.xl, bottom: Spacing.md })
+
+      if (this.permission) {
+        Text(this.permission.toolCall.title)
+          .fontSize(FontSize.base).fontColor(Colors.foregroundMuted)
+          .width('100%')
+          .padding({ left: Spacing.xl, right: Spacing.xl, bottom: Spacing.lg })
+
+        List() {
+          ForEach(this.permission.options, (opt: PermissionOption) => {
+            ListItem() {
+              Row() {
+                Text(opt.name)
+                  .fontSize(FontSize.base).fontColor(Colors.foreground)
+                  .padding({ top: Spacing.md, bottom: Spacing.md, left: Spacing.md, right: Spacing.md })
+              }
+              .width('100%')
+            }
+            .width('100%').borderRadius(Radius.md)
+            .backgroundColor(Colors.surface1)
+            .margin({ bottom: Spacing.xs, left: Spacing.md, right: Spacing.md })
+            .onClick(() => {
+              if (this.onSelect) this.onSelect(opt.optionId);
+            })
+          }, (opt: PermissionOption) => opt.optionId)
+        }
+        .width('100%')
+      }
+    }
+    .width('100%')
+    .padding({ bottom: Spacing.xxxl })
+    .backgroundColor(Colors.surface0)
+    .borderRadius({ topLeft: Radius.xl, topRight: Radius.xl })
   }
 }
 
 @Component
 struct PickerSheet {
-  private pickerMode: number = -1;
-  private pickerTitle: string = '';
-  private onSelect?: (index: number) => void;
+  @Prop pickerMode: number = -1;
+  @Prop pickerTitle: string = '';
+  onSelect?: (index: number) => void;
 
   build() {
     Column() {

@@ -29,6 +29,7 @@ export interface SessionState {
   agent: string;
   pendingPermission: PendingPermission | null;
   terminals: Map<string, TerminalState>;
+  restartCount: number;
 }
 
 export interface WSClientMessage {

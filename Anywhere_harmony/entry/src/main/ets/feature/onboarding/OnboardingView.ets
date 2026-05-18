@@ -78,9 +78,6 @@ export struct OnboardingView {
       let m = new MessageData('assistant', 'Error: ' + text, 'text');
       ChatStore.messages = [...ChatStore.messages, m];
     });
-    this.ws.onSessionStarted(() => {
-      this.ws.send({ type: 'list_models' } as ClientMessage);
-    });
     this.ws.connect(this.serverUrl);
     this.callbacks.onWsClientReady(this.ws);
   }
@@ -111,13 +108,27 @@ export struct OnboardingView {
       m.toolCallId = u.toolCallId; m.toolName = u.title || ''; m.toolStatus = 'pending'; m.toolKind = u.kind || '';
       ChatStore.messages = [...ChatStore.messages, m];
     } else if (t === 'tool_call_update' && u.toolCallId && u.status) {
-      ChatStore.messages = this.updateStatus(ChatStore.messages, u.toolCallId, u.status);
+      let contentText = '';
+      if (u.toolCallContent) {
+        for (let i = 0; i < u.toolCallContent.length; i++) {
+          if (u.toolCallContent[i].content?.text) {
+            contentText += u.toolCallContent[i].content!.text!;
+          }
+        }
+      }
+      ChatStore.messages = this.updateToolStatus(ChatStore.messages, u.toolCallId, u.status, contentText);
     } else if (t === 'plan' && u.entries) {
       ChatStore.planEntries = u.entries;
     } else if (t === 'user_message_chunk' && u.content?.text) {
       ChatStore.messages = [...ChatStore.messages, new MessageData('user', u.content.text, 'text')];
     } else if (t === 'session_info_update' && u.title) {
       ChatStore.sessionTitle = u.title;
+      for (let i = 0; i < ChatStore.sessions.length; i++) {
+        if (ChatStore.sessions[i].sessionId === ChatStore.loadedSessionId) {
+          ChatStore.sessions[i].title = u.title;
+          break;
+        }
+      }
     } else if (t === 'config_option_update' && u.configOptions) {
       ChatStore.configOptions = u.configOptions;
     } else if (t === 'available_commands_update' && u.availableCommands) {
@@ -126,9 +137,6 @@ export struct OnboardingView {
       ChatStore.lastUsage = u.usage;
     } else if (t === 'turn_ended') {
       ChatStore.turnActive = false;
-      if (WorkspaceStore.currentIndex >= 0) {
-        this.ws.send({ type: 'list_sessions', cwd: WorkspaceStore.workspaces[WorkspaceStore.currentIndex].path } as ClientMessage);
-      }
     }
   }
 
@@ -157,13 +165,14 @@ export struct OnboardingView {
     return [...msgs, new MessageData('assistant', t, 'thinking')];
   }
 
-  updateStatus(msgs: MessageData[], id: string, s: string): MessageData[] {
+  updateToolStatus(msgs: MessageData[], id: string, s: string, c: string): MessageData[] {
     let r = [...msgs];
     for (let i = 0; i < r.length; i++) {
       if (r[i].toolCallId === id) {
         let u = new MessageData(r[i].role, r[i].content, r[i].type);
         u.id = r[i].id; u.timestamp = r[i].timestamp;
         u.toolName = r[i].toolName; u.toolStatus = s; u.toolCallId = r[i].toolCallId;
+        u.toolContent = c.length > 0 ? c : r[i].toolContent;
         r[i] = u; break;
       }
     }

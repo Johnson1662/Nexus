@@ -638,6 +638,16 @@ async function handleStart(ws, msg) {
       modelId: effectiveModel,
     });
 
+    const models = (sessionResult.models?.availableModels || []).map((m) => ({
+      modelId: m.modelId,
+      name: m.name,
+    }));
+    const modes = (sessionResult.modes?.availableModes || []).map((m) => ({
+      value: m.id,
+      name: m.name,
+    }));
+    ws.send(JSON.stringify({ type: "model_list", models, modes }));
+
     // Notify client immediately (don't wait for MCP)
     ws.send(
       JSON.stringify({
@@ -646,6 +656,7 @@ async function handleStart(ws, msg) {
         agent: agent,
         prompt,
         acpSessionId,
+        model: effectiveModel,
       })
     );
 
@@ -680,6 +691,8 @@ async function handleStart(ws, msg) {
         );
       }).catch((err) => {
         console.log(`[server] prompt error: ${err.message}`);
+        ws.send(JSON.stringify({ type: "turn_ended", sessionId, stopReason: "error" }));
+        ws.send(JSON.stringify({ type: "error", sessionId, text: `Agent error: ${err.message}` }));
       });
     }
   } catch (err) {
@@ -722,6 +735,8 @@ function handleInput(ws, msg) {
     })
     .catch((err) => {
       console.log(`[server] prompt error: ${err.message}`);
+      ws.send(JSON.stringify({ type: "turn_ended", sessionId, stopReason: "error" }));
+      ws.send(JSON.stringify({ type: "error", sessionId, text: `Agent error: ${err.message}` }));
     });
 }
 

@@ -4,6 +4,7 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import { AcpClient } from "../acp/client.mjs";
 import { getAgentLaunchArgs } from "../discovery/agents.mjs";
+import { getLastModel } from "../prefs.mjs";
 import { setSession, deleteSession, getSession, killSessionProcess, killOldWsSessions, } from "../session.mjs";
 function isPathWithinCwd(target, cwd) {
     const resolved = path.resolve(target);
@@ -30,6 +31,7 @@ export async function handleStart(ws, params) {
         cwd: cwd || process.cwd(),
         pendingPermission: null,
         terminals: new Map(),
+        restartCount: 0,
     };
     const client = new AcpClient(proc, {
         onSessionUpdate: async (update) => {
@@ -273,10 +275,32 @@ export async function handleStart(ws, params) {
             if (modelOpt)
                 console.log(`[server] agent default model: ${modelOpt.currentValue}`);
         }
-        if (model) {
-            console.log(`[server] setting model to ${model}`);
-            await client.setSessionModel(acpSessionId, model);
+        let effectiveModel = model || getLastModel(agent);
+        if (!model && effectiveModel) {
+            console.log(`[server] using last model: ${effectiveModel}`);
         }
+        if (effectiveModel) {
+            console.log(`[server] setting model to ${effectiveModel}`);
+            await client.setSessionModel(acpSessionId, effectiveModel);
+        }
+        const models = sessionResult.models?.availableModels || [];
+        const modes = sessionResult.modes?.availableModes || [];
+        const mappedModels = models.map((m) => ({
+            modelId: m.modelId,
+            name: m.name,
+        }));
+        const mappedModes = modes.map((m) => ({
+            value: m.id,
+            name: m.name,
+        }));
+        try {
+            ws.send(JSON.stringify({
+                type: "model_list",
+                models: mappedModels,
+                modes: mappedModes,
+            }));
+        }
+        catch { }
         try {
             const sessionTitle = prompt ? prompt.slice(0, 50) + (prompt.length > 50 ? "\u2026" : "") : "New Session";
             ws.send(JSON.stringify({
@@ -285,7 +309,7 @@ export async function handleStart(ws, params) {
                 agent,
                 prompt,
                 acpSessionId,
-                ...(model ? { model } : {}),
+                ...(effectiveModel ? { model: effectiveModel } : {}),
                 title: sessionTitle,
             }));
         }
@@ -304,6 +328,11 @@ export async function handleStart(ws, params) {
             }, (err) => {
                 const msg = err instanceof Error ? err.message : String(err);
                 console.log(`[server] prompt error: ${msg}`);
+                try {
+                    ws.send(JSON.stringify({ type: "turn_ended", sessionId, stopReason: "error" }));
+                    ws.send(JSON.stringify({ type: "error", sessionId, text: `Agent error: ${msg}` }));
+                }
+                catch { }
             });
         }
     }

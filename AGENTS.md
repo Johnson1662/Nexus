@@ -303,7 +303,7 @@ npm run server:old   # Old hand-written server (keep for rollback)
 ## File Structure
 
 ```
-entry/src/main/ets/
+Anywhere_harmony/entry/src/main/ets/
 ├── pages/
 │   └── Index.ets                    # Navigation root + PagesMap builder
 ├── feature/

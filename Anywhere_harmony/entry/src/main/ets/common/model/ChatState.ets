@@ -37,6 +37,24 @@ export interface UsageInfo {
   totalTokens: number;
 }
 
+export interface PermissionOption {
+  optionId: string;
+  name: string;
+  kind: string;
+}
+
+export interface PendingPermission {
+  requestId: string;
+  toolCall: PendingToolCall;
+  options: PermissionOption[];
+}
+
+export interface PendingToolCall {
+  toolCallId: string;
+  title: string;
+  kind: string;
+}
+
 @ObservedV2
 export class PlanEntry {
   @Trace content: string = '';
@@ -65,6 +83,8 @@ export class ChatStoreModel {
   @Trace configOptions: ConfigOption[] = [];
   @Trace availableCommands: AvailableCommand[] = [];
   @Trace lastUsage: UsageInfo | null = null;
+  @Trace pendingPermission: PendingPermission | null = null;
+  @Trace sessionReady: boolean = false;
 }
 
 export const ChatStore: ChatStoreModel = new ChatStoreModel();

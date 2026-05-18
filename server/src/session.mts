@@ -3,6 +3,26 @@ import type { SessionState } from "./acp/types.mjs";
 
 const sessions = new Map<string, SessionState>();
 
+const wsOpQueues = new Map<import("ws").WebSocket, Promise<unknown>>();
+
+export function enqueueWsOp(ws: import("ws").WebSocket, fn: () => Promise<void>): void {
+  const prev = wsOpQueues.get(ws) || Promise.resolve();
+  const next = prev.then(async () => {
+    try {
+      await fn();
+    } catch (err: any) {
+      console.log(`[server] queued op error: ${err.message}`);
+    }
+  }, async () => {
+    try {
+      await fn();
+    } catch (err: any) {
+      console.log(`[server] queued op error: ${err.message}`);
+    }
+  });
+  wsOpQueues.set(ws, next);
+}
+
 export function getSession(id: string): SessionState | undefined {
   return sessions.get(id);
 }

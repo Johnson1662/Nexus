@@ -1,4 +1,5 @@
 import { getSession } from "../session.mjs";
+import { setLastModel } from "../prefs.mjs";
 export async function handleSwitchModel(ws, sessionId, model) {
     const sess = getSession(sessionId);
     if (!sess || !sess.acpSessionId) {
@@ -13,6 +14,7 @@ export async function handleSwitchModel(ws, sessionId, model) {
         console.log(`[server] switching model for ${sessionId} to ${model}`);
         await sess.client.setSessionModel(sess.acpSessionId, model);
         console.log(`[server] model switched for ${sessionId} to ${model}`);
+        setLastModel(sess.agent || "opencode", model);
         ws.send(JSON.stringify({
             type: "model_switched",
             sessionId,

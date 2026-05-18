@@ -1,5 +1,6 @@
 import type { WebSocket } from "ws";
 import { getSession } from "../session.mjs";
+import { getLastModel, setLastModel } from "../prefs.mjs";
 
 export async function handleSwitchModel(
   ws: WebSocket,
@@ -23,6 +24,7 @@ export async function handleSwitchModel(
     console.log(`[server] switching model for ${sessionId} to ${model}`);
     await sess.client.setSessionModel(sess.acpSessionId, model);
     console.log(`[server] model switched for ${sessionId} to ${model}`);
+    setLastModel(sess.agent || "opencode", model);
     ws.send(
       JSON.stringify({
         type: "model_switched",

@@ -190,6 +190,34 @@ export class WSClient {
     this.sessionStartedListeners = [];
   }
 
+  sendPermissionResponse(optionId: string): void {
+    if (!ChatStore.pendingPermission) return;
+    let reqId: string = ChatStore.pendingPermission.requestId;
+    let sessionId: string = ChatStore.sessionId;
+    this.send({
+      type: 'permission_response',
+      sessionId: sessionId,
+      requestId: reqId,
+      outcome: 'selected',
+      optionId: optionId,
+    } as ClientMessage);
+    ChatStore.pendingPermission = null;
+  }
+
+  private parsePermissionOptions(raw: Object | undefined): import('../model/ChatState').PermissionOption[] {
+    if (!raw) return [];
+    let arr: Array<Record<string, Object>> = raw as Array<Record<string, Object>>;
+    let result: import('../model/ChatState').PermissionOption[] = [];
+    for (let i = 0; i < arr.length; i++) {
+      result.push({
+        optionId: String(arr[i]['optionId']) || '',
+        name: String(arr[i]['name']) || '',
+        kind: String(arr[i]['kind']) || '',
+      });
+    }
+    return result;
+  }
+
   private notifyState(connected: boolean): void {
     for (let cb of this.stateListeners) {
       cb(connected);
@@ -214,10 +242,34 @@ export class WSClient {
         }
         if (msg.model) {
           ChatStore.sessionCurrentModelId = msg.model;
+          for (let i = 0; i < ChatStore.models.length; i++) {
+            if (ChatStore.models[i].modelId === msg.model) {
+              ChatStore.modelIndex = i;
+              break;
+            }
+          }
         }
         if (msg.title) {
           ChatStore.sessionTitle = msg.title;
         }
+        {
+          let id = msg.loadedSessionId || msg.sessionId || '';
+          let found = false;
+          for (let i = 0; i < ChatStore.sessions.length; i++) {
+            if (ChatStore.sessions[i].sessionId === id) {
+              ChatStore.sessions[i].title = String(msg.title || ChatStore.sessions[i].title);
+              found = true;
+              break;
+            }
+          }
+          if (!found) {
+            let s = new ServerSession();
+            s.sessionId = id;
+            s.title = String(msg.title || '');
+            ChatStore.sessions = [...ChatStore.sessions, s];
+          }
+        }
+        ChatStore.sessionReady = true;
         for (let cb of this.sessionStartedListeners) {
           cb();
         }
@@ -239,11 +291,22 @@ export class WSClient {
         }
         break;
       case 'model_list':
+        ChatStore.models = msg.models || [];
+        ChatStore.modes = msg.modes || [];
+        if (ChatStore.sessionCurrentModelId) {
+          for (let i = 0; i < ChatStore.models.length; i++) {
+            if (ChatStore.models[i].modelId === ChatStore.sessionCurrentModelId) {
+              ChatStore.modelIndex = i;
+              break;
+            }
+          }
+        }
         for (let cb of this.modelListeners) {
           cb(msg.models || [], msg.modes || []);
         }
         break;
       case 'session_list':
+        ChatStore.sessions = msg.sessions || [];
         for (let cb of this.sessionListeners) {
           cb(msg.sessions || []);
         }
@@ -256,6 +319,20 @@ export class WSClient {
       case 'error':
         for (let cb of this.errorListeners) {
           cb(String(msg.text || 'Unknown error'));
+        }
+        break;
+      case 'permission_request':
+        if (msg.requestId && msg.toolCall) {
+          let toolCall: Record<string, Object> = msg.toolCall as Record<string, Object>;
+          ChatStore.pendingPermission = {
+            requestId: msg.requestId,
+            toolCall: {
+              toolCallId: String(toolCall['toolCallId']) || '',
+              title: String(toolCall['title']) || '',
+              kind: String(toolCall['kind']) || '',
+            },
+            options: this.parsePermissionOptions(msg.options),
+          };
         }
         break;
       case 'config_option_updated':

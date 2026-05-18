@@ -16,6 +16,13 @@ export interface AcpUpdate {
   availableCommands?: AvailableCommand[];
   usage?: UsageInfo;
   configId?: string;
+  toolCallContent?: AcpToolCallContent[];
+}
+
+export interface AcpToolCallContent {
+  type?: string;
+  content?: AcpContent;
+  terminalId?: string;
 }
 
 export interface AcpContent {

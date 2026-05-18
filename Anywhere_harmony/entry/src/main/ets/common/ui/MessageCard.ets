@@ -1,7 +1,7 @@
 import { Colors, FontSize, Spacing, Radius, Duration } from '../../constants/DesignTokens';
 import { CardHeader } from './CardHeader';
 import { ThinkingSection } from './ThinkingSection';
-import { ToolCallCard } from '../../components/ToolCallCard';
+import { ToolCallCard } from './ToolCallCard';
 import { MarkdownRender } from './MarkdownRender';
 import pasteboard from '@ohos.pasteboard';
 
@@ -16,6 +16,7 @@ export struct MessageCard {
   @State msgToolName: string = '';
   @State msgToolStatus: string = '';
   @State msgToolKind: string = '';
+  @State msgToolContent: string = '';
   @State streaming: boolean = false;
 
   aboutToReuse(params: Record<string, object>): void {
@@ -27,6 +28,7 @@ export struct MessageCard {
     this.msgToolName = String(params['msgToolName']);
     this.msgToolStatus = String(params['msgToolStatus']);
     this.msgToolKind = String(params['msgToolKind']);
+    this.msgToolContent = String(params['msgToolContent']);
     this.streaming = Boolean(params['streaming']);
   }
 
@@ -51,7 +53,7 @@ export struct MessageCard {
             if (this.msgType === 'thinking') {
               ThinkingSection({ thinking: this.msgContent, isStreaming: this.streaming })
             } else if (this.msgType === 'tool_call') {
-              ToolCallCard({ name: this.msgToolName, status: this.msgToolStatus, kind: this.msgToolKind })
+              ToolCallCard({ name: this.msgToolName, status: this.msgToolStatus, kind: this.msgToolKind, content: this.msgToolContent })
             } else {
               if (this.msgContent.length > 0) {
                 if (this.streaming) {

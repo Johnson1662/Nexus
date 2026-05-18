@@ -1,5 +1,25 @@
 import kill from "tree-kill";
 const sessions = new Map();
+const wsOpQueues = new Map();
+export function enqueueWsOp(ws, fn) {
+    const prev = wsOpQueues.get(ws) || Promise.resolve();
+    const next = prev.then(async () => {
+        try {
+            await fn();
+        }
+        catch (err) {
+            console.log(`[server] queued op error: ${err.message}`);
+        }
+    }, async () => {
+        try {
+            await fn();
+        }
+        catch (err) {
+            console.log(`[server] queued op error: ${err.message}`);
+        }
+    });
+    wsOpQueues.set(ws, next);
+}
 export function getSession(id) {
     return sessions.get(id);
 }
