@@ -196,7 +196,8 @@ Phone (HarmonyOS ArkTS App)             PC (Node.js Bridge)
 ### SymbolGlyph Resource Names
 - Pattern: `$r('sys.symbol.ohos_xxx')` or `$r('sys.symbol.xxx')`
 - **NOT all SF Symbol names work** — many common names like `sparkles`, `terminal`, `gear`, `ellipsis` do NOT exist in HarmonyOS SDK.
-- If a symbol name fails with "Unknown resource name", verify at https://developer.huawei.com/consumer/cn/design/harmonyos-symbol/ or use a known working alternative.
+- If a symbol name fails with "Unknown resource name", see `docs/harmonyos-symbol-reference.md` for all 404 verified names, or browse at https://developer.huawei.com/consumer/cn/design/harmonyos-symbol/.
+- Names from the API's `name_map_new.json` are used as `$r('sys.symbol.<name>')` directly — do NOT add `ohos_` prefix unless specifically verified.
 - `fontColor` requires an **array**: `fontColor([Colors.accent])`, NOT `fontColor(Colors.accent)`.
 
 ### @Provide/@Consume

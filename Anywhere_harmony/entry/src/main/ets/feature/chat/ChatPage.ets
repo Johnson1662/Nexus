@@ -14,8 +14,13 @@ export struct ChatPage {
   private scroller: Scroller = new Scroller();
   private dataSource: MessageDataSource = new MessageDataSource([]);
 
+  @State iconScale: number = 1.0;
+
   aboutToAppear(): void {
     this.dataSource = new MessageDataSource(this.messages);
+    setTimeout(() => {
+      this.iconScale = 1.08;
+    }, 100);
   }
 
   onMessagesChange(): void {
@@ -50,13 +55,22 @@ export struct ChatPage {
               .animation({ duration: Duration.fast, curve: Curve.EaseInOut })
             } else {
               Column() {
-                Text('No active task')
-                  .fontSize(FontSize.base).fontColor(Colors.foreground).fontWeight(FontWeight.Medium)
-                Text('Type a message below to start a new session.')
+                Image($r('app.media.anywhere_logo'))
+                  .width(36).height(36)
+                  .fillColor(Colors.accent)
+                  .margin({ bottom: Spacing.lg })
+                  .opacity(0.3)
+                  .scale({ x: this.iconScale, y: this.iconScale })
+                  .animation({ duration: 2500, curve: Curve.EaseInOut, playMode: PlayMode.Alternate, iterations: -1 })
+                Text('Anywhere')
+                  .fontSize(FontSize.xxl).fontColor(Colors.foreground).fontWeight(FontWeight.Bold)
+                Text('Select a workspace and start typing.')
                   .fontSize(FontSize.sm).fontColor(Colors.foregroundMuted)
                   .margin({ top: Spacing.xs })
               }
               .alignItems(HorizontalAlign.Center)
+              .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: 20 })))
+              .animation({ duration: Duration.normal, curve: Curve.EaseOut })
             }
           }
         .width('100%').layoutWeight(1)

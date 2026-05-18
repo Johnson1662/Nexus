@@ -4,7 +4,7 @@
     "vendor": "anywhere",
     "versionCode": 2,
     "versionName": "0.2.0",
-    "icon": "$media:startIcon",
+    "icon": "$media:layered_image",
     "label": "$string:app_name"
   }
 }

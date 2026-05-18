@@ -1,4 +1,4 @@
-import { Colors, FontSize, Spacing, Radius, Duration } from '../../constants/DesignTokens';
+import { Colors, FontSize, Spacing, Radius, Duration, Shadow } from '../../constants/DesignTokens';
 import { ChatStore, ModelItem, ModeItem } from '../../common/model/ChatState';
 import { WorkspaceStore } from '../../common/model/WorkspaceInfo';
 import { WorkspaceInfo, ServerSession } from '../../common/model/WorkspaceInfo';
@@ -18,9 +18,44 @@ export struct OnboardingView {
   @State connectError: string = '';
   @State discoveredAgents: AgentInfo[] = [];
   @StorageLink('serverUrl') serverUrl: string = 'ws://100.111.77.50:12138';
+  @State iconScale: number = 1.0;
 
   private ws: WSClient = new WSClient();
   callbacks: OnboardingCallbacks = { onNavigateToWorkspaceSelect: () => {}, onWsClientReady: () => {} };
+
+  aboutToAppear() {
+    setTimeout(() => {
+      this.iconScale = 1.08;
+    }, 100);
+  }
+
+  getFirstLetter(agent: AgentInfo): string {
+    return (agent.title || agent.name).substring(0, 1).toUpperCase();
+  }
+
+  getAgentIconUrl(agent: AgentInfo): string {
+    let name = (agent.name || '').toLowerCase();
+    let src = (agent.source || '').toLowerCase();
+
+    // Map agents to their official website favicons via Google
+    if (name.includes('opencode')) return 'https://www.google.com/s2/favicons?domain=opencode.ai&sz=64';
+    if (name.includes('hermes') || name.includes('nous')) return 'https://www.google.com/s2/favicons?domain=nousresearch.com&sz=64';
+    if (name.includes('kiro')) return 'https://www.google.com/s2/favicons?domain=kiro.dev&sz=64';
+    if (name.includes('claude') || name.includes('anthropic')) return 'https://www.google.com/s2/favicons?domain=claude.ai&sz=64';
+    if (name.includes('gemini')) return 'https://www.google.com/s2/favicons?domain=geminicli.com&sz=64';
+    if (name.includes('gpt') || name.includes('openai') || name.includes('chatgpt')) return 'https://www.google.com/s2/favicons?domain=openai.com&sz=64';
+    if (name.includes('deepseek')) return 'https://www.google.com/s2/favicons?domain=deepseek.com&sz=64';
+    if (name.includes('copilot') || name.includes('github')) return 'https://www.google.com/s2/favicons?domain=github.com&sz=64';
+    if (name.includes('cursor')) return 'https://www.google.com/s2/favicons?domain=cursor.com&sz=64';
+    if (name.includes('bolt') || name.includes('bolt.new')) return 'https://www.google.com/s2/favicons?domain=bolt.new&sz=64';
+
+    // Try to extract domain from source path for unknown agents
+    let match = src.match(/github\.com\/([^\/]+)/);
+    if (match !== null && match.length > 1) {
+      return 'https://www.google.com/s2/favicons?domain=github.com&sz=64&url=https://github.com/' + match[1];
+    }
+    return '';
+  }
 
   tryConnect(): void {
     AppStorage.setOrCreate<string>('serverUrl', this.serverUrl);
@@ -36,7 +71,7 @@ export struct OnboardingView {
         if (!this.connecting && this.connectError.length === 0) {
           if (ChatStore.selectedAgentName.length > 0 && ChatStore.messages.length > 0) {
           } else {
-            this.connectError = 'Could not connect. Make sure the bridge server is running.';
+            this.connectError = 'Could not connect. Bridge server unavailable.';
           }
         }
         this.connecting = false;
@@ -51,12 +86,15 @@ export struct OnboardingView {
       }
     });
     this.ws.onAgentList((agents: AgentInfo[]) => {
-      this.discoveredAgents = agents;
       this.connecting = false;
       if (agents.length > 0) {
         this.connectError = '';
+        animateTo({ duration: 100 }, () => {
+          this.discoveredAgents = agents;
+        });
       } else {
-        this.connectError = 'No ACP agents discovered on the server. Install one (e.g., opencode) and try again.';
+        this.discoveredAgents = [];
+        this.connectError = 'No ACP agents discovered.';
       }
     });
     this.ws.onModelList((models: ModelItem[], modes: ModeItem[]) => {
@@ -181,101 +219,187 @@ export struct OnboardingView {
 
   build() {
     NavDestination() {
-      Column() {
+      Stack({ alignContent: Alignment.Top }) {
         Scroll() {
           Column() {
-            // Title
+            // HERO
             Column() {
-              SymbolGlyph($r('sys.symbol.ohos_wifi'))
-                .fontSize(36).fontColor([Colors.accent]).margin({ bottom: Spacing.md })
-              Text('Bridge Configuration')
-                .fontSize(FontSize.xxl).fontWeight(FontWeight.Bold).fontColor(Colors.foreground)
-              Text('Connect to a remote AI coding agent')
-                .fontSize(FontSize.sm).fontColor(Colors.foregroundMuted)
-            }
-            .width('100%').alignItems(HorizontalAlign.Center)
-            .padding({ top: Spacing.xxxl * 2, bottom: Spacing.xxxl })
+              Image($r('app.media.anywhere_logo'))
+                .width(48).height(48)
+                .fillColor(Colors.accent)
+                .margin({ bottom: Spacing.lg })
+                .scale({ x: this.iconScale, y: this.iconScale })
+                .animation({ duration: 2500, curve: Curve.EaseInOut, playMode: PlayMode.Alternate, iterations: -1 })
 
-            // Form
-            Column() {
-              TextInput({ text: this.serverUrl, placeholder: 'ws://ip:port' })
-                .height(48).width('100%')
-                .backgroundColor(Colors.surface1).borderRadius(Radius.md)
-                .fontSize(FontSize.base).padding({ left: Spacing.md })
-                .onChange((val: string) => { this.serverUrl = val })
+              Text('Anywhere.')
+                .fontSize(36)
+                .fontWeight(FontWeight.Bolder)
+                .fontColor(Colors.foreground)
+                .letterSpacing(-1.2)
+                .margin({ bottom: Spacing.xxs })
 
-              Button() {
-                Row() {
-                  if (this.connecting) {
-                    LoadingProgress().width(20).height(20).color(Color.White)
-                      .margin({ right: Spacing.sm })
-                  }
-                  Text(this.connecting ? 'Connecting...' : 'Connect')
-                    .fontColor(Color.White).fontSize(FontSize.base)
-                }
-                .alignItems(VerticalAlign.Center).justifyContent(FlexAlign.Center)
-              }
-              .width('100%').height(48)
-              .backgroundColor(Colors.accent).borderRadius(Radius.md)
-              .margin({ top: Spacing.lg })
-              .enabled(!this.connecting)
-              .onClick(() => { this.tryConnect() })
+              Text('Seamlessly connected AI workspace.')
+                .fontSize(15)
+                .fontColor(Colors.foregroundMuted)
+                .fontWeight(FontWeight.Medium)
             }
             .width('100%')
+            .alignItems(HorizontalAlign.Center)
+            .margin({ top: ChatStore.connected ? 30 : 100, bottom: ChatStore.connected ? 30 : 50 })
+            .animation({ duration: Duration.slow, curve: Curve.FastOutSlowIn })
 
-            // Error
-            if (this.connectError.length > 0) {
-              Text(this.connectError)
-                .fontSize(FontSize.xs).fontColor(Colors.error)
-                .width('100%').margin({ top: Spacing.md })
-                .transition(TransitionEffect.OPACITY)
+            // CONNECTION
+            Column() {
+              if (!ChatStore.connected) {
+                Row() {
+                  TextInput({ text: this.serverUrl, placeholder: 'Bridge URL (ws://ip:port)' })
+                    .layoutWeight(1)
+                    .height(52)
+                    .backgroundColor(Color.Transparent)
+                    .fontSize(15)
+                    .fontWeight(FontWeight.Medium)
+                    .padding({ left: 20 })
+                    .onChange((val: string) => { this.serverUrl = val })
+                    .enabled(!this.connecting)
+                    .onSubmit(() => { this.tryConnect() })
+
+                  Button() {
+                    if (this.connecting) {
+                      LoadingProgress().width(22).height(22).color(Color.White)
+                    } else {
+                      SymbolGlyph($r('sys.symbol.chevron_right'))
+                        .fontSize(22).fontWeight(FontWeight.Bold).fontColor([Color.White])
+                    }
+                  }
+                  .type(ButtonType.Circle)
+                  .width(44).height(44)
+                  .backgroundColor(this.serverUrl.length > 0 ? Colors.accent : Colors.border)
+                  .margin({ right: 4 })
+                  .enabled(!this.connecting && this.serverUrl.length > 0)
+                  .onClick(() => { this.tryConnect() })
+                  .animation({ duration: Duration.normal })
+                }
+                .width('100%').height(52)
+                .backgroundColor(Colors.surface0)
+                .borderRadius(26)
+                .shadow(Shadow.md)
+                .transition(TransitionEffect.OPACITY.combine(TransitionEffect.scale({ x: 0.95, y: 0.95 })))
+
+                if (this.connectError.length > 0) {
+                  Text(this.connectError)
+                    .fontSize(13).fontColor(Colors.error)
+                    .margin({ top: Spacing.md })
+                    .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: -10 })))
+                }
+              } else {
+                Row() {
+                  Circle().width(8).height(8).fill(Colors.success).margin({ left: 16, right: 10 })
+                  Text(this.serverUrl)
+                    .fontSize(14).fontColor(Colors.foreground)
+                    .fontWeight(FontWeight.Medium)
+                    .layoutWeight(1)
+                  Button('Disconnect')
+                    .fontSize(13).fontColor(Colors.foregroundMuted).backgroundColor(Color.Transparent)
+                    .fontWeight(FontWeight.Medium)
+                    .margin({ right: 8 })
+                    .onClick(() => {
+                      ChatStore.connected = false;
+                      this.ws.disconnect();
+                    })
+                }
+                .width('100%').height(52)
+                .backgroundColor(Colors.surface0)
+                .borderRadius(26)
+                .shadow(Shadow.sm)
+                .transition(TransitionEffect.OPACITY.combine(TransitionEffect.scale({ x: 0.95, y: 0.95 })))
+              }
             }
+            .width('100%')
+            .padding({ left: Spacing.xxl, right: Spacing.xxl })
 
-            // Agent list
-            if (this.discoveredAgents.length > 0) {
-              Text('Select Agent')
-                .fontSize(FontSize.base).fontWeight(FontWeight.Bold).fontColor(Colors.foreground)
-                .width('100%').margin({ top: Spacing.xxl, bottom: Spacing.md })
+            // AGENTS
+            if (ChatStore.connected) {
+              if (this.connecting && this.discoveredAgents.length === 0) {
+                Column() {
+                  LoadingProgress().width(32).height(32).color(Colors.foregroundMuted)
+                  Text('Discovering agents...')
+                    .fontSize(14).fontColor(Colors.foregroundMuted)
+                    .margin({ top: Spacing.md })
+                }
+                .width('100%').height(120)
+                .justifyContent(FlexAlign.Center)
+                .alignItems(HorizontalAlign.Center)
+                .transition(TransitionEffect.OPACITY)
+              } else if (this.discoveredAgents.length > 0) {
+                Column() {
+                  Text('AVAILABLE AGENTS')
+                    .fontSize(11).fontColor(Colors.foregroundLight)
+                    .fontWeight(FontWeight.Bold)
+                    .letterSpacing(2)
+                    .width('100%').margin({ bottom: Spacing.md })
+                    .padding({ left: Spacing.md })
 
-              List() {
-                ForEach(this.discoveredAgents, (agent: AgentInfo, index: number) => {
-                  ListItem() {
+                  ForEach(this.discoveredAgents, (agent: AgentInfo, index: number) => {
                     Row() {
-                      Circle().width(8).height(8).fill(Colors.success).margin({ right: Spacing.md })
+                      Stack() {
+                        Circle().width(44).height(44).fill(Colors.surface1)
+                        Text(this.getFirstLetter(agent))
+                          .fontSize(18).fontWeight(FontWeight.Bolder).fontColor(Colors.accent)
+                        Image(this.getAgentIconUrl(agent))
+                          .width(44).height(44)
+                          .borderRadius(22)
+                          .objectFit(ImageFit.Cover)
+                          .visibility(this.getAgentIconUrl(agent).length > 0 ? Visibility.Visible : Visibility.None)
+                      }
+                      .margin({ right: Spacing.lg })
+
                       Column() {
                         Text(agent.title || agent.name)
-                          .fontSize(FontSize.base).fontWeight(FontWeight.Medium).fontColor(Colors.foreground)
-                        Text(agent.name)
-                          .fontSize(FontSize.xs).fontColor(Colors.foregroundMuted)
+                          .fontSize(16).fontColor(Colors.foreground)
+                          .fontWeight(FontWeight.Medium)
+                        if (agent.title && agent.title !== agent.name) {
+                          Text(agent.name)
+                            .fontSize(12).fontColor(Colors.foregroundMuted)
+                            .margin({ top: 2 })
+                        }
                       }
+                      .alignItems(HorizontalAlign.Start)
                       .layoutWeight(1)
+
                       SymbolGlyph($r('sys.symbol.chevron_right'))
-                        .fontSize(FontSize.sm).fontColor([Colors.foregroundLight])
+                        .fontSize(16).fontColor([Colors.foregroundLight])
                     }
-                    .width('100%').padding(Spacing.lg)
-                    .backgroundColor(Colors.surface1).borderRadius(Radius.md)
+                    .width('100%')
+                    .padding(Spacing.lg)
+                    .backgroundColor(Colors.surface0)
+                    .borderRadius(Radius.xl)
+                    .shadow(Shadow.sm)
+                    .margin({ bottom: Spacing.md })
                     .onClick(() => { this.selectAgent(agent) })
-                    .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ x: 30 })))
-                    .animation({ duration: Duration.normal, curve: Curve.EaseOut, delay: index * 50 })
-                  }
-                  .padding({ bottom: Spacing.sm })
-                }, (agent: AgentInfo) => agent.name)
+                    .transition(
+                      TransitionEffect.OPACITY
+                        .combine(TransitionEffect.translate({ y: 20 }))
+                        .animation({ duration: 400, curve: Curve.EaseOut, delay: index * 60 })
+                    )
+                  }, (agent: AgentInfo) => agent.name)
+                }
+                .width('100%')
+                .padding({ left: Spacing.xl, right: Spacing.xl })
+                .margin({ top: Spacing.xxl })
+                .transition(TransitionEffect.OPACITY)
               }
-              .width('100%').layoutWeight(1)
             }
           }
           .width('100%')
-          .padding({ bottom: Spacing.xxxl })
+          .padding({ bottom: Spacing.xxxl * 2 })
         }
-        .layoutWeight(1).width('100%')
+        .width('100%').height('100%')
+        .scrollBar(BarState.Off)
       }
       .width('100%').height('100%')
-      .padding({ left: Spacing.xxxl, right: Spacing.xxxl })
-      .backgroundColor(Colors.surface0)
+      .backgroundColor('#FAFAFA')
     }
     .hideTitleBar(true)
-    .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ x: -30 })))
     .width('100%').height('100%')
-    .backgroundColor(Colors.surface0)
   }
 }

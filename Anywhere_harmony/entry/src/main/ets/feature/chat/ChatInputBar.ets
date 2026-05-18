@@ -1,4 +1,4 @@
-import { Colors, FontSize, Spacing, Radius, Shadow } from '../../constants/DesignTokens';
+import { Colors, FontSize, Spacing, Radius, Shadow, Duration } from '../../constants/DesignTokens';
 import { ChatStore, AvailableCommand } from '../../common/model/ChatState';
 
 @Component
@@ -89,15 +89,21 @@ export struct ChatInputBar {
               .fontColor([Colors.error])
               .fontSize(28)
               .onClick(() => { if (this.onCancel) this.onCancel() })
+              .transition(TransitionEffect.OPACITY.combine(TransitionEffect.scale({ x: 0.5, y: 0.5 })))
+              .animation({ duration: Duration.fast, curve: Curve.EaseOut })
           } else if (this.text.length > 0) {
             SymbolGlyph($r('sys.symbol.arrow_up_circle_fill'))
               .fontColor([Colors.foreground])
               .fontSize(28)
               .onClick(() => { this.doSend() })
+              .transition(TransitionEffect.OPACITY.combine(TransitionEffect.scale({ x: 0.5, y: 0.5 })))
+              .animation({ duration: Duration.fast, curve: Curve.EaseOut })
           } else {
             Text('agent')
               .fontSize(FontSize.xs)
               .fontColor(Colors.foregroundLight)
+              .transition(TransitionEffect.OPACITY)
+              .animation({ duration: Duration.fast })
           }
         }
         .width('100%')

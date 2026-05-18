@@ -3,65 +3,91 @@ import { Colors, FontSize, Spacing, Duration } from '../../constants/DesignToken
 @Component
 export struct ThinkingSection {
   @Prop thinking: string = '';
-  @Prop isStreaming: boolean = false;
+  @Watch('onStreamingChange') @Prop isStreaming: boolean = false;
   @State expanded: boolean = true;
   @State breathFlag: boolean = false;
-  @State shimmerOffset: number = -120;
+  @State elapsedSeconds: number = 0;
+  private timerId: number = -1;
 
   aboutToAppear(): void {
     if (this.isStreaming) {
+      this.expanded = true;
+      this.startTimer();
       setTimeout(() => {
         this.breathFlag = true;
-        this.shimmerOffset = 600;
       }, 50);
+    } else {
+      this.expanded = false; // History defaults to collapsed
+    }
+  }
+
+  aboutToDisappear(): void {
+    this.stopTimer();
+  }
+
+  onStreamingChange() {
+    if (this.isStreaming) {
+      this.startTimer();
+      this.expanded = true;
+      this.breathFlag = true;
+    } else {
+      this.stopTimer();
+      this.breathFlag = false;
+      // Auto collapse when thinking finishes
+      this.getUIContext()?.animateTo({ duration: Duration.normal, curve: Curve.EaseInOut }, () => {
+        this.expanded = false;
+      });
+    }
+  }
+
+  startTimer() {
+    if (this.timerId === -1) {
+      this.timerId = setInterval(() => {
+        this.elapsedSeconds += 1;
+      }, 1000);
+    }
+  }
+
+  stopTimer() {
+    if (this.timerId !== -1) {
+      clearInterval(this.timerId);
+      this.timerId = -1;
     }
   }
 
   build() {
     Column() {
-      Stack() {
-        // Thinking label
-        Row() {
-          Text('Thinking...')
-            .fontSize(FontSize.sm)
-            .fontColor(Colors.foregroundMuted)
-            .fontStyle(FontStyle.Italic)
-            .fontWeight(FontWeight.Medium)
-            .opacity(this.isStreaming ? (this.breathFlag ? 0.35 : 0.85) : 0.65)
-            .animation(this.isStreaming ? {
-              duration: 1200,
-              curve: Curve.EaseInOut,
-              playMode: PlayMode.Alternate,
-              iterations: -1
-            } : { duration: 0 })
-        }
-        .width('100%')
-        .height(24)
-        .clip(true)
+      // Header
+      Row() {
+        SymbolGlyph(this.isStreaming ? $r('sys.symbol.ellipsis_message_1') : $r('sys.symbol.checkmark'))
+          .fontSize(FontSize.md)
+          .fontColor([Colors.foregroundMuted])
+          .margin({ right: Spacing.sm })
+          .opacity(this.isStreaming ? (this.breathFlag ? 0.4 : 1.0) : 1.0)
+          .animation(this.isStreaming ? {
+            duration: 1200,
+            curve: Curve.EaseInOut,
+            playMode: PlayMode.Alternate,
+            iterations: -1
+          } : { duration: 0 })
 
-        // Shimmer sweep
-        if (this.isStreaming) {
-          Row()
-            .width(80)
-            .height(18)
-            .borderRadius(9)
-            .linearGradient({
-              direction: GradientDirection.Right,
-              colors: [["#00FFFFFF", 0], ["#35FFFFFF", 0.5], ["#00FFFFFF", 1]]
-            })
-            .position({ x: this.shimmerOffset, y: 2 })
-            .animation({
-              duration: 1500,
-              curve: Curve.Linear,
-              playMode: PlayMode.Alternate,
-              iterations: -1
-            })
-        }
+        Text(this.isStreaming ? `Thinking about your request · ${this.elapsedSeconds}s` : (this.elapsedSeconds > 0 ? `Thought for ${this.elapsedSeconds}s` : `Thought process`))
+          .fontSize(FontSize.sm)
+          .fontColor(Colors.foregroundMuted)
+          .fontWeight(FontWeight.Medium)
+
+        Blank()
+
+        // Collapse Toggle
+        SymbolGlyph($r('sys.symbol.chevron_down'))
+          .fontSize(FontSize.md)
+          .fontColor([Colors.foregroundMuted])
+          .rotate({ z: 1, angle: this.expanded ? 0 : -90 })
+          .animation({ duration: Duration.fast, curve: Curve.EaseInOut })
       }
       .width('100%')
-      .height(24)
-      .clip(true)
-      .padding({ top: Spacing.xs, bottom: Spacing.xs })
+      .height(32)
+      .alignItems(VerticalAlign.Center)
       .onClick(() => {
         this.getUIContext()?.animateTo({ duration: Duration.fast, curve: Curve.EaseInOut }, () => {
           this.expanded = !this.expanded;
@@ -75,11 +101,12 @@ export struct ThinkingSection {
             .fontColor(Colors.foregroundMuted)
             .lineHeight(22)
             .width('100%')
-            .padding({ bottom: Spacing.xs })
         }
         .width('100%')
-        .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: -6 })))
-        .animation({ duration: Duration.fast, curve: Curve.EaseOut })
+        .padding({ left: Spacing.md, top: Spacing.xs, bottom: Spacing.sm })
+        .margin({ left: 7 }) // shift slightly right to align visual center of ellipsis
+        .border({ width: { left: 1 }, color: { left: Colors.border } })
+        .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: -10 })))
       }
     }
     .width('100%')

@@ -13,6 +13,7 @@ export struct ChatView {
   @State showPicker: boolean = false;
   @State pickerTitle: string = '';
   @State pickerMode: number = -1;
+  @State titleBarOpacity: number = 0;
   onSendMessage?: (text: string) => void;
   onSwitchModel?: (index: number) => void;
   onSwitchMode?: (index: number) => void;
@@ -20,6 +21,15 @@ export struct ChatView {
   onSelectSession?: (i: number) => void;
   onWorkspaceSelect?: (index: number) => void;
   onPermissionResponse?: (optionId: string) => void;
+
+  aboutToAppear(): void {
+    if (WorkspaceStore.currentIndex >= 0 && this.onWorkspaceSelect) {
+      this.onWorkspaceSelect(WorkspaceStore.currentIndex);
+    }
+    setTimeout(() => {
+      this.titleBarOpacity = 1;
+    }, 50);
+  }
 
   getSessionTitle(): string {
     let targetId = ChatStore.loadedSessionId || ChatStore.sessionId;
@@ -52,12 +62,6 @@ export struct ChatView {
     }
     this.pickerMode = mode;
     this.showPicker = true;
-  }
-
-  aboutToAppear(): void {
-    if (WorkspaceStore.currentIndex >= 0 && this.onWorkspaceSelect) {
-      this.onWorkspaceSelect(WorkspaceStore.currentIndex);
-    }
   }
 
   doPickerSelect(index: number): void {
@@ -106,7 +110,11 @@ export struct ChatView {
           })
 
           Column() {
-            this.TitleBar()
+            Column() {
+              this.TitleBar()
+            }
+            .opacity(this.titleBarOpacity)
+            .animation({ duration: Duration.slow, curve: Curve.EaseOut })
 
             if (this.showPathInput) {
               Row() {
@@ -168,7 +176,7 @@ export struct ChatView {
           .width('100%').height('100%')
           .backgroundColor('#33000000')
           .zIndex(100)
-          .transition(TransitionEffect.OPACITY)
+          .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: 30 })))
         }
 
         // Permission request overlay
@@ -190,13 +198,13 @@ export struct ChatView {
           .width('100%').height('100%')
           .backgroundColor('#33000000')
           .zIndex(110)
-          .transition(TransitionEffect.OPACITY)
+          .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: 30 })))
         }
       }
       .width('100%').height('100%')
     }
     .hideTitleBar(true)
-    .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ x: 30 })))
+    .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: 20 })))
     .width('100%').height('100%')
     .backgroundColor(Colors.surface0)
   }
@@ -224,7 +232,7 @@ export struct ChatView {
           Row() {
             LoadingProgress()
               .width(12).height(12).color(Colors.foregroundMuted)
-            Text('Loading model…')
+            Text('Loading model...')
               .fontSize(FontSize.xs).fontColor(Colors.foregroundMuted)
               .margin({ left: 4 })
           }
@@ -252,6 +260,7 @@ export struct ChatView {
     .width('100%').height(56)
     .padding({ left: Spacing.lg, right: Spacing.lg })
     .backgroundColor(Colors.surfaceElevated)
+    .shadow({ radius: 0, color: '#00000008', offsetY: 1 })
   }
 }
 
@@ -300,6 +309,7 @@ struct PermissionSheet {
     .padding({ bottom: Spacing.xxxl })
     .backgroundColor(Colors.surface0)
     .borderRadius({ topLeft: Radius.xl, topRight: Radius.xl })
+    .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: 20 })))
   }
 }
 
@@ -348,6 +358,7 @@ struct PickerSheet {
     .padding({ bottom: Spacing.xxxl })
     .backgroundColor(Colors.surface0)
     .borderRadius({ topLeft: Radius.xl, topRight: Radius.xl })
+    .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: 20 })))
   }
 
   getItems(): string[] {

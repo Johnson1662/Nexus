@@ -1,4 +1,4 @@
-import { Colors, FontSize, Spacing, Radius } from '../../constants/DesignTokens';
+import { Colors, FontSize, Spacing, Radius, Duration } from '../../constants/DesignTokens';
 import { WorkspaceInfo } from '../../common/model/WorkspaceInfo';
 
 @Component
@@ -18,7 +18,7 @@ export struct WorkspaceDrawer {
 
   build() {
     Column() {
-      // 头部
+      // Header
       Row() {
         SymbolGlyph($r('sys.symbol.close_sidebar'))
           .fontSize(24)
@@ -34,8 +34,9 @@ export struct WorkspaceDrawer {
       }
       .width('100%')
       .padding({ left: Spacing.lg, right: Spacing.lg, top: Spacing.lg, bottom: Spacing.lg })
+      .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: -10 })))
 
-      // 工作区列表
+      // Workspace list
       List() {
         ForEach(this.workspaces, (ws: WorkspaceInfo, index: number) => {
           ListItem() {
@@ -72,11 +73,14 @@ export struct WorkspaceDrawer {
             .width('100%')
             .padding({ left: Spacing.xl, right: Spacing.xl, top: Spacing.md, bottom: Spacing.md })
             .backgroundColor(index === this.currentIndex ? Colors.surface1 : 'transparent')
+            .borderRadius(Radius.md)
             .onClick(() => { if (this.onSelect) this.onSelect(index) })
             .gesture(
               LongPressGesture({ repeat: false, duration: 600 })
                 .onAction(() => { if (this.onDelete) this.onDelete(index) })
             )
+            .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ x: -20 })))
+            .animation({ duration: Duration.normal, curve: Curve.EaseOut, delay: index * 40 })
           }
         }, (ws: WorkspaceInfo, index: number) => ws.id + index.toString())
       }
@@ -84,7 +88,7 @@ export struct WorkspaceDrawer {
       .layoutWeight(1)
       .divider({ strokeWidth: 0.5, color: Colors.borderLight, startMargin: Spacing.xl, endMargin: Spacing.xl })
 
-      // 底部区域
+      // Bottom area
       Column() {
         if (this.showForm) {
           Column() {
@@ -116,7 +120,7 @@ export struct WorkspaceDrawer {
             .width('100%').margin({ top: Spacing.md })
           }
           .padding({ left: Spacing.xl, right: Spacing.xl, bottom: Spacing.xl, top: Spacing.sm })
-          .transition(TransitionEffect.OPACITY)
+          .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: 10 })))
         } else {
           Row() {
             SymbolGlyph($r('sys.symbol.plus'))
@@ -130,9 +134,11 @@ export struct WorkspaceDrawer {
           .width('100%')
           .padding({ left: Spacing.xl, right: Spacing.xl, bottom: Spacing.xxl, top: Spacing.lg })
           .onClick(() => { this.showForm = true })
+          .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: 10 })))
         }
       }
       .width('100%')
+      .animation({ duration: Duration.normal, curve: Curve.EaseOut })
     }
     .width('100%')
     .height('100%')
