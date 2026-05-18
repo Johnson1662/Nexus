@@ -22,3 +22,9 @@ Thumbs.db
 # Environment
 .env
 *.local
+
+# Temp
+tmpfix/
+
+# ArkTS logs
+.arkts/
