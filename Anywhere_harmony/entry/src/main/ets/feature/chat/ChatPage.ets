@@ -7,6 +7,34 @@ import { ChatInputBar } from './ChatInputBar';
 import { MessageDataSource } from '../../common/ui/MessageDataSource';
 
 @Component
+struct PulsingDots {
+  @State opacities: number[] = [0.3, 0.3, 0.3];
+
+  aboutToAppear(): void {
+    this.getUIContext()?.animateTo({ duration: 600, curve: Curve.EaseInOut, delay: 0, iterations: -1, playMode: PlayMode.Alternate }, () => {
+      this.opacities[0] = 1.0;
+    });
+    this.getUIContext()?.animateTo({ duration: 600, curve: Curve.EaseInOut, delay: 200, iterations: -1, playMode: PlayMode.Alternate }, () => {
+      this.opacities[1] = 1.0;
+    });
+    this.getUIContext()?.animateTo({ duration: 600, curve: Curve.EaseInOut, delay: 400, iterations: -1, playMode: PlayMode.Alternate }, () => {
+      this.opacities[2] = 1.0;
+    });
+  }
+
+  build() {
+    Row({ space: 5 }) {
+      Circle().width(6).height(6).fill(Colors.foregroundMuted)
+        .opacity(this.opacities[0])
+      Circle().width(6).height(6).fill(Colors.foregroundMuted)
+        .opacity(this.opacities[1])
+      Circle().width(6).height(6).fill(Colors.foregroundMuted)
+        .opacity(this.opacities[2])
+    }
+  }
+}
+
+@Component
 export struct ChatPage {
   @Prop @Watch('onMessagesChange') messages: MessageData[] = [];
   onSendMessage?: (text: string) => void;
@@ -56,14 +84,14 @@ export struct ChatPage {
             } else {
               Column() {
                 Image($r('app.media.anywhere_logo'))
-                  .width(36).height(36)
+                  .width(44).height(44)
                   .fillColor(Colors.accent)
                   .margin({ bottom: Spacing.lg })
                   .opacity(0.3)
                   .scale({ x: this.iconScale, y: this.iconScale })
                   .animation({ duration: 2500, curve: Curve.EaseInOut, playMode: PlayMode.Alternate, iterations: -1 })
-                Text('Anywhere')
-                  .fontSize(FontSize.xxl).fontColor(Colors.foreground).fontWeight(FontWeight.Bold)
+Text('Anywhere')
+  .fontSize(FontSize.xxl).fontColor(Colors.foreground).fontWeight(FontWeight.Bold).fontFamily('serif')
                 Text('Select a workspace and start typing.')
                   .fontSize(FontSize.sm).fontColor(Colors.foregroundMuted)
                   .margin({ top: Spacing.xs })
@@ -106,6 +134,14 @@ export struct ChatPage {
             .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: 12 })))
             .animation({ duration: Duration.normal, curve: Curve.EaseOut })
           }, (msg: MessageData) => msg.id + msg.content.length + msg.toolStatus + (ChatStore.turnActive ? '_active' : '_done'))
+
+          if (ChatStore.turnActive) {
+            ListItem() {
+              PulsingDots()
+                .padding({ left: Spacing.lg, top: Spacing.xs, bottom: Spacing.xs })
+            }
+            .transition(TransitionEffect.OPACITY)
+          }
         }
         .layoutWeight(1)
         .width('100%')

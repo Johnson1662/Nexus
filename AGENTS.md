@@ -42,7 +42,7 @@ Phone (HarmonyOS ArkTS App)             PC (Node.js Bridge)
 ### Visual Design Principles
 - **Aesthetic:** ChatGPT-like, clean monochrome (black/white/gray)
 - **Message Cards:** User messages = right-aligned light gray bubble (`Colors.userBubble`), agent messages = full-width no background
-- **Typography:** System sans-serif, no forced monospace
+- **Typography:** System sans-serif body, serif brand title (`fontFamily('serif')`), no forced monospace
 - **Color Palette:** Black/white/gray (`#202123`, `#F4F4F4`, `#6B7280`, etc.)
 - **Thinking/ToolCall:** Italic muted gray text, no icons/borders/backgrounds, breathing opacity animation (0.4↔1.0) via declarative `.animation()`
 - **PlanView (TODO):** Plain numbered list like "1." in markdown, no card wrapper
@@ -290,6 +290,8 @@ npm run server:old   # Old hand-written server (keep for rollback)
 - **Reactive picker sheet** using `Stack` + conditional rendering (not `bindSheet`) — observes `@ObservedV2 ChatStore` changes live
 - **Auto session creation** on workspace select — ensures models/modes populate before first message
 - **LoadingProgress spinners** at all loading gaps (connecting, session/model/mode loading, session switch)
+- **PulsingDots** smooth staggered loading animation via `animateTo` with `iterations: -1` and `PlayMode.Alternate` (no `setInterval`)
+- **Serif brand title** (`fontFamily('serif')`) on onboarding and chat page empty state
 
 ### Not Working / TODO
 - File upload (placeholder)

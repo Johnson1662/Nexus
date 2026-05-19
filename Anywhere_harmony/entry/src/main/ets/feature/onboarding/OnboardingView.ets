@@ -225,18 +225,19 @@ export struct OnboardingView {
             // HERO
             Column() {
               Image($r('app.media.anywhere_logo'))
-                .width(48).height(48)
+                .width(60).height(60)
                 .fillColor(Colors.accent)
                 .margin({ bottom: Spacing.lg })
                 .scale({ x: this.iconScale, y: this.iconScale })
                 .animation({ duration: 2500, curve: Curve.EaseInOut, playMode: PlayMode.Alternate, iterations: -1 })
 
-              Text('Anywhere.')
-                .fontSize(36)
-                .fontWeight(FontWeight.Bolder)
-                .fontColor(Colors.foreground)
-                .letterSpacing(-1.2)
-                .margin({ bottom: Spacing.xxs })
+Text('Anywhere')
+  .fontSize(36)
+  .fontWeight(FontWeight.Bolder)
+  .fontColor(Colors.foreground)
+  .fontFamily('serif')
+  .letterSpacing(-1.2)
+  .margin({ bottom: Spacing.xxs })
 
               Text('Seamlessly connected AI workspace.')
                 .fontSize(15)

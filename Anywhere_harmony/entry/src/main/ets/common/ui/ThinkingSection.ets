@@ -11,14 +11,16 @@ export struct ThinkingSection {
 
   aboutToAppear(): void {
     if (this.isStreaming) {
-      this.expanded = true;
       this.startTimer();
-      setTimeout(() => {
-        this.breathFlag = true;
-      }, 50);
-    } else {
-      this.expanded = false; // History defaults to collapsed
     }
+    setTimeout(() => {
+      this.breathFlag = this.isStreaming;
+      if (!this.isStreaming) {
+        this.getUIContext()?.animateTo({ duration: 0 }, () => {
+          this.expanded = false;
+        });
+      }
+    }, 50);
   }
 
   aboutToDisappear(): void {
@@ -27,13 +29,12 @@ export struct ThinkingSection {
 
   onStreamingChange() {
     if (this.isStreaming) {
-      this.startTimer();
       this.expanded = true;
+      this.startTimer();
       this.breathFlag = true;
     } else {
       this.stopTimer();
       this.breathFlag = false;
-      // Auto collapse when thinking finishes
       this.getUIContext()?.animateTo({ duration: Duration.normal, curve: Curve.EaseInOut }, () => {
         this.expanded = false;
       });
