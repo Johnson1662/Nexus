@@ -1,32 +1,56 @@
 import { findSessionForWs } from "../session.mjs";
-export async function handleListModels(ws) {
+import { createTempClient } from "../temp-client.mjs";
+export async function handleListModels(ws, agent) {
     const sess = findSessionForWs(ws);
-    if (!sess) {
+    // Use existing bridge session's client if alive
+    if (sess && sess.client?.connected) {
+        await doListModels(ws, sess.client, sess.cwd || process.cwd());
+        return;
+    }
+    // Fall back to temporary ACP client
+    if (!agent) {
         ws.send(JSON.stringify({ type: "model_list", models: [], modes: [] }));
         return;
     }
+    console.log(`[server] list_models: creating temp client for agent="${agent}"`);
+    let temp = null;
     try {
-        const result = await sess.client.createSession(sess.cwd || process.cwd());
-        const models = result.models?.availableModels || [];
-        const modes = result.modes?.availableModes || [];
-        const mappedModels = models.map((m) => ({
-            modelId: m.modelId,
-            name: m.name,
-        }));
-        const mappedModes = modes.map((m) => ({
-            value: m.id,
-            name: m.name,
-        }));
-        console.log(`[server] list_models: ${mappedModels.length} models, ${mappedModes.length} modes`);
-        ws.send(JSON.stringify({
-            type: "model_list",
-            models: mappedModels,
-            modes: mappedModes,
-        }));
+        temp = await createTempClient(agent);
+        await doListModels(ws, temp.client, temp.client.cwd || process.cwd());
     }
     catch (err) {
-        console.log(`[server] list_models error: ${err.message}`);
+        console.log(`[server] list_models (temp) error: ${err.message}`);
         ws.send(JSON.stringify({ type: "model_list", models: [], modes: [] }));
     }
+    finally {
+        if (temp)
+            temp.destroy();
+    }
+}
+async function doListModels(ws, client, cwd) {
+    const acpResult = await client.createSession(cwd);
+    const acpSessionId = acpResult.sessionId;
+    const models = acpResult.models?.availableModels || [];
+    const modes = acpResult.modes?.availableModes || [];
+    const mappedModels = models.map((m) => ({
+        modelId: m.modelId,
+        name: m.name,
+    }));
+    const mappedModes = modes.map((m) => ({
+        value: m.id,
+        name: m.name,
+    }));
+    console.log(`[server] list_models: ${mappedModels.length} models, ${mappedModes.length} modes`);
+    // Close the temporary ACP session to avoid orphans
+    if (acpSessionId) {
+        client.closeSession(acpSessionId).catch((err) => {
+            console.log(`[server] failed to close temp list_models session: ${err.message}`);
+        });
+    }
+    ws.send(JSON.stringify({
+        type: "model_list",
+        models: mappedModels,
+        modes: mappedModes,
+    }));
 }
 //# sourceMappingURL=list-models.mjs.map

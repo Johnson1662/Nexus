@@ -4,6 +4,7 @@ import { WorkspaceStore, WorkspaceInfo } from '../common/model/WorkspaceInfo';
 import { MessageData } from '../common/model/MessageData';
 import { WSClient } from '../common/websocket/WSClient';
 import { ClientMessage } from '../common/websocket/WSProtocol';
+import { StorageService, PrefsKeys } from '../services/StorageService';
 import { ChatView } from '../feature/chat/ChatView';
 import { OnboardingView } from '../feature/onboarding/OnboardingView';
 import { WorkspaceSelectView } from '../feature/workspace/WorkspaceSelectView';
@@ -37,6 +38,8 @@ export struct Index {
         onSwitchModel: (i: number) => {
           if (ChatStore.sessionId && i > 0 && i - 1 < ChatStore.models.length) {
             ChatStore.modelIndex = i - 1;
+            ChatStore.lastModelId = ChatStore.models[i - 1].modelId;
+            StorageService.getInstance().putString(PrefsKeys.LAST_MODEL_ID, ChatStore.lastModelId);
             this.ws.send({ type: 'switch_model', sessionId: ChatStore.sessionId, model: ChatStore.models[i-1].modelId } as ClientMessage)
           }
         },
@@ -50,7 +53,11 @@ export struct Index {
           if (i > 0 && i - 1 < ChatStore.sessions.length) {
             ChatStore.messages = []; ChatStore.planEntries = []; ChatStore.turnActive = false;
             ChatStore.loadingSession = true;
+            ChatStore.sessionReady = false;
+            ChatStore.streamingThinking = '';
             let p = WorkspaceStore.workspaces[WorkspaceStore.currentIndex].path;
+            // Refresh model list so session_started can correctly match the session's model
+            this.ws.send({ type: 'list_models', agent: ChatStore.agentType } as ClientMessage);
             this.ws.send({ type: 'load_session', sessionId: ChatStore.sessions[i - 1].sessionId, cwd: p } as ClientMessage);
           }
         },
@@ -60,6 +67,8 @@ export struct Index {
           ChatStore.turnActive = false;
           ChatStore.sessionId = '';
           ChatStore.loadedSessionId = '';
+          ChatStore.sessionReady = false;
+          ChatStore.streamingThinking = '';
           let cwd = WorkspaceStore.currentIndex >= 0 ? WorkspaceStore.workspaces[WorkspaceStore.currentIndex].path : '';
           let model = (ChatStore.modelIndex >= 0 && ChatStore.modelIndex < ChatStore.models.length)
             ? ChatStore.models[ChatStore.modelIndex].modelId : undefined;
@@ -73,9 +82,11 @@ export struct Index {
           ChatStore.planEntries = [];
           ChatStore.turnActive = false;
           ChatStore.sessionReady = false;
+          ChatStore.streamingThinking = '';
           let cwd = WorkspaceStore.workspaces[index].path;
-          this.ws.send({ type: 'start', agent: ChatStore.agentType, cwd: cwd } as ClientMessage);
-          this.ws.send({ type: 'list_sessions', cwd: cwd } as ClientMessage);
+          // List sessions + models with agent name so server can create temp client
+          this.ws.send({ type: 'list_sessions', cwd: cwd, agent: ChatStore.agentType } as ClientMessage);
+          this.ws.send({ type: 'list_models', agent: ChatStore.agentType } as ClientMessage);
         },
         onPermissionResponse: (optionId: string) => {
           this.ws.sendPermissionResponse(optionId);
@@ -110,9 +121,9 @@ export struct Index {
   build() {
     Navigation(this.navStack) {
       OnboardingView({
+        ws: this.ws,
         callbacks: {
-          onNavigateToWorkspaceSelect: () => { this.navStack.pushPath({ name: 'workspace-select' }) },
-          onWsClientReady: (ws: WSClient) => { this.ws = ws; }
+          onNavigateToWorkspaceSelect: () => { this.navStack.pushPath({ name: 'workspace-select' }) }
         }
       })
     }

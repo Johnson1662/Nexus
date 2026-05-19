@@ -1,0 +1,342 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e7]:
+    - generic [ref=e8]:
+      - img "华为开发者联盟" [ref=e407]
+      - generic [ref=e9]:
+        - generic [ref=e10] [cursor=pointer]:
+          - generic [ref=e11]: 简体中文
+          - img [ref=e13]
+        - link "下载 App" [ref=e15] [cursor=pointer]:
+          - /url: /consumer/cn/huawei-app/
+          - generic [ref=e16]: 下载 App
+    - generic [ref=e17]:
+      - link "华为开发者联盟" [ref=e408] [cursor=pointer]:
+        - /url: https://developer.huawei.com/consumer/cn/
+        - img "华为开发者联盟" [ref=e409]
+      - generic [ref=e18]:
+        - list [ref=e19]:
+          - listitem [ref=e20] [cursor=pointer]: 探索
+          - listitem [ref=e21] [cursor=pointer]: 设计
+          - listitem [ref=e22] [cursor=pointer]: 开发
+          - listitem [ref=e23] [cursor=pointer]: 分发
+          - listitem [ref=e24] [cursor=pointer]: 推广与变现
+          - listitem [ref=e25] [cursor=pointer]: 生态合作
+          - listitem [ref=e26] [cursor=pointer]: 支持
+        - listitem [ref=e27]:
+          - generic [ref=e28]: 更多
+          - img [ref=e31]
+        - list [ref=e34]:
+          - listitem [ref=e35] [cursor=pointer]:
+            - link "探索" [ref=e37]:
+              - /url: /consumer/cn/discover/
+              - generic [ref=e38]: 探索
+          - listitem [ref=e39] [cursor=pointer]:
+            - link "设计" [ref=e41]:
+              - /url: /consumer/cn/design/
+              - generic [ref=e42]: 设计
+          - listitem [ref=e43] [cursor=pointer]:
+            - link "开发" [ref=e45]:
+              - /url: /consumer/cn/develop/
+              - generic [ref=e46]: 开发
+          - listitem [ref=e47] [cursor=pointer]:
+            - link "分发" [ref=e49]:
+              - /url: /consumer/cn/distribute/
+              - generic [ref=e50]: 分发
+          - listitem [ref=e51] [cursor=pointer]:
+            - link "推广与变现" [ref=e53]:
+              - /url: /consumer/cn/promote/
+              - generic [ref=e54]: 推广与变现
+          - listitem [ref=e55] [cursor=pointer]:
+            - link "生态合作" [ref=e57]:
+              - /url: /consumer/cn/cooperate/
+              - generic [ref=e58]: 生态合作
+          - listitem [ref=e59] [cursor=pointer]:
+            - link "支持" [ref=e61]:
+              - /url: /consumer/cn/support/
+              - generic [ref=e62]: 支持
+      - generic [ref=e64]:
+        - generic [ref=e67]:
+          - textbox "HarmonyOS 6" [ref=e410]
+          - img [ref=e70] [cursor=pointer]
+        - link "文档" [ref=e72] [cursor=pointer]:
+          - /url: /consumer/cn/doc/
+        - link "管理中心" [ref=e73] [cursor=pointer]:
+          - /url: /consumer/cn/console
+        - img [ref=e78] [cursor=pointer]
+  - generic [ref=e86]:
+    - complementary [ref=e87]:
+      - generic [ref=e90]: HarmonyOS Symbol
+    - main [ref=e95]:
+      - generic [ref=e96]:
+        - generic [ref=e97]:
+          - textbox "搜索图标" [ref=e102]
+          - generic "0个图标符号" [ref=e103]
+        - generic [ref=e106]:
+          - generic "列表视图" [ref=e107] [cursor=pointer]
+          - generic "网格视图" [ref=e108] [cursor=pointer]
+      - img "loading..." [ref=e111]
+    - generic [ref=e112]:
+      - generic [ref=e113]:
+        - generic [ref=e114] [cursor=pointer]: 样式调整
+        - generic [ref=e115] [cursor=pointer]: 动效配置
+      - generic [ref=e121]:
+        - generic [ref=e122]:
+          - generic [ref=e123]: 图标粗细
+          - generic [ref=e125] [cursor=pointer]:
+            - generic:
+              - combobox [ref=e127]
+              - generic [ref=e128]: Regular
+        - generic [ref=e131]:
+          - generic [ref=e132]: 图标风格
+          - generic [ref=e134]:
+            - paragraph [ref=e136] [cursor=pointer]: 单色
+            - paragraph [ref=e138] [cursor=pointer]: 分层
+            - paragraph [ref=e140] [cursor=pointer]: 多色
+        - generic [ref=e141]:
+          - generic [ref=e142]: 颜色
+          - generic [ref=e146]:
+            - generic [ref=e148] [cursor=pointer]:
+              - generic:
+                - combobox [ref=e152]
+                - generic [ref=e153]: 一级色
+            - textbox [ref=e158]: 100%
+        - generic [ref=e159]:
+          - generic [ref=e160]: 背景色
+          - generic [ref=e166] [cursor=pointer]:
+            - generic:
+              - combobox [ref=e170]
+              - generic [ref=e171]: 默认
+        - button "清空配置" [ref=e174] [cursor=pointer]:
+          - generic [ref=e176]: 清空配置
+        - generic [ref=e179]: 图标信息
+  - generic [ref=e184]:
+    - generic [ref=e185]:
+      - generic [ref=e187]: HarmonyOS Developer
+      - generic [ref=e188]:
+        - generic [ref=e191]:
+          - paragraph [ref=e194]: 工具
+          - list [ref=e197]:
+            - listitem [ref=e198]:
+              - link "ArkTS" [ref=e199] [cursor=pointer]:
+                - /url: https://developer.huawei.com/consumer/cn/arkts/
+            - listitem [ref=e200]:
+              - link "ArkUI" [ref=e201] [cursor=pointer]:
+                - /url: https://developer.huawei.com/consumer/cn/arkui/
+            - listitem [ref=e202]:
+              - link "ArkCompiler" [ref=e203] [cursor=pointer]:
+                - /url: https://developer.huawei.com/consumer/cn/arkcompiler/
+            - listitem [ref=e204]:
+              - link "DevEco Studio" [ref=e205] [cursor=pointer]:
+                - /url: https://developer.huawei.com/consumer/cn/deveco-studio/
+            - listitem [ref=e206]:
+              - link "DevEco Testing" [ref=e207] [cursor=pointer]:
+                - /url: https://developer.huawei.com/consumer/cn/deveco-testing/
+            - listitem [ref=e208]:
+              - link "DevEco Device Tool" [ref=e209] [cursor=pointer]:
+                - /url: https://device.harmonyos.com/cn/develop/ide
+            - listitem [ref=e210]:
+              - link "DevEco Service" [ref=e211] [cursor=pointer]:
+                - /url: https://developer.huawei.com/consumer/cn/deveco-service
+            - listitem [ref=e212]:
+              - link "仓颉体验版" [ref=e213] [cursor=pointer]:
+                - /url: https://developer.huawei.com/consumer/cn/cangjie/
+            - listitem [ref=e214]:
+              - link "HarmonyOS Symbol" [ref=e215] [cursor=pointer]:
+                - /url: https://developer.huawei.com/consumer/cn/design/harmonyos-symbol
+        - generic [ref=e218]:
+          - paragraph [ref=e221]: 开放能力
+          - list [ref=e224]:
+            - listitem [ref=e225]:
+              - link "Account Kit" [ref=e226] [cursor=pointer]:
+                - /url: https://developer.huawei.com/consumer/cn/sdk/account-kit
+            - listitem [ref=e227]:
+              - link "Ads Kit" [ref=e228] [cursor=pointer]:
+                - /url: https://developer.huawei.com/consumer/cn/sdk/ads-kit
+            - listitem [ref=e229]:
+              - link "Core Speech Kit" [ref=e230] [cursor=pointer]:
+                - /url: https://developer.huawei.com/consumer/cn/sdk/core-speech-kit
+            - listitem [ref=e231]:
+              - link "Core Vision Kit" [ref=e232] [cursor=pointer]:
+                - /url: https://developer.huawei.com/consumer/cn/sdk/core-vision-kit
+            - listitem [ref=e233]:
+              - link "IAP Kit" [ref=e234] [cursor=pointer]:
+                - /url: https://developer.huawei.com/consumer/cn/sdk/iap-kit
+            - listitem [ref=e235]:
+              - link "Intents Kit" [ref=e236] [cursor=pointer]:
+                - /url: https://developer.huawei.com/consumer/cn/sdk/intents-kit
+            - listitem [ref=e237]:
+              - link "Location Kit" [ref=e238] [cursor=pointer]:
+                - /url: https://developer.huawei.com/consumer/cn/sdk/location-kit
+            - listitem [ref=e239]:
+              - link "Live View Kit" [ref=e240] [cursor=pointer]:
+                - /url: https://developer.huawei.com/consumer/cn/sdk/live-view-kit
+            - listitem [ref=e241]:
+              - link "Payment Kit" [ref=e242] [cursor=pointer]:
+                - /url: https://developer.huawei.com/consumer/cn/sdk/payment-kit
+            - listitem [ref=e243]:
+              - link "Push Kit" [ref=e244] [cursor=pointer]:
+                - /url: https://developer.huawei.com/consumer/cn/sdk/push-kit
+            - listitem [ref=e245]:
+              - link "Scan Kit" [ref=e246] [cursor=pointer]:
+                - /url: https://developer.huawei.com/consumer/cn/sdk/scan-kit
+        - generic [ref=e249]:
+          - paragraph [ref=e252]: 资源
+          - list [ref=e255]:
+            - listitem [ref=e256]:
+              - link "文档" [ref=e257] [cursor=pointer]:
+                - /url: https://developer.huawei.com/consumer/cn/doc/
+            - listitem [ref=e258]:
+              - link "示例代码" [ref=e259] [cursor=pointer]:
+                - /url: https://developer.huawei.com/consumer/cn/samples/
+            - listitem [ref=e260]:
+              - link "最佳实践" [ref=e261] [cursor=pointer]:
+                - /url: https://developer.huawei.com/consumer/cn/doc/best-practices/bpta-best-practices-overview
+            - listitem [ref=e262]:
+              - link "下载中心" [ref=e263] [cursor=pointer]:
+                - /url: https://developer.huawei.com/consumer/cn/download/
+            - listitem [ref=e264]:
+              - link "视频课程" [ref=e265] [cursor=pointer]:
+                - /url: https://developer.huawei.com/consumer/cn/training/result?type1=101718934267126043&orderBy=1
+            - listitem [ref=e266]:
+              - link "Codelabs" [ref=e267] [cursor=pointer]:
+                - /url: https://developer.huawei.com/consumer/cn/codelabsPortal/serviceTypes/43
+            - listitem [ref=e268]:
+              - link "考试认证" [ref=e269] [cursor=pointer]:
+                - /url: https://developer.huawei.com/consumer/cn/training/dev-certification/a617e0d3bc144624864a04edb951f6c4?ha_source=GWxfk&ha_sourceId=89000474
+            - listitem [ref=e270]:
+              - link "行业解决方案" [ref=e271] [cursor=pointer]:
+                - /url: https://developer.huawei.com/consumer/cn/solution/harmonyos/?ha_source=gwyj&ha_sourceId=89000071
+            - listitem [ref=e272]:
+              - link "开发者月刊" [ref=e273] [cursor=pointer]:
+                - /url: https://developer.huawei.com/consumer/cn/monthly/
+        - generic [ref=e276]:
+          - paragraph [ref=e279]: 支持
+          - list [ref=e282]:
+            - listitem [ref=e283]:
+              - link "服务公告" [ref=e284] [cursor=pointer]:
+                - /url: https://developer.huawei.com/consumer/cn/notice
+            - listitem [ref=e285]:
+              - link "支持文档" [ref=e286] [cursor=pointer]:
+                - /url: https://developer.huawei.com/consumer/cn/doc/start/introduction-0000001053446472
+            - listitem [ref=e287]:
+              - link "智能客服" [ref=e288] [cursor=pointer]:
+                - /url: https://developer.huawei.com/consumer/cn/customerService/#/bot-dev-top/faq-top/faq-talk-top
+            - listitem [ref=e289]:
+              - link "社区问答" [ref=e290] [cursor=pointer]:
+                - /url: https://developer.huawei.com/consumer/cn/forum/
+            - listitem [ref=e291]:
+              - link "在线提单" [ref=e292] [cursor=pointer]:
+                - /url: https://developer.huawei.com/consumer/cn/support/feedback/#/
+            - listitem [ref=e293]:
+              - link "快速入门" [ref=e294] [cursor=pointer]:
+                - /url: https://developer.huawei.com/consumer/cn/develop-novice-guide/
+            - listitem [ref=e295]:
+              - link "联系我们" [ref=e296] [cursor=pointer]:
+                - /url: https://developer.huawei.com/consumer/cn/support/contactUs
+            - listitem [ref=e297]:
+              - link "协议与准则" [ref=e298] [cursor=pointer]:
+                - /url: https://developer.huawei.com/consumer/cn/agreement/
+            - listitem [ref=e299]:
+              - link "举报中心" [ref=e300] [cursor=pointer]:
+                - /url: https://developer.huawei.com/consumer/cn/report
+            - listitem [ref=e301]:
+              - link "联盟 APP" [ref=e302] [cursor=pointer]:
+                - /url: https://developer.huawei.com/consumer/cn/huawei-app/
+        - generic [ref=e305]:
+          - paragraph [ref=e308]: Programs
+          - list [ref=e311]:
+            - listitem [ref=e312]:
+              - link "HUAWEI Developer Groups" [ref=e313] [cursor=pointer]:
+                - /url: https://developer.huawei.com/consumer/cn/programs/hdg/
+            - listitem [ref=e314]:
+              - link "HUAWEI Developer Experts" [ref=e315] [cursor=pointer]:
+                - /url: https://developer.huawei.com/consumer/cn/programs/hde
+            - listitem [ref=e316]:
+              - link "HUAWEI Student Developers" [ref=e317] [cursor=pointer]:
+                - /url: https://developer.huawei.com/consumer/cn/programs/hsd
+            - listitem [ref=e318]:
+              - link "HUAWEI Women Developers" [ref=e319] [cursor=pointer]:
+                - /url: https://developer.huawei.com/consumer/cn/programs/hwd
+            - listitem [ref=e320]:
+              - link "鸿蒙极客" [ref=e321] [cursor=pointer]:
+                - /url: https://developer.huawei.com/consumer/cn/programs/harmonyosgeek/
+            - listitem [ref=e322]:
+              - link "耀星计划" [ref=e323] [cursor=pointer]:
+                - /url: https://developer.huawei.com/consumer/cn/activity/yaoxingActivity/detail/617
+        - generic [ref=e326]:
+          - paragraph [ref=e329]: 活动
+          - list [ref=e332]:
+            - listitem [ref=e333]:
+              - link "活动概览" [ref=e334] [cursor=pointer]:
+                - /url: https://developer.huawei.com/consumer/cn/activity/
+            - listitem [ref=e335]:
+              - link "HUAWEI Developer Day" [ref=e336] [cursor=pointer]:
+                - /url: https://developer.huawei.com/consumer/cn/activity/hdd/
+            - listitem [ref=e337]:
+              - link "HarmonyOS Tech Talk" [ref=e338] [cursor=pointer]:
+                - /url: https://developer.huawei.com/consumer/cn/training/study-path/401748584706136426
+            - listitem [ref=e339]:
+              - link "HarmonyOS 开发者会客厅" [ref=e340] [cursor=pointer]:
+                - /url: https://developer.huawei.com/consumer/cn/training/study-path/401747807113001496
+            - listitem [ref=e341]:
+              - link "HarmonyOS 百校未来星活动招募" [ref=e342] [cursor=pointer]:
+                - /url: https://developer.huawei.com/consumer/cn/activity/401741745535563428
+            - listitem [ref=e343]:
+              - link "2026 HarmonyOS 创新赛·极客赛道" [ref=e344] [cursor=pointer]:
+                - /url: https://developer.huawei.com/consumer/cn/activity/digixActivity/digixcmsdetail/101773710117484023
+            - listitem [ref=e345]:
+              - link "华为开发者大会（HDC）" [ref=e346] [cursor=pointer]:
+                - /url: https://developer.huawei.com/consumer/cn/hdc/2026/
+            - listitem [ref=e347]:
+              - link "鸿蒙应用开发者激励计划 2026" [ref=e348] [cursor=pointer]:
+                - /url: https://developer.huawei.com/consumer/cn/activity/harmonyos-incentive/2026?ha_source=yejiao&ha_sourceId=70000006
+      - generic [ref=e349]:
+        - generic [ref=e351]:
+          - generic [ref=e353]: 友情链接
+          - generic [ref=e354]:
+            - link "华为官网" [ref=e355] [cursor=pointer]:
+              - /url: https://www.huawei.com/cn/corporate-information
+            - link "消费者业务网站" [ref=e356] [cursor=pointer]:
+              - /url: https://consumer.huawei.com/cn/
+            - link "华为商城" [ref=e357] [cursor=pointer]:
+              - /url: https://www.vmall.com/
+            - link "HarmonyOS" [ref=e358] [cursor=pointer]:
+              - /url: https://consumer.huawei.com/cn/harmonyos-6/
+            - link "华为终端云空间" [ref=e359] [cursor=pointer]:
+              - /url: https://cloud.huawei.com/
+            - link "华为云" [ref=e360] [cursor=pointer]:
+              - /url: https://www.huaweicloud.com/
+        - generic [ref=e361]:
+          - generic [ref=e364] [cursor=pointer]: 简体中文
+          - generic [ref=e366]:
+            - img "img" [ref=e368] [cursor=pointer]
+            - img "img" [ref=e370] [cursor=pointer]
+            - img "img" [ref=e372]
+            - img "img" [ref=e374]
+            - img "img" [ref=e376] [cursor=pointer]
+            - img "img" [ref=e378] [cursor=pointer]
+    - generic [ref=e380]:
+      - paragraph [ref=e383]: 华为开发者联盟 版权所有 ©2026
+      - generic [ref=e384]:
+        - generic [ref=e385]:
+          - link "问题反馈" [ref=e386] [cursor=pointer]:
+            - /url: https://developer.huawei.com/consumer/cn/support/feedback/#/
+          - text: "|"
+        - generic [ref=e387]:
+          - link "使用条款" [ref=e388] [cursor=pointer]:
+            - /url: https://developer.huawei.com/consumer/cn/devservice/use
+          - text: "|"
+        - generic [ref=e389]:
+          - link "华为开发者联盟用户协议" [ref=e390] [cursor=pointer]:
+            - /url: https://developer.huawei.com/consumer/cn/doc/start/useragreement-0000001494912825
+          - text: "|"
+        - generic [ref=e391]:
+          - link "关于华为开发者联盟与隐私的声明" [ref=e392] [cursor=pointer]:
+            - /url: https://developer.huawei.com/consumer/cn/devservice/term
+          - text: "|"
+        - generic [ref=e393]:
+          - link "Cookies" [ref=e394] [cursor=pointer]:
+            - /url: https://consumer.huawei.com/cn/legal/cookie-policy/
+          - text: "|"
+        - link "开源软件声明" [ref=e396] [cursor=pointer]:
+          - /url: https://developer.huawei.com/consumer/cn/opensource/

@@ -25,9 +25,6 @@ export class Colors {
   static readonly borderLight: string = '#E5E5EA';
   static readonly borderFocus: string = '#202123';
 
-  static readonly shadowColor: string = '#00000008';
-  static readonly shadowColorStrong: string = '#00000014';
-  static readonly shadowAccent: string = '#20212314';
 }
 
 export class Spacing {

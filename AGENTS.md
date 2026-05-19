@@ -230,16 +230,21 @@ hdc -t 2NP0224627054426 shell aa start -a EntryAbility -b com.anywhere.app
 手机和电脑连同一局域网后，在手机开发者选项中开启"无线调试"获取 IP:端口：
 ```powershell
 # 1. 建立 TCP 连接（IP:端口每次可能不同）
-hdc tconn 192.168.x.x:xxxxx
+hdc tconn 192.168.137.215:41015
 
 # 2. 确认设备已连接
 hdc list targets
 
 # 3. 部署 / 启动
-hdc install "entry/build/default/outputs/default/entry-default-signed.hap"
-hdc shell aa start -a EntryAbility -b com.anywhere.app
+hdc -t "192.168.137.215:41015" install "entry/build/default/outputs/default/entry-default-signed.hap"
+hdc -t "192.168.137.215:41015" shell aa start -a EntryAbility -b com.anywhere.app
 ```
-注意：无线首次连接建议先用 USB 连一次再切无线，更稳定。断线后重新 `hdc tconn` 即可。
+注意：无线首次连接建议先用 USB 连一次再切无线，更稳定。断线后重新 `hdc tconn` 即可。无线调试的 IP:端口每次可能不同，以上为当前设备地址。
+
+### 当前设备调试信息
+- **无线调试地址:** `192.168.137.215:41015`
+- **设备 UDID:** `2NP0224627054426`
+- **Bridge Server:** PC 端运行 `npm start`
 
 ### Bridge Server (must be running on PC)
 

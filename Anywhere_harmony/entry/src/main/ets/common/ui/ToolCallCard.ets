@@ -103,7 +103,7 @@ export struct ToolCallCard {
         }
       }
       .width('100%')
-      .height(28)
+      .height(32)
       .alignItems(VerticalAlign.Center)
 
       if (this.content.length > 0) {
@@ -123,8 +123,6 @@ export struct ToolCallCard {
       }
     }
     .width('100%')
-    // Indent to look visually grouped under thinking
-    .padding({ left: Spacing.sm })
     .animation({ duration: Duration.fast, curve: Curve.EaseOut })
   }
 }

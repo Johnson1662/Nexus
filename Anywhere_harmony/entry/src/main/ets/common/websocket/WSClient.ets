@@ -4,6 +4,7 @@ import { hilog } from '@kit.PerformanceAnalysisKit';
 import { backgroundTaskManager } from '@kit.BackgroundTasksKit';
 import { ChatStore } from '../model/ChatState';
 import { ServerSession } from '../model/WorkspaceInfo';
+import { StorageService, PrefsKeys } from '../../services/StorageService';
 import { WorkspaceStore } from '../model/WorkspaceInfo';
 import { ClientMessage, ServerMessage, AcpUpdate, AgentInfo } from './WSProtocol';
 import { ModelItem, ModeItem } from '../model/ChatState';
@@ -242,6 +243,8 @@ export class WSClient {
         }
         if (msg.model) {
           ChatStore.sessionCurrentModelId = msg.model;
+          ChatStore.lastModelId = msg.model;
+          StorageService.getInstance().putString(PrefsKeys.LAST_MODEL_ID, msg.model);
           for (let i = 0; i < ChatStore.models.length; i++) {
             if (ChatStore.models[i].modelId === msg.model) {
               ChatStore.modelIndex = i;
@@ -301,12 +304,22 @@ export class WSClient {
             }
           }
         }
+        // If session didn't set a model, try persisted lastModelId
+        if (!ChatStore.sessionCurrentModelId && ChatStore.lastModelId.length > 0) {
+          for (let i = 0; i < ChatStore.models.length; i++) {
+            if (ChatStore.models[i].modelId === ChatStore.lastModelId) {
+              ChatStore.modelIndex = i;
+              break;
+            }
+          }
+        }
         for (let cb of this.modelListeners) {
           cb(msg.models || [], msg.modes || []);
         }
         break;
       case 'session_list':
         ChatStore.sessions = msg.sessions || [];
+        ChatStore.sessionReady = true;
         for (let cb of this.sessionListeners) {
           cb(msg.sessions || []);
         }

@@ -73,6 +73,7 @@ export class StorageService {
 export interface PrefsKeysType {
   SERVER_URL: string;
   LAST_AGENT: string;
+  LAST_MODEL_ID: string;
   WORKSPACES: string;
   WORKSPACE_INDEX: string;
 }
@@ -80,6 +81,7 @@ export interface PrefsKeysType {
 export const PrefsKeys: PrefsKeysType = {
   SERVER_URL: 'server_url',
   LAST_AGENT: 'last_agent',
+  LAST_MODEL_ID: 'last_model_id',
   WORKSPACES: 'workspaces',
   WORKSPACE_INDEX: 'workspace_index'
 };

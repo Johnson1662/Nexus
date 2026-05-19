@@ -70,3 +70,19 @@
 [WARN] ⚠️: <ETS Language Server> 5/18/2026, 10:26:52 PM Locale is undefined, skip load diagnostic messages.
 [INFO] 🔥: <ETS Language Server> 5/18/2026, 10:26:52 PM Workspace folders: file:///C:/Users/lneoo/Desktop/cltest/Anywhere
 [INFO] 🔥: <ETS Language Server> 5/18/2026, 10:26:52 PM Cannot find ets.sdkPath in initialization options, language server is shutdowning...
+[INFO] 🔥: <ETS Language Server> 5/18/2026, 11:50:51 PM ETS Support language server version: 1.3.9
+[INFO] 🔥: <ETS Language Server> 5/18/2026, 11:50:51 PM ohos-typescript version: 4.9.5
+[INFO] 🔥: <ETS Language Server> 5/18/2026, 11:50:51 PM Current file URI: file:///C:/Users/lneoo/AppData/Local/npm-cache/_npx/1e1169d954a67fc9/node_modules/@arkts/language-server/out/index.js
+[INFO] 🔥: <ETS Language Server> 5/18/2026, 11:50:51 PM ETS Language Server is starting...
+[INFO] 🔥: <ETS Language Server> 5/18/2026, 11:50:51 PM ETS Language Server is started! PID: 37092
+[WARN] ⚠️: <ETS Language Server> 5/18/2026, 11:50:51 PM Locale is undefined, skip load diagnostic messages.
+[INFO] 🔥: <ETS Language Server> 5/18/2026, 11:50:51 PM Workspace folders: file:///C:/Users/lneoo/Desktop/cltest/Anywhere
+[INFO] 🔥: <ETS Language Server> 5/18/2026, 11:50:51 PM Cannot find ets.sdkPath in initialization options, language server is shutdowning...
+[INFO] 🔥: <ETS Language Server> 5/19/2026, 3:20:19 PM ETS Support language server version: 1.3.9
+[INFO] 🔥: <ETS Language Server> 5/19/2026, 3:20:19 PM ohos-typescript version: 4.9.5
+[INFO] 🔥: <ETS Language Server> 5/19/2026, 3:20:19 PM Current file URI: file:///C:/Users/lneoo/AppData/Local/npm-cache/_npx/1e1169d954a67fc9/node_modules/@arkts/language-server/out/index.js
+[INFO] 🔥: <ETS Language Server> 5/19/2026, 3:20:19 PM ETS Language Server is starting...
+[INFO] 🔥: <ETS Language Server> 5/19/2026, 3:20:19 PM ETS Language Server is started! PID: 62404
+[WARN] ⚠️: <ETS Language Server> 5/19/2026, 3:20:19 PM Locale is undefined, skip load diagnostic messages.
+[INFO] 🔥: <ETS Language Server> 5/19/2026, 3:20:19 PM Workspace folders: file:///C:/Users/lneoo/Desktop/cltest/Anywhere
+[INFO] 🔥: <ETS Language Server> 5/19/2026, 3:20:19 PM Cannot find ets.sdkPath in initialization options, language server is shutdowning...

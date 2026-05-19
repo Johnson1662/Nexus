@@ -2,6 +2,7 @@ import { Colors, FontSize, Spacing, Radius, Duration } from '../../constants/Des
 import { ChatStore } from '../../common/model/ChatState';
 import { MessageData } from '../../common/model/MessageData';
 import { MessageCard } from '../../common/ui/MessageCard';
+import { ThinkingSection } from '../../common/ui/ThinkingSection';
 import { PlanView } from '../../common/ui/PlanView';
 import { ChatInputBar } from './ChatInputBar';
 import { MessageDataSource } from '../../common/ui/MessageDataSource';
@@ -37,6 +38,7 @@ struct PulsingDots {
 @Component
 export struct ChatPage {
   @Prop @Watch('onMessagesChange') messages: MessageData[] = [];
+  @Prop @Watch('onStreamingChange') streamingThinking: string = '';
   onSendMessage?: (text: string) => void;
 
   private scroller: Scroller = new Scroller();
@@ -53,6 +55,13 @@ export struct ChatPage {
 
   onMessagesChange(): void {
     this.dataSource.updateData(this.messages);
+    setTimeout(() => {
+      this.scroller.scrollEdge(Edge.Bottom);
+    }, 50);
+  }
+
+  onStreamingChange(): void {
+    // Scroll to follow streaming thinking output
     setTimeout(() => {
       this.scroller.scrollEdge(Edge.Bottom);
     }, 50);
@@ -131,9 +140,18 @@ Text('Anywhere')
               }
             }
             .height('auto')
-            .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: 12 })))
-            .animation({ duration: Duration.normal, curve: Curve.EaseOut })
-          }, (msg: MessageData) => msg.id + msg.content.length + msg.toolStatus + (ChatStore.turnActive ? '_active' : '_done'))
+            // Stable key: msg.id only — streaming thinking is OUTSIDE LazyForEach
+          }, (msg: MessageData) => msg.id)
+
+          // Streaming thinking section (outside LazyForEach — no key changes on chunks)
+          if (ChatStore.streamingThinking.length > 0 && ChatStore.turnActive) {
+            ListItem() {
+              ThinkingSection({ thinking: ChatStore.streamingThinking, isStreaming: true })
+                .width('100%')
+                .padding({ left: Spacing.lg, right: Spacing.lg })
+            }
+            .height('auto')
+          }
 
           if (ChatStore.turnActive) {
             ListItem() {

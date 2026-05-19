@@ -1,5 +1,4 @@
 import { Colors, FontSize, Spacing, Radius, Duration } from '../../constants/DesignTokens';
-import { CardHeader } from './CardHeader';
 import { ThinkingSection } from './ThinkingSection';
 import { ToolCallCard } from './ToolCallCard';
 import { MarkdownRender } from './MarkdownRender';
@@ -104,7 +103,6 @@ export struct MessageCard {
       top: (this.msgType === 'thinking' || this.msgType === 'tool_call') ? 0 : Spacing.xs, 
       bottom: (this.msgType === 'thinking' || this.msgType === 'tool_call') ? 0 : Spacing.xs 
     })
-    .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: 12 })))
-    .animation({ duration: Duration.normal, curve: Curve.EaseOut })
+    
   }
 }

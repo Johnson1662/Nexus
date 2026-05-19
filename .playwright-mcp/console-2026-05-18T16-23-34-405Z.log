@@ -1,0 +1,11 @@
+[    5413ms] [ERROR] TypeError: Cannot read properties of undefined (reading 'value')
+    at Proxy.created (https://developer.huawei.com/allianceCmsResource/resource/HUAWEI_Developer_VUE/template/header.js?v=1767876882302:1:612816)
+    at tL (https://developer.huawei.com/allianceCmsResource/resource/HUAWEI_Developer_VUE/libs/global/vue.runtime.min.js?v=1767876882302:5:18418)
+    at tD (https://developer.huawei.com/allianceCmsResource/resource/HUAWEI_Developer_VUE/libs/global/vue.runtime.min.js?v=1767876882302:5:18478)
+    at n7 (https://developer.huawei.com/allianceCmsResource/resource/HUAWEI_Developer_VUE/libs/global/vue.runtime.min.js?v=1767876882302:6:5342)
+    at https://developer.huawei.com/allianceCmsResource/resource/HUAWEI_Developer_VUE/libs/global/vue.runtime.min.js?v=1767876882302:6:35446
+    at rE (https://developer.huawei.com/allianceCmsResource/resource/HUAWEI_Developer_VUE/libs/global/vue.runtime.min.js?v=1767876882302:6:35819)
+    at https://developer.huawei.com/allianceCmsResource/resource/HUAWEI_Developer_VUE/libs/global/vue.runtime.min.js?v=1767876882302:6:14986
+    at https://developer.huawei.com/allianceCmsResource/resource/HUAWEI_Developer_VUE/libs/global/vue.runtime.min.js?v=1767876882302:6:14994
+    at $ (https://developer.huawei.com/allianceCmsResource/resource/HUAWEI_Developer_VUE/libs/global/vue.runtime.min.js?v=1767876882302:6:15009)
+    at B (https://developer.huawei.com/allianceCmsResource/resource/HUAWEI_Developer_VUE/libs/global/vue.runtime.min.js?v=1767876882302:6:12169) @ https://developer.huawei.com/allianceCmsResource/resource/HUAWEI_Developer_VUE/libs/global/vue.runtime.min.js?v=1767876882302:4

@@ -30,6 +30,8 @@ export interface SessionState {
   pendingPermission: PendingPermission | null;
   terminals: Map<string, TerminalState>;
   restartCount: number;
+  /** ACP session ID of the loaded history session, if any */
+  loadedSessionId?: string;
 }
 
 export interface WSClientMessage {

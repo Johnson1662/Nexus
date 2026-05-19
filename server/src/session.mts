@@ -7,13 +7,7 @@ const wsOpQueues = new Map<import("ws").WebSocket, Promise<unknown>>();
 
 export function enqueueWsOp(ws: import("ws").WebSocket, fn: () => Promise<void>): void {
   const prev = wsOpQueues.get(ws) || Promise.resolve();
-  const next = prev.then(async () => {
-    try {
-      await fn();
-    } catch (err: any) {
-      console.log(`[server] queued op error: ${err.message}`);
-    }
-  }, async () => {
+  const next = prev.catch(() => {}).then(async () => {
     try {
       await fn();
     } catch (err: any) {
@@ -71,16 +65,6 @@ export function killSessionProcess(sess: SessionState): void {
 }
 
 export function cleanupWsSessions(ws: import("ws").WebSocket): void {
-  for (const [id, sess] of sessions) {
-    if (sess.ws === ws) {
-      killTerminalProcesses(sess);
-      killSessionProcess(sess);
-      sessions.delete(id);
-    }
-  }
-}
-
-export function killOldWsSessions(ws: import("ws").WebSocket): void {
   for (const [id, sess] of sessions) {
     if (sess.ws === ws) {
       killTerminalProcesses(sess);

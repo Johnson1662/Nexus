@@ -3,14 +3,7 @@ const sessions = new Map();
 const wsOpQueues = new Map();
 export function enqueueWsOp(ws, fn) {
     const prev = wsOpQueues.get(ws) || Promise.resolve();
-    const next = prev.then(async () => {
-        try {
-            await fn();
-        }
-        catch (err) {
-            console.log(`[server] queued op error: ${err.message}`);
-        }
-    }, async () => {
+    const next = prev.catch(() => { }).then(async () => {
         try {
             await fn();
         }
@@ -71,15 +64,6 @@ export function killSessionProcess(sess) {
     }
 }
 export function cleanupWsSessions(ws) {
-    for (const [id, sess] of sessions) {
-        if (sess.ws === ws) {
-            killTerminalProcesses(sess);
-            killSessionProcess(sess);
-            sessions.delete(id);
-        }
-    }
-}
-export function killOldWsSessions(ws) {
     for (const [id, sess] of sessions) {
         if (sess.ws === ws) {
             killTerminalProcesses(sess);

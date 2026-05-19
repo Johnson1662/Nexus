@@ -9,7 +9,6 @@ import { StorageService, PrefsKeys } from '../../services/StorageService';
 
 interface OnboardingCallbacks {
   onNavigateToWorkspaceSelect: () => void;
-  onWsClientReady: (ws: WSClient) => void;
 }
 
 @Component
@@ -20,8 +19,8 @@ export struct OnboardingView {
   @StorageLink('serverUrl') serverUrl: string = 'ws://100.111.77.50:12138';
   @State iconScale: number = 1.0;
 
-  private ws: WSClient = new WSClient();
-  callbacks: OnboardingCallbacks = { onNavigateToWorkspaceSelect: () => {}, onWsClientReady: () => {} };
+  ws: WSClient = new WSClient();
+  callbacks: OnboardingCallbacks = { onNavigateToWorkspaceSelect: () => {} };
 
   aboutToAppear() {
     setTimeout(() => {
@@ -117,7 +116,6 @@ export struct OnboardingView {
       ChatStore.messages = [...ChatStore.messages, m];
     });
     this.ws.connect(this.serverUrl);
-    this.callbacks.onWsClientReady(this.ws);
   }
 
   selectAgent(agent: AgentInfo): void {
@@ -138,10 +136,22 @@ export struct OnboardingView {
     }
     let t: string = u.sessionUpdate;
     if (t === 'agent_message_chunk' && u.content?.text) {
+      // Finalize any pending streaming thinking before appending agent text
+      if (ChatStore.streamingThinking.length > 0) {
+        ChatStore.messages = [...ChatStore.messages, new MessageData('assistant', ChatStore.streamingThinking, 'thinking')];
+        ChatStore.streamingThinking = '';
+      }
       ChatStore.messages = this.appendText(ChatStore.messages, u.content.text);
     } else if (t === 'agent_thought_chunk' && u.content?.text) {
-      ChatStore.messages = this.appendThinking(ChatStore.messages, u.content.text);
+      // Stream thinking chunks into a separate field — NOT into LazyForEach messages.
+      // This keeps the LazyForEach key stable during streaming, preventing flicker.
+      ChatStore.streamingThinking += u.content.text;
     } else if (t === 'tool_call' && u.toolCallId) {
+      // Finalize any pending streaming thinking before showing tool call
+      if (ChatStore.streamingThinking.length > 0) {
+        ChatStore.messages = [...ChatStore.messages, new MessageData('assistant', ChatStore.streamingThinking, 'thinking')];
+        ChatStore.streamingThinking = '';
+      }
       let m = new MessageData('assistant', u.title || '', 'tool_call');
       m.toolCallId = u.toolCallId; m.toolName = u.title || ''; m.toolStatus = 'pending'; m.toolKind = u.kind || '';
       ChatStore.messages = [...ChatStore.messages, m];
@@ -156,13 +166,19 @@ export struct OnboardingView {
       }
       ChatStore.messages = this.updateToolStatus(ChatStore.messages, u.toolCallId, u.status, contentText);
     } else if (t === 'plan' && u.entries) {
+      // Finalize any pending streaming thinking before showing plan
+      if (ChatStore.streamingThinking.length > 0) {
+        ChatStore.messages = [...ChatStore.messages, new MessageData('assistant', ChatStore.streamingThinking, 'thinking')];
+        ChatStore.streamingThinking = '';
+      }
       ChatStore.planEntries = u.entries;
     } else if (t === 'user_message_chunk' && u.content?.text) {
       ChatStore.messages = [...ChatStore.messages, new MessageData('user', u.content.text, 'text')];
     } else if (t === 'session_info_update' && u.title) {
       ChatStore.sessionTitle = u.title;
+      let targetSessionId = ChatStore.loadedSessionId || ChatStore.sessionId;
       for (let i = 0; i < ChatStore.sessions.length; i++) {
-        if (ChatStore.sessions[i].sessionId === ChatStore.loadedSessionId) {
+        if (ChatStore.sessions[i].sessionId === targetSessionId) {
           ChatStore.sessions[i].title = u.title;
           break;
         }
@@ -174,6 +190,11 @@ export struct OnboardingView {
     } else if (t === 'usage_update' && u.usage) {
       ChatStore.lastUsage = u.usage;
     } else if (t === 'turn_ended') {
+      // Finalize any remaining streaming thinking before ending the turn
+      if (ChatStore.streamingThinking.length > 0) {
+        ChatStore.messages = [...ChatStore.messages, new MessageData('assistant', ChatStore.streamingThinking, 'thinking')];
+        ChatStore.streamingThinking = '';
+      }
       ChatStore.turnActive = false;
     }
   }
@@ -189,18 +210,6 @@ export struct OnboardingView {
     }
     let cleaned = t.replace(/^\n+/, '');
     return [...msgs, new MessageData('assistant', cleaned, 'text')];
-  }
-
-  appendThinking(msgs: MessageData[], t: string): MessageData[] {
-    if (msgs.length > 0) {
-      let last = msgs[msgs.length - 1];
-      if (last.role === 'assistant' && last.type === 'thinking') {
-        let u = new MessageData('assistant', last.content + t, 'thinking');
-        u.id = last.id; u.timestamp = last.timestamp;
-        let r = [...msgs]; r[r.length - 1] = u; return r;
-      }
-    }
-    return [...msgs, new MessageData('assistant', t, 'thinking')];
   }
 
   updateToolStatus(msgs: MessageData[], id: string, s: string, c: string): MessageData[] {

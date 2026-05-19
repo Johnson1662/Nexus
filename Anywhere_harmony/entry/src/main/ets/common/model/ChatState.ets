@@ -85,6 +85,8 @@ export class ChatStoreModel {
   @Trace lastUsage: UsageInfo | null = null;
   @Trace pendingPermission: PendingPermission | null = null;
   @Trace sessionReady: boolean = false;
+  @Trace streamingThinking: string = '';
+  @Trace lastModelId: string = '';
 }
 
 export const ChatStore: ChatStoreModel = new ChatStoreModel();

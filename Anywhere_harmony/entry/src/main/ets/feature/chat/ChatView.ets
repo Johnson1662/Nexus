@@ -32,11 +32,21 @@ export struct ChatView {
   }
 
   getSessionTitle(): string {
+    if (!ChatStore.sessionId && !ChatStore.loadedSessionId) {
+      return 'New Session';
+    }
+    // Prefer the live sessionTitle from server updates
+    if (ChatStore.sessionTitle.length > 0) {
+      return ChatStore.sessionTitle;
+    }
     let targetId = ChatStore.loadedSessionId || ChatStore.sessionId;
     for (let i = 0; i < ChatStore.sessions.length; i++) {
       if (ChatStore.sessions[i].sessionId === targetId) {
         return ChatStore.sessions[i].title || ChatStore.sessions[i].sessionId.substring(0, 8);
       }
+    }
+    if (targetId.length > 0) {
+      return targetId.substring(0, 8);
     }
     return 'Session';
   }
@@ -48,9 +58,7 @@ export struct ChatView {
     return '';
   }
 
-  isModelReady(): boolean {
-    return ChatStore.sessionReady && ChatStore.models.length > 0;
-  }
+
 
   openPicker(mode: number): void {
     if (mode === 0) {
@@ -148,6 +156,7 @@ export struct ChatView {
 
             ChatPage({
               messages: ChatStore.messages,
+              streamingThinking: ChatStore.streamingThinking,
               onSendMessage: (t: string) => { if (this.onSendMessage) this.onSendMessage(t) }
             }).layoutWeight(1)
           }
@@ -223,22 +232,17 @@ export struct ChatView {
           .lineHeight(20).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
           .width('100%')
 
-        if (this.isModelReady()) {
+        if (!ChatStore.sessionId && !ChatStore.loadedSessionId) {
+          Text('No session')
+            .fontSize(FontSize.xs).fontColor(Colors.foregroundLight)
+            .lineHeight(16).maxLines(1)
+            .width('100%')
+        } else if (ChatStore.models.length > 0) {
+          // Always show model name when available — shows last used or current model
           Text(this.getModelName())
             .fontSize(FontSize.xs).fontColor(Colors.foregroundMuted)
             .lineHeight(16).maxLines(1)
             .width('100%')
-        } else {
-          Row() {
-            LoadingProgress()
-              .width(12).height(12).color(Colors.foregroundMuted)
-            Text('Loading model...')
-              .fontSize(FontSize.xs).fontColor(Colors.foregroundMuted)
-              .margin({ left: 4 })
-          }
-          .alignItems(VerticalAlign.Center)
-          .height(16)
-          .width('100%')
         }
       }
       .alignItems(HorizontalAlign.Start)

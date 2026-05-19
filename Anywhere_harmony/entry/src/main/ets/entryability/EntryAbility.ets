@@ -2,6 +2,7 @@ import { AbilityConstant, ConfigurationConstant, UIAbility, Want } from '@kit.Ab
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { window } from '@kit.ArkUI';
 import { StorageService, PrefsKeys } from '../services/StorageService';
+import { ChatStore } from '../common/model/ChatState';
 
 const DOMAIN: number = 0x0000;
 const TAG: string = 'EntryAbility';
@@ -26,6 +27,18 @@ export default class EntryAbility extends UIAbility {
       });
       storage.getString(PrefsKeys.LAST_AGENT, '').then((agent) => {
         AppStorage.setOrCreate<string>('lastAgent', agent);
+      });
+      storage.getString(PrefsKeys.LAST_MODEL_ID, '').then((id) => {
+        ChatStore.lastModelId = id;
+        // If models are already loaded, try to match persisted model
+        if (id.length > 0 && ChatStore.models.length > 0) {
+          for (let i = 0; i < ChatStore.models.length; i++) {
+            if (ChatStore.models[i].modelId === id) {
+              ChatStore.modelIndex = i;
+              break;
+            }
+          }
+        }
       });
     });
   }

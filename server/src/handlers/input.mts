@@ -1,19 +1,14 @@
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
-import fs from "node:fs/promises";
+import kill from "tree-kill";
 import type { WebSocket } from "ws";
-import { getSession, killTerminalProcesses } from "../session.mjs";
+import { getSession, setSession, killTerminalProcesses } from "../session.mjs";
 import { AcpClient } from "../acp/client.mjs";
 import { getAgentLaunchArgs } from "../discovery/agents.mjs";
+import { isPathWithinCwd, createAcpCallbacks } from "../acp-callbacks.mjs";
 
 const PROMPT_TIMEOUT = 120 * 1000; // 2 minutes
-
-function isPathWithinCwd(target: string, cwd: string): boolean {
-  const resolved = path.resolve(target);
-  const relative = path.relative(cwd, resolved);
-  return !relative.startsWith("..") && !path.isAbsolute(relative);
-}
 const MODEL_ERROR_PATTERNS: RegExp[] = [
   /rate limit/i, /quota/i, /429/i, /402/i, /insufficient_quota/i,
   /resource.*exhausted/i, /too many request/i, /billing/i,
@@ -40,8 +35,13 @@ async function ensureSessionAlive(ws: WebSocket, sessionId: string): Promise<boo
 
   killTerminalProcesses(sess);
   try { sess.client?.destroy(); } catch {}
-  if (sess.process && !sess.process.killed) {
-    try { (await import("tree-kill")).default(sess.process.pid!, "SIGTERM"); } catch {}
+  if (sess.process) {
+    // Remove old listeners to prevent exit handler from deleting the session
+    sess.process.removeAllListeners("exit");
+    sess.process.removeAllListeners("error");
+    if (!sess.process.killed) {
+      try { kill(sess.process.pid!, "SIGTERM"); } catch {}
+    }
   }
 
   const cwd = sess.cwd || process.cwd();
@@ -53,8 +53,11 @@ async function ensureSessionAlive(ws: WebSocket, sessionId: string): Promise<boo
     shell: true,
   });
 
+  let suppressingReplay = false;
+
   const client = new AcpClient(proc, {
     onSessionUpdate: async (update) => {
+      if (suppressingReplay) return; // skip history replay during loadSession
       try {
         ws.send(JSON.stringify({ type: "agent_event", sessionId, event: update.update }));
       } catch {}
@@ -69,38 +72,7 @@ async function ensureSessionAlive(ws: WebSocket, sessionId: string): Promise<boo
         } catch {}
       });
     },
-    onReadTextFile: async (params) => {
-      const s = getSession(sessionId);
-      if (!s) throw new Error("session not found");
-      const effectiveCwd = (client.cwd || cwd) || process.cwd();
-      if (!isPathWithinCwd(params.path, effectiveCwd)) {
-        throw new Error(`path not allowed: ${params.path}`);
-      }
-      let content: string;
-      if (params.line != null && params.line > 0) {
-        const allLines = (await fs.readFile(params.path, "utf-8")).split("\n");
-        const start = params.line - 1;
-        const end = params.limit != null ? start + params.limit : undefined;
-        content = allLines.slice(start, end).join("\n");
-      } else {
-        content = await fs.readFile(params.path, "utf-8");
-        if (params.limit) {
-          content = content.split("\n").slice(0, params.limit).join("\n");
-        }
-      }
-      return { content };
-    },
-    onWriteTextFile: async (params) => {
-      const s = getSession(sessionId);
-      if (!s) throw new Error("session not found");
-      const effectiveCwd = (client.cwd || cwd) || process.cwd();
-      if (!isPathWithinCwd(params.path, effectiveCwd)) {
-        throw new Error(`path not allowed: ${params.path}`);
-      }
-      await fs.mkdir(path.dirname(params.path), { recursive: true });
-      await fs.writeFile(params.path, params.content, "utf-8");
-      return {};
-    },
+    ...createAcpCallbacks({ ws, sessionId, cwd }),
   });
 
   proc.stderr.on("data", (chunk: Buffer) => {
@@ -112,13 +84,39 @@ async function ensureSessionAlive(ws: WebSocket, sessionId: string): Promise<boo
   });
 
   await client.initialize();
-  const result = await client.createSession(cwd);
-  const acpSessionId = result.sessionId;
+
+  // Try to reload existing session first to avoid creating orphaned sessions in the agent's store
+  const reloadSessionId = sess.loadedSessionId || sess.acpSessionId;
+
+  let acpSessionId: string;
+  if (reloadSessionId) {
+    suppressingReplay = true;
+    try {
+      console.log(`[server] reloading session ${reloadSessionId}...`);
+      await client.loadSession(reloadSessionId, cwd);
+      acpSessionId = reloadSessionId;
+    } catch (err) {
+      // Session no longer exists on agent — create a fresh one
+      console.log(`[server] loadSession failed, creating new session: ${err instanceof Error ? err.message : String(err)}`);
+      const result = await client.createSession(cwd);
+      acpSessionId = result.sessionId;
+    } finally {
+      suppressingReplay = false;
+    }
+  } else {
+    console.log(`[server] creating new session...`);
+    const result = await client.createSession(cwd);
+    acpSessionId = result.sessionId;
+  }
 
   sess.process = proc;
   sess.client = client;
   sess.acpSessionId = acpSessionId;
   sess.pendingPermission = null;
+  sess.restartCount = 0;
+
+  // Re-insert into map in case old exit handler deleted it
+  setSession(sessionId, sess);
 
   console.log(`[server] ACP session restarted: ${sessionId} → ${acpSessionId}`);
   return true;
@@ -144,6 +142,11 @@ export function handleInput(
       }
       // Retry prompt on the revived session
       doPrompt(ws, sessionId, text);
+    }).catch((err: Error) => {
+      console.log(`[server] ensureSessionAlive error: ${err.message}`);
+      try {
+        ws.send(JSON.stringify({ type: "error", sessionId, text: `Failed to restore session: ${err.message}` }));
+      } catch {}
     });
     return;
   }
@@ -157,7 +160,13 @@ function doPrompt(
   text: string,
 ): void {
   const sess = getSession(sessionId);
-  if (!sess || !sess.acpSessionId) return;
+  if (!sess || !sess.acpSessionId) {
+    console.log(`[server] doPrompt: session not found or no acpSessionId for ${sessionId}`);
+    try {
+      ws.send(JSON.stringify({ type: "error", sessionId, text: `session lost while sending message` }));
+    } catch {}
+    return;
+  }
 
   console.log(`[server] calling ACP prompt (acpSessionId=${sess.acpSessionId}, text="${text.slice(0, 50)}")`);
 
@@ -195,7 +204,7 @@ function doPrompt(
     sess.client.cancel(sess.acpSessionId).catch(() => {});
     sess.client.destroy();
     ws.send(JSON.stringify({ type: "turn_ended", sessionId, stopReason: "timeout" }));
-    ws.send(JSON.stringify({ type: "error", sessionId, text: `[Timeout] No response in 15s. Switch model and try again.` }));
+    ws.send(JSON.stringify({ type: "error", sessionId, text: `[Timeout] No response in 2 minutes. Switch model and try again.` }));
   }, PROMPT_TIMEOUT);
 
   sess.client.prompt(sess.acpSessionId, text)

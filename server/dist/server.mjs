@@ -60,12 +60,12 @@ wss.on("connection", (ws) => {
                 });
                 break;
             case "list_models":
-                console.log(`[server] handleListModels`);
-                enqueueWsOp(ws, () => handleListModels(ws));
+                console.log(`[server] handleListModels agent="${msg.agent || ""}"`);
+                enqueueWsOp(ws, () => handleListModels(ws, msg.agent));
                 break;
             case "list_sessions":
-                console.log(`[server] handleListSessions cwd="${msg.cwd || ""}"`);
-                enqueueWsOp(ws, () => handleListSessions(ws, msg.cwd));
+                console.log(`[server] handleListSessions cwd="${msg.cwd || ""}" agent="${msg.agent || ""}"`);
+                enqueueWsOp(ws, () => handleListSessions(ws, msg.cwd, msg.agent));
                 break;
             case "set_mode":
                 console.log(`[server] handleSetMode session="${msg.sessionId?.slice(0, 20)}" mode="${msg.modeId}"`);
