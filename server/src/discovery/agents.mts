@@ -23,7 +23,6 @@ const ACP_AGENTS: AgentEntry[] = [
   { binary: "qoder", title: "Qoder CLI", args: ["--acp"] },
   { binary: "vtcode", title: "VT Code", args: ["acp"] },
   { binary: "crow", title: "crow-cli", args: ["acp"] },
-  { binary: "codex", title: "Codex CLI", args: ["acp"] },
   { binary: "codex-acp", title: "Codex CLI", args: [] },
   { binary: "code-assistant", title: "Code Assistant", args: ["acp"] },
   { binary: "stakpak", title: "Stakpak", args: ["acp"] },
@@ -76,6 +75,7 @@ const ACP_AGENTS: AgentEntry[] = [
   { binary: "agente", title: "Agmente", args: ["acp"] },
   { binary: "ferngeist", title: "Ferngeist", args: ["acp"] },
   { binary: "mobvibe", title: "Mobvibe", args: ["acp"] },
+  { binary: "omp", title: "oh-my-pi", args: ["acp"] },
 ];
 
 const AGENT_ARGS_MAP = new Map<string, string[]>();
@@ -85,6 +85,10 @@ for (const entry of ACP_AGENTS) {
 
 export function getAgentLaunchArgs(agentName: string): string[] {
   return AGENT_ARGS_MAP.get(agentName) ?? ["acp"];
+}
+
+export function isValidAgent(agentName: string): boolean {
+  return AGENT_ARGS_MAP.has(agentName);
 }
 
 export interface AgentInfo {
@@ -117,15 +121,20 @@ function findInPath(binaryName: string): string | null {
 }
 
 function getAgentVersion(binaryPath: string): string | null {
-  try {
-    const result = execSync(`"${binaryPath}" --version`, {
-      encoding: "utf8",
-      timeout: 3000,
-    });
-    return result.trim().split("\n")[0];
-  } catch {
-    return null;
+  // Try --version first, fall back to --help (some agents only support one or the other)
+  const commands = ["--version", "--help"];
+  for (const cmd of commands) {
+    try {
+      const result = execSync(`"${binaryPath}" ${cmd}`, {
+        encoding: "utf8",
+        timeout: 3000,
+      });
+      return result.trim().split("\n")[0];
+    } catch {
+      // try next command
+    }
   }
+  return null;
 }
 
 export function discoverAgents(): AgentInfo[] {

@@ -1,14 +1,13 @@
-const { WebSocketServer } = require("ws");
+﻿const { WebSocketServer } = require("ws");
 const { spawn, execSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
 
 const PORT = 12138;
-const HOST = "0.0.0.0";
 
-const wss = new WebSocketServer({ host: HOST, port: PORT });
-console.log(`[server] listening on ws://${HOST}:${PORT}`);
+const wss = new WebSocketServer({ port: PORT });
+console.log(`[server] listening on port ${PORT} (IPv4+IPv6)`);
 
 // active ACP agent sessions: sessionId -> { process, ws, acpSessionId, pendingPermission }
 const sessions = new Map();
@@ -31,7 +30,6 @@ const ACP_AGENTS = [
   ["qoder", "Qoder CLI"],
   ["vtcode", "VT Code"],
   ["crow", "crow-cli"],
-  ["codex", "Codex CLI"],
   ["code-assistant", "Code Assistant"],
   ["stakpak", "Stakpak"],
   ["poolside", "Poolside"],
@@ -78,6 +76,7 @@ const ACP_AGENTS = [
   ["agente", "Agmente"],
   ["ferngeist", "Ferngeist"],
   ["mobvibe", "Mobvibe"],
+  ["omp", "oh-my-pi"],
 ];
 
 // ── ACP Agent Launch Args (from official registry) ──
@@ -149,6 +148,7 @@ const AGENT_LAUNCH_ARGS = {
   agente: ["acp"],
   ferngeist: ["acp"],
   mobvibe: ["acp"],
+  omp: ["acp"],
 };
 
 function getAgentLaunchArgs(agentName) {
@@ -204,12 +204,17 @@ function findInPath(binaryName) {
 
 // Try to get version from binary
 function getAgentVersion(binaryPath) {
-  try {
-    const result = execSync(`"${binaryPath}" --version`, { encoding: "utf8", timeout: 3000 });
-    return result.trim().split("\n")[0];
-  } catch {
-    return null;
+  // Try --version first, fall back to --help (some agents only support one or the other)
+  const commands = ["--version", "--help"];
+  for (const cmd of commands) {
+    try {
+      const result = execSync(`"${binaryPath}" ${cmd}`, { encoding: "utf8", timeout: 3000 });
+      return result.trim().split("\n")[0];
+    } catch {
+      // try next command
+    }
   }
+  return null;
 }
 
 // ── Agent binary discovery in PATH ──
@@ -232,12 +237,17 @@ function findInPath(binaryName) {
 
 // Try to get version from binary
 function getAgentVersion(binaryPath) {
-  try {
-    const result = execSync(`"${binaryPath}" --version`, { encoding: "utf8", timeout: 3000 });
-    return result.trim().split("\n")[0];
-  } catch {
-    return null;
+  // Try --version first, fall back to --help (some agents only support one or the other)
+  const commands = ["--version", "--help"];
+  for (const cmd of commands) {
+    try {
+      const result = execSync(`"${binaryPath}" ${cmd}`, { encoding: "utf8", timeout: 3000 });
+      return result.trim().split("\n")[0];
+    } catch {
+      // try next command
+    }
   }
+  return null;
 }
 
 // ── Agent discovery: scan PATH for each known ACP agent ──
@@ -313,6 +323,24 @@ function parseMcpServers(servers) {
 
 wss.on("connection", (ws) => {
   console.log("[server] client connected");
+
+  // Send server info immediately on connect
+  try {
+    const hostname = os.hostname();
+    const nets = os.networkInterfaces();
+    const ips = [];
+    for (const name of Object.keys(nets)) {
+      for (const net of nets[name]) {
+        if (!net.internal) {
+          ips.push(net.address);
+        }
+      }
+    }
+    ws.send(JSON.stringify({ type: "server_info", hostname, ips }));
+    console.log(`[server] sent server_info: ${hostname} (${ips.length} IPs)`);
+  } catch (err) {
+    console.log(`[server] failed to get host info: ${err}`);
+  }
 
   ws.on("message", (raw) => {
     let msg;
