@@ -5,7 +5,7 @@ import kill from "tree-kill";
 import type { WebSocket } from "ws";
 import { getSession, setSession, killTerminalProcesses } from "../session.mjs";
 import { AcpClient } from "../acp/client.mjs";
-import { getAgentLaunchArgs } from "../discovery/agents.mjs";
+import { getAgentLaunchArgs, isValidAgent } from "../discovery/agents.mjs";
 import { isPathWithinCwd, createAcpCallbacks } from "../acp-callbacks.mjs";
 
 const PROMPT_TIMEOUT = 120 * 1000; // 2 minutes

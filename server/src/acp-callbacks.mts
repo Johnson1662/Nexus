@@ -1,5 +1,6 @@
 import path from "node:path";
 import fs from "node:fs/promises";
+import { realpathSync } from "node:fs";
 import { spawn } from "node:child_process";
 import kill from "tree-kill";
 import type { WebSocket } from "ws";
@@ -23,7 +24,22 @@ import type {
 
 export function isPathWithinCwd(target: string, cwd: string): boolean {
   const resolved = path.resolve(target);
-  const relative = path.relative(cwd, resolved);
+  // Resolve symlinks to prevent symlink-based directory escape
+  let realResolved: string;
+  try {
+    realResolved = realpathSync(resolved);
+  } catch {
+    // File doesn't exist yet (e.g. write operation) — resolve parent dir instead
+    const parent = path.dirname(resolved);
+    try {
+      const realParent = realpathSync(parent);
+      realResolved = path.join(realParent, path.basename(resolved));
+    } catch {
+      return false;
+    }
+  }
+  const realCwd: string = realpathSync(cwd);
+  const relative = path.relative(realCwd, realResolved);
   return !relative.startsWith("..") && !path.isAbsolute(relative);
 }
 

@@ -1,4 +1,5 @@
 import { WebSocketServer, type WebSocket } from "ws";
+import os from "os";
 import { discoverAgents } from "./discovery/agents.mjs";
 import { handleStart } from "./handlers/start.mjs";
 import { handleInput } from "./handlers/input.mjs";
@@ -23,6 +24,24 @@ console.log(`[server] listening on ws://${HOST}:${PORT}`);
 
 wss.on("connection", (ws: WebSocket) => {
   console.log("[server] client connected");
+
+  // Send server info immediately on connect (hostname + all non-internal IPs)
+  try {
+    const hostname = os.hostname();
+    const nets = os.networkInterfaces();
+    const ips: string[] = [];
+    for (const name of Object.keys(nets)) {
+      for (const net of nets[name]!) {
+        if (!net.internal) {
+          ips.push(net.address);
+        }
+      }
+    }
+    ws.send(JSON.stringify({ type: "server_info", hostname, ips }));
+    console.log(`[server] sent server_info: ${hostname} (${ips.length} IPs)`);
+  } catch (err) {
+    console.log(`[server] failed to get host info: ${err}`);
+  }
 
   ws.on("message", (raw: Buffer) => {
     let msg: any;

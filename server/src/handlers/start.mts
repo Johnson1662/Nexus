@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { AcpClient } from "../acp/client.mjs";
-import { getAgentLaunchArgs } from "../discovery/agents.mjs";
+import { getAgentLaunchArgs, isValidAgent } from "../discovery/agents.mjs";
 import { getLastModel, setLastModel } from "../prefs.mjs";
 import {
   setSession,

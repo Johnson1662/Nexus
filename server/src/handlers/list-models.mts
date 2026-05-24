@@ -2,6 +2,7 @@ import type { WebSocket } from "ws";
 import type { AcpClient } from "../acp/client.mjs";
 import { findSessionForWs } from "../session.mjs";
 import { createTempClient } from "../temp-client.mjs";
+import { isValidAgent } from "../discovery/agents.mjs";
 
 export async function handleListModels(
   ws: WebSocket,
@@ -18,6 +19,11 @@ export async function handleListModels(
   // Fall back to temporary ACP client
   if (!agent) {
     ws.send(JSON.stringify({ type: "model_list", models: [], modes: [] }));
+    return;
+  }
+
+  if (!isValidAgent(agent)) {
+    ws.send(JSON.stringify({ type: "error", text: `Unknown agent: ${agent}` }));
     return;
   }
 

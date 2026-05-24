@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import type { WebSocket } from "ws";
 import { AcpClient } from "../acp/client.mjs";
-import { getAgentLaunchArgs } from "../discovery/agents.mjs";
+import { getAgentLaunchArgs, isValidAgent } from "../discovery/agents.mjs";
 import {
   setSession,
   deleteSession,
@@ -26,6 +26,11 @@ export async function handleResumeSession(
 
   if (!targetSessionId) {
     ws.send(JSON.stringify({ type: "error", text: "sessionId is required" }));
+    return;
+  }
+
+  if (!isValidAgent(agent)) {
+    ws.send(JSON.stringify({ type: "error", text: `Unknown agent: ${agent}` }));
     return;
   }
 
