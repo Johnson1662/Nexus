@@ -15,7 +15,6 @@ const ACP_AGENTS = [
     { binary: "qoder", title: "Qoder CLI", args: ["--acp"] },
     { binary: "vtcode", title: "VT Code", args: ["acp"] },
     { binary: "crow", title: "crow-cli", args: ["acp"] },
-    { binary: "codex", title: "Codex CLI", args: ["acp"] },
     { binary: "codex-acp", title: "Codex CLI", args: [] },
     { binary: "code-assistant", title: "Code Assistant", args: ["acp"] },
     { binary: "stakpak", title: "Stakpak", args: ["acp"] },
@@ -76,6 +75,9 @@ for (const entry of ACP_AGENTS) {
 export function getAgentLaunchArgs(agentName) {
     return AGENT_ARGS_MAP.get(agentName) ?? ["acp"];
 }
+export function isValidAgent(agentName) {
+    return AGENT_ARGS_MAP.has(agentName);
+}
 function findInPath(binaryName) {
     const pathDirs = (process.env.PATH || "").split(path.delimiter);
     // Also check local node_modules/.bin for npm-installed packages
@@ -99,16 +101,21 @@ function findInPath(binaryName) {
     return null;
 }
 function getAgentVersion(binaryPath) {
-    try {
-        const result = execSync(`"${binaryPath}" --version`, {
-            encoding: "utf8",
-            timeout: 3000,
-        });
-        return result.trim().split("\n")[0];
+    // Try --version first, fall back to --help (some agents only support one or the other)
+    const commands = ["--version", "--help"];
+    for (const cmd of commands) {
+        try {
+            const result = execSync(`"${binaryPath}" ${cmd}`, {
+                encoding: "utf8",
+                timeout: 3000,
+            });
+            return result.trim().split("\n")[0];
+        }
+        catch {
+            // try next command
+        }
     }
-    catch {
-        return null;
-    }
+    return null;
 }
 export function discoverAgents() {
     const discovered = [];

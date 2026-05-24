@@ -1,13 +1,17 @@
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { AcpClient } from "../acp/client.mjs";
-import { getAgentLaunchArgs } from "../discovery/agents.mjs";
+import { getAgentLaunchArgs, isValidAgent } from "../discovery/agents.mjs";
 import { setSession, deleteSession, getSession, killSessionProcess, cleanupWsSessions, } from "../session.mjs";
 import { createAcpCallbacks } from "../acp-callbacks.mjs";
 export async function handleResumeSession(ws, params) {
     const { sessionId: targetSessionId, cwd, agent = "opencode", model } = params;
     if (!targetSessionId) {
         ws.send(JSON.stringify({ type: "error", text: "sessionId is required" }));
+        return;
+    }
+    if (!isValidAgent(agent)) {
+        ws.send(JSON.stringify({ type: "error", text: `Unknown agent: ${agent}` }));
         return;
     }
     cleanupWsSessions(ws);

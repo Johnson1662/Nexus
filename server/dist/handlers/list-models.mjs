@@ -1,5 +1,6 @@
 import { findSessionForWs } from "../session.mjs";
 import { createTempClient } from "../temp-client.mjs";
+import { isValidAgent } from "../discovery/agents.mjs";
 export async function handleListModels(ws, agent) {
     const sess = findSessionForWs(ws);
     // Use existing bridge session's client if alive
@@ -10,6 +11,10 @@ export async function handleListModels(ws, agent) {
     // Fall back to temporary ACP client
     if (!agent) {
         ws.send(JSON.stringify({ type: "model_list", models: [], modes: [] }));
+        return;
+    }
+    if (!isValidAgent(agent)) {
+        ws.send(JSON.stringify({ type: "error", text: `Unknown agent: ${agent}` }));
         return;
     }
     console.log(`[server] list_models: creating temp client for agent="${agent}"`);

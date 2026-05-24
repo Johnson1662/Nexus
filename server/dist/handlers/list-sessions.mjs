@@ -1,5 +1,6 @@
 import { findSessionForWs } from "../session.mjs";
 import { createTempClient } from "../temp-client.mjs";
+import { isValidAgent } from "../discovery/agents.mjs";
 const sessionListCache = new Map();
 const LIST_TIMEOUT = 10000;
 export async function handleListSessions(ws, cwd, agent) {
@@ -12,6 +13,10 @@ export async function handleListSessions(ws, cwd, agent) {
     // Fall back to temporary ACP client
     if (!agent) {
         ws.send(JSON.stringify({ type: "session_list", sessions: [] }));
+        return;
+    }
+    if (!isValidAgent(agent)) {
+        ws.send(JSON.stringify({ type: "error", text: `Unknown agent: ${agent}` }));
         return;
     }
     console.log(`[server] list_sessions: creating temp client for agent="${agent}"`);

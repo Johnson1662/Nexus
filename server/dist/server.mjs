@@ -1,4 +1,5 @@
 import { WebSocketServer } from "ws";
+import os from "os";
 import { discoverAgents } from "./discovery/agents.mjs";
 import { handleStart } from "./handlers/start.mjs";
 import { handleInput } from "./handlers/input.mjs";
@@ -15,11 +16,29 @@ import { handlePermissionResponse } from "./handlers/permission.mjs";
 import { handleAuth } from "./handlers/auth.mjs";
 import { cleanupWsSessions, enqueueWsOp } from "./session.mjs";
 const PORT = 12138;
-const HOST = "0.0.0.0";
-const wss = new WebSocketServer({ host: HOST, port: PORT });
-console.log(`[server] listening on ws://${HOST}:${PORT}`);
+
+const wss = new WebSocketServer({ port: PORT });
+console.log(`[server] listening on port ${PORT} (IPv4+IPv6 dual-stack)`);
 wss.on("connection", (ws) => {
     console.log("[server] client connected");
+    // Send server info immediately on connect (hostname + all non-internal IPs)
+    try {
+        const hostname = os.hostname();
+        const nets = os.networkInterfaces();
+        const ips = [];
+        for (const name of Object.keys(nets)) {
+            for (const net of nets[name]) {
+                if (!net.internal) {
+                    ips.push(net.address);
+                }
+            }
+        }
+        ws.send(JSON.stringify({ type: "server_info", hostname, ips }));
+        console.log(`[server] sent server_info: ${hostname} (${ips.length} IPs)`);
+    }
+    catch (err) {
+        console.log(`[server] failed to get host info: ${err}`);
+    }
     ws.on("message", (raw) => {
         let msg;
         try {
