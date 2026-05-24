@@ -1,11 +1,11 @@
 import { Colors, FontSize, Spacing, Radius, Duration, Shadow } from '../../constants/DesignTokens';
 import { ChatStore, ModelItem, ModeItem } from '../../common/model/ChatState';
-import { WorkspaceStore } from '../../common/model/WorkspaceInfo';
+import { WorkspaceStore, HostStore, DeviceEntry } from '../../common/model/WorkspaceInfo';
 import { WorkspaceInfo, ServerSession } from '../../common/model/WorkspaceInfo';
 import { WSClient } from '../../common/websocket/WSClient';
 import { ClientMessage, AcpUpdate, AgentInfo } from '../../common/websocket/WSProtocol';
 import { MessageData } from '../../common/model/MessageData';
-import { StorageService, PrefsKeys } from '../../services/StorageService';
+import { StorageService, PrefsKeys, loadWorkspaces, saveHosts, loadModelCache } from '../../services/StorageService';
 
 interface OnboardingCallbacks {
   onNavigateToWorkspaceSelect: () => void;
@@ -14,18 +14,65 @@ interface OnboardingCallbacks {
 @Component
 export struct OnboardingView {
   @State connecting: boolean = false;
+  @State connectingDeviceName: string = '';
   @State connectError: string = '';
   @State discoveredAgents: AgentInfo[] = [];
-  @StorageLink('serverUrl') serverUrl: string = 'ws://100.111.77.50:12138';
+  @StorageLink('serverUrl') serverUrl: string = 'ws://192.168.137.1:12138';
   @State iconScale: number = 1.0;
+  @State connectedViaSavedDevice: boolean = false;
 
   ws: WSClient = new WSClient();
   callbacks: OnboardingCallbacks = { onNavigateToWorkspaceSelect: () => {} };
+
+  @State showSavedServers: boolean = true;
 
   aboutToAppear() {
     setTimeout(() => {
       this.iconScale = 1.08;
     }, 100);
+  }
+
+  aboutToDisappear(): void {
+    this.iconScale = 1.0;
+  }
+
+  getDeviceForUrl(url: string): DeviceEntry | null {
+    for (let i = 0; i < HostStore.devices.length; i++) {
+      let urls: string[] = HostStore.devices[i].urls;
+      for (let j = 0; j < urls.length; j++) {
+        if (urls[j] === url) return HostStore.devices[i];
+      }
+    }
+    return null;
+  }
+
+  getCurrentServerName(): string {
+    if (this.connectedViaSavedDevice) {
+      let device: DeviceEntry | null = this.getDeviceForUrl(this.serverUrl);
+      if (device !== null && device.name.length > 0) {
+        return device.name;
+      }
+    }
+    return this.extractIpPort(this.serverUrl);
+  }
+
+  extractIpPort(url: string): string {
+    let schemeEnd: number = url.indexOf('://');
+    if (schemeEnd >= 0) {
+      return url.substring(schemeEnd + 3);
+    }
+    return url;
+  }
+
+  deleteHost(index: number): void {
+    HostStore.removeDevice(index);
+    saveHosts();
+  }
+
+  selectHost(device: DeviceEntry): void {
+    if (device.urls.length > 0) {
+      this.serverUrl = device.urls[0];
+    }
   }
 
   getFirstLetter(agent: AgentInfo): string {
@@ -37,6 +84,7 @@ export struct OnboardingView {
     let src = (agent.source || '').toLowerCase();
 
     // Map agents to their official website favicons via Google
+    if (name.includes('codex')) return 'https://www.google.com/s2/favicons?domain=chatgpt.com&sz=64';
     if (name.includes('opencode')) return 'https://www.google.com/s2/favicons?domain=opencode.ai&sz=64';
     if (name.includes('hermes') || name.includes('nous')) return 'https://www.google.com/s2/favicons?domain=nousresearch.com&sz=64';
     if (name.includes('kiro')) return 'https://www.google.com/s2/favicons?domain=kiro.dev&sz=64';
@@ -56,26 +104,85 @@ export struct OnboardingView {
     return '';
   }
 
-  tryConnect(): void {
-    AppStorage.setOrCreate<string>('serverUrl', this.serverUrl);
-    StorageService.getInstance().putString(PrefsKeys.SERVER_URL, this.serverUrl);
+  normalizeServerUrl(raw: string): string {
+    let url: string = raw.trim();
+    if (url.length === 0) return '';
+    if (url.startsWith('http://')) {
+      url = 'ws://' + url.substring(7);
+    } else if (url.startsWith('https://')) {
+      url = 'wss://' + url.substring(8);
+    } else if (!url.startsWith('ws://') && !url.startsWith('wss://')) {
+      url = 'ws://' + url;
+    }
+    // Strip trailing slash
+    if (url.endsWith('/') && url.length > 6) {
+      url = url.substring(0, url.length - 1);
+    }
+    // Wrap bare IPv6 addresses in brackets for valid WebSocket URL
+    let schemeEnd: number = url.indexOf('://');
+    if (schemeEnd >= 0) {
+      let scheme: string = url.substring(0, schemeEnd + 3);
+      let rest: string = url.substring(schemeEnd + 3);
+      let portSep: number = rest.lastIndexOf(':');
+      if (portSep >= 0) {
+        let host: string = rest.substring(0, portSep);
+        let port: string = rest.substring(portSep + 1);
+        if (host.indexOf(':') >= 0 && !host.startsWith('[')) {
+          url = scheme + '[' + host + ']:' + port;
+        }
+      } else if (rest.indexOf(':') >= 0 && !rest.startsWith('[')) {
+        url = scheme + '[' + rest + ']';
+      }
+    }
+    return url;
+  }
+
+  tryConnect(device?: DeviceEntry): void {
+    let url: string = this.normalizeServerUrl(this.serverUrl);
+    if (!device && url.length === 0) {
+      this.connectError = '请输入服务器地址';
+      return;
+    }
+    if (!device) {
+      this.serverUrl = url;
+      AppStorage.setOrCreate<string>('serverUrl', url);
+      StorageService.getInstance().putString(PrefsKeys.SERVER_URL, url);
+    }
+    // 连接中先显示主机名（探测阶段），非设备场景显示 IP
+    if (device && device.name.length > 0) {
+      this.connectedViaSavedDevice = true;
+      this.connectingDeviceName = device.name;
+    } else {
+      this.connectedViaSavedDevice = false;
+      this.connectingDeviceName = this.extractIpPort(url);
+    }
+    // Load workspaces (device name scoped, works regardless of which URL connects)
+    loadWorkspaces(url);
     this.ws.clearListeners();
     this.connecting = true;
     this.connectError = '';
     this.discoveredAgents = [];
     ChatStore.selectedAgentName = '';
-    this.ws.onStateChange((v: boolean) => {
+    this.ws.onStateChange((v: boolean, detail: string) => {
       ChatStore.connected = v;
       if (!v) {
-        if (!this.connecting && this.connectError.length === 0) {
-          if (ChatStore.selectedAgentName.length > 0 && ChatStore.messages.length > 0) {
-          } else {
-            this.connectError = 'Could not connect. Bridge server unavailable.';
-          }
+        if (detail.length === 0) {
+          this.connecting = false;
+          this.connectingDeviceName = '';
+          return;
         }
+        this.connectError = detail;
         this.connecting = false;
+        this.connectingDeviceName = '';
       } else {
         this.connectError = '';
+        this.connectingDeviceName = '';
+        if (device && detail.length > 0) {
+          // connectBest found a responsive URL, persist it
+          this.serverUrl = detail;
+          AppStorage.setOrCreate<string>('serverUrl', detail);
+          StorageService.getInstance().putString(PrefsKeys.SERVER_URL, detail);
+        }
         if (ChatStore.selectedAgentName.length > 0 && ChatStore.messages.length > 0) {
           this.connecting = false;
           this.ws.send({ type: 'start', agent: ChatStore.selectedAgentName } as ClientMessage);
@@ -115,7 +222,11 @@ export struct OnboardingView {
       let m = new MessageData('assistant', 'Error: ' + text, 'text');
       ChatStore.messages = [...ChatStore.messages, m];
     });
-    this.ws.connect(this.serverUrl);
+    if (device) {
+      this.ws.connectBest(device.urls);
+    } else {
+      this.ws.connect(url);
+    }
   }
 
   selectAgent(agent: AgentInfo): void {
@@ -126,6 +237,22 @@ export struct OnboardingView {
     ChatStore.messages = [];
     ChatStore.planEntries = [];
     ChatStore.sessionId = '';
+    // Load cached models immediately for instant display
+    loadModelCache(agent.name).then((cached) => {
+      if (cached !== null) {
+        ChatStore.models = cached.models;
+        ChatStore.modes = cached.modes;
+        if (ChatStore.lastModelId.length > 0) {
+          for (let i = 0; i < cached.models.length; i++) {
+            if (cached.models[i].modelId === ChatStore.lastModelId) {
+              ChatStore.modelIndex = i;
+              break;
+            }
+          }
+        }
+      }
+    });
+    // Refresh model list once from server — server caches this per agent to avoid temp sessions
     this.ws.send({ type: 'list_models' } as ClientMessage);
     this.callbacks.onNavigateToWorkspaceSelect();
   }
@@ -260,40 +387,74 @@ Text('Anywhere')
 
             // CONNECTION
             Column() {
-              if (!ChatStore.connected) {
-                Row() {
-                  TextInput({ text: this.serverUrl, placeholder: 'Bridge URL (ws://ip:port)' })
-                    .layoutWeight(1)
-                    .height(52)
-                    .backgroundColor(Color.Transparent)
-                    .fontSize(15)
-                    .fontWeight(FontWeight.Medium)
-                    .padding({ left: 20 })
-                    .onChange((val: string) => { this.serverUrl = val })
-                    .enabled(!this.connecting)
-                    .onSubmit(() => { this.tryConnect() })
+                if (ChatStore.connected) {
+                  // 连上后的连接栏 — 显示主机名 — IP:端口
+                  Row() {
+                    Circle().width(8).height(8).fill(Colors.success).margin({ left: 16, right: 10 })
+                    Text(this.getCurrentServerName())
+                      .fontSize(14).fontColor(Colors.foreground)
+                      .fontWeight(FontWeight.Medium)
+                      .layoutWeight(1)
+                    Button('断开')
+                      .fontSize(13).fontColor(Colors.foregroundMuted).backgroundColor(Color.Transparent)
+                      .fontWeight(FontWeight.Medium)
+                      .margin({ right: 8 })
+                      .onClick(() => {
+                        ChatStore.connected = false;
+                        this.connectedViaSavedDevice = false;
+                        this.ws.disconnect();
+                      })
+                  }
+                  .width('100%').height(52)
+                  .backgroundColor(Colors.surface0)
+                  .borderRadius(26)
+                  .shadow(Shadow.sm)
+                  .transition(TransitionEffect.OPACITY.combine(TransitionEffect.scale({ x: 0.95, y: 0.95 })))
+                } else if (this.connecting) {
+                  // 连接中 — 显示主机名 + 加载动画，无红字
+                  Row() {
+                    LoadingProgress().width(22).height(22).color(Colors.accent).margin({ left: 16, right: 10 })
+                    Text(this.connectingDeviceName.length > 0 ? '正在连接 ' + this.connectingDeviceName + '…' : '正在连接…')
+                      .fontSize(14).fontColor(Colors.foregroundMuted)
+                      .fontWeight(FontWeight.Medium)
+                      .layoutWeight(1)
+                  }
+                  .width('100%').height(52)
+                  .backgroundColor(Colors.surface0)
+                  .borderRadius(26)
+                  .shadow(Shadow.sm)
+                  .transition(TransitionEffect.OPACITY)
+                } else {
+                  Row() {
+                    TextInput({ text: this.serverUrl, placeholder: 'Bridge URL (ws://ip:port)' })
+                      .layoutWeight(1)
+                      .height(52)
+                      .backgroundColor(Color.Transparent)
+                      .fontSize(15)
+                      .fontWeight(FontWeight.Medium)
+                      .padding({ left: 20 })
+                      .onChange((val: string) => { this.serverUrl = val })
+                      .enabled(!this.connecting)
+                      .onSubmit(() => { this.tryConnect() })
 
-                  Button() {
-                    if (this.connecting) {
-                      LoadingProgress().width(22).height(22).color(Color.White)
-                    } else {
+                    Button() {
                       SymbolGlyph($r('sys.symbol.chevron_right'))
                         .fontSize(22).fontWeight(FontWeight.Bold).fontColor([Color.White])
                     }
+                    .type(ButtonType.Circle)
+                    .width(44).height(44)
+                    .backgroundColor(this.serverUrl.length > 0 ? Colors.accent : Colors.border)
+                    .margin({ right: 4 })
+                    .enabled(this.serverUrl.length > 0)
+                    .onClick(() => { this.tryConnect() })
+                    .animation({ duration: Duration.normal })
                   }
-                  .type(ButtonType.Circle)
-                  .width(44).height(44)
-                  .backgroundColor(this.serverUrl.length > 0 ? Colors.accent : Colors.border)
-                  .margin({ right: 4 })
-                  .enabled(!this.connecting && this.serverUrl.length > 0)
-                  .onClick(() => { this.tryConnect() })
-                  .animation({ duration: Duration.normal })
+                  .width('100%').height(52)
+                  .backgroundColor(Colors.surface0)
+                  .borderRadius(26)
+                  .shadow(Shadow.md)
+                  .transition(TransitionEffect.OPACITY.combine(TransitionEffect.scale({ x: 0.95, y: 0.95 })))
                 }
-                .width('100%').height(52)
-                .backgroundColor(Colors.surface0)
-                .borderRadius(26)
-                .shadow(Shadow.md)
-                .transition(TransitionEffect.OPACITY.combine(TransitionEffect.scale({ x: 0.95, y: 0.95 })))
 
                 if (this.connectError.length > 0) {
                   Text(this.connectError)
@@ -301,31 +462,89 @@ Text('Anywhere')
                     .margin({ top: Spacing.md })
                     .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: -10 })))
                 }
-              } else {
-                Row() {
-                  Circle().width(8).height(8).fill(Colors.success).margin({ left: 16, right: 10 })
-                  Text(this.serverUrl)
-                    .fontSize(14).fontColor(Colors.foreground)
-                    .fontWeight(FontWeight.Medium)
-                    .layoutWeight(1)
-                  Button('Disconnect')
-                    .fontSize(13).fontColor(Colors.foregroundMuted).backgroundColor(Color.Transparent)
-                    .fontWeight(FontWeight.Medium)
-                    .margin({ right: 8 })
-                    .onClick(() => {
-                      ChatStore.connected = false;
-                      this.ws.disconnect();
-                    })
-                }
-                .width('100%').height(52)
-                .backgroundColor(Colors.surface0)
-                .borderRadius(26)
-                .shadow(Shadow.sm)
-                .transition(TransitionEffect.OPACITY.combine(TransitionEffect.scale({ x: 0.95, y: 0.95 })))
-              }
             }
             .width('100%')
             .padding({ left: Spacing.xxl, right: Spacing.xxl })
+
+            // SAVED SERVERS
+            Column() {
+              Row() {
+                Text('SAVED SERVERS')
+                  .fontSize(11).fontColor(Colors.foregroundLight)
+                  .fontWeight(FontWeight.Bold)
+                  .letterSpacing(2)
+                Blank()
+                SymbolGlyph($r('sys.symbol.chevron_down'))
+                  .fontSize(16).fontColor([Colors.foregroundLight])
+                  .margin({ left: Spacing.sm })
+                  .rotate({ angle: this.showSavedServers ? 180 : 0 })
+                  .animation({ duration: Duration.normal })
+                  .onClick(() => { this.showSavedServers = !this.showSavedServers })
+              }
+              .width('100%').margin({ bottom: Spacing.md })
+              .padding({ left: Spacing.md })
+
+              if (this.showSavedServers) {
+                if (HostStore.devices.length === 0) {
+                  Row() {
+                    Text('No saved servers yet')
+                      .fontSize(13).fontColor(Colors.foregroundLight)
+                      .padding({ left: Spacing.md })
+                  }
+                  .width('100%')
+                  .transition(TransitionEffect.OPACITY)
+                } else {
+                  ForEach(HostStore.devices, (device: DeviceEntry, index: number) => {
+                    Row() {
+                      SymbolGlyph($r('sys.symbol.ohos_wifi'))
+                        .fontSize(18).fontColor([device.urls.indexOf(this.serverUrl) >= 0 ? Colors.accent : Colors.foregroundMuted])
+                        .margin({ right: Spacing.md })
+                      Column() {
+                        Row() {
+                          Text(device.name)
+                            .fontSize(14).fontColor(device.urls.indexOf(this.serverUrl) >= 0 ? Colors.accent : Colors.foreground)
+                            .fontWeight(device.urls.indexOf(this.serverUrl) >= 0 ? FontWeight.Medium : FontWeight.Normal)
+                            .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+                          if (device.urls.indexOf(this.serverUrl) >= 0) {
+                            SymbolGlyph($r('sys.symbol.checkmark'))
+                              .fontSize(14).fontColor([Colors.accent])
+                              .margin({ left: Spacing.sm })
+                          }
+                        }
+                        .onClick(() => {
+                          this.selectHost(device);
+                          if (!ChatStore.connected) {
+                            this.connecting = true;
+                            this.tryConnect(device);
+                          }
+                        })
+                        if (device.urls.length > 1) {
+                          Text(device.urls.length + ' addresses')
+                            .fontSize(11).fontColor(Colors.foregroundMuted)
+                        }
+                      }
+                      .alignItems(HorizontalAlign.Start).layoutWeight(1)
+                    }
+                    .width('100%')
+                    .padding({ left: Spacing.lg, right: Spacing.lg, top: Spacing.sm, bottom: Spacing.sm })
+                    .backgroundColor(Colors.surface0)
+                    .borderRadius(Radius.md)
+                    .margin({ bottom: Spacing.xs })
+                    .gesture(
+                      LongPressGesture({ repeat: false, duration: 600 })
+                        .onAction(() => { this.deleteHost(index) })
+                    )
+                    .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: -8 })))
+                    .animation({ duration: Duration.normal, curve: Curve.EaseOut, delay: index * 30 })
+                  }, (device: DeviceEntry) => device.name)
+                }
+
+              }
+            }
+            .width('100%')
+            .padding({ left: Spacing.xl, right: Spacing.xl })
+            .margin({ top: Spacing.lg })
+            .transition(TransitionEffect.OPACITY)
 
             // AGENTS
             if (ChatStore.connected) {

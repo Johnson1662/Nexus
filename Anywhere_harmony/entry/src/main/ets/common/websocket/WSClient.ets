@@ -3,16 +3,16 @@ import { BusinessError } from '@kit.BasicServicesKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { backgroundTaskManager } from '@kit.BackgroundTasksKit';
 import { ChatStore } from '../model/ChatState';
-import { ServerSession } from '../model/WorkspaceInfo';
-import { StorageService, PrefsKeys } from '../../services/StorageService';
+import { ServerSession, HostStore, DeviceEntry } from '../model/WorkspaceInfo';
+import { StorageService, PrefsKeys, saveHosts, loadWorkspaces, saveModelCache, saveSessionCache } from '../../services/StorageService';
 import { WorkspaceStore } from '../model/WorkspaceInfo';
-import { ClientMessage, ServerMessage, AcpUpdate, AgentInfo } from './WSProtocol';
+import { ClientMessage, ServerMessage, AcpUpdate, AgentInfo, ServerInfoMessage } from './WSProtocol';
 import { ModelItem, ModeItem } from '../model/ChatState';
 
 const DOMAIN: number = 0x0000;
 const TAG: string = 'WSClient';
 
-export type StateChangeCallback = (connected: boolean) => void;
+export type StateChangeCallback = (connected: boolean, detail: string) => void;
 export type ModelListCallback = (models: ModelItem[], modes: ModeItem[]) => void;
 export type SessionListCallback = (sessions: ServerSession[]) => void;
 export type AcpUpdateCallback = (update: AcpUpdate) => void;
@@ -34,23 +34,96 @@ export class WSClient {
   private reconnectAttempts: number = 0;
   private intentionalClose: boolean = false;
   private suspendRequestId: number | null = null;
+  private wsGen: number = 0;
+  private everConnected: boolean = false;
 
   connect(url: string): void {
+    this.cancelReconnect();
     this.lastUrl = url;
     this.intentionalClose = false;
     this.reconnectAttempts = 0;
+    this.everConnected = false;
     this.doConnect(url);
+  }
+
+  // Try connecting to a single URL, returns latency in ms on success, -1 on failure
+  tryConnect(url: string): Promise<number> {
+    return new Promise<number>((resolve) => {
+      let start: number = Date.now();
+      let resolved: boolean = false;
+      let ws: webSocket.WebSocket = webSocket.createWebSocket();
+      let timer: number | null = null;
+
+      let done = (latency: number): void => {
+        if (resolved) return;
+        resolved = true;
+        if (timer !== null) {
+          clearTimeout(timer);
+          timer = null;
+        }
+        ws.off('open'); ws.off('error'); ws.off('close');
+        try { ws.close(); } catch {}
+        resolve(latency);
+      };
+
+      timer = setTimeout(() => { done(-1) }, 3000);
+
+      ws.on('open', () => { done(Date.now() - start) });
+      ws.on('error', () => { done(-1) });
+      ws.on('close', () => { done(-1) });
+
+      try {
+        ws.connect(url);
+      } catch {
+        done(-1);
+      }
+    });
+  }
+
+  // Connect to the fastest reachable URL from a device, then use that URL
+  async connectBest(urls: string[]): Promise<void> {
+    let bestUrl: string = urls[0];
+    let bestLatency: number = -1;
+    let results: Promise<number>[] = [];
+    for (let i: number = 0; i < urls.length; i++) {
+      results.push(this.tryConnect(urls[i]));
+    }
+    for (let i: number = 0; i < results.length; i++) {
+      let latency: number = await results[i];
+      if (latency >= 0 && (bestLatency < 0 || latency < bestLatency)) {
+        bestLatency = latency;
+        bestUrl = urls[i];
+      }
+    }
+    hilog.info(DOMAIN, TAG, `connectBest: selected ${bestUrl} (${bestLatency}ms)`);
+    this.connect(bestUrl);
   }
 
   private doConnect(url: string): void {
     this.disconnectInternal();
     this.ws = webSocket.createWebSocket();
+    let gen: number = ++this.wsGen;
+    let connectNotified: boolean = false;
+
+    let onConnectFailure = (detail: string): void => {
+      if (connectNotified) return;
+      connectNotified = true;
+      hilog.error(DOMAIN, TAG, detail);
+      ChatStore.connected = false;
+      this.notifyState(false, detail);
+      if (!this.intentionalClose) {
+        this.scheduleReconnect();
+      }
+    };
 
     this.ws.on('open', () => {
-      hilog.info(DOMAIN, TAG, 'connected');
+      if (gen !== this.wsGen) return;
+      connectNotified = true;
+      this.everConnected = true;
+      hilog.info(DOMAIN, TAG, 'connected: ' + url);
       ChatStore.connected = true;
       this.reconnectAttempts = 0;
-      this.notifyState(true);
+      this.notifyState(true, url);
       this.requestBgTask();
     });
 
@@ -61,33 +134,34 @@ export class WSClient {
     });
 
     this.ws.on('close', () => {
-      hilog.info(DOMAIN, TAG, 'disconnected');
+      if (gen !== this.wsGen) return;
+      if (!this.everConnected) {
+        onConnectFailure('Connection closed before WebSocket handshake completed');
+        return;
+      }
+      this.everConnected = false;
+      hilog.info(DOMAIN, TAG, 'disconnected: ' + url);
       ChatStore.connected = false;
       this.cancelBgTask();
-      this.notifyState(false);
+      this.notifyState(false, '');
       if (!this.intentionalClose) {
         this.scheduleReconnect();
       }
     });
 
     this.ws.on('error', (err: BusinessError) => {
-      hilog.error(DOMAIN, TAG, 'error: ' + JSON.stringify(err));
-      ChatStore.connected = false;
-      this.cancelBgTask();
-      this.notifyState(false);
-      if (!this.intentionalClose) {
-        this.scheduleReconnect();
+      if (gen !== this.wsGen) return;
+      if (this.everConnected) {
+        hilog.error(DOMAIN, TAG, 'post-connect error: ' + JSON.stringify(err));
+        return;
       }
+      onConnectFailure('Connection error: ' + JSON.stringify(err));
     });
 
     this.ws.connect(url, (err: BusinessError) => {
+      if (gen !== this.wsGen) return;
       if (err) {
-        hilog.error(DOMAIN, TAG, 'connect failed: ' + JSON.stringify(err));
-        ChatStore.connected = false;
-        this.notifyState(false);
-        if (!this.intentionalClose) {
-          this.scheduleReconnect();
-        }
+        onConnectFailure('Connect failed: ' + JSON.stringify(err));
       }
     });
   }
@@ -95,6 +169,7 @@ export class WSClient {
   private scheduleReconnect(): void {
     if (this.intentionalClose || !this.lastUrl) return;
     this.cancelReconnect();
+    this.everConnected = false;
     this.reconnectAttempts++;
     const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts - 1), 30000);
     hilog.info(DOMAIN, TAG, `reconnect in ${delay}ms (attempt ${this.reconnectAttempts})`);
@@ -144,6 +219,7 @@ export class WSClient {
 
   disconnect(): void {
     this.intentionalClose = true;
+    this.everConnected = false;
     this.cancelReconnect();
     this.cancelBgTask();
     this.disconnectInternal();
@@ -219,10 +295,26 @@ export class WSClient {
     return result;
   }
 
-  private notifyState(connected: boolean): void {
+  private notifyState(connected: boolean, detail: string = ''): void {
     for (let cb of this.stateListeners) {
-      cb(connected);
+      cb(connected, detail);
     }
+  }
+
+  private handleServerInfo(info: ServerInfoMessage): void {
+    let hostname: string = info.hostname;
+    let connectedUrl: string = this.lastUrl;
+    if (connectedUrl.length === 0) return;
+    // Only add the actual connected URL — name-matched merge with existing device
+    HostStore.addOrUpdateDevice({ name: hostname, urls: [connectedUrl] } as DeviceEntry);
+    // Remove stale entries that share this URL but have a different name (e.g. migrated old ip:port format)
+    for (let i: number = HostStore.devices.length - 1; i >= 0; i--) {
+      if (HostStore.devices[i].name !== hostname && HostStore.devices[i].urls.indexOf(connectedUrl) >= 0) {
+        HostStore.removeDevice(i);
+      }
+    }
+    saveHosts();
+    loadWorkspaces(connectedUrl);
   }
 
   private handleMessage(raw: string): void {
@@ -234,6 +326,9 @@ export class WSClient {
     }
 
     switch (msg.type) {
+      case 'server_info':
+        this.handleServerInfo(msg as ServerInfoMessage);
+        break;
       case 'session_started':
         ChatStore.sessionId = msg.sessionId || '';
         if (msg.loadedSessionId) {
@@ -313,6 +408,8 @@ export class WSClient {
             }
           }
         }
+        // Persist to local cache
+        saveModelCache(ChatStore.agentType || ChatStore.selectedAgentName, msg.models || [], msg.modes || []);
         for (let cb of this.modelListeners) {
           cb(msg.models || [], msg.modes || []);
         }
@@ -320,6 +417,12 @@ export class WSClient {
       case 'session_list':
         ChatStore.sessions = msg.sessions || [];
         ChatStore.sessionReady = true;
+        // Persist to local cache
+        if (ChatStore.agentType.length > 0 && WorkspaceStore.currentIndex >= 0 &&
+            WorkspaceStore.currentIndex < WorkspaceStore.workspaces.length) {
+          let cwd: string = WorkspaceStore.workspaces[WorkspaceStore.currentIndex].path;
+          saveSessionCache(ChatStore.agentType, cwd, msg.sessions || []);
+        }
         for (let cb of this.sessionListeners) {
           cb(msg.sessions || []);
         }

@@ -4,7 +4,7 @@ import { WorkspaceStore, WorkspaceInfo } from '../common/model/WorkspaceInfo';
 import { MessageData } from '../common/model/MessageData';
 import { WSClient } from '../common/websocket/WSClient';
 import { ClientMessage } from '../common/websocket/WSProtocol';
-import { StorageService, PrefsKeys } from '../services/StorageService';
+import { StorageService, PrefsKeys, saveWorkspaces, loadSessionCache } from '../services/StorageService';
 import { ChatView } from '../feature/chat/ChatView';
 import { OnboardingView } from '../feature/onboarding/OnboardingView';
 import { WorkspaceSelectView } from '../feature/workspace/WorkspaceSelectView';
@@ -29,6 +29,7 @@ export struct Index {
           ws.path = p;
           WorkspaceStore.workspaces.push(ws);
           WorkspaceStore.currentIndex = WorkspaceStore.workspaces.length - 1;
+          saveWorkspaces(AppStorage.get<string>('serverUrl') || '');
           this.navStack.pushPath({ name: 'chat' });
         }
       })
@@ -56,8 +57,7 @@ export struct Index {
             ChatStore.sessionReady = false;
             ChatStore.streamingThinking = '';
             let p = WorkspaceStore.workspaces[WorkspaceStore.currentIndex].path;
-            // Refresh model list so session_started can correctly match the session's model
-            this.ws.send({ type: 'list_models', agent: ChatStore.agentType } as ClientMessage);
+            // Models already cached from agent selection — no need to re-request
             this.ws.send({ type: 'load_session', sessionId: ChatStore.sessions[i - 1].sessionId, cwd: p } as ClientMessage);
           }
         },
@@ -84,9 +84,15 @@ export struct Index {
           ChatStore.sessionReady = false;
           ChatStore.streamingThinking = '';
           let cwd = WorkspaceStore.workspaces[index].path;
-          // List sessions + models with agent name so server can create temp client
+          // Load cached sessions instantly, then refresh from server
+          loadSessionCache(ChatStore.agentType, cwd).then((cached) => {
+            if (cached !== null) {
+              ChatStore.sessions = cached.sessions;
+              ChatStore.sessionReady = true;
+            }
+          });
+          // Models already cached from agent selection — only refresh sessions
           this.ws.send({ type: 'list_sessions', cwd: cwd, agent: ChatStore.agentType } as ClientMessage);
-          this.ws.send({ type: 'list_models', agent: ChatStore.agentType } as ClientMessage);
         },
         onPermissionResponse: (optionId: string) => {
           this.ws.sendPermissionResponse(optionId);

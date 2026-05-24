@@ -66,6 +66,14 @@ export interface ServerMessage {
   toolCall?: object;
   options?: object;
   configOptions?: ConfigOption[];
+  hostname?: string;
+  ips?: string[];
+}
+
+export interface ServerInfoMessage {
+  type: string;
+  hostname: string;
+  ips: string[];
 }
 
 export interface AgentInfo {

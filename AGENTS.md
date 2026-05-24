@@ -1,396 +1,285 @@
-# Anywhere — Remote AI Coding Agent Client for HarmonyOS
+# Anywhere — HarmonyOS 远程 AI 编程助手客户端
 
-## ⚠️ Golden Rule: Always use native ArkUI components
+## 永远用中文回答
 
-Prefer ArkUI built-in components (SideBarContainer, bindSheet, bindMenu, Navigation, etc.) over hand-written overlays, modals, or custom implementations. Native components get free system-level behaviors: animations, accessibility, multirender lifecycle, and OS upgrades. Always wrap state changes in `animateTo()` to ensure smooth transitions — native components animate by default when triggered via their built-in interaction, but programmatic toggles need explicit `animateTo()`.
+## 项目概述
 
-## ⚠️ CRITICAL: Always Use huawei-docs MCP
-
-**Before writing ANY HarmonyOS/ArkTS code, you MUST use the `huawei-docs` MCP tools to look up the official API.** Never guess ArkTS API signatures, decorator behavior, or component names. The `huawei-docs_get_page`, `huawei-docs_search_docs`, and `huawei-docs_get_category` tools provide direct access to developer.huawei.com official docs.
-
-This project was built by consulting these docs extensively. Breaking this rule = code that doesn't compile.
-
-## Project Overview
-
-Anywhere is a HarmonyOS App that connects to any ACP (Agent Client Protocol) compatible AI coding agent running on a remote machine via WebSocket. It functions as a mobile developer workspace, bridging your phone to a remote coding environment.
-
-**Architecture:**
+Anywhere 是一个 HarmonyOS App，通过 WebSocket 连接到 PC 端 Bridge Server，Bridge Server 再通过 ACP (Agent Client Protocol) 协议与 AI 编程 Agent (如 OpenCode、Claude Code) 通信。App 充当手机上的移动开发工作区。
 
 ```
-Phone (HarmonyOS ArkTS App)             PC (Node.js Bridge)
-┌───────────────────────────┐          ┌──────────────────────────┐
-│  Index.ets (@Entry)       │    WS    │  server.js               │
-│  └─ Navigation            │────────→│  监听 ws://0.0.0.0:6767  │
-│     ├─ OnboardingView     │         │                          │
-│     │  (form/connecting/  │         │  ACP Agent (子进程)       │
-│     │   discovering/      │         │  ├─ JSON-RPC 2.0          │
-│     │   agent picker)     │←───────│  │   over stdio            │
-│     └─ NavDestination     │  agent  │  ├─ session/new           │
-│        "chat": ChatView   │  event  │  ├─ session/prompt        │
-│         (workspace select │         │  ├─ session/set_model     │
-│          + session select │         │  └─ session/set_mode      │
-│          + ChatPage)      │         └──────────────────────────┘
-└───────────────────────────┘
+手机 (HarmonyOS ArkTS)              PC (Node.js Bridge)
+┌────────────────────────┐         ┌─────────────────────────┐
+│  Navigation            │   WS    │  server/dist/server.mjs  │
+│  ├─ OnboardingView     │───────→ │  端口 12138              │
+│  └─ ChatView           │←─────── │  ACP Agent (子进程)      │
+└────────────────────────┘         └─────────────────────────┘
 ```
 
-**Data flow:** App WS Message → server.js → ACP JSON-RPC → Agent → ACP Response → server.js → WS Message → App renders UI
+---
 
-**ACP protocol:** Agent-agnostic by design. ANY agent implementing ACP (JSON-RPC 2.0 over stdio) works.
+## ⚠️ 网络连接问题排查
 
-## Key Design Decisions
+### Server 监听配置
 
-### Visual Design Principles
-- **Aesthetic:** ChatGPT-like, clean monochrome (black/white/gray)
-- **Message Cards:** User messages = right-aligned light gray bubble (`Colors.userBubble`), agent messages = full-width no background
-- **Typography:** System sans-serif body, serif brand title (`fontFamily('serif')`), no forced monospace
-- **Color Palette:** Black/white/gray (`#202123`, `#F4F4F4`, `#6B7280`, etc.)
-- **Thinking/ToolCall:** Italic muted gray text, no icons/borders/backgrounds, breathing opacity animation (0.4↔1.0) via declarative `.animation()`
-- **PlanView (TODO):** Plain numbered list like "1." in markdown, no card wrapper
+**当前实现：** `server/dist/server.mjs` 使用 `new WebSocketServer({ port: 12138 })`，不指定 host，自动启用 IPv4+IPv6 双栈。不要设置 `host: "::"` 或 `host: "0.0.0.0"`，否则只能监听单栈。
 
-### Component Implementations
+### 客户端 IPv6 URL 格式
 
-1. **Icons — SymbolGlyph (CRITICAL):**
-   - **ALWAYS** use `SymbolGlyph($r('sys.symbol.xxx'))` for icons — NOT SVG files, NOT Unicode characters.
-   - `Image` with `$r('app.media.ic_xxx')` is the OLD approach. SymbolGlyph is native, auto-scales, and supports color/fontWeight/effects.
-   - **Verified working symbol names:**
-     - `sys.symbol.ohos_trash` (trash/delete)
-     - `sys.symbol.ohos_wifi` (connection/wifi)
-     - `sys.symbol.ohos_folder_badge_plus` (add folder)
-     - `sys.symbol.ohos_folder` (folder)
-     - `sys.symbol.checkmark` (check/done)
-     - `sys.symbol.circle` (circle/empty)
-     - `sys.symbol.chevron_down` (dropdown arrow)
-     - `sys.symbol.xmark` (close/cancel)
-     - `sys.symbol.xmark_circle` (error/fail)
-     - `sys.symbol.ellipsis_message_1` (loading/thinking)
-     - `sys.symbol.arrow_up_circle_fill` (send)
-     - `sys.symbol.paperclip` (attachment)
-     - `sys.symbol.mic` (microphone)
-     - `sys.symbol.waveform` (waveform)
-     - `sys.symbol.clock` (pending/waiting)
-     - `sys.symbol.doc` (document/copy)
-     - `sys.symbol.AI` (AI/sparkles)
-     - `sys.symbol.square` (session indicator)
-   - **Names that do NOT exist** (common mistakes): `sparkles`, `terminal`, `gear`, `ellipsis`, `rectangle_fill`, `ohos_command` — verify before use.
-   - Full list at: https://developer.huawei.com/consumer/cn/design/harmonyos-symbol/
+`OnboardingView.ets` 的 `normalizeServerUrl()` 会自动将裸 IPv6 地址包裹方括号（例：`fe80::1:12138` → `ws://[fe80::1]:12138`）。IPv6 地址在 URL 中必须用 `[ ]` 包裹才能被 WebSocket API 正确解析。
 
-2. **Navigation (Routing):**
-   - Uses `Navigation(NavPathStack)` with `navDestination(this.PagesMap)` — a `@Builder` reference, NOT a lambda.
-   - The `@Builder PagesMap(name: string)` matches names to `@Component` structs.
-   - Each destination must be a `@Component` with `NavDestination()` as root.
-   - Home content (OnboardingView) goes inside `Navigation(stack) { ... }` as default child.
-   - `NavigationMode.Stack` mode is set explicitly.
+### 防火墙
 
-3. **State Management (V1 + V2 hybrid + Persistence):**
-   - Model classes use `@ObservedV2`/`@Trace` (V2 decorators): `ChatStoreModel`, `WorkspaceStoreModel`, `PlanEntry`.
-   - UI components use V1: `@Component`/`@State`/`@Prop`.
-   - Global singletons (`ChatStore`, `WorkspaceStore`) are `@ObservedV2` instances.
-   - UI state that needs global access (messages, sessions, models, etc.) lives in `ChatStore`.
-   - Local UI state (showPathInput, showDrawer) stays as `@State` in the component.
-   - **Persistence layer:** `StorageService` wraps `@kit.ArkData` preferences for serverUrl, lastAgent, workspaces.
-   - `AppStorage` for cross-component state (`serverUrl`, `lastAgent`, `isConnected`).
-   - `@StorageLink('serverUrl')` in OnboardingView for automatic sync with AppStorage.
+Windows 防火墙规则必须匹配实际运行的 node.exe 路径。本项目运行的是 `D:\nvm4w\nodejs\node.exe`（nvmw4 管理的 Node），不是 DevEco Studio 自带的 Node。如果加规则时绑定了错误的程序路径，外部连接会被拦截。
 
- 4. **ChatStore Global State:**
-    - `ChatStore.messages` — array of MessageData
-    - `ChatStore.planEntries` — array of PlanEntry
-    - `ChatStore.turnActive`, `ChatStore.sessionId`, `ChatStore.connected`
-    - `ChatStore.sessions`, `ChatStore.models`, `ChatStore.modes`
-    - `ChatStore.selectedAgentName`, `ChatStore.agentType`
-    - `ChatStore.loadingSession` — true while loading history session messages
-    - Streaming updates: reassign arrays with `ChatStore.messages = [...ChatStore.messages, newMsg]`
-    - **CRITICAL: LazyForEach key for streaming messages MUST be `msg.id + msg.content.length`** — NOT just `msg.id`. During streaming, text appends to the same message (same id, longer content). If the key is only `msg.id`, LazyForEach won't detect the change and won't re-render, so the message gets stuck at truncated text. The `+ msg.content.length` ensures the key changes on each append, forcing re-render. This bug has been introduced by multiple agents independently.
+### Clash/代理干扰
 
-5. **Markdown Rendering:**
-   - Uses `@luvi/lv-markdown-in` (v3.4.1, Gitee: `https://gitee.com/luvi/lv-markdown-in.git`).
-   - During `turnActive`, agent message chunks render as plain `Text()`. On `turn_ended`, switches to `MarkdownRender`.
+clash-verge 的**全局模式**会劫持所有网络流量，导致手机热点连不上 PC 的桥接服务。解决方案：
+- 关闭全局模式
+- 或在 clash 配置中 bypass 局域网地址段 (`192.168.0.0/16`、`10.0.0.0/8` 等)
 
- 6. **Workspace Management:**
-    - Managed via `SideBarContainer` sidebar overlay in `ChatView` (full-screen WorkspaceDrawer).
-    - Workspace selection & add via `WorkspaceSelectView` (forced before entering chat).
-    - Workspace data in `WorkspaceStore` (global `@ObservedV2` singleton).
+### Tailscale 连接注意事项
 
-7. **Auto-Reconnect:**
-   - `WSClient` with exponential backoff (1s → 2s → 4s → ... → 30s max).
-   - `backgroundTaskManager.requestSuspendDelay()` for ~3min background keepalive.
+| 场景 | IPv4 (`100.x.x.x`) | IPv6 (`fd7a::...`) | 原因 |
+|------|:---:|:---:|---|
+| 手机连热点 WiFi | ✅ | ✅ | 两端直连 |
+| 手机用移动数据 | ✅ | ❌ | Android 蜂窝网 IPv6 栈与 VPN IPv6 路由冲突，ULA 地址路由不完整 |
 
-8. **Animations & Transitions:**
-   - View transitions: `TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: 20 }))` with `.animation({ duration: Duration.normal, curve: Curve.EaseOut })`.
-   - Message cards: slide-in on appear with `TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: 12 }))`.
-   - Button press feedback: `@State scale` with `.scale({ x: this.scale, y: this.scale })` on `TouchType.Down/Up`.
-   - Thinking section expand/collapse: `animateTo()` with `Curve.EaseInOut`.
-   - Agent list items: staggered entry with `delay: index * 50`.
+**建议始终用 Tailscale IPv4 地址连接**，所有网络环境都可靠。
 
-## ⚠️ ArkTS Syntax Pitfalls (Critical — Read Before Coding)
+### 排查流程
 
-### Type System Restrictions
-| Rule | What NOT to do | Correct approach |
-|------|---------------|-----------------|
-| `arkts-no-any-unknown` | `x as unknown as string` | `String(x)` or `Boolean(x)` |
-| `arkts-no-typing-with-this` | `this: Type` in function params | Remove `this` param |
-| object-to-primitive cast | `params.isUser as boolean` | `Boolean(params['isUser'])` |
-| object-to-primitive compare | `params['isUser'] === true` | `Boolean(params['isUser'])` |
-| arrow-ts-parameter | `const fn = (x: number) => x` | `const fn = (x: number): number => x` |
-| untyped object literals | `const prefs = { key: 'val' }` | Define explicit interface first |
+1. `netstat -an | findstr "12138"` — 确认 server 监听 `0.0.0.0` 和 `[::]`
+2. 本机 `node -e "new (require('ws'))('ws://地址:12138')"` — 测试 server 可达性
+3. `hdc shell ping <PC_IP>` — 确认手机到 PC 的网络连通性（ICMP 不通不代表 TCP 不通，但至少能排查基本网络问题）
+4. `netsh advfirewall firewall show rule name=all dir=in` — 检查防火墙规则
+5. 关闭 clash 全局模式重试
 
-### Navigation API (Most Common Failure)
-| Mistake | Wrong | Correct |
-|---------|-------|---------|
-| navDestination arg type | `.navDestination((name, param) => {})` | Create a `@Builder PagesMap(name: string)` and use `.navDestination(this.PagesMap)` |
-| Destination content | Inline `Column() { ... }` | Create a separate `@Component` struct with `NavDestination()` as root |
-| param type | `param: unknown` or `param: any` | `param: Object` (but `unknown`/`any` are banned) |
+---
+
+## ⚠️ Golden Rule: 优先使用原生 ArkUI 组件
+
+优先使用 ArkUI 内置组件（SideBarContainer、bindSheet、Navigation 等），而非手写浮层/弹窗。原生组件自带系统级行为：动画、无障碍、多渲染器生命周期和系统升级兼容。在 `animateTo()` 中包裹状态变更以确保平滑过渡。
+
+---
+
+## 关键设计决策
+
+### 视觉设计
+- **风格：** ChatGPT 风格，黑白灰单色调
+- **消息气泡：** 用户消息右对齐浅灰气泡 (`Colors.userBubble`)，Agent 消息全宽无背景
+- **字体：** 正文系统 sans-serif，品牌标题衬线体 (`fontFamily('serif')`)
+- **Thinking/ToolCall：** 斜体灰色文本，无图标/边框/背景，呼吸透明度动画 (0.4↔1.0)
+- **配色：** `#202123`, `#F4F4F4`, `#6B7280` 等
+
+### 图标 — SymbolGlyph（关键）
+
+**始终**使用 `SymbolGlyph($r('sys.symbol.xxx'))`，禁用 SVG/Unicode 字符。
+
+已验证可用的 symbol 名：`ohos_trash`、`ohos_wifi`、`ohos_folder_badge_plus`、`ohos_folder`、`checkmark`、`circle`、`chevron_down`、`xmark`、`xmark_circle`、`ellipsis_message_1`、`arrow_up_circle_fill`、`paperclip`、`mic`、`waveform`、`clock`、`doc`、`AI`、`square`
+
+**不存在**的常见名：`sparkles`, `terminal`, `gear`, `ellipsis`, `rectangle_fill`, `ohos_command`
+
+`fontColor` 必须是数组：`fontColor([Colors.accent])`，不是 `fontColor(Colors.accent)`。
+
+参考：https://developer.huawei.com/consumer/cn/design/harmonyos-symbol/
+
+### 导航
+- `Navigation(NavPathStack)` + `.navDestination(this.PagesMap)` — `PagesMap` 是 `@Builder` 引用，不是 lambda
+- 每个目的地必须是根节点为 `NavDestination()` 的 `@Component`
+- 启用 `NavigationMode.Stack`
+
+### 状态管理
+- Model 类用 `@ObservedV2`/`@Trace`（V2）
+- UI 组件用 `@Component`/`@State`/`@Prop`（V1）
+- 全局单例：`ChatStore`、`WorkspaceStore`、`HostStore`
+- 持久化：`StorageService`（基于 `@kit.ArkData` preferences）
+- 跨组件状态：`AppStorage`（如 `serverUrl`、`lastAgent`）
+
+### ChatStore 关键字段
+- `messages` — MessageData 数组
+- `streamingThinking` — 流式 thinking 独立字段（不在 LazyForEach 中），避免列表重渲染闪烁
+- `turnActive`, `sessionId`, `connected`
+- `sessions`, `models`, `modes`, `planEntries`
+- `availableCommands` — 斜杠命令补全列表
+
+**LazyForEach key 必须用 `msg.id + msg.content.length`**，不能只用 `msg.id`。流式传输时 content 在变化，只用 id 不会触发 UI 更新。
+
+### Markdown 渲染
+使用 `@luvi/lv-markdown-in` (v3.4.1)。`turnActive` 期间用纯 `Text()`，`turn_ended` 后切换 `MarkdownRender`。
+
+### 工作区管理
+`SideBarContainer` 侧边栏 + `WorkspaceStore` 全局单例。工作区按设备名持久化（同 PC 的所有 IP 共享），`getWorkspaceScopes()` 提供回退链。
+
+### 设备分组 (HostStore)
+`server_info` 消息按 hostname 合并 IP 为 `DeviceEntry[]`。`connectBest(urls[])` 并行探测选最低延迟。兼容旧 `HostInfo[]` 格式自动迁移。
+
+### 自动重连
+指数退避 (1s → 2s → 4s → ... → 30s 上限)，后台保活约 3 分钟。
+
+### 动画
+- 页面切换：`TransitionEffect.OPACITY + translate({ y: 20 })`
+- 消息卡片：`TransitionEffect.OPACITY + translate({ y: 12 })`
+- 按钮反馈：`@State scale` + `TouchType.Down/Up`
+- Agent 列表：交错入场 `delay: index * 50`
+
+---
+
+## ⚠️ ArkTS 语法陷阱
+
+### 类型系统
+| 规则 | 错误 | 正确 |
+|------|------|------|
+| 禁 `any`/`unknown` | `x as unknown as string` | `String(x)` |
+| 禁 `this` 类型标注 | `this: Type` | 删除 |
+| 对象转基本类型 | `params.isUser as boolean` | `Boolean(params['isUser'])` |
+| 箭头函数无返回类型 | `(x: number) => x` | `(x: number): number => x` |
+
+### Navigation
+- `.navDestination((name, param) => {})` ❌ — 必须用 `@Builder PagesMap(name: string)`
+- 内联 `Column()` ❌ — 必须抽取 `@Component` struct
 
 ### bindSheet
-- `bindSheet($$state, content, options)` — DOES work on a top-level component like `Navigation`.
-- Does NOT work when chained inside a `@Builder` function (parser fails with "unexpected token").
-- `$$` binding only works with `@State`, NOT `@Prop`.
-- **CRITICAL: `bindSheet` content is NOT reactive** — it renders once when the sheet opens and does NOT re-render when `@ObservedV2`/`@State` dependencies change. For reactive overlays, use `Stack` + conditional `if` rendering with a `@Component` child instead.
+- `bindSheet` 内部内容**不是响应式的** — 打开时渲染一次，不随状态变化更新
+- 需要响应式浮层请用 `Stack` + 条件渲染
+- `$$` 绑定位仅支持 `@State`，不支持 `@Prop`
 
 ### SideBarContainer
-| Constraint | Explanation |
-|-----------|-------------|
-| No `if/else` as direct child | Must wrap content in a `@Builder` or `@Component` |
-| Only 2 children allowed | Exactly 1 sidebar + 1 content |
-| Animation | Built-in slide animation ONLY via `showControlButton(true)`. For programmatic toggle (custom button), use `animateTo({ duration: 300 }, () => { this.showDrawer = val })` AND set `.showSideBar(this.showDrawer)` (NO `$$`). `$$` bypasses animation system. |
-| `showSideBar` | Use direct property `.showSideBar(this.showDrawer)` NOT `$$` when you need animation |
-| Preferred alternative | Use `Stack` + `position({x:0,y:0}).zIndex(100)` + conditional rendering instead |
+- 直接子节点不能用 `if/else`
+- 程序化切换用 `.showSideBar(this.showDrawer)` + `animateTo()`，不用 `$$`
+- 推荐替代：`Stack` + 条件渲染
 
-### @Reusable + aboutToReuse
-- `aboutToReuse(params: Record<string, object>)` — must convert types via `String()` and `Boolean()`, NOT `as` cast.
-- `@State` (not `@Prop`) must be used for variables that update on reuse.
-- `as unknown as Type` is BANNED — use `String(params['key'])` or `Boolean(params['key'])`.
+### 其他常用规则
+- `LongPressGesture` 通过 `.gesture()` 附加，不与 `onClick` 混用
+- `@Reusable` + `aboutToReuse(params)` — 用 `String()`/`Boolean()` 转换参数，禁 `as` 转型
+- `NavDestination` 内条件渲染改用 `.visibility()` 属性
+- 可点击元素始终用 `Button()`，不用 `Text().onClick()`
+- import 必须在文件最顶部，设计 token 统一从 `DesignTokens.ets` 引入
+- `@StorageLink('key')` 需提前 `AppStorage.setOrCreate()` 初始化
 
-### Conditional Rendering in NavDestination
-- `if (this.stateVar)` conditional inside `NavDestination` may NOT re-render when `@State` changes.
-- **Workaround:** Use `Visibility` property instead of conditional `if`:
-  ```ets
-  Row() { ... }
-  .visibility(this.showDrawer ? Visibility.Visible : Visibility.None)
-  ```
-- This applies specifically to `NavDestination` children, not regular `@Component` structs.
-
-### Text.onClick / Button.onClick
-- `Text('\u2630').onClick(...)` — onClick may NOT fire on plain `Text` in some contexts.
-- **Always use `Button()` for clickable elements**, or wrap `Text` in a `Row()` with `.onClick()`.
-
-### Input Components
-| Component | onSubmit signature | Notes |
-|-----------|-------------------|-------|
-| `TextInput` | `(value: string, event: SubmitEvent) => void` | ArkTS API |
-| `TextArea` | `() => void` or `(EnterKeyType, SubmitEvent)` | Use `enterKeyType(EnterKeyType.Send)` |
-
-### Border Syntax
+### Border 语法
 ```ets
-// WRONG — won't compile:
+// 错误
 .border({ left: { width: 3 } })
 
-// CORRECT:
+// 正确
 .border({ width: { left: 3 }, color: { left: Colors.accent } })
 ```
 
-### Imports
-- `import` statements MUST be at the TOP of the file, before any other declarations.
-- Circular imports: `A → B → A` causes compiler errors. Break cycles by inlining simple types or creating a shared types file.
-- **Single source of truth:** All design tokens imported from `../constants/DesignTokens` (Colors, FontSize, Spacing, Radius, Duration, Shadow all in one file).
+### LazyForEach
+- 必须实现 `IDataSource` 的 `registerDataChangeListener`/`unregisterDataChangeListener`
+- 更新后需调用 `notifyDataReload()`
 
-### SymbolGlyph Resource Names
-- Pattern: `$r('sys.symbol.ohos_xxx')` or `$r('sys.symbol.xxx')`
-- **NOT all SF Symbol names work** — many common names like `sparkles`, `terminal`, `gear`, `ellipsis` do NOT exist in HarmonyOS SDK.
-- If a symbol name fails with "Unknown resource name", see `docs/harmonyos-symbol-reference.md` for all 404 verified names, or browse at https://developer.huawei.com/consumer/cn/design/harmonyos-symbol/.
-- Names from the API's `name_map_new.json` are used as `$r('sys.symbol.<name>')` directly — do NOT add `ohos_` prefix unless specifically verified.
-- `fontColor` requires an **array**: `fontColor([Colors.accent])`, NOT `fontColor(Colors.accent)`.
+---
 
-### @Provide/@Consume
-- `@Provide('key')` in parent, `@Consume('key')` in child — key string must match exactly.
-- Alternative: use `AppStorage.setOrCreate()` for simple global state.
+## 构建与部署
 
-### LazyForEach + IDataSource
-- `IDataSource` requires explicit `registerDataChangeListener` / `unregisterDataChangeListener` implementations.
-- `LazyForEach` key function must return a **unique string** per item (e.g., `msg.id`).
-- Data source `updateData()` must call `notifyDataReload()` on all registered listeners.
+### 无线调试（当前设备）
 
-### @StorageLink
-- `@StorageLink('key')` requires the key to be pre-initialized via `AppStorage.setOrCreate()` **before** the component is created.
-- Best place: `EntryAbility.onCreate()`.
-
-## Build & Deploy
-
-### USB / 无线部署
 ```powershell
-# Build
+# 构建
 cd Anywhere_harmony
 node "D:\DevEco Studio\tools\hvigor\bin\hvigorw.js" --mode module -p module=entry@default -p product=default assembleHap
 
-# Deploy (device UDID: 2NP0224627054426)
-hdc -t 2NP0224627054426 install "entry/build/default/outputs/default/entry-default-signed.hap"
-hdc -t 2NP0224627054426 shell aa start -a EntryAbility -b com.anywhere.app
-```
-
-### 无线调试（Wi-Fi）
-手机和电脑连同一局域网后，在手机开发者选项中开启"无线调试"获取 IP:端口：
-```powershell
-# 1. 建立 TCP 连接（IP:端口每次可能不同）
+# 连接（IP:端口每次可能不同）
 hdc tconn 192.168.137.215:41015
 
-# 2. 确认设备已连接
-hdc list targets
-
-# 3. 部署 / 启动
+# 部署
 hdc -t "192.168.137.215:41015" install "entry/build/default/outputs/default/entry-default-signed.hap"
+
+# 启动
 hdc -t "192.168.137.215:41015" shell aa start -a EntryAbility -b com.anywhere.app
 ```
-注意：无线首次连接建议先用 USB 连一次再切无线，更稳定。断线后重新 `hdc tconn` 即可。无线调试的 IP:端口每次可能不同，以上为当前设备地址。
 
-### 当前设备调试信息
-- **无线调试地址:** `192.168.137.215:41015`
-- **设备 UDID:** `2NP0224627054426`
-- **Bridge Server:** PC 端运行 `npm start`
+设备 UDID: `2NP0224627054426`
 
-### Bridge Server (must be running on PC)
-
-Server is built with `@agentclientprotocol/sdk` (TypeScript).
+### Bridge Server
 
 ```powershell
 cd Anywhere
-npm run build        # Compile TypeScript → server/dist/
-npm start            # Start SDK-based server (server/dist/server.mjs)
-# OR use fallback:
-npm run server:old   # Old hand-written server (keep for rollback)
+npm run build        # 编译 TypeScript → server/dist/
+npm start            # 启动 server/dist/server.mjs
 ```
 
-## Current State
+---
 
-### Working
-- WebSocket connection to bridge server via manual IP/Port configuration (onboarding form)
-- ACP session creation and streaming chat
-- Agent auto-discovery + inline agent picker list (after connection)
-- Navigation + NavPathStack routing (native HarmonyOS page transitions with OnboardingView as home)
-- ChatGPT-style message blocks with bubble for user, borderless for agent
-- Thinking content + tool call cards + agent message text (all italic muted gray, breathing opacity)
-- Markdown rendering (tables, code blocks, LaTeX math, links) on turn completion
-- Streaming text via plain `Text()` during active turn
-- Workspace management (add/select via full-screen SideBarContainer drawer)
-- Model and Mode selection (bottom sheet pickers)
-- Native SymbolGlyph icons (system built-in, no SVG files needed, no Unicode characters)
-- Message text copying via system pasteboard
-- Session clearing functionality
-- Auto-reconnect with exponential backoff
-- Background task keepalive (~3min)
-- Session list with load/switch via dropdown
-- Disabled input during turnActive
-- Auto-scroll to bottom on new messages
-- Working directory passed via workspace path
-- TextArea multi-line input (1-6 lines, Enter to send)
-- MessageCard @Reusable component recycling
-- ChatStore global state (observable across components)
-- **View transition animations** (fade + slide on state changes)
-- **Message card entry animations** (slide-in on appear)
-- **Button press feedback** (scale animation on touch)
-- **LazyForEach** message list with IDataSource (performance optimized)
-- **AppStorage persistence** for serverUrl, lastAgent
-- **Preferences persistence** via StorageService for serverUrl, lastAgent, workspaces
-- **Unified design tokens** (single DesignTokens.ets file, no Colors.ets)
-- **Title bar session title** correctly resolved using `loadedSessionId` fallback when loading history sessions
-- **Title bar model name** tracks `ChatStore.modelIndex` instead of always showing first model
-- **Reactive picker sheet** using `Stack` + conditional rendering (not `bindSheet`) — observes `@ObservedV2 ChatStore` changes live
-- **Auto session creation** on workspace select — ensures models/modes populate before first message
-- **LoadingProgress spinners** at all loading gaps (connecting, session/model/mode loading, session switch)
-- **PulsingDots** smooth staggered loading animation via `animateTo` with `iterations: -1` and `PlayMode.Alternate` (no `setInterval`)
-- **Serif brand title** (`fontFamily('serif')`) on onboarding and chat page empty state
-
-### Not Working / TODO
-- File upload (placeholder)
-- Microphone/Voice input (placeholder)
-- Permission request dialog
-- Session renaming
-- Host list management (saving multiple bridge servers)
-- Cancel current turn
-- Error recovery on message send failure (turn stays active)
-- Workspace delete (needs UI for deletion)
-
-## File Structure
+## 文件结构
 
 ```
 Anywhere_harmony/entry/src/main/ets/
 ├── pages/
-│   └── Index.ets                    # Navigation root + PagesMap builder
+│   └── Index.ets                    # 导航根 + PagesMap + WS 消息路由
 ├── feature/
 │   ├── onboarding/
-│   │   └── OnboardingView.ets       # NavDestination: connect + agent picker (home)
+│   │   └── OnboardingView.ets       # 连接表单 + agent 发现 + 设备列表
 │   ├── chat/
-│   │   ├── ChatPage.ets             # Message list + input bar
-│   │   └── ChatInputBar.ets         # TextArea + model/mode selects
+│   │   ├── ChatPage.ets             # 消息列表 + 流式 thinking + 输入绑定
+│   │   ├── ChatInputBar.ets         # TextArea + 取消按钮 + 斜杠命令
+│   │   └── ChatView.ets             # TitleBar + 抽屉 + 选择器 + 权限
 │   └── workspace/
-│       └── WorkspaceDrawer.ets      # Drawer overlay component
-├── components/
-│   └── ChatView.ets                 # NavDestination: workspace + session selects
+│       ├── WorkspaceDrawer.ets      # 工作区列表（增删选）
+│       └── WorkspaceSelectView.ets  # 初始工作区选择
 ├── common/
 │   ├── model/
 │   │   ├── ChatState.ets            # ChatStore, ModelItem, ModeItem, PlanEntry
-│   │   ├── WorkspaceInfo.ets        # WorkspaceStore, WorkspaceInfo
-│   │   ├── MessageData.ets          # MessageData class
-│   │   └── AgentConfig.ets          # AgentModel, AgentMode
+│   │   ├── WorkspaceInfo.ets        # WorkspaceStore, HostStore, DeviceEntry
+│   │   ├── MessageData.ets
+│   │   └── AgentConfig.ets
 │   ├── ui/
-│   │   ├── MessageCard.ets          # @Reusable message card component
-│   │   ├── ThinkingSection.ets      # Thinking content section
-│   │   ├── ToolCallCard.ets         # Tool call status card
-│   │   ├── PlanView.ets             # Plan entries display
-│   │   ├── MarkdownRender.ets       # Markdown rendering wrapper
-│   │   ├── CardHeader.ets           # Message card header
-│   │   └── MessageDataSource.ets    # IDataSource for LazyForEach
+│   │   ├── MessageCard.ets          # @Reusable 消息卡片
+│   │   ├── ThinkingSection.ets      # thinking 内容区域
+│   │   ├── ToolCallCard.ets         # 工具调用状态卡片
+│   │   ├── PlanView.ets             # plan 条目
+│   │   ├── MarkdownRender.ets       # Markdown 渲染
+│   │   └── MessageDataSource.ets    # LazyForEach 数据源
 │   └── websocket/
-│       ├── WSClient.ets             # WebSocket client with auto-reconnect
-│       └── WSProtocol.ets           # Protocol types (ClientMessage, AcpUpdate)
+│       ├── WSClient.ets             # WS 客户端 + 自动重连 + 消息分发
+│       └── WSProtocol.ets           # 协议类型定义
 ├── services/
-│   └── StorageService.ets           # Preferences persistence service
-├── constants/
-│   └── DesignTokens.ets             # Unified: Colors, Spacing, Radius, FontSize, Shadow, Duration
-├── entryability/
-│   └── EntryAbility.ets             # App entry, AppStorage initialization
-└── entrybackupability/
-    └── EntryBackupAbility.ets       # Backup ability
+│   └── StorageService.ets           # 持久化服务
+└── constants/
+    └── DesignTokens.ets             # 统一设计 token
 ```
 
-## Documentation
+---
 
-- **ACP Protocol Spec:** `docs/acp-protocol.md` — Full 19-chapter reference
-- **Frontend Architecture:** `docs/app-frontend-architecture.md`
-- **Plans:** `docs/plans/` — Implementation plans and design docs
-- **Native Component Improvement Plan:** `docs/plans/2026-05-15-native-component-improvement-plan.md`
+## API 协议参考
 
-## API Reference
+### 客户端 → 服务端
 
-### WebSocket Protocol (Client → Server)
+| type | 关键字段 | 触发时机 |
+|------|---------|---------|
+| `list_agents` | — | WS 连接后自动发送 |
+| `start` | `agent`, `cwd?`, `model?` | 新会话/首次消息 |
+| `input` | `sessionId`, `text` | 发送消息 |
+| `list_models` | `agent?` | 选 agent 后（仅一次，结果缓存本地） |
+| `list_sessions` | `cwd` | 选工作区后 |
+| `switch_model` | `sessionId`, `model` | 切换模型 |
+| `set_mode` | `sessionId`, `modeId` | 切换模式 |
+| `load_session` | `sessionId`, `cwd` | 加载历史会话 |
+| `cancel` | `sessionId` | 取消当前轮次 |
+| `permission_response` | `sessionId`, `requestId`, `outcome`, `optionId` | 权限请求响应 |
 
-| type | fields | trigger |
-|------|--------|---------|
-| `start` | `agent`, `prompt?`, `cwd?`, `model?` | Connect / new session / first message |
-| `input` | `sessionId`, `text` | Send message in existing session |
-| `list_agents` | — | After WebSocket connects (auto) |
-| `list_models` | — | After agent selected (pre-fetch) + after `session_started` |
-| `list_sessions` | `cwd` | After workspace selected |
-| `switch_model` | `sessionId`, `model` | Model select change |
-| `set_mode` | `sessionId`, `modeId` | Mode select change |
-| `load_session` | `sessionId`, `cwd` | Load history session |
+### 服务端 → 客户端
 
-### WebSocket Protocol (Server → Client)
+| type | 关键字段 | 用途 |
+|------|---------|------|
+| `server_info` | `hostname`, `ips[]` | 连接后立即发送 |
+| `session_started` | `sessionId`, `agent`, `model?`, `title?` | 会话创建/加载 |
+| `agent_event` | `event: AcpUpdate` | 流式数据块 |
+| `turn_ended` | `stopReason` | 回合结束 |
+| `agent_list` | `agents[]` | 已发现 agent 列表 |
+| `model_list` | `models[]`, `modes[]` | 可用模型/模式 |
+| `session_list` | `sessions[]` | 工作区会话列表 |
+| `permission_request` | `requestId`, `toolCall`, `options[]` | 权限请求 |
+| `session_closed` | — | 会话关闭 |
 
-| type | fields | purpose |
-|------|--------|---------|
-| `session_started` | `sessionId`, `agent` | Session created |
-| `agent_event` | `event: AcpUpdate` | Stream chunk (thought/message/tool/plan) |
-| `turn_ended` | `stopReason` | Turn complete |
-| `agent_list` | `agents[]` | Discovered ACP agents |
-| `model_list` | `models[]`, `modes[]` | Available models/modes |
-| `session_list` | `sessions[]` | Workspace sessions |
+### AcpUpdate.sessionUpdate 类型
 
-### AcpUpdate.sessionUpdate types
-
-| value | renders as | key fields |
-|-------|-----------|------------|
-| `agent_message_chunk` | MessageCard text (streaming: Text, done: MarkdownRender) | `content.text` |
+| 值 | 渲染为 | 关键字段 |
+|----|-------|---------|
+| `agent_message_chunk` | 消息文本（流式→Text，完成→MarkdownRender） | `content.text` |
 | `agent_thought_chunk` | ThinkingSection | `content.text` |
 | `tool_call` | ToolCallCard | `toolCallId`, `title` |
-| `tool_call_update` | ToolCallCard update | `toolCallId`, `status` |
+| `tool_call_update` | ToolCallCard 更新 | `toolCallId`, `status` |
 | `plan` | PlanView | `entries[]` |
-| `user_message_chunk` | MessageCard user | `content.text` |
+| `user_message_chunk` | 用户消息气泡 | `content.text` |

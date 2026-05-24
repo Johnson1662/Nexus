@@ -2,6 +2,7 @@ import { Colors, FontSize, Spacing, Radius, Duration } from '../../constants/Des
 import { ChatStore, PendingPermission, PermissionOption } from '../../common/model/ChatState';
 import { WorkspaceStore } from '../../common/model/WorkspaceInfo';
 import { WorkspaceInfo } from '../../common/model/WorkspaceInfo';
+import { StorageService, saveWorkspaces } from '../../services/StorageService';
 import { ChatPage } from './ChatPage';
 import { WorkspaceDrawer } from '../workspace/WorkspaceDrawer';
 
@@ -14,6 +15,8 @@ export struct ChatView {
   @State pickerTitle: string = '';
   @State pickerMode: number = -1;
   @State titleBarOpacity: number = 0;
+  @State showRename: boolean = false;
+  @State renameText: string = '';
   onSendMessage?: (text: string) => void;
   onSwitchModel?: (index: number) => void;
   onSwitchMode?: (index: number) => void;
@@ -60,6 +63,21 @@ export struct ChatView {
 
 
 
+  doRename(): void {
+    this.showRename = false;
+    let newTitle = this.renameText.trim();
+    if (newTitle.length === 0) return;
+    ChatStore.sessionTitle = newTitle;
+    // Update local sessions array
+    let targetId = ChatStore.loadedSessionId || ChatStore.sessionId;
+    for (let i = 0; i < ChatStore.sessions.length; i++) {
+      if (ChatStore.sessions[i].sessionId === targetId) {
+        ChatStore.sessions[i].title = newTitle;
+        break;
+      }
+    }
+  }
+
   openPicker(mode: number): void {
     if (mode === 0) {
       this.pickerTitle = 'Sessions';
@@ -103,6 +121,7 @@ export struct ChatView {
               if (WorkspaceStore.currentIndex >= WorkspaceStore.workspaces.length) {
                 WorkspaceStore.currentIndex = WorkspaceStore.workspaces.length - 1;
               }
+              saveWorkspaces(AppStorage.get<string>('serverUrl') || '');
             },
             onClose: () => { this.getUIContext()?.animateTo({ duration: Duration.normal }, () => { this.showDrawer = false }) },
             onAddWorkspace: (p: string) => {
@@ -112,6 +131,7 @@ export struct ChatView {
               ws.path = p;
               WorkspaceStore.workspaces.push(ws);
               WorkspaceStore.currentIndex = WorkspaceStore.workspaces.length - 1;
+              saveWorkspaces(AppStorage.get<string>('serverUrl') || '');
               this.getUIContext()?.animateTo({ duration: Duration.normal }, () => { this.showDrawer = false });
               if (this.onWorkspaceSelect) this.onWorkspaceSelect(WorkspaceStore.workspaces.length - 1);
             }
@@ -143,6 +163,7 @@ export struct ChatView {
                       ws.path = p;
                       WorkspaceStore.workspaces.push(ws);
                       WorkspaceStore.currentIndex = WorkspaceStore.workspaces.length - 1;
+                      saveWorkspaces(AppStorage.get<string>('serverUrl') || '');
                       this.newPath = '';
                       this.showPathInput = false;
                       if (this.onWorkspaceSelect) this.onWorkspaceSelect(WorkspaceStore.workspaces.length - 1);
@@ -227,22 +248,51 @@ export struct ChatView {
         .onClick(() => { this.getUIContext()?.animateTo({ duration: Duration.normal }, () => { this.showDrawer = !this.showDrawer }) })
 
       Column() {
-        Text(this.getSessionTitle())
-          .fontSize(FontSize.base).fontColor(Colors.foreground).fontWeight(FontWeight.Medium)
-          .lineHeight(20).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-          .width('100%')
+        if (this.showRename) {
+          Row() {
+            TextInput({ text: this.renameText, placeholder: 'Session name' })
+              .layoutWeight(1).height(36)
+              .backgroundColor(Colors.surface1).borderRadius(Radius.sm)
+              .padding({ left: Spacing.md, right: Spacing.md })
+              .fontSize(FontSize.base).fontColor(Colors.foreground).fontWeight(FontWeight.Medium)
+              .onChange((v: string) => { this.renameText = v })
+              .onSubmit(() => { this.doRename() })
 
-        if (!ChatStore.sessionId && !ChatStore.loadedSessionId) {
-          Text('No session')
-            .fontSize(FontSize.xs).fontColor(Colors.foregroundLight)
-            .lineHeight(16).maxLines(1)
-            .width('100%')
-        } else if (ChatStore.models.length > 0) {
-          // Always show model name when available — shows last used or current model
-          Text(this.getModelName())
-            .fontSize(FontSize.xs).fontColor(Colors.foregroundMuted)
-            .lineHeight(16).maxLines(1)
-            .width('100%')
+            SymbolGlyph($r('sys.symbol.xmark'))
+              .fontSize(16).fontColor([Colors.foregroundMuted])
+              .margin({ left: Spacing.xs })
+              .onClick(() => { this.showRename = false })
+          }
+          .width('100%')
+        } else {
+          Row() {
+            Text(this.getSessionTitle())
+              .fontSize(FontSize.base).fontColor(Colors.foreground).fontWeight(FontWeight.Medium)
+              .lineHeight(20).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+
+
+          }
+          .width('100%')
+          .onClick(() => {
+            if (ChatStore.sessionId || ChatStore.loadedSessionId) {
+              this.renameText = this.getSessionTitle();
+              this.showRename = true;
+            }
+          })
+        }
+
+        if (!this.showRename) {
+          if (!ChatStore.sessionId && !ChatStore.loadedSessionId) {
+            Text('No session')
+              .fontSize(FontSize.xs).fontColor(Colors.foregroundLight)
+              .lineHeight(16).maxLines(1)
+              .width('100%')
+          } else if (ChatStore.models.length > 0) {
+            Text(this.getModelName())
+              .fontSize(FontSize.xs).fontColor(Colors.foregroundMuted)
+              .lineHeight(16).maxLines(1)
+              .width('100%')
+          }
         }
       }
       .alignItems(HorizontalAlign.Start)

@@ -23,6 +23,11 @@ struct PulsingDots {
     });
   }
 
+  aboutToDisappear(): void {
+    // Stop infinite animations by resetting to static values
+    this.opacities = [0.3, 0.3, 0.3];
+  }
+
   build() {
     Row({ space: 5 }) {
       Circle().width(6).height(6).fill(Colors.foregroundMuted)
@@ -140,8 +145,8 @@ Text('Anywhere')
               }
             }
             .height('auto')
-            // Stable key: msg.id only — streaming thinking is OUTSIDE LazyForEach
-          }, (msg: MessageData) => msg.id)
+            // Key includes content length so streaming text messages re-render
+          }, (msg: MessageData) => msg.id + msg.content.length)
 
           // Streaming thinking section (outside LazyForEach — no key changes on chunks)
           if (ChatStore.streamingThinking.length > 0 && ChatStore.turnActive) {

@@ -1,7 +1,7 @@
 import { AbilityConstant, ConfigurationConstant, UIAbility, Want } from '@kit.AbilityKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { window } from '@kit.ArkUI';
-import { StorageService, PrefsKeys } from '../services/StorageService';
+import { StorageService, PrefsKeys, loadWorkspaces, loadHosts, loadModelCache } from '../services/StorageService';
 import { ChatStore } from '../common/model/ChatState';
 
 const DOMAIN: number = 0x0000;
@@ -16,17 +16,30 @@ export default class EntryAbility extends UIAbility {
     }
     hilog.info(DOMAIN, TAG, 'Ability onCreate');
 
-    AppStorage.setOrCreate<string>('serverUrl', 'ws://100.111.77.50:12138');
+    AppStorage.setOrCreate<string>('serverUrl', 'ws://192.168.137.1:12138');
     AppStorage.setOrCreate<string>('lastAgent', '');
     AppStorage.setOrCreate<boolean>('isConnected', false);
 
     StorageService.getInstance().init(this.context).then(() => {
       let storage = StorageService.getInstance();
-      storage.getString(PrefsKeys.SERVER_URL, 'ws://100.111.77.50:12138').then((url) => {
-        AppStorage.setOrCreate<string>('serverUrl', url);
+      loadHosts().then(() => {
+          storage.getString(PrefsKeys.SERVER_URL, 'ws://192.168.137.1:12138').then((url) => {
+          AppStorage.setOrCreate<string>('serverUrl', url);
+          // Load workspaces after host groups so all IPs for one device share a list.
+          loadWorkspaces(url);
+        });
       });
       storage.getString(PrefsKeys.LAST_AGENT, '').then((agent) => {
         AppStorage.setOrCreate<string>('lastAgent', agent);
+        // Load cached model list for last used agent so UI shows models instantly
+        if (agent.length > 0) {
+          loadModelCache(agent).then((cached) => {
+            if (cached !== null) {
+              ChatStore.models = cached.models;
+              ChatStore.modes = cached.modes;
+            }
+          });
+        }
       });
       storage.getString(PrefsKeys.LAST_MODEL_ID, '').then((id) => {
         ChatStore.lastModelId = id;
