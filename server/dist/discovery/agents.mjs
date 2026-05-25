@@ -67,6 +67,7 @@ const ACP_AGENTS = [
     { binary: "agente", title: "Agmente", args: ["acp"] },
     { binary: "ferngeist", title: "Ferngeist", args: ["acp"] },
     { binary: "mobvibe", title: "Mobvibe", args: ["acp"] },
+    { binary: "omp", title: "oh-my-pi", args: ["acp"] },
 ];
 const AGENT_ARGS_MAP = new Map();
 for (const entry of ACP_AGENTS) {

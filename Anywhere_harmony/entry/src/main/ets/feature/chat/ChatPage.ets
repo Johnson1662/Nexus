@@ -139,14 +139,20 @@ Text('Anywhere')
                   msgToolStatus: msg.toolStatus,
                   msgToolKind: msg.toolKind,
                   msgToolContent: msg.toolContent,
+                  msgToolContentType: msg.toolContentType,
+                  msgToolPath: msg.toolPath,
+                  msgToolOldText: msg.toolOldText,
+                  msgToolNewText: msg.toolNewText,
+                  msgToolTerminalId: msg.toolTerminalId,
                   streaming: ChatStore.turnActive && msg.role === 'assistant' && msg.id === ChatStore.messages[ChatStore.messages.length - 1]?.id
                 })
                   .margin({ bottom: msg.role === 'user' ? Spacing.lg : 0 })
               }
             }
             .height('auto')
-            // Key includes content length so streaming text messages re-render
-          }, (msg: MessageData) => msg.id + msg.content.length)
+            // Key includes tool payload changes so tool cards re-render on output/diff updates
+          }, (msg: MessageData) => msg.id + ':' + msg.content.length + ':' + msg.toolContent.length + ':' +
+            msg.toolContentType + ':' + msg.toolOldText.length + ':' + msg.toolNewText.length + ':' + msg.toolStatus)
 
           // Streaming thinking section (outside LazyForEach — no key changes on chunks)
           if (ChatStore.streamingThinking.length > 0 && ChatStore.turnActive) {

@@ -119,6 +119,12 @@ function getWorkspaceScopes(serverUrl: string): string[] {
   if (scopes.indexOf(serverUrl) < 0) {
     scopes.push(serverUrl);
   }
+  
+  // HARDCODED FALLBACK FOR LOST WORKSPACES
+  scopes.push('device_LAPTOP-3FLH46E9'); 
+  scopes.push('ws://192.168.137.215:12138');
+  scopes.push('ws://192.168.137.251:12138');
+  
   return scopes;
 }
 

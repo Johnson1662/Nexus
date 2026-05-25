@@ -47,6 +47,7 @@ interface AcpCallbacksConfig {
   ws: WebSocket;
   sessionId: string;
   cwd: string;
+  toolCallIdMap?: Map<string, string>;
 }
 
 export function createAcpCallbacks(config: AcpCallbacksConfig): {
@@ -58,7 +59,28 @@ export function createAcpCallbacks(config: AcpCallbacksConfig): {
   onKillTerminal: (params: KillTerminalRequest) => Promise<KillTerminalResponse | void>;
   onReleaseTerminal: (params: ReleaseTerminalRequest) => Promise<ReleaseTerminalResponse | void>;
 } {
-  const { ws, sessionId, cwd } = config;
+  const { ws, sessionId, cwd, toolCallIdMap } = config;
+
+  function sendToolCallUpdate(toolCallId: string, status: string, content: object[]): void {
+    const originalId = toolCallIdMap?.get(toolCallId);
+    const effectiveId = originalId || toolCallId;
+    try {
+      ws.send(JSON.stringify({
+        type: "agent_event",
+        sessionId,
+        event: {
+          sessionUpdate: "tool_call_update",
+          toolCallId: effectiveId,
+          status,
+          toolCallContent: content,
+        },
+      }));
+    } catch {}
+  }
+
+  function fileToolCallId(prefix: string, filePath: string): string {
+    return `${prefix}:${path.resolve(filePath)}`;
+  }
 
   const onReadTextFile = async (params: ReadTextFileRequest): Promise<ReadTextFileResponse> => {
     const currentSess = getSession(sessionId);
@@ -78,6 +100,15 @@ export function createAcpCallbacks(config: AcpCallbacksConfig): {
         content = content.split("\n").slice(0, params.limit).join("\n");
       }
     }
+    sendToolCallUpdate(fileToolCallId("read", params.path), "completed", [
+      {
+        type: "content",
+        content: {
+          type: "text",
+          text: content,
+        },
+      },
+    ]);
     return { content };
   };
 
@@ -87,8 +118,22 @@ export function createAcpCallbacks(config: AcpCallbacksConfig): {
     if (!isPathWithinCwd(params.path, cwd)) {
       throw new Error(`path not allowed: ${params.path}`);
     }
+    let oldText = "";
+    try {
+      oldText = await fs.readFile(params.path, "utf-8");
+    } catch {
+      oldText = "";
+    }
     await fs.mkdir(path.dirname(params.path), { recursive: true });
     await fs.writeFile(params.path, params.content, "utf-8");
+    sendToolCallUpdate(fileToolCallId("write", params.path), "completed", [
+      {
+        type: "diff",
+        path: params.path,
+        oldText,
+        newText: params.content,
+      },
+    ]);
     return {};
   };
 
@@ -97,6 +142,10 @@ export function createAcpCallbacks(config: AcpCallbacksConfig): {
     if (!currentSess) throw new Error("session not found");
 
     const terminalId = `term-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    // Map terminalId to the original toolCallId so tool_call_update can find the original card
+    if (currentSess.lastToolCallId) {
+      currentSess.toolCallIdMap.set(terminalId, currentSess.lastToolCallId);
+    }
     const outputByteLimit = params.outputByteLimit ?? 100000;
 
     let resolveExit: (() => void) | null = null;
@@ -115,6 +164,22 @@ export function createAcpCallbacks(config: AcpCallbacksConfig): {
       outputByteLimit,
     };
     currentSess.terminals.set(terminalId, terminal);
+
+    const sendTerminalUpdate = (status: string): void => {
+      const sess = getSession(sessionId);
+      const t = sess?.terminals.get(terminalId);
+      if (!t) return;
+      sendToolCallUpdate(terminalId, status, [
+        {
+          type: "terminal",
+          terminalId,
+          content: {
+            type: "text",
+            text: t.output,
+          },
+        },
+      ]);
+    };
 
     const termProc = spawn(params.command, params.args ?? [], {
       cwd: params.cwd ?? cwd,
@@ -136,6 +201,7 @@ export function createAcpCallbacks(config: AcpCallbacksConfig): {
         t.output = t.output.slice(t.output.length - t.outputByteLimit);
         t.truncated = true;
       }
+      sendTerminalUpdate("in_progress");
     });
 
     termProc.stderr!.on("data", (chunk: Buffer) => {
@@ -147,6 +213,7 @@ export function createAcpCallbacks(config: AcpCallbacksConfig): {
         t.output = t.output.slice(t.output.length - t.outputByteLimit);
         t.truncated = true;
       }
+      sendTerminalUpdate("in_progress");
     });
 
     termProc.on("exit", (code: number | null, sig: string | null) => {
@@ -156,6 +223,7 @@ export function createAcpCallbacks(config: AcpCallbacksConfig): {
         t.exitStatus = { exitCode: code, signal: sig ?? null };
         if (t.resolveExit) t.resolveExit();
       }
+      sendTerminalUpdate(code === 0 ? "completed" : "failed");
     });
 
     termProc.on("error", () => {
@@ -165,6 +233,7 @@ export function createAcpCallbacks(config: AcpCallbacksConfig): {
         t.exitStatus = { exitCode: -1, signal: null };
         if (t.resolveExit) t.resolveExit();
       }
+      sendTerminalUpdate("failed");
     });
 
     return { terminalId };

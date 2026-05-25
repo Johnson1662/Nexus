@@ -9,6 +9,11 @@ export class MessageData {
   @Trace toolCallId: string = '';
   @Trace toolKind: string = '';
   @Trace toolContent: string = '';
+  @Trace toolContentType: string = '';
+  @Trace toolPath: string = '';
+  @Trace toolOldText: string = '';
+  @Trace toolNewText: string = '';
+  @Trace toolTerminalId: string = '';
   @Trace timestamp: number = 0;
 
   constructor(role: string, content: string, type: string = 'text') {

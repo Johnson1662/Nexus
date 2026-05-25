@@ -1,4 +1,4 @@
-import { Colors, FontSize, Spacing, Duration } from '../../constants/DesignTokens';
+import { Colors, FontSize, Spacing, Duration, Radius } from '../../constants/DesignTokens';
 
 @Component
 export struct ToolCallCard {
@@ -6,7 +6,13 @@ export struct ToolCallCard {
   @Prop status: string = 'pending';
   @Prop kind: string = '';
   @Prop content: string = '';
+  @Prop contentType: string = '';
+  @Prop path: string = '';
+  @Prop oldText: string = '';
+  @Prop newText: string = '';
+  @Prop terminalId: string = '';
   @State breathFlag: boolean = false;
+  @State expanded: boolean = false;
 
   aboutToAppear(): void {
     if (this.status === 'in_progress') {
@@ -14,7 +20,11 @@ export struct ToolCallCard {
         this.breathFlag = true;
       }, 50);
     }
+    if (this.hasDetail()) {
+      this.expanded = true;
+    }
   }
+
 
   getFormattedName(): string {
     if (!this.name) return 'Tool call';
@@ -66,6 +76,178 @@ export struct ToolCallCard {
     return $r('sys.symbol.paperclip'); 
   }
 
+  getPathLabel(): string {
+    if (this.path.length === 0) return '';
+    let slash = this.path.lastIndexOf('/');
+    let backslash = this.path.lastIndexOf('\\');
+    let idx = slash > backslash ? slash : backslash;
+    if (idx >= 0 && idx + 1 < this.path.length) return this.path.substring(idx + 1);
+    return this.path;
+  }
+
+  getPreviewText(text: string): string {
+    if (text.length <= 8000) return text;
+    return text.substring(0, 8000) + '\n… truncated';
+  }
+
+  getDiffLines(): string[] {
+    if (this.oldText.length === 0 && this.newText.length === 0) return [];
+    if (this.oldText === this.newText) return [' no changes'];
+
+    let oldLines = this.oldText.split('\n');
+    let newLines = this.newText.split('\n');
+
+    let prefix = 0;
+    while (prefix < oldLines.length && prefix < newLines.length && oldLines[prefix] === newLines[prefix]) {
+      prefix++;
+    }
+
+    let suffix = 0;
+    while (suffix < oldLines.length - prefix && suffix < newLines.length - prefix && 
+           oldLines[oldLines.length - 1 - suffix] === newLines[newLines.length - 1 - suffix]) {
+      suffix++;
+    }
+
+    let result: string[] = [];
+
+    let contextBefore = prefix > 3 ? prefix - 3 : 0;
+    if (contextBefore > 0) result.push('@@ ... @@');
+    for (let i = contextBefore; i < prefix; i++) {
+      result.push(' ' + oldLines[i]);
+    }
+
+    let oldEnd = oldLines.length - suffix;
+    for (let i = prefix; i < oldEnd; i++) {
+      result.push('-' + oldLines[i]);
+    }
+
+    let newEnd = newLines.length - suffix;
+    for (let i = prefix; i < newEnd; i++) {
+      result.push('+' + newLines[i]);
+    }
+
+    let contextAfter = (newEnd + 3 < newLines.length) ? newEnd + 3 : newLines.length;
+    for (let i = newEnd; i < contextAfter; i++) {
+      result.push(' ' + newLines[i]);
+    }
+    if (contextAfter < newLines.length) result.push('@@ ... @@');
+
+    if (result.length > 200) {
+      result = result.slice(0, 200);
+      result.push('… truncated');
+    }
+
+    return result;
+  }
+
+  getDiffColor(line: string): string {
+    if (line.startsWith('+') && !line.startsWith('+++')) return Colors.success;
+    if (line.startsWith('-') && !line.startsWith('---')) return Colors.error;
+    if (line.startsWith('@@')) return Colors.foregroundLight;
+    return Colors.foregroundMuted;
+  }
+
+  getDiffBgColor(line: string): string {
+    if (line.startsWith('+') && !line.startsWith('+++')) return Colors.successLight;
+    if (line.startsWith('-') && !line.startsWith('---')) return Colors.errorLight;
+    return 'transparent';
+  }
+
+  hasDetail(): boolean {
+    return this.content.length > 0 || this.contentType === 'diff';
+  }
+
+  @Builder
+  DetailContent() {
+    if (this.contentType === 'terminal') {
+      Column() {
+        Text(this.getPreviewText(this.content))
+          .fontSize(FontSize.xs)
+          .fontColor('#E5E7EB')
+          .fontFamily('monospace')
+          .lineHeight(18)
+      }
+      .layoutWeight(1)
+      .padding(Spacing.sm)
+      .backgroundColor('#111827')
+      .borderRadius(Radius.sm)
+    } else if (this.contentType === 'diff') {
+      Column() {
+        if (this.content.length > 0) {
+          Text(this.content)
+            .fontSize(FontSize.xs)
+            .fontColor(Colors.foregroundMuted)
+            .fontFamily('monospace')
+            .lineHeight(18)
+            .margin({ bottom: Spacing.sm })
+        }
+        
+        Column() {
+          Row() {
+            SymbolGlyph($r('sys.symbol.doc_text'))
+              .fontSize(FontSize.sm)
+              .fontColor([Colors.foregroundMuted])
+              .margin({ right: Spacing.xs })
+            Text(this.getPathLabel())
+              .fontSize(FontSize.xs)
+              .fontColor(Colors.foregroundMuted)
+              .fontWeight(FontWeight.Medium)
+          }
+          .width('100%')
+          .padding({ left: Spacing.sm, right: Spacing.sm, top: Spacing.xs, bottom: Spacing.xs })
+          .backgroundColor(Colors.surface1)
+          .border({ width: { bottom: 1 }, color: { bottom: Colors.borderLight } })
+          
+          Column() {
+            ForEach(this.getDiffLines(), (line: string, index: number) => {
+              Row() {
+                Text(line)
+                  .fontSize(FontSize.xs)
+                  .fontColor(this.getDiffColor(line))
+                  .fontFamily('monospace')
+                  .lineHeight(18)
+                  .textOverflow({ overflow: TextOverflow.Ellipsis })
+                  .maxLines(1)
+              }
+              .width('100%')
+              .padding({ left: Spacing.sm, right: Spacing.sm })
+              .backgroundColor(this.getDiffBgColor(line))
+            }, (line: string, index: number) => index + '_' + line)
+          }
+          .width('100%')
+          .padding({ top: Spacing.xs, bottom: Spacing.xs })
+          .alignItems(HorizontalAlign.Start)
+        }
+        .width('100%')
+        .clip(true)
+        .backgroundColor(Colors.surface0)
+        .border({ width: 1, color: Colors.borderLight })
+        .borderRadius(Radius.sm)
+      }
+      .layoutWeight(1)
+      .alignItems(HorizontalAlign.Start)
+    } else if (this.contentType === 'content') {
+      Column() {
+        Text(this.getPreviewText(this.content))
+          .fontSize(FontSize.xs)
+          .fontColor(Colors.foregroundMuted)
+          .fontFamily('monospace')
+          .lineHeight(18)
+      }
+      .layoutWeight(1)
+      .padding(Spacing.sm)
+      .backgroundColor(Colors.surface1)
+      .borderRadius(Radius.sm)
+    } else {
+      Text(this.content)
+        .fontSize(FontSize.xs)
+        .fontColor(Colors.foregroundLight)
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .layoutWeight(1)
+    }
+  }
+
   build() {
     Column() {
       Row() {
@@ -80,6 +262,19 @@ export struct ToolCallCard {
           .fontWeight(FontWeight.Medium)
 
         Blank()
+
+        if (this.hasDetail()) {
+          Text(this.expanded ? 'Hide' : 'Show')
+            .fontSize(FontSize.xs)
+            .fontColor(Colors.foregroundLight)
+            .margin({ right: Spacing.xs })
+
+          SymbolGlyph($r('sys.symbol.chevron_down'))
+            .fontSize(FontSize.sm)
+            .fontColor([Colors.foregroundMuted])
+            .rotate({ angle: this.expanded ? 180 : 0 })
+            .animation({ duration: Duration.fast, curve: Curve.EaseOut })
+        }
 
         if (this.status === 'in_progress') {
           SymbolGlyph($r('sys.symbol.clock'))
@@ -105,17 +300,18 @@ export struct ToolCallCard {
       .width('100%')
       .height(32)
       .alignItems(VerticalAlign.Center)
+      .enabled(this.hasDetail())
+      .onClick(() => {
+        if (this.hasDetail()) {
+          this.expanded = !this.expanded;
+        }
+      })
 
-      if (this.content.length > 0) {
+      if (this.expanded && this.hasDetail()) {
         Row() {
           Column().width(24) // offset for icon + margin
-          
-          Text(this.content)
-            .fontSize(FontSize.xs)
-            .fontColor(Colors.foregroundLight)
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .layoutWeight(1)
+
+          this.DetailContent()
         }
         .width('100%')
         .padding({ bottom: Spacing.xs })

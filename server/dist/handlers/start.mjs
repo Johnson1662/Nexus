@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import path from "node:path";
 import { AcpClient } from "../acp/client.mjs";
 import { getAgentLaunchArgs } from "../discovery/agents.mjs";
 import { getLastModel } from "../prefs.mjs";
@@ -26,10 +27,55 @@ export async function handleStart(ws, params) {
         pendingPermission: null,
         terminals: new Map(),
         restartCount: 0,
+        toolCallIdMap: new Map(),
     };
     const client = new AcpClient(proc, {
         onSessionUpdate: async (update) => {
             const type = update.update?.sessionUpdate || "unknown";
+            if (type === "tool_call" || type === "tool_call_update") {
+                try {
+                    const obj = JSON.parse(JSON.stringify(update.update));
+                    console.log(`[debug] ${type} keys=${Object.keys(obj).join(",")} toolCallId=${String(obj.toolCallId || "")} hasContent=${!!obj.content} contentIsArray=${Array.isArray(obj.content)} status=${String(obj.status || "")} hasToolCallContent=${!!obj.toolCallContent}`);
+                    if (Array.isArray(obj.content)) {
+                        for (let i = 0; i < Math.min(obj.content.length, 2); i++) {
+                            console.log(`[debug]   content[${i}]=${JSON.stringify(obj.content[i]).slice(0, 200)}`);
+                        }
+                    }
+                }
+                catch (e) {
+                    console.log(`[debug] parse error: ${e}`);
+                }
+            }
+            const toolCallEvt = update.update;
+            if (type === "tool_call" && toolCallEvt?.toolCallId) {
+                const sess = getSession(sessionId);
+                if (sess) {
+                    const rawId = String(toolCallEvt.toolCallId);
+                    const locations = (toolCallEvt.locations || []);
+                    const rawInput = toolCallEvt.rawInput;
+                    for (const loc of locations) {
+                        if (loc.path) {
+                            const rp = path.resolve(loc.path);
+                            sess.toolCallIdMap.set(`read:${rp}`, rawId);
+                            sess.toolCallIdMap.set(`write:${rp}`, rawId);
+                        }
+                    }
+                    if (locations.length === 0 && rawInput && typeof rawInput.path === "string") {
+                        const rp = path.resolve(rawInput.path);
+                        if (toolCallEvt.kind === "read") {
+                            sess.toolCallIdMap.set(`read:${rp}`, rawId);
+                        }
+                        else if (toolCallEvt.kind === "edit") {
+                            sess.toolCallIdMap.set(`write:${rp}`, rawId);
+                        }
+                        else {
+                            sess.toolCallIdMap.set(`read:${rp}`, rawId);
+                            sess.toolCallIdMap.set(`write:${rp}`, rawId);
+                        }
+                    }
+                    sess.lastToolCallId = rawId;
+                }
+            }
             console.log(`[server] agent_event type=${type} sessionId=${sessionId?.slice(0, 20)}`);
             try {
                 ws.send(JSON.stringify({
@@ -59,7 +105,7 @@ export async function handleStart(ws, params) {
                 catch { }
             });
         },
-        ...createAcpCallbacks({ ws, sessionId, cwd: cwd || process.cwd() }),
+        ...createAcpCallbacks({ ws, sessionId, cwd: cwd || process.cwd(), toolCallIdMap: sess.toolCallIdMap }),
     });
     sess.client = client;
     setSession(sessionId, sess);

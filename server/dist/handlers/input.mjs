@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import path from "node:path";
 import kill from "tree-kill";
 import { getSession, setSession, killTerminalProcesses } from "../session.mjs";
 import { AcpClient } from "../acp/client.mjs";
@@ -57,6 +58,39 @@ async function ensureSessionAlive(ws, sessionId) {
         onSessionUpdate: async (update) => {
             if (suppressingReplay)
                 return; // skip history replay during loadSession
+            const toolCallEvt = update.update;
+            if (toolCallEvt?.sessionUpdate === "tool_call" && toolCallEvt?.toolCallId) {
+                const s = getSession(sessionId);
+                if (s) {
+                    const rawId = String(toolCallEvt.toolCallId);
+                    const locations = (toolCallEvt.locations || []);
+                    const rawInput = toolCallEvt.rawInput;
+                    for (const loc of locations) {
+                        if (loc.path) {
+                            const rp = path.resolve(loc.path);
+                            s.toolCallIdMap.set(`read:${rp}`, rawId);
+                            s.toolCallIdMap.set(`write:${rp}`, rawId);
+                        }
+                    }
+                    if (locations.length === 0 && rawInput && typeof rawInput.path === "string") {
+                        const rp = path.resolve(rawInput.path);
+                        if (toolCallEvt.kind === "read") {
+                            s.toolCallIdMap.set(`read:${rp}`, rawId);
+                        }
+                        else if (toolCallEvt.kind === "edit") {
+                            s.toolCallIdMap.set(`write:${rp}`, rawId);
+                        }
+                        else {
+                            s.toolCallIdMap.set(`read:${rp}`, rawId);
+                            s.toolCallIdMap.set(`write:${rp}`, rawId);
+                        }
+                    }
+                    s.lastToolCallId = rawId;
+                }
+            }
+            if (toolCallEvt?.sessionUpdate === "tool_call_update") {
+                console.log(`[debug] tool_call_update toolCallId=${JSON.stringify(toolCallEvt.toolCallId)} status=${JSON.stringify(toolCallEvt.status)} hasContent=${!!toolCallEvt.content} hasToolCallContent=${!!toolCallEvt.toolCallContent} contentKeys=${toolCallEvt.content ? Object.keys(toolCallEvt.content).join(",") : "none"}`);
+            }
             try {
                 ws.send(JSON.stringify({ type: "agent_event", sessionId, event: update.update }));
             }
@@ -74,7 +108,7 @@ async function ensureSessionAlive(ws, sessionId) {
                 catch { }
             });
         },
-        ...createAcpCallbacks({ ws, sessionId, cwd }),
+        ...createAcpCallbacks({ ws, sessionId, cwd, toolCallIdMap: sess.toolCallIdMap }),
     });
     proc.stderr.on("data", (chunk) => {
         console.log(`[server] stderr: ${chunk.toString().slice(0, 200)}`);

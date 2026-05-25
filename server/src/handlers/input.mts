@@ -58,6 +58,37 @@ async function ensureSessionAlive(ws: WebSocket, sessionId: string): Promise<boo
   const client = new AcpClient(proc, {
     onSessionUpdate: async (update) => {
       if (suppressingReplay) return; // skip history replay during loadSession
+      const toolCallEvt = update.update as any;
+      if (toolCallEvt?.sessionUpdate === "tool_call" && toolCallEvt?.toolCallId) {
+        const s = getSession(sessionId);
+        if (s) {
+          const rawId = String(toolCallEvt.toolCallId);
+          const locations = (toolCallEvt.locations || []) as Array<{ path: string }>;
+          const rawInput = toolCallEvt.rawInput as Record<string, unknown> | undefined;
+          for (const loc of locations) {
+            if (loc.path) {
+              const rp = path.resolve(loc.path);
+              s.toolCallIdMap.set(`read:${rp}`, rawId);
+              s.toolCallIdMap.set(`write:${rp}`, rawId);
+            }
+          }
+          if (locations.length === 0 && rawInput && typeof rawInput.path === "string") {
+            const rp = path.resolve(rawInput.path as string);
+            if (toolCallEvt.kind === "read") {
+              s.toolCallIdMap.set(`read:${rp}`, rawId);
+            } else if (toolCallEvt.kind === "edit") {
+              s.toolCallIdMap.set(`write:${rp}`, rawId);
+            } else {
+              s.toolCallIdMap.set(`read:${rp}`, rawId);
+              s.toolCallIdMap.set(`write:${rp}`, rawId);
+            }
+          }
+          s.lastToolCallId = rawId;
+        }
+      }
+      if (toolCallEvt?.sessionUpdate === "tool_call_update") {
+        console.log(`[debug] tool_call_update toolCallId=${JSON.stringify(toolCallEvt.toolCallId)} status=${JSON.stringify(toolCallEvt.status)} hasContent=${!!toolCallEvt.content} hasToolCallContent=${!!toolCallEvt.toolCallContent} contentKeys=${toolCallEvt.content ? Object.keys(toolCallEvt.content).join(",") : "none"}`);
+      }
       try {
         ws.send(JSON.stringify({ type: "agent_event", sessionId, event: update.update }));
       } catch {}
@@ -72,7 +103,7 @@ async function ensureSessionAlive(ws: WebSocket, sessionId: string): Promise<boo
         } catch {}
       });
     },
-    ...createAcpCallbacks({ ws, sessionId, cwd }),
+    ...createAcpCallbacks({ ws, sessionId, cwd, toolCallIdMap: sess.toolCallIdMap }),
   });
 
   proc.stderr.on("data", (chunk: Buffer) => {

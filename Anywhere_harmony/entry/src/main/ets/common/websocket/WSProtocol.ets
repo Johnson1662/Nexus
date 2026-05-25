@@ -23,6 +23,9 @@ export interface AcpToolCallContent {
   type?: string;
   content?: AcpContent;
   terminalId?: string;
+  path?: string;
+  oldText?: string;
+  newText?: string;
 }
 
 export interface AcpContent {
@@ -74,6 +77,8 @@ export interface ServerInfoMessage {
   type: string;
   hostname: string;
   ips: string[];
+  hostId?: string;
+  relayPin?: string;
 }
 
 export interface AgentInfo {

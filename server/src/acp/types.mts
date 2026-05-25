@@ -32,6 +32,10 @@ export interface SessionState {
   restartCount: number;
   /** ACP session ID of the loaded history session, if any */
   loadedSessionId?: string;
+  /** Maps bridge-generated tool call IDs → agent's original toolCallId */
+  toolCallIdMap: Map<string, string>;
+  /** Latest original toolCallId from agent, used by terminal mapping */
+  lastToolCallId?: string;
 }
 
 export interface WSClientMessage {

@@ -24,6 +24,8 @@ export const WorkspaceStore: WorkspaceStoreModel = new WorkspaceStoreModel();
 export interface DeviceEntry {
   name: string;
   urls: string[];
+  hostId?: string;
+  relayPin?: string;
 }
 
 // Legacy HostInfo — kept for migration only
@@ -39,13 +41,29 @@ export class HostStoreModel {
   addOrUpdateDevice(device: DeviceEntry): void {
     let existing: number = -1;
     for (let i: number = 0; i < this.devices.length; i++) {
-      if (this.devices[i].name === device.name) {
+      let current = this.devices[i];
+      if (device.hostId && current.hostId === device.hostId) {
+        existing = i;
+        break;
+      }
+      if (device.hostId && (!current.hostId || current.hostId.length === 0) && current.name === device.name) {
+        existing = i;
+        break;
+      }
+      if (!device.hostId && current.name === device.name) {
         existing = i;
         break;
       }
     }
     if (existing >= 0) {
-      let existingUrls: string[] = this.devices[existing].urls;
+      let current = this.devices[existing];
+      if (device.hostId && (!current.hostId || current.hostId.length === 0)) {
+        current.hostId = device.hostId;
+      }
+      if (device.relayPin && device.relayPin.length > 0) {
+        current.relayPin = device.relayPin;
+      }
+      let existingUrls: string[] = current.urls;
       for (let i: number = 0; i < device.urls.length; i++) {
         let url: string = device.urls[i];
         if (existingUrls.indexOf(url) < 0) {

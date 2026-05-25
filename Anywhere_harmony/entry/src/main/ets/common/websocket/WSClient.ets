@@ -261,7 +261,6 @@ export class WSClient {
     this.stateListeners = [];
     this.modelListeners = [];
     this.sessionListeners = [];
-    this.updateListeners = [];
     this.agentListListeners = [];
     this.errorListeners = [];
     this.sessionStartedListeners = [];
@@ -305,11 +304,15 @@ export class WSClient {
     let hostname: string = info.hostname;
     let connectedUrl: string = this.lastUrl;
     if (connectedUrl.length === 0) return;
-    // Only add the actual connected URL — name-matched merge with existing device
-    HostStore.addOrUpdateDevice({ name: hostname, urls: [connectedUrl] } as DeviceEntry);
-    // Remove stale entries that share this URL but have a different name (e.g. migrated old ip:port format)
+    HostStore.addOrUpdateDevice({
+      name: hostname,
+      urls: [connectedUrl],
+      hostId: info.hostId,
+      relayPin: info.relayPin,
+    } as DeviceEntry);
     for (let i: number = HostStore.devices.length - 1; i >= 0; i--) {
-      if (HostStore.devices[i].name !== hostname && HostStore.devices[i].urls.indexOf(connectedUrl) >= 0) {
+      let device = HostStore.devices[i];
+      if (device.name !== hostname && device.urls.indexOf(connectedUrl) >= 0 && (!info.hostId || device.hostId !== info.hostId)) {
         HostStore.removeDevice(i);
       }
     }

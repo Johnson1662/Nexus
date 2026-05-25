@@ -1,5 +1,7 @@
 import { WebSocketServer, type WebSocket } from "ws";
 import os from "os";
+import { getOrCreateHostId } from "./host-identity.mjs";
+import { RelayHost } from "./relay.mjs";
 import { discoverAgents } from "./discovery/agents.mjs";
 import { handleStart } from "./handlers/start.mjs";
 import { handleInput } from "./handlers/input.mjs";
@@ -18,12 +20,34 @@ import { cleanupWsSessions, enqueueWsOp } from "./session.mjs";
 
 const PORT = 12138;
 const HOST = "0.0.0.0";
+const RELAY_URL = "ws://35.212.247.127:12138";
 
 const wss = new WebSocketServer({ host: HOST, port: PORT });
 console.log(`[server] listening on ws://${HOST}:${PORT}`);
+const HOST_ID = getOrCreateHostId();
 
-wss.on("connection", (ws: WebSocket) => {
-  console.log("[server] client connected");
+let relayWsAdapter: any = null;
+
+const relay = new RelayHost(RELAY_URL, (raw: string) => {
+  console.log(`[relay] received ${raw.slice(0, 120)}`);
+  if (relayWsAdapter) {
+    relayWsAdapter.emit("message", Buffer.from(raw));
+  }
+});
+
+import { EventEmitter } from "events";
+class RelayWsAdapter extends EventEmitter {
+  send(data: string) {
+    relay.send(data);
+  }
+  readyState = 1;
+}
+
+relayWsAdapter = new RelayWsAdapter();
+relay.connect();
+
+function handleIncomingConnection(ws: WebSocket | any, isRelay: boolean = false) {
+  console.log(`[server] ${isRelay ? 'Relay' : 'Local'} client connected`);
 
   // Send server info immediately on connect (hostname + all non-internal IPs)
   try {
@@ -37,7 +61,16 @@ wss.on("connection", (ws: WebSocket) => {
         }
       }
     }
-    ws.send(JSON.stringify({ type: "server_info", hostname, ips }));
+    // Also include relay pin
+    ips.push(`RELAY:${relay.deviceId}`);
+    
+    ws.send(JSON.stringify({
+      type: "server_info",
+      hostId: HOST_ID,
+      relayPin: relay.deviceId,
+      hostname,
+      ips,
+    }));
     console.log(`[server] sent server_info: ${hostname} (${ips.length} IPs)`);
   } catch (err) {
     console.log(`[server] failed to get host info: ${err}`);
@@ -157,8 +190,15 @@ wss.on("connection", (ws: WebSocket) => {
   });
 
   ws.on("close", () => {
-    console.log("[server] client disconnected, cleaning up sessions");
+    console.log(`[server] ${isRelay ? 'Relay' : 'Local'} client disconnected, cleaning up sessions`);
     clearSessionListCache(ws);
     cleanupWsSessions(ws);
   });
+}
+
+handleIncomingConnection(relayWsAdapter, true);
+
+wss.on("connection", (ws: WebSocket) => {
+  handleIncomingConnection(ws, false);
 });
+

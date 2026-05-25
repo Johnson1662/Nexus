@@ -104,6 +104,7 @@ function findInPath(binaryName: string): string | null {
   const pathDirs = (process.env.PATH || "").split(path.delimiter);
   // Also check local node_modules/.bin for npm-installed packages
   const localBin = path.join(process.cwd(), "node_modules", ".bin");
+
   if (pathDirs.indexOf(localBin) === -1) {
     pathDirs.push(localBin);
   }

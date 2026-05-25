@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import path from "node:path";
 import { AcpClient } from "../acp/client.mjs";
 import { getAgentLaunchArgs, isValidAgent } from "../discovery/agents.mjs";
 import { setSession, deleteSession, getSession, killSessionProcess, cleanupWsSessions, } from "../session.mjs";
@@ -31,9 +32,40 @@ export async function handleResumeSession(ws, params) {
         cwd: cwd || process.cwd(),
         pendingPermission: null,
         terminals: new Map(),
+        toolCallIdMap: new Map(),
     };
     const client = new AcpClient(proc, {
         onSessionUpdate: async (update) => {
+            const toolCallEvt = update.update;
+            if (toolCallEvt?.sessionUpdate === "tool_call" && toolCallEvt?.toolCallId) {
+                const s = getSession(bridgeSessionId);
+                if (s) {
+                    const rawId = String(toolCallEvt.toolCallId);
+                    const locations = (toolCallEvt.locations || []);
+                    const rawInput = toolCallEvt.rawInput;
+                    for (const loc of locations) {
+                        if (loc.path) {
+                            const rp = path.resolve(loc.path);
+                            s.toolCallIdMap.set(`read:${rp}`, rawId);
+                            s.toolCallIdMap.set(`write:${rp}`, rawId);
+                        }
+                    }
+                    if (locations.length === 0 && rawInput && typeof rawInput.path === "string") {
+                        const rp = path.resolve(rawInput.path);
+                        if (toolCallEvt.kind === "read") {
+                            s.toolCallIdMap.set(`read:${rp}`, rawId);
+                        }
+                        else if (toolCallEvt.kind === "edit") {
+                            s.toolCallIdMap.set(`write:${rp}`, rawId);
+                        }
+                        else {
+                            s.toolCallIdMap.set(`read:${rp}`, rawId);
+                            s.toolCallIdMap.set(`write:${rp}`, rawId);
+                        }
+                    }
+                    s.lastToolCallId = rawId;
+                }
+            }
             try {
                 ws.send(JSON.stringify({
                     type: "agent_event",
@@ -62,7 +94,7 @@ export async function handleResumeSession(ws, params) {
                 catch { }
             });
         },
-        ...createAcpCallbacks({ ws, sessionId: bridgeSessionId, cwd: cwd || process.cwd() }),
+        ...createAcpCallbacks({ ws, sessionId: bridgeSessionId, cwd: cwd || process.cwd(), toolCallIdMap: sess.toolCallIdMap }),
     });
     sess.client = client;
     sess.loadedSessionId = targetSessionId;

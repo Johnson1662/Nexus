@@ -8,12 +8,18 @@ import { StorageService, PrefsKeys, saveWorkspaces, loadSessionCache } from '../
 import { ChatView } from '../feature/chat/ChatView';
 import { OnboardingView } from '../feature/onboarding/OnboardingView';
 import { WorkspaceSelectView } from '../feature/workspace/WorkspaceSelectView';
+import { AcpUpdate } from '../common/websocket/WSProtocol';
+import { handleAcpUpdate } from '../common/model/MessageHandler';
 
 @Entry
 @Component
 export struct Index {
   private navStack: NavPathStack = new NavPathStack();
   private ws: WSClient = new WSClient();
+
+  aboutToAppear(): void {
+    this.ws.onAcpUpdate((update: AcpUpdate) => { handleAcpUpdate(update); });
+  }
 
   @Builder
   PagesMap(name: string) {

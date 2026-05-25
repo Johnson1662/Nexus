@@ -3,7 +3,7 @@ import { ChatStore, ModelItem, ModeItem } from '../../common/model/ChatState';
 import { WorkspaceStore, HostStore, DeviceEntry } from '../../common/model/WorkspaceInfo';
 import { WorkspaceInfo, ServerSession } from '../../common/model/WorkspaceInfo';
 import { WSClient } from '../../common/websocket/WSClient';
-import { ClientMessage, AcpUpdate, AgentInfo } from '../../common/websocket/WSProtocol';
+import { ClientMessage, AgentInfo } from '../../common/websocket/WSProtocol';
 import { MessageData } from '../../common/model/MessageData';
 import { StorageService, PrefsKeys, loadWorkspaces, saveHosts, loadModelCache } from '../../services/StorageService';
 
@@ -86,6 +86,7 @@ export struct OnboardingView {
     // Map agents to their official website favicons via Google
     if (name.includes('codex')) return 'https://www.google.com/s2/favicons?domain=chatgpt.com&sz=64';
     if (name.includes('opencode')) return 'https://www.google.com/s2/favicons?domain=opencode.ai&sz=64';
+    if (name.includes('omp') || name.includes('oh-my-pi')) return 'https://www.google.com/s2/favicons?domain=omp.sh&sz=64';
     if (name.includes('hermes') || name.includes('nous')) return 'https://www.google.com/s2/favicons?domain=nousresearch.com&sz=64';
     if (name.includes('kiro')) return 'https://www.google.com/s2/favicons?domain=kiro.dev&sz=64';
     if (name.includes('claude') || name.includes('anthropic')) return 'https://www.google.com/s2/favicons?domain=claude.ai&sz=64';
@@ -107,6 +108,10 @@ export struct OnboardingView {
   normalizeServerUrl(raw: string): string {
     let url: string = raw.trim();
     if (url.length === 0) return '';
+    let pin = url.toUpperCase();
+    if (/^[A-Z0-9]{8}$/.test(pin)) {
+      return 'ws://35.212.247.127:12138?role=client&deviceId=' + pin;
+    }
     if (url.startsWith('http://')) {
       url = 'ws://' + url.substring(7);
     } else if (url.startsWith('https://')) {
@@ -114,11 +119,9 @@ export struct OnboardingView {
     } else if (!url.startsWith('ws://') && !url.startsWith('wss://')) {
       url = 'ws://' + url;
     }
-    // Strip trailing slash
     if (url.endsWith('/') && url.length > 6) {
       url = url.substring(0, url.length - 1);
     }
-    // Wrap bare IPv6 addresses in brackets for valid WebSocket URL
     let schemeEnd: number = url.indexOf('://');
     if (schemeEnd >= 0) {
       let scheme: string = url.substring(0, schemeEnd + 3);
@@ -156,8 +159,7 @@ export struct OnboardingView {
       this.connectedViaSavedDevice = false;
       this.connectingDeviceName = this.extractIpPort(url);
     }
-    // Load workspaces (device name scoped, works regardless of which URL connects)
-    loadWorkspaces(url);
+    // Defer workspace loading until server_info arrives so hostId/url merge is available
     this.ws.clearListeners();
     this.connecting = true;
     this.connectError = '';
@@ -216,7 +218,6 @@ export struct OnboardingView {
       }
     });
     this.ws.onSessionList((sessions: ServerSession[]) => { ChatStore.sessions = sessions; });
-    this.ws.onAcpUpdate((update: AcpUpdate) => { this.handleUpdate(update); });
     this.ws.onError((text: string) => {
       ChatStore.turnActive = false;
       let m = new MessageData('assistant', 'Error: ' + text, 'text');
@@ -255,102 +256,6 @@ export struct OnboardingView {
     // Refresh model list once from server — server caches this per agent to avoid temp sessions
     this.ws.send({ type: 'list_models' } as ClientMessage);
     this.callbacks.onNavigateToWorkspaceSelect();
-  }
-
-  handleUpdate(u: AcpUpdate): void {
-    if (ChatStore.loadingSession) {
-      ChatStore.loadingSession = false;
-    }
-    let t: string = u.sessionUpdate;
-    if (t === 'agent_message_chunk' && u.content?.text) {
-      // Finalize any pending streaming thinking before appending agent text
-      if (ChatStore.streamingThinking.length > 0) {
-        ChatStore.messages = [...ChatStore.messages, new MessageData('assistant', ChatStore.streamingThinking, 'thinking')];
-        ChatStore.streamingThinking = '';
-      }
-      ChatStore.messages = this.appendText(ChatStore.messages, u.content.text);
-    } else if (t === 'agent_thought_chunk' && u.content?.text) {
-      // Stream thinking chunks into a separate field — NOT into LazyForEach messages.
-      // This keeps the LazyForEach key stable during streaming, preventing flicker.
-      ChatStore.streamingThinking += u.content.text;
-    } else if (t === 'tool_call' && u.toolCallId) {
-      // Finalize any pending streaming thinking before showing tool call
-      if (ChatStore.streamingThinking.length > 0) {
-        ChatStore.messages = [...ChatStore.messages, new MessageData('assistant', ChatStore.streamingThinking, 'thinking')];
-        ChatStore.streamingThinking = '';
-      }
-      let m = new MessageData('assistant', u.title || '', 'tool_call');
-      m.toolCallId = u.toolCallId; m.toolName = u.title || ''; m.toolStatus = 'pending'; m.toolKind = u.kind || '';
-      ChatStore.messages = [...ChatStore.messages, m];
-    } else if (t === 'tool_call_update' && u.toolCallId && u.status) {
-      let contentText = '';
-      if (u.toolCallContent) {
-        for (let i = 0; i < u.toolCallContent.length; i++) {
-          if (u.toolCallContent[i].content?.text) {
-            contentText += u.toolCallContent[i].content!.text!;
-          }
-        }
-      }
-      ChatStore.messages = this.updateToolStatus(ChatStore.messages, u.toolCallId, u.status, contentText);
-    } else if (t === 'plan' && u.entries) {
-      // Finalize any pending streaming thinking before showing plan
-      if (ChatStore.streamingThinking.length > 0) {
-        ChatStore.messages = [...ChatStore.messages, new MessageData('assistant', ChatStore.streamingThinking, 'thinking')];
-        ChatStore.streamingThinking = '';
-      }
-      ChatStore.planEntries = u.entries;
-    } else if (t === 'user_message_chunk' && u.content?.text) {
-      ChatStore.messages = [...ChatStore.messages, new MessageData('user', u.content.text, 'text')];
-    } else if (t === 'session_info_update' && u.title) {
-      ChatStore.sessionTitle = u.title;
-      let targetSessionId = ChatStore.loadedSessionId || ChatStore.sessionId;
-      for (let i = 0; i < ChatStore.sessions.length; i++) {
-        if (ChatStore.sessions[i].sessionId === targetSessionId) {
-          ChatStore.sessions[i].title = u.title;
-          break;
-        }
-      }
-    } else if (t === 'config_option_update' && u.configOptions) {
-      ChatStore.configOptions = u.configOptions;
-    } else if (t === 'available_commands_update' && u.availableCommands) {
-      ChatStore.availableCommands = u.availableCommands;
-    } else if (t === 'usage_update' && u.usage) {
-      ChatStore.lastUsage = u.usage;
-    } else if (t === 'turn_ended') {
-      // Finalize any remaining streaming thinking before ending the turn
-      if (ChatStore.streamingThinking.length > 0) {
-        ChatStore.messages = [...ChatStore.messages, new MessageData('assistant', ChatStore.streamingThinking, 'thinking')];
-        ChatStore.streamingThinking = '';
-      }
-      ChatStore.turnActive = false;
-    }
-  }
-
-  appendText(msgs: MessageData[], t: string): MessageData[] {
-    if (msgs.length > 0) {
-      let last = msgs[msgs.length - 1];
-      if (last.role === 'assistant' && last.type === 'text') {
-        let u = new MessageData('assistant', last.content + t, 'text');
-        u.id = last.id; u.timestamp = last.timestamp;
-        let r = [...msgs]; r[r.length - 1] = u; return r;
-      }
-    }
-    let cleaned = t.replace(/^\n+/, '');
-    return [...msgs, new MessageData('assistant', cleaned, 'text')];
-  }
-
-  updateToolStatus(msgs: MessageData[], id: string, s: string, c: string): MessageData[] {
-    let r = [...msgs];
-    for (let i = 0; i < r.length; i++) {
-      if (r[i].toolCallId === id) {
-        let u = new MessageData(r[i].role, r[i].content, r[i].type);
-        u.id = r[i].id; u.timestamp = r[i].timestamp;
-        u.toolName = r[i].toolName; u.toolStatus = s; u.toolCallId = r[i].toolCallId;
-        u.toolContent = c.length > 0 ? c : r[i].toolContent;
-        r[i] = u; break;
-      }
-    }
-    return r;
   }
 
   build() {
@@ -426,7 +331,7 @@ Text('Anywhere')
                   .transition(TransitionEffect.OPACITY)
                 } else {
                   Row() {
-                    TextInput({ text: this.serverUrl, placeholder: 'Bridge URL (ws://ip:port)' })
+                    TextInput({ text: this.serverUrl, placeholder: 'Bridge URL or 8-char relay PIN' })
                       .layoutWeight(1)
                       .height(52)
                       .backgroundColor(Color.Transparent)

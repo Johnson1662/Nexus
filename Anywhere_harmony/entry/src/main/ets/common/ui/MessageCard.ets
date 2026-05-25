@@ -54,6 +54,11 @@ export struct MessageCard {
   @State msgToolStatus: string = '';
   @State msgToolKind: string = '';
   @State msgToolContent: string = '';
+  @State msgToolContentType: string = '';
+  @State msgToolPath: string = '';
+  @State msgToolOldText: string = '';
+  @State msgToolNewText: string = '';
+  @State msgToolTerminalId: string = '';
   @State streaming: boolean = false;
   @State parsedFileType: string = '';
   @State parsedFileName: string = '';
@@ -70,6 +75,11 @@ export struct MessageCard {
     this.msgToolStatus = String(params['msgToolStatus']);
     this.msgToolKind = String(params['msgToolKind']);
     this.msgToolContent = String(params['msgToolContent']);
+    this.msgToolContentType = String(params['msgToolContentType']);
+    this.msgToolPath = String(params['msgToolPath']);
+    this.msgToolOldText = String(params['msgToolOldText']);
+    this.msgToolNewText = String(params['msgToolNewText']);
+    this.msgToolTerminalId = String(params['msgToolTerminalId']);
     this.streaming = Boolean(params['streaming']);
     let info: FilePrefixInfo = parseFilePrefix(this.msgContent);
     this.parsedFileType = info.fileType;
@@ -98,7 +108,9 @@ export struct MessageCard {
             if (this.msgType === 'thinking') {
               ThinkingSection({ thinking: this.msgContent, isStreaming: this.streaming })
             } else if (this.msgType === 'tool_call') {
-              ToolCallCard({ name: this.msgToolName, status: this.msgToolStatus, kind: this.msgToolKind, content: this.msgToolContent })
+              ToolCallCard({ name: this.msgToolName, status: this.msgToolStatus, kind: this.msgToolKind, content: this.msgToolContent,
+                contentType: this.msgToolContentType, path: this.msgToolPath, oldText: this.msgToolOldText,
+                newText: this.msgToolNewText, terminalId: this.msgToolTerminalId })
             } else {
               if (this.msgContent.length > 0) {
                 if (this.streaming) {
