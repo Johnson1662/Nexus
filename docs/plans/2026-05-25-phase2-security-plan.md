@@ -5,18 +5,28 @@
 
 ---
 
+## 架构强制约束 (Architectural Constraints)
+在进入各阶段实施前，必须遵守以下核心约束，以防止系统分裂或瘫痪：
+1. **网络拓扑必须支持多路复用**：`relay/server.ts` 必须支持多 Client 绑定同一 Host，杜绝新连接直接踢掉旧连接的现状。
+2. **控制平面与数据平面分离**：路由信息（如 `hostId`、`sessionId`、协议指令）必须明文或仅受传输层保护；但 Agent 吐出的内容（代码、思考、工具详情）必须被 E2EE 保护，以优化高频 Chunk 加密开销。
+3. **能力协商 (Capability Negotiation)**：握手时必须交换 `features` 数组，新旧版本必须能优雅降级回明文模式，避免因底层 Crypto 库差异导致无法回滚。
+4. **中继状态强感知**：Relay 必须具备主机在线状态的订阅/广播能力；若 Host 掉线，Relay 必须显式通知所有关联 Client，防止 UI 进入黑洞。
+
+---
+
 ## 阶段一：持久化授权模型 (Auth Token 机制)
 **目标**：消除频繁的 PIN 码确认，实现一次配对，永久无感直连。
 
 - **重构身份体系**：
   - 客户端生成全局唯一的 `clientId`。
   - 维持服务端刚引入的持久化 `hostId`。
+  - **Relay 路由拓扑升级**：Relay Server 必须从依赖临时 PIN 码 1 对 1 绑定，升级为按 `targetHostId` 路由分发流量。
 - **首次发现 (Discovery)**：
   - 用户在手机端输入 PC 生成的 8 位随机 `relayPin`。
-  - 服务端验证通过后，将此 `clientId` 注册为受信设备，并签发高熵 `authToken` 下发给手机。
+  - **物理授权确认**：杜绝暴力破解，必须在 PC 控制台敲击 `Y` 确认后，才将该 `clientId` 纳入白名单并下发 `authToken`，同时协商 ECDH 初始密钥。
 - **无感重连 (Reconnection)**：
   - 手机端 `StorageService` 持久化保存 `{ hostId, clientId, authToken }`。
-  - 下次连接时，跳过 PIN 流程，直接通过 Relay 携带这三元组进行握手。
+  - 下次连接时，跳过 PIN 流程，直接通过 Relay 向 `targetHostId` 发起鉴权握手。
 - **设备管理**：PC 端提供基础的命令或界面来主动吊销特定的 `clientId`。
 
 ---
@@ -32,6 +42,8 @@
   - **修复策略**：严格约束握手时的公钥格式（Raw/SPKI），统一 IV (Initialization Vector) 长度为 12 Bytes，统一将 GCM 的 16 Bytes Auth Tag 追加在密文末尾，并在两侧严格按此切分。
 - **中继盲发 (Blind Relay)**：
   - Relay Server 只负责根据目标 `hostId` 路由 WebSocket 二进制帧，对 Payload 完全无法解密。
+- **加密颗粒度控制**：
+  - 高频细小的 Stream Chunk 严禁逐帧附带巨大 GCM Tag，建议将 AES 应用于逻辑体（Payload Content），而保留 WebSocket 外壳（明文 Type）以维持协议栈兼容和重传。
 
 ---
 
@@ -42,8 +54,9 @@
   - 服务端为每个激活的 Session 维护最近 50 条消息及流式 Chunk 的缓存。
 - **游标同步 (Cursor Sync)**：
   - 客户端在重连握手时，携带本地接收到的 `lastMessageId`。
-- **断点续传**：
-  - 服务端对比游标，将断线期间错过的 Agent 思考过程 (Thinking)、工具调用状态更新 (tool_call_update) 重新推给客户端，避免 UI 状态僵死。
+- **断点续传与通道重定向 (Re-piping)**：
+  - 服务端对比游标，将断线期间错过的 Agent 思考过程 (Thinking)、工具调用状态更新 (tool_call_update) 重新推给客户端。
+  - 服务器必须维护 `sessionId` 与当前激活的 WebSocket 连接的绑定，断线重连时必须将旧 Session 的事件输出重定向至新连接的 Socket，避免 UI 状态僵死。
 
 ---
 
@@ -60,5 +73,5 @@
 
 ## 实施路径建议
 我们当前处于刚刚稳定 UI 渲染和历史数据恢复的节点。接下来的实施优先级必须是：
-**阶段一 (Auth Token) -> 阶段三 (断线接管) -> 阶段二 (E2EE)**。
+**阶段一 (Auth Token + Relay拓扑升级) -> 阶段三 (断线接管) -> 阶段二 (E2EE)**。
 优先解决**连接体验**和**弱网容错**，最后再补齐**防窃听加密**，防止加密引入的不稳定影响正常开发流程。
