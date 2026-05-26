@@ -110,10 +110,6 @@ export struct OnboardingView {
   normalizeServerUrl(raw: string): string {
     let url: string = raw.trim();
     if (url.length === 0) return '';
-    let pin = url.toUpperCase();
-    if (/^[A-Z0-9]{8}$/.test(pin)) {
-      return 'ws://35.212.247.127:12138?role=client&targetHostId=' + pin;
-    }
     if (url.startsWith('http://')) {
       url = 'ws://' + url.substring(7);
     } else if (url.startsWith('https://')) {
@@ -377,7 +373,7 @@ Text('Anywhere')
                   .transition(TransitionEffect.OPACITY)
                 } else {
                   Row() {
-                    TextInput({ text: this.serverUrl, placeholder: 'Bridge URL or 8-char relay PIN' })
+                    TextInput({ text: this.serverUrl, placeholder: 'Bridge WS URL or IP:Port' })
                       .layoutWeight(1)
                       .height(52)
                       .backgroundColor(Color.Transparent)

@@ -36,7 +36,9 @@ class RelayWsAdapter extends EventEmitter {
     send(data) {
         relay.send(data);
     }
-    readyState = 1;
+    get readyState() {
+        return relay.isReady() ? 1 : 3;
+    }
 }
 relayWsAdapter = new RelayWsAdapter();
 // Print QR code after relay connects
@@ -51,9 +53,7 @@ setTimeout(() => {
     console.log('\n[QR] Scan this code in Anywhere App to connect:\n');
     qrcode.generate(qrData, { small: true });
 }, 1000);
-function handleIncomingConnection(ws, isRelay = false) {
-    console.log(`[server] ${isRelay ? 'Relay' : 'Local'} client connected`);
-    // Send server info immediately on connect (hostname + all non-internal IPs)
+function sendServerInfo(ws) {
     try {
         const hostname = os.hostname();
         const nets = os.networkInterfaces();
@@ -65,7 +65,6 @@ function handleIncomingConnection(ws, isRelay = false) {
                 }
             }
         }
-        // Expose hostId for workspace resolution
         ips.push(`HOST:${HOST_ID}`);
         ws.send(JSON.stringify({
             type: "server_info",
@@ -79,6 +78,10 @@ function handleIncomingConnection(ws, isRelay = false) {
     catch (err) {
         console.log(`[server] failed to get host info: ${err}`);
     }
+}
+function handleIncomingConnection(ws, isRelay = false) {
+    console.log(`[server] ${isRelay ? 'Relay' : 'Local'} client connected`);
+    sendServerInfo(ws);
     ws.on("message", (raw) => {
         let msg;
         try {
@@ -167,7 +170,13 @@ function handleIncomingConnection(ws, isRelay = false) {
                 });
                 break;
             default:
-                console.log(`[server] unknown message type: ${msg.type}`);
+                if (isRelay && msg.type === 'relay_client_connected') {
+                    console.log('[server] new client via relay, resending server_info');
+                    sendServerInfo(ws);
+                }
+                else {
+                    console.log(`[server] unknown message type: ${msg.type}`);
+                }
         }
     });
     ws.on("close", () => {

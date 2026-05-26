@@ -41,7 +41,9 @@ class RelayWsAdapter extends EventEmitter {
   send(data: string) {
     relay.send(data);
   }
-  readyState = 1;
+  get readyState() {
+    return relay.isReady() ? 1 : 3;
+  }
 }
 
 relayWsAdapter = new RelayWsAdapter();
@@ -59,10 +61,7 @@ setTimeout(() => {
   qrcode.generate(qrData, { small: true });
 }, 1000);
 
-function handleIncomingConnection(ws: WebSocket | any, isRelay: boolean = false) {
-  console.log(`[server] ${isRelay ? 'Relay' : 'Local'} client connected`);
-
-  // Send server info immediately on connect (hostname + all non-internal IPs)
+function sendServerInfo(ws: WebSocket | any) {
   try {
     const hostname = os.hostname();
     const nets = os.networkInterfaces();
@@ -74,9 +73,7 @@ function handleIncomingConnection(ws: WebSocket | any, isRelay: boolean = false)
         }
       }
     }
-    // Expose hostId for workspace resolution
     ips.push(`HOST:${HOST_ID}`);
-    
     ws.send(JSON.stringify({
       type: "server_info",
       hostId: HOST_ID,
@@ -88,6 +85,12 @@ function handleIncomingConnection(ws: WebSocket | any, isRelay: boolean = false)
   } catch (err) {
     console.log(`[server] failed to get host info: ${err}`);
   }
+}
+
+function handleIncomingConnection(ws: WebSocket | any, isRelay: boolean = false) {
+  console.log(`[server] ${isRelay ? 'Relay' : 'Local'} client connected`);
+
+  sendServerInfo(ws);
 
   ws.on("message", (raw: Buffer) => {
     let msg: any;
@@ -198,7 +201,12 @@ function handleIncomingConnection(ws: WebSocket | any, isRelay: boolean = false)
         break;
 
       default:
-        console.log(`[server] unknown message type: ${msg.type}`);
+        if (isRelay && msg.type === 'relay_client_connected') {
+          console.log('[server] new client via relay, resending server_info');
+          sendServerInfo(ws);
+        } else {
+          console.log(`[server] unknown message type: ${msg.type}`);
+        }
     }
   });
 

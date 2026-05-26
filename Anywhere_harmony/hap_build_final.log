@@ -1,27 +1,27 @@
 > hvigor [33mWARN: hvigor client: Failed to find or create an available daemon. Build will be executed in no-daemon mode.[39m
 > hvigor [32mUP-TO-DATE :entry:default@PreBuild...  [39m
-> hvigor [32mFinished :entry:default@CreateModuleInfo... after 1 ms [39m
+> hvigor [32mFinished :entry:default@CreateModuleInfo... after 3 ms [39m
 > hvigor [32mUP-TO-DATE :entry:default@GenerateMetadata...  [39m
 > hvigor [32mFinished :entry:default@ConfigureCmake... after 1 ms [39m
 > hvigor [32mUP-TO-DATE :entry:default@MergeProfile...  [39m
 > hvigor [32mUP-TO-DATE :entry:default@CreateBuildProfile...  [39m
 > hvigor [32mFinished :entry:default@PreCheckSyscap... after 1 ms [39m
 > hvigor [32mUP-TO-DATE :entry:default@GeneratePkgContextInfo...  [39m
-> hvigor [32mFinished :entry:default@ProcessIntegratedHsp... after 1 ms [39m
+> hvigor [32mFinished :entry:default@ProcessIntegratedHsp... after 3 ms [39m
 > hvigor [32mFinished :entry:default@BuildNativeWithCmake... after 1 ms [39m
 > hvigor [32mUP-TO-DATE :entry:default@MakePackInfo...  [39m
-> hvigor [32mFinished :entry:default@SyscapTransform... after 11 ms [39m
+> hvigor [32mFinished :entry:default@SyscapTransform... after 42 ms [39m
 > hvigor [32mUP-TO-DATE :entry:default@ProcessProfile...  [39m
 > hvigor [32mUP-TO-DATE :entry:default@ProcessRouterMap...  [39m
 > hvigor [32mUP-TO-DATE :entry:default@ProcessShareConfig...  [39m
-> hvigor [32mFinished :entry:default@ProcessStartupConfig... after 7 ms [39m
-> hvigor [32mFinished :entry:default@BuildNativeWithNinja... after 1 ms [39m
+> hvigor [32mFinished :entry:default@ProcessStartupConfig... after 32 ms [39m
+> hvigor [32mFinished :entry:default@BuildNativeWithNinja... after 2 ms [39m
 > hvigor [32mUP-TO-DATE :entry:default@ProcessResource...  [39m
 > hvigor [32mUP-TO-DATE :entry:default@GenerateLoaderJson...  [39m
 > hvigor [32mUP-TO-DATE :entry:default@ProcessLibs...  [39m
 > hvigor [32mUP-TO-DATE :entry:default@CompileResource...  [39m
 > hvigor [32mUP-TO-DATE :entry:default@DoNativeStrip...  [39m
-> hvigor [32mFinished :entry:default@BuildJS... after 8 ms [39m
+> hvigor [32mFinished :entry:default@BuildJS... after 7 ms [39m
 > hvigor [32mUP-TO-DATE :entry:default@CacheNativeLibs...  [39m
 > hvigor [33mWARN: [33mWARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/oh_modules/.ohpm/@luvi+lv-markdown-in@3.4.1/oh_modules/@luvi/lv-markdown-in/src/main/ets/lv-markdown-in/lib/utils/controller/lvFootnoteController.d.ets:2:1
  Switching off type checks with in-place comments is not allowed (arkts-strict-typing-required)
@@ -291,10 +291,10 @@
 [33mWARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/entry/src/main/ets/feature/chat/ChatInputBar.ets:271:14
  The 'minLines' API is supported since SDK version 20. However, the current compatible SDK version is 5.0.0(12).
 [39m[39m
-[33mWARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/entry/src/main/ets/feature/onboarding/OnboardingView.ets:202:9
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/entry/src/main/ets/feature/onboarding/OnboardingView.ets:205:9
  'animateTo' has been deprecated.
 [39m[39m
-[33mWARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/entry/src/main/ets/feature/onboarding/OnboardingView.ets:272:21
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/entry/src/main/ets/feature/onboarding/OnboardingView.ets:275:21
  'getContext' has been deprecated.
 [39m[39m
 [33mWARN: [33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/entry/src/main/ets/pages/Index.ets:14:1
@@ -302,12 +302,21 @@
 [33mWARN: [33m[33m[39m [33mArkTS:WARN Property 'sourceMapsPath' not found in '@luvi/lv-markdown-in'.[39m [33m[39m[39m[39m
 [33mWARN: [33m[33m[39m [33mArkTS:WARN Property 'sourceMapsPath' not found in '@cangjie-tpc/formula_hybrid'.[39m [33m[39m[39m[39m
 [39m
-> hvigor [32mFinished :entry:default@CompileArkTS... after 12 s 793 ms [39m
-> hvigor [32mFinished :entry:default@GeneratePkgModuleJson... after 9 ms [39m
-> hvigor [32mFinished :entry:default@ProcessCompiledResources... after 2 ms [39m
-> hvigor [32mFinished :entry:default@PackageHap... after 4 s 821 ms [39m
-> hvigor [32mFinished :entry:default@PackingCheck... after 22 ms [39m
-> hvigor [32mFinished :entry:default@SignHap... after 5 s 183 ms [39m
-> hvigor [32mFinished :entry:default@CollectDebugSymbol... after 5 ms [39m
-> hvigor [32mFinished :entry:assembleHap... after 1 ms [39m
-> hvigor [32mBUILD SUCCESSFUL in 29 s 774 ms [39m
+> hvigor [32mFinished :entry:default@CompileArkTS... after 1 min 23 s 898 ms [39m
+> hvigor [32mUP-TO-DATE :entry:default@GeneratePkgModuleJson...  [39m
+> hvigor [32mFinished :entry:default@ProcessCompiledResources... after 3 ms [39m
+> hvigor [32mFinished :entry:default@PackageHap... after 4 s 633 ms [39m
+> hvigor [32mFinished :entry:default@PackingCheck... after 61 ms [39m
+> hvigor [91mERROR: Failed :entry:default@SignHap... [39m
+> hvigor [91mERROR: Tools execution failed.
+Command failed with exit code 1: java -jar D:\DevEco Studio\sdk\default\openharmony\toolchains\lib\hap-sign-tool.jar sign-app -mode localSign -keystoreFile C:/Users/lneoo/.ohos/config/default_Anywhere_harmony__K2hEDVvx3YH9ivOlUK2aHeEfcHnf7OjAuJxFMOj-Tg=.p12 -keystorePwd kwJdV6mvxY -keyAlias debugKey -keyPwd kwJdV6mvxY -signAlg SHA256withECDSA -profileFile C:/Users/lneoo/.ohos/config/default_Anywhere_harmony__K2hEDVvx3YH9ivOlUK2aHeEfcHnf7OjAuJxFMOj-Tg=.p7b -appCertFile C:/Users/lneoo/.ohos/config/default_Anywhere_harmony__K2hEDVvx3YH9ivOlUK2aHeEfcHnf7OjAuJxFMOj-Tg=.cer -inFile C:\Users\lneoo\Desktop\cltest\Anywhere\Anywhere_harmony\entry\build\default\outputs\default\entry-default-unsigned.hap -outFile C:\Users\lneoo\Desktop\cltest\Anywhere\Anywhere_harmony\entry\build\default\outputs\default\entry-default-signed.hap
+05-26 13:26:26.888  INFO - Start sign-app
+05-26 13:26:28.276  INFO - certificate in profile: 陈梓豪(1943101224291199873)\,Development
+05-26 13:26:30.960  INFO - Start to sign code.
+05-26 13:26:31.014  INFO - profile type is: debug
+05-26 13:26:31.261  INFO - C:/Users/lneoo/.ohos/config/default_Anywhere_harmony__K2hEDVvx3YH9ivOlUK2aHeEfcHnf7OjAuJxFMOj-Tg=.p12 is exist. Try to load it with given passwd
+
+[31m* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --debug option to get more log output.
+[39m

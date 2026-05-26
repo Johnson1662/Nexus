@@ -35,4 +35,8 @@ export class RelayHost {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
     this.ws.send(data);
   }
+
+  isReady(): boolean {
+    return this.ws !== null && this.ws.readyState === WebSocket.OPEN;
+  }
 }

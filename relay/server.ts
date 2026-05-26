@@ -49,6 +49,12 @@ const server = serve({
           clients.set(hostId, clientSet);
         }
         clientSet.add(ws);
+        // Notify host that a new client connected
+        const hostWs = hosts.get(hostId);
+        if (hostWs) {
+          hostWs.send(JSON.stringify({ type: "relay_client_connected" }));
+          console.log(`[NOTIFY] host ${hostId} about new client`);
+        }
       }
     },
     message(ws, message) {

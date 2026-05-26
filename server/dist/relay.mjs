@@ -32,5 +32,8 @@ export class RelayHost {
             return;
         this.ws.send(data);
     }
+    isReady() {
+        return this.ws !== null && this.ws.readyState === WebSocket.OPEN;
+    }
 }
 //# sourceMappingURL=relay.mjs.map
