@@ -61,12 +61,36 @@ interface EncryptedChannel {
   send(data: string | ArrayBuffer): Promise<void>;
 }
 ```
+```
+
+**`control()` 的序列化约定**：
+```
+control("heartbeat", { ts: 1234 })
+  → text frame payload: {"type": "heartbeat", "ts": 1234}
+```
+`type` 参数和 `payload` 字典合并为一个扁平 JSON 对象，`type` 成为顶层字段。接收端解析后据此路由。
+
+**接收端事件**：`EncryptedChannel` 收到 text frame 时路由到 `oncontrol`，收到 binary frame 时解密后路由到 `onmessage`。暴露对称回调：
+
+```typescript
+interface EncryptedChannelEvents {
+  /** 收到控制消息（text frame） */
+  oncontrol?: (type: string, payload: Record<string, unknown>) => void;
+  /** 收到加密消息（binary frame，已解密为明文） */
+  onmessage?: (data: string | ArrayBuffer) => void;
+  onopen?: () => void;
+  onclose?: (code: number, reason: string) => void;
+  onerror?: (error: Error) => void;
+}
+```
+
+注意 `control()` 与 `oncontrol` 的配对是 send/receive 关系，不是 request/response。心跳的 request/response 由业务层自行约定（见下）。
 
 控制消息类型（预定义）：
 
 | type | 方向 | 用途 |
 |---|---|---|
-| `heartbeat` | 双向 | 应用层 keepalive，Bridge 侧 30s 无响应判定断连 |
+| `heartbeat` | 双向 | 应用层 keepalive。Bridge 每 10s 发 `{"type":"heartbeat","ts":…}`，手机回复相同格式。Bridge 30s 无回复→判定手机断连；手机 45s 无收到→判定 Bridge 断连。 |
 | `e2ee_hello` | Client→Host | ECDH 握手第一步 |
 | `e2ee_ready` | Host→Client | ECDH 握手第二步 |
 | `server_info` | Host→Client | 主机信息（不走控制通道就收不到） |
@@ -219,15 +243,16 @@ connecting → handshaking → open → closed
 
 | 状态 | 行为 |
 |---|---|
-| `connecting` | 底层传输未就绪（WS 正在连接）。任何 `send()` 调用 buffer 到 pending queue（上限 200 条）。 |
+| `connecting` | 底层传输未就绪（WS 正在连接）。手机端 WS timeout=10s。任何 `send()` 调用 buffer 到 pending queue（上限 200 条）。超时未连接→`connecting → closed`。 |
 | `handshaking` | WS 已就绪，正在等待/处理 E2EE 握手。`send()` 继续 buffer。`control()` 立即发送（明文 text）。 |
 | `open` | E2EE 已建立。`send()` 加密后发 binary frame。`control()` 明文发 text frame。 |
 | `closed` | 传输已关闭。`send()`/`control()` 静默丢弃。 |
 
 状态转换：
+- `connecting → closed`：WS 连接超时（手机端 WS timeout 设为 10s，超时后回到配对界面）。
 - `connecting → handshaking`：WebSocket open 事件触发。Client 侧立即发 `E2EEHello`。
-- `handshaking → open`：收到 `E2EEHello`（Host 侧）或 `E2EEReady`（Client 侧）。flush pending queue。
-- `handshaking → closed`：WS close 或握手超时（15s）。
+- `handshaking → open`：(a) Host 侧收到 `E2EEHello` → 验证 sign → 派生密钥 → 发送 `E2EEReady`。(b) Client 侧收到 `E2EEReady(accepted=true)` → 派生密钥 → flush pending queue。
+- `handshaking → closed`：(a) WS close 或握手超时（15s）。(b) Client 侧收到 `E2EEReady(accepted=false, error=…)` → 记录 error 原因，关闭通道，通知 UI 层，不重试。
 - `open → handshaking`：收到 re-hello（不同密钥），重新派生密钥，drop pending queue。
 - `open → closed`：WS close。
 
