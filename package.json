@@ -12,10 +12,12 @@
   "dependencies": {
     "@agentclientprotocol/claude-agent-acp": "^0.35.0",
     "@agentclientprotocol/sdk": "^0.21.1",
+    "qrcode-terminal": "^0.12.0",
     "ws": "^8.18.0"
   },
   "devDependencies": {
     "@types/node": "^25.7.0",
+    "@types/qrcode-terminal": "^0.12.2",
     "@types/ws": "^8.18.1",
     "tree-kill": "^1.2.2",
     "typescript": "^6.0.3"

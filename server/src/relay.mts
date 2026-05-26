@@ -1,12 +1,11 @@
 import WebSocket from 'ws';
-import crypto from 'crypto';
 
 export class RelayHost {
   private ws: WebSocket | null = null;
   public deviceId: string;
 
-  constructor(private relayUrl: string, private onMessage: (msg: string) => void) {
-    this.deviceId = crypto.randomBytes(4).toString('hex').toUpperCase();
+  constructor(private relayUrl: string, hostId: string, private onMessage: (msg: string) => void) {
+    this.deviceId = hostId;
   }
 
   connect() {
@@ -15,7 +14,7 @@ export class RelayHost {
     this.ws = new WebSocket(url);
 
     this.ws.on('open', () => {
-      console.log(`[Relay] Connected! Your PIN is: ${this.deviceId}`);
+      console.log(`[Relay] Connected! HostId: ${this.deviceId}`);
     });
 
     this.ws.on('message', (data: WebSocket.RawData) => {

@@ -1,6 +1,7 @@
+import qrcode from 'qrcode-terminal';
 import { WebSocketServer } from "ws";
 import os from "os";
-import { getOrCreateHostId } from "./host-identity.mjs";
+import { getOrCreateHostId, getOrCreateHostIdentity } from "./host-identity.mjs";
 import { RelayHost } from "./relay.mjs";
 import { discoverAgents } from "./discovery/agents.mjs";
 import { handleStart } from "./handlers/start.mjs";
@@ -19,12 +20,12 @@ import { handleAuth } from "./handlers/auth.mjs";
 import { cleanupWsSessions, enqueueWsOp } from "./session.mjs";
 const PORT = 12138;
 const HOST = "0.0.0.0";
-const RELAY_URL = "ws://35.212.247.127:12138";
+const RELAY_URL = process.env.ANYWHERE_RELAY_URL || "ws://35.212.247.127:12138";
 const wss = new WebSocketServer({ host: HOST, port: PORT });
 console.log(`[server] listening on ws://${HOST}:${PORT}`);
 const HOST_ID = getOrCreateHostId();
 let relayWsAdapter = null;
-const relay = new RelayHost(RELAY_URL, (raw) => {
+const relay = new RelayHost(RELAY_URL, HOST_ID, (raw) => {
     console.log(`[relay] received ${raw.slice(0, 120)}`);
     if (relayWsAdapter) {
         relayWsAdapter.emit("message", Buffer.from(raw));
@@ -38,7 +39,18 @@ class RelayWsAdapter extends EventEmitter {
     readyState = 1;
 }
 relayWsAdapter = new RelayWsAdapter();
+// Print QR code after relay connects
+const relayHostIdentity = getOrCreateHostIdentity();
 relay.connect();
+setTimeout(() => {
+    const qrData = JSON.stringify({
+        relayUrl: RELAY_URL,
+        hostId: relayHostIdentity.hostId,
+        publicKey: relayHostIdentity.publicKeyHex,
+    });
+    console.log('\n[QR] Scan this code in Anywhere App to connect:\n');
+    qrcode.generate(qrData, { small: true });
+}, 1000);
 function handleIncomingConnection(ws, isRelay = false) {
     console.log(`[server] ${isRelay ? 'Relay' : 'Local'} client connected`);
     // Send server info immediately on connect (hostname + all non-internal IPs)
@@ -53,12 +65,12 @@ function handleIncomingConnection(ws, isRelay = false) {
                 }
             }
         }
-        // Also include relay pin
-        ips.push(`RELAY:${relay.deviceId}`);
+        // Expose hostId for workspace resolution
+        ips.push(`HOST:${HOST_ID}`);
         ws.send(JSON.stringify({
             type: "server_info",
             hostId: HOST_ID,
-            relayPin: relay.deviceId,
+            relayPin: HOST_ID,
             hostname,
             ips,
         }));

@@ -1,0 +1,318 @@
+> hvigor [33mWARN: hvigor client: Failed to find or create an available daemon. Build will be executed in no-daemon mode.[39m
+> hvigor [33mWARN: The version number of the 'entry' module does not comply with the SemVer specification.
+               This will affect the installation and publication by ohpm.
+               Make sure the value of version in the oh-package.json5 file of the module complies with the SemVer specification.[39m
+> hvigor [32mFinished :entry:default@PreBuild... after 106 ms [39m
+> hvigor [32mFinished :entry:default@CreateModuleInfo... after 1 ms [39m
+> hvigor [32mFinished :entry:default@GenerateMetadata... after 3 ms [39m
+> hvigor [32mFinished :entry:default@ConfigureCmake... after 1 ms [39m
+> hvigor [32mFinished :entry:default@MergeProfile... after 17 ms [39m
+> hvigor [32mUP-TO-DATE :entry:default@CreateBuildProfile...  [39m
+> hvigor [32mFinished :entry:default@PreCheckSyscap... after 1 ms [39m
+> hvigor [32mUP-TO-DATE :entry:default@GeneratePkgContextInfo...  [39m
+> hvigor [32mFinished :entry:default@ProcessIntegratedHsp... after 1 ms [39m
+> hvigor [32mFinished :entry:default@BuildNativeWithCmake... after 1 ms [39m
+> hvigor [32mFinished :entry:default@MakePackInfo... after 4 ms [39m
+> hvigor [32mFinished :entry:default@SyscapTransform... after 17 ms [39m
+> hvigor [32mFinished :entry:default@ProcessProfile... after 168 ms [39m
+> hvigor [32mFinished :entry:default@ProcessRouterMap... after 9 ms [39m
+> hvigor [32mFinished :entry:default@ProcessShareConfig... after 6 ms [39m
+> hvigor [32mFinished :entry:default@ProcessStartupConfig... after 18 ms [39m
+> hvigor [32mFinished :entry:default@BuildNativeWithNinja... after 1 ms [39m
+> hvigor [32mUP-TO-DATE :entry:default@ProcessResource...  [39m
+> hvigor [32mFinished :entry:default@GenerateLoaderJson... after 58 ms [39m
+> hvigor [32mUP-TO-DATE :entry:default@ProcessLibs...  [39m
+> hvigor [32mFinished :entry:default@CompileResource... after 495 ms [39m
+> hvigor [32mUP-TO-DATE :entry:default@DoNativeStrip...  [39m
+> hvigor [32mFinished :entry:default@BuildJS... after 7 ms [39m
+> hvigor [32mUP-TO-DATE :entry:default@CacheNativeLibs...  [39m
+> hvigor [91mERROR: Failed :entry:default@CompileArkTS... [39m
+> hvigor [33mWARN: 
+[33m1 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/oh_modules/.ohpm/@luvi+lv-markdown-in@3.4.1/oh_modules/@luvi/lv-markdown-in/src/main/ets/lv-markdown-in/lib/utils/controller/lvFootnoteController.d.ets:2:1
+ Switching off type checks with in-place comments is not allowed (arkts-strict-typing-required)
+[39m[39m
+[33m2 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/oh_modules/.ohpm/@luvi+lv-markdown-in@3.4.1/oh_modules/@luvi/lv-markdown-in/src/main/ets/lv-markdown-in/lib/Index.d.ets:2:1
+ Switching off type checks with in-place comments is not allowed (arkts-strict-typing-required)
+[39m[39m
+[33m3 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/oh_modules/.ohpm/@luvi+lv-markdown-in@3.4.1/oh_modules/@luvi/lv-markdown-in/src/main/ets/lv-markdown-in/lib/domain/LvTitle.d.ets:2:1
+ Switching off type checks with in-place comments is not allowed (arkts-strict-typing-required)
+[39m[39m
+[33m4 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/oh_modules/.ohpm/@luvi+lv-markdown-in@3.4.1/oh_modules/@luvi/lv-markdown-in/src/main/ets/lv-markdown-in/lib/domain/LvText.d.ets:2:1
+ Switching off type checks with in-place comments is not allowed (arkts-strict-typing-required)
+[39m[39m
+[33m5 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/oh_modules/.ohpm/@luvi+lv-markdown-in@3.4.1/oh_modules/@luvi/lv-markdown-in/src/main/ets/lv-markdown-in/lib/domain/LvCode.d.ets:2:1
+ Switching off type checks with in-place comments is not allowed (arkts-strict-typing-required)
+[39m[39m
+[33m6 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/oh_modules/.ohpm/@luvi+lv-markdown-in@3.4.1/oh_modules/@luvi/lv-markdown-in/src/main/ets/lv-markdown-in/lib/domain/LvLink.d.ets:2:1
+ Switching off type checks with in-place comments is not allowed (arkts-strict-typing-required)
+[39m[39m
+[33m7 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/oh_modules/.ohpm/@luvi+lv-markdown-in@3.4.1/oh_modules/@luvi/lv-markdown-in/src/main/ets/lv-markdown-in/lib/domain/LvQuote.d.ets:2:1
+ Switching off type checks with in-place comments is not allowed (arkts-strict-typing-required)
+[39m[39m
+[33m8 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/oh_modules/.ohpm/@luvi+lv-markdown-in@3.4.1/oh_modules/@luvi/lv-markdown-in/src/main/ets/lv-markdown-in/lib/domain/LvImage.d.ets:2:1
+ Switching off type checks with in-place comments is not allowed (arkts-strict-typing-required)
+[39m[39m
+[33m9 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/oh_modules/.ohpm/@luvi+lv-markdown-in@3.4.1/oh_modules/@luvi/lv-markdown-in/src/main/ets/lv-markdown-in/lib/utils/common/index.d.ets:2:1
+ Switching off type checks with in-place comments is not allowed (arkts-strict-typing-required)
+[39m[39m
+[33m10 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/oh_modules/.ohpm/@luvi+lv-markdown-in@3.4.1/oh_modules/@luvi/lv-markdown-in/src/main/ets/enhance/constant/CodeTheme.d.ets:2:1
+ Switching off type checks with in-place comments is not allowed (arkts-strict-typing-required)
+[39m[39m
+[33m11 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/oh_modules/.ohpm/@luvi+lv-markdown-in@3.4.1/oh_modules/@luvi/lv-markdown-in/src/main/ets/enhance/model/CodeHighlight.d.ets:2:1
+ Switching off type checks with in-place comments is not allowed (arkts-strict-typing-required)
+[39m[39m
+[33m12 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/oh_modules/.ohpm/@luvi+lv-markdown-in@3.4.1/oh_modules/@luvi/lv-markdown-in/src/main/ets/enhance/controller/MarkdonwController.d.ets:86:9
+ Type notation using "this" is not supported (arkts-no-typing-with-this)
+[39m[39m
+[33m13 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/oh_modules/.ohpm/@luvi+lv-markdown-in@3.4.1/oh_modules/@luvi/lv-markdown-in/src/main/ets/enhance/controller/MarkdonwController.d.ets:106:9
+ Type notation using "this" is not supported (arkts-no-typing-with-this)
+[39m[39m
+[33m14 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/oh_modules/.ohpm/@luvi+lv-markdown-in@3.4.1/oh_modules/@luvi/lv-markdown-in/src/main/ets/enhance/controller/MarkdonwController.d.ets:126:9
+ Type notation using "this" is not supported (arkts-no-typing-with-this)
+[39m[39m
+[33m15 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/oh_modules/.ohpm/@luvi+lv-markdown-in@3.4.1/oh_modules/@luvi/lv-markdown-in/src/main/ets/enhance/controller/MarkdonwController.d.ets:147:9
+ Type notation using "this" is not supported (arkts-no-typing-with-this)
+[39m[39m
+[33m16 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/oh_modules/.ohpm/@luvi+lv-markdown-in@3.4.1/oh_modules/@luvi/lv-markdown-in/src/main/ets/enhance/controller/MarkdonwController.d.ets:168:9
+ Type notation using "this" is not supported (arkts-no-typing-with-this)
+[39m[39m
+[33m17 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/oh_modules/.ohpm/@luvi+lv-markdown-in@3.4.1/oh_modules/@luvi/lv-markdown-in/src/main/ets/enhance/controller/MarkdonwController.d.ets:190:9
+ Type notation using "this" is not supported (arkts-no-typing-with-this)
+[39m[39m
+[33m18 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/oh_modules/.ohpm/@luvi+lv-markdown-in@3.4.1/oh_modules/@luvi/lv-markdown-in/src/main/ets/enhance/controller/MarkdonwController.d.ets:203:39
+ Type notation using "this" is not supported (arkts-no-typing-with-this)
+[39m[39m
+[33m19 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/oh_modules/.ohpm/@luvi+lv-markdown-in@3.4.1/oh_modules/@luvi/lv-markdown-in/src/main/ets/enhance/controller/MarkdonwController.d.ets:209:51
+ Type notation using "this" is not supported (arkts-no-typing-with-this)
+[39m[39m
+[33m20 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/oh_modules/.ohpm/@luvi+lv-markdown-in@3.4.1/oh_modules/@luvi/lv-markdown-in/src/main/ets/enhance/controller/MarkdonwController.d.ets:215:45
+ Type notation using "this" is not supported (arkts-no-typing-with-this)
+[39m[39m
+[33m21 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/oh_modules/.ohpm/@luvi+lv-markdown-in@3.4.1/oh_modules/@luvi/lv-markdown-in/src/main/ets/enhance/controller/MarkdonwController.d.ets:221:42
+ Type notation using "this" is not supported (arkts-no-typing-with-this)
+[39m[39m
+[33m22 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/oh_modules/.ohpm/@luvi+lv-markdown-in@3.4.1/oh_modules/@luvi/lv-markdown-in/src/main/ets/enhance/controller/MarkdonwController.d.ets:227:45
+ Type notation using "this" is not supported (arkts-no-typing-with-this)
+[39m[39m
+[33m23 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/oh_modules/.ohpm/@luvi+lv-markdown-in@3.4.1/oh_modules/@luvi/lv-markdown-in/src/main/ets/enhance/controller/MarkdonwController.d.ets:233:55
+ Type notation using "this" is not supported (arkts-no-typing-with-this)
+[39m[39m
+[33m24 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/oh_modules/.ohpm/@luvi+lv-markdown-in@3.4.1/oh_modules/@luvi/lv-markdown-in/src/main/ets/enhance/controller/MarkdonwController.d.ets:239:52
+ Type notation using "this" is not supported (arkts-no-typing-with-this)
+[39m[39m
+[33m25 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/oh_modules/.ohpm/@luvi+lv-markdown-in@3.4.1/oh_modules/@luvi/lv-markdown-in/src/main/ets/enhance/controller/MarkdonwController.d.ets:246:46
+ Type notation using "this" is not supported (arkts-no-typing-with-this)
+[39m[39m
+[33m26 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/oh_modules/.ohpm/@luvi+lv-markdown-in@3.4.1/oh_modules/@luvi/lv-markdown-in/src/main/ets/enhance/controller/MarkdonwController.d.ets:252:50
+ Type notation using "this" is not supported (arkts-no-typing-with-this)
+[39m[39m
+[33m27 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/oh_modules/.ohpm/@luvi+lv-markdown-in@3.4.1/oh_modules/@luvi/lv-markdown-in/src/main/ets/enhance/controller/MarkdonwController.d.ets:259:54
+ Type notation using "this" is not supported (arkts-no-typing-with-this)
+[39m[39m
+[33m28 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/oh_modules/.ohpm/@luvi+lv-markdown-in@3.4.1/oh_modules/@luvi/lv-markdown-in/src/main/ets/enhance/controller/MarkdonwController.d.ets:266:53
+ Type notation using "this" is not supported (arkts-no-typing-with-this)
+[39m[39m
+[33m29 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/oh_modules/.ohpm/@luvi+lv-markdown-in@3.4.1/oh_modules/@luvi/lv-markdown-in/src/main/ets/enhance/controller/MarkdonwController.d.ets:273:64
+ Type notation using "this" is not supported (arkts-no-typing-with-this)
+[39m[39m
+[33m30 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/oh_modules/.ohpm/@luvi+lv-markdown-in@3.4.1/oh_modules/@luvi/lv-markdown-in/src/main/ets/enhance/controller/MarkdonwController.d.ets:279:40
+ Type notation using "this" is not supported (arkts-no-typing-with-this)
+[39m[39m
+[33m31 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/oh_modules/.ohpm/@luvi+lv-markdown-in@3.4.1/oh_modules/@luvi/lv-markdown-in/src/main/ets/enhance/controller/MarkdonwController.d.ets:285:41
+ Type notation using "this" is not supported (arkts-no-typing-with-this)
+[39m[39m
+[33m32 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/oh_modules/.ohpm/@luvi+lv-markdown-in@3.4.1/oh_modules/@luvi/lv-markdown-in/src/main/ets/enhance/controller/MarkdonwController.d.ets:292:58
+ Type notation using "this" is not supported (arkts-no-typing-with-this)
+[39m[39m
+[33m33 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/oh_modules/.ohpm/@luvi+lv-markdown-in@3.4.1/oh_modules/@luvi/lv-markdown-in/src/main/ets/enhance/controller/MarkdonwController.d.ets:298:43
+ Type notation using "this" is not supported (arkts-no-typing-with-this)
+[39m[39m
+[33m34 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/oh_modules/.ohpm/@luvi+lv-markdown-in@3.4.1/oh_modules/@luvi/lv-markdown-in/src/main/ets/enhance/controller/MarkdonwController.d.ets:305:55
+ Type notation using "this" is not supported (arkts-no-typing-with-this)
+[39m[39m
+[33m35 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/oh_modules/.ohpm/@luvi+lv-markdown-in@3.4.1/oh_modules/@luvi/lv-markdown-in/src/main/ets/enhance/controller/MarkdonwController.d.ets:311:54
+ Type notation using "this" is not supported (arkts-no-typing-with-this)
+[39m[39m
+[33m36 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/oh_modules/.ohpm/@luvi+lv-markdown-in@3.4.1/oh_modules/@luvi/lv-markdown-in/src/main/ets/enhance/controller/MarkdonwController.d.ets:317:57
+ Type notation using "this" is not supported (arkts-no-typing-with-this)
+[39m[39m
+[33m37 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/oh_modules/.ohpm/@luvi+lv-markdown-in@3.4.1/oh_modules/@luvi/lv-markdown-in/src/main/ets/enhance/controller/MarkdonwController.d.ets:323:55
+ Type notation using "this" is not supported (arkts-no-typing-with-this)
+[39m[39m
+[33m38 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/oh_modules/.ohpm/@luvi+lv-markdown-in@3.4.1/oh_modules/@luvi/lv-markdown-in/src/main/ets/enhance/controller/MarkdonwController.d.ets:329:58
+ Type notation using "this" is not supported (arkts-no-typing-with-this)
+[39m[39m
+[33m39 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/oh_modules/.ohpm/@luvi+lv-markdown-in@3.4.1/oh_modules/@luvi/lv-markdown-in/src/main/ets/enhance/controller/MarkdonwController.d.ets:336:54
+ Type notation using "this" is not supported (arkts-no-typing-with-this)
+[39m[39m
+[33m40 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/oh_modules/.ohpm/@luvi+lv-markdown-in@3.4.1/oh_modules/@luvi/lv-markdown-in/src/main/ets/enhance/controller/MarkdonwController.d.ets:343:59
+ Type notation using "this" is not supported (arkts-no-typing-with-this)
+[39m[39m
+[33m41 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/oh_modules/.ohpm/@luvi+lv-markdown-in@3.4.1/oh_modules/@luvi/lv-markdown-in/src/main/ets/enhance/controller/MarkdonwController.d.ets:350:54
+ Type notation using "this" is not supported (arkts-no-typing-with-this)
+[39m[39m
+[33m42 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/oh_modules/.ohpm/@luvi+lv-markdown-in@3.4.1/oh_modules/@luvi/lv-markdown-in/src/main/ets/enhance/controller/MarkdonwController.d.ets:356:48
+ Type notation using "this" is not supported (arkts-no-typing-with-this)
+[39m[39m
+[33m43 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/oh_modules/.ohpm/@luvi+lv-markdown-in@3.4.1/oh_modules/@luvi/lv-markdown-in/src/main/ets/enhance/controller/MarkdonwController.d.ets:363:54
+ Type notation using "this" is not supported (arkts-no-typing-with-this)
+[39m[39m
+[33m44 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/oh_modules/.ohpm/@luvi+lv-markdown-in@3.4.1/oh_modules/@luvi/lv-markdown-in/src/main/ets/enhance/controller/MarkdonwController.d.ets:369:54
+ Type notation using "this" is not supported (arkts-no-typing-with-this)
+[39m[39m
+[33m45 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/oh_modules/.ohpm/@luvi+lv-markdown-in@3.4.1/oh_modules/@luvi/lv-markdown-in/src/main/ets/enhance/controller/MarkdonwController.d.ets:375:51
+ Type notation using "this" is not supported (arkts-no-typing-with-this)
+[39m[39m
+[33m46 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/oh_modules/.ohpm/@luvi+lv-markdown-in@3.4.1/oh_modules/@luvi/lv-markdown-in/src/main/ets/enhance/controller/MarkdonwController.d.ets:381:47
+ Type notation using "this" is not supported (arkts-no-typing-with-this)
+[39m[39m
+[33m47 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/oh_modules/.ohpm/@luvi+lv-markdown-in@3.4.1/oh_modules/@luvi/lv-markdown-in/src/main/ets/enhance/controller/MarkdonwController.d.ets:388:121
+ Type notation using "this" is not supported (arkts-no-typing-with-this)
+[39m[39m
+[33m48 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/oh_modules/.ohpm/@luvi+lv-markdown-in@3.4.1/oh_modules/@luvi/lv-markdown-in/src/main/ets/enhance/controller/MarkdonwController.d.ets:394:50
+ Type notation using "this" is not supported (arkts-no-typing-with-this)
+[39m[39m
+[33m49 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/oh_modules/.ohpm/@luvi+lv-markdown-in@3.4.1/oh_modules/@luvi/lv-markdown-in/src/main/ets/enhance/controller/MarkdonwController.d.ets:400:55
+ Type notation using "this" is not supported (arkts-no-typing-with-this)
+[39m[39m
+[33m50 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/oh_modules/.ohpm/@luvi+lv-markdown-in@3.4.1/oh_modules/@luvi/lv-markdown-in/src/main/ets/enhance/controller/MarkdonwController.d.ets:406:60
+ Type notation using "this" is not supported (arkts-no-typing-with-this)
+[39m[39m
+[33m51 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/oh_modules/.ohpm/@luvi+lv-markdown-in@3.4.1/oh_modules/@luvi/lv-markdown-in/src/main/ets/enhance/controller/MarkdonwController.d.ets:413:54
+ Type notation using "this" is not supported (arkts-no-typing-with-this)
+[39m[39m
+[33m52 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/oh_modules/.ohpm/@luvi+lv-markdown-in@3.4.1/oh_modules/@luvi/lv-markdown-in/src/main/ets/enhance/controller/MarkdonwController.d.ets:420:51
+ Type notation using "this" is not supported (arkts-no-typing-with-this)
+[39m[39m
+[33m53 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/oh_modules/.ohpm/@luvi+lv-markdown-in@3.4.1/oh_modules/@luvi/lv-markdown-in/src/main/ets/enhance/controller/MarkdonwController.d.ets:427:58
+ Type notation using "this" is not supported (arkts-no-typing-with-this)
+[39m[39m
+[33m54 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/oh_modules/.ohpm/@luvi+lv-markdown-in@3.4.1/oh_modules/@luvi/lv-markdown-in/src/main/ets/enhance/controller/MarkdonwController.d.ets:434:51
+ Type notation using "this" is not supported (arkts-no-typing-with-this)
+[39m[39m
+[33m55 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/oh_modules/.ohpm/@luvi+lv-markdown-in@3.4.1/oh_modules/@luvi/lv-markdown-in/src/main/ets/enhance/controller/MarkdonwController.d.ets:441:58
+ Type notation using "this" is not supported (arkts-no-typing-with-this)
+[39m[39m
+[33m56 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/oh_modules/.ohpm/@luvi+lv-markdown-in@3.4.1/oh_modules/@luvi/lv-markdown-in/src/main/ets/enhance/controller/MarkdonwController.d.ets:448:36
+ Type notation using "this" is not supported (arkts-no-typing-with-this)
+[39m[39m
+[33m57 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/oh_modules/.ohpm/@luvi+lv-markdown-in@3.4.1/oh_modules/@luvi/lv-markdown-in/src/main/ets/enhance/controller/MarkdonwController.d.ets:454:47
+ Type notation using "this" is not supported (arkts-no-typing-with-this)
+[39m[39m
+[33m58 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/oh_modules/.ohpm/@luvi+lv-markdown-in@3.4.1/oh_modules/@luvi/lv-markdown-in/src/main/ets/enhance/controller/MarkdonwController.d.ets:460:51
+ Type notation using "this" is not supported (arkts-no-typing-with-this)
+[39m[39m
+[33m59 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/oh_modules/.ohpm/@luvi+lv-markdown-in@3.4.1/oh_modules/@luvi/lv-markdown-in/src/main/ets/enhance/controller/MarkdonwController.d.ets:467:48
+ Type notation using "this" is not supported (arkts-no-typing-with-this)
+[39m[39m
+[33m60 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/oh_modules/.ohpm/@luvi+lv-markdown-in@3.4.1/oh_modules/@luvi/lv-markdown-in/src/main/ets/enhance/controller/MarkdonwController.d.ets:474:42
+ Type notation using "this" is not supported (arkts-no-typing-with-this)
+[39m[39m
+[33m61 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/oh_modules/.ohpm/@luvi+lv-markdown-in@3.4.1/oh_modules/@luvi/lv-markdown-in/src/main/ets/enhance/controller/MarkdonwController.d.ets:480:47
+ Type notation using "this" is not supported (arkts-no-typing-with-this)
+[39m[39m
+[33m62 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/oh_modules/.ohpm/@luvi+lv-markdown-in@3.4.1/oh_modules/@luvi/lv-markdown-in/src/main/ets/enhance/controller/MarkdonwController.d.ets:487:39
+ Type notation using "this" is not supported (arkts-no-typing-with-this)
+[39m[39m
+[33m63 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/oh_modules/.ohpm/@luvi+lv-markdown-in@3.4.1/oh_modules/@luvi/lv-markdown-in/src/main/ets/enhance/controller/MarkdonwController.d.ets:494:40
+ Type notation using "this" is not supported (arkts-no-typing-with-this)
+[39m[39m
+[33m64 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/oh_modules/.ohpm/@luvi+lv-markdown-in@3.4.1/oh_modules/@luvi/lv-markdown-in/src/main/ets/enhance/controller/MarkdonwController.d.ets:501:41
+ Type notation using "this" is not supported (arkts-no-typing-with-this)
+[39m[39m
+[33m65 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/oh_modules/.ohpm/@luvi+lv-markdown-in@3.4.1/oh_modules/@luvi/lv-markdown-in/src/main/ets/enhance/controller/MarkdonwController.d.ets:508:86
+ Type notation using "this" is not supported (arkts-no-typing-with-this)
+[39m[39m
+[33m66 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/oh_modules/.ohpm/@luvi+lv-markdown-in@3.4.1/oh_modules/@luvi/lv-markdown-in/src/main/ets/enhance/controller/MarkdonwController.d.ets:514:42
+ Type notation using "this" is not supported (arkts-no-typing-with-this)
+[39m[39m
+[33m67 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/oh_modules/.ohpm/@luvi+lv-markdown-in@3.4.1/oh_modules/@luvi/lv-markdown-in/src/main/ets/enhance/controller/MarkdonwController.d.ets:530:43
+ Type notation using "this" is not supported (arkts-no-typing-with-this)
+[39m[39m
+[33m68 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/oh_modules/.ohpm/@luvi+lv-markdown-in@3.4.1/oh_modules/@luvi/lv-markdown-in/src/main/ets/enhance/controller/MarkdonwController.d.ets:537:64
+ Type notation using "this" is not supported (arkts-no-typing-with-this)
+[39m[39m
+[33m69 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/oh_modules/.ohpm/@luvi+lv-markdown-in@3.4.1/oh_modules/@luvi/lv-markdown-in/src/main/ets/enhance/controller/MarkdonwController.d.ets:2:1
+ Switching off type checks with in-place comments is not allowed (arkts-strict-typing-required)
+[39m[39m
+[33m70 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/oh_modules/.ohpm/@luvi+lv-markdown-in@3.4.1/oh_modules/@luvi/lv-markdown-in/src/main/ets/enhance/model/TreeNode.d.ets:2:1
+ Switching off type checks with in-place comments is not allowed (arkts-strict-typing-required)
+[39m[39m
+[33m71 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/oh_modules/.ohpm/@luvi+lv-markdown-in@3.4.1/oh_modules/@luvi/lv-markdown-in/src/main/ets/enhance/model/MarkdownPlugin.d.ets:2:1
+ Switching off type checks with in-place comments is not allowed (arkts-strict-typing-required)
+[39m[39m
+[33m72 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/oh_modules/.ohpm/@luvi+lv-markdown-in@3.4.1/oh_modules/@luvi/lv-markdown-in/src/main/ets/enhance/model/MdCallback.d.ets:2:1
+ Switching off type checks with in-place comments is not allowed (arkts-strict-typing-required)
+[39m[39m
+[33m73 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/oh_modules/.ohpm/@luvi+lv-markdown-in@3.4.1/oh_modules/@luvi/lv-markdown-in/src/main/ets/enhance/index.d.ets:2:1
+ Switching off type checks with in-place comments is not allowed (arkts-strict-typing-required)
+[39m[39m
+[33m74 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/oh_modules/.ohpm/@luvi+lv-markdown-in@3.4.1/oh_modules/@luvi/lv-markdown-in/Index.d.ets:2:1
+ Switching off type checks with in-place comments is not allowed (arkts-strict-typing-required)
+[39m[39m
+[33m75 WARN: [33m[33mArkTS:WARN: For details about ArkTS syntax errors, see FAQs[39m[39m
+[33m76 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/entry/src/main/ets/services/StorageService.ets:36:11
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m77 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/entry/src/main/ets/services/StorageService.ets:37:11
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m78 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/entry/src/main/ets/services/StorageService.ets:42:18
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m79 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/entry/src/main/ets/services/StorageService.ets:47:11
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m80 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/entry/src/main/ets/services/StorageService.ets:48:11
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m81 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/entry/src/main/ets/services/StorageService.ets:53:21
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m82 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/entry/src/main/ets/services/StorageService.ets:63:11
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m83 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/entry/src/main/ets/services/StorageService.ets:64:11
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m84 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/entry/src/main/ets/services/StorageService.ets:69:21
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m85 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/entry/src/main/ets/common/websocket/WSClient.ets:191:20
+ The system capacity of this api 'backgroundTaskManager' is not supported on all devices
+[39m[39m
+[33m86 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/entry/src/main/ets/common/websocket/WSClient.ets:203:9
+ The system capacity of this api 'backgroundTaskManager' is not supported on all devices
+[39m[39m
+[33m87 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/entry/src/main/ets/common/ui/MessageCard.ets:94:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m88 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/entry/src/main/ets/common/ui/MessageCard.ets:95:45
+ The 'openToast' API is supported since SDK version 18. However, the current compatible SDK version is 5.0.0(12).
+[39m[39m
+[33m89 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/entry/src/main/ets/feature/chat/ChatInputBar.ets:90:56
+ 'getContext' has been deprecated.
+[39m[39m
+[33m90 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/entry/src/main/ets/feature/chat/ChatInputBar.ets:271:14
+ The 'minLines' API is supported since SDK version 20. However, the current compatible SDK version is 5.0.0(12).
+[39m[39m
+[33m91 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/entry/src/main/ets/feature/onboarding/OnboardingView.ets:202:9
+ 'animateTo' has been deprecated.
+[39m[39m
+[33m92 WARN: [33m[33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/entry/src/main/ets/feature/onboarding/OnboardingView.ets:272:21
+ 'getContext' has been deprecated.
+[39m[39m
+[33m93 WARN: [33mArkTS:WARN File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/entry/src/main/ets/pages/Index.ets:14:1
+ It's not a recommended way to export struct with '@Entry' decorator, which may cause ACE Engine error in component preview mode.[39m[39m[39m
+> hvigor [91mERROR: ArkTS Compiler Error
+[31m1 ERROR: [31m10605008 ArkTS Compiler Error
+Error Message: Use explicit types instead of "any", "unknown" (arkts-no-any-unknown) At File: C:/Users/lneoo/Desktop/cltest/Anywhere/Anywhere_harmony/entry/src/main/ets/feature/onboarding/OnboardingView.ets:278:15
+[39m
+[39m
+[31mCOMPILE RESULT:FAIL {ERROR:2 WARN:93}[39m
+
+[31m* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --debug option to get more log output.
+[39m
+> hvigor [91mERROR: BUILD FAILED in 30 s 67 ms [39m

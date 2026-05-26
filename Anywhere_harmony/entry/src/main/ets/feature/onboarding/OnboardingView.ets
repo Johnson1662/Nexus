@@ -112,7 +112,7 @@ export struct OnboardingView {
     if (url.length === 0) return '';
     let pin = url.toUpperCase();
     if (/^[A-Z0-9]{8}$/.test(pin)) {
-      return 'ws://35.212.247.127:12138?role=client&deviceId=' + pin;
+      return 'ws://35.212.247.127:12138?role=client&targetHostId=' + pin;
     }
     if (url.startsWith('http://')) {
       url = 'ws://' + url.substring(7);
@@ -123,6 +123,13 @@ export struct OnboardingView {
     }
     if (url.endsWith('/') && url.length > 6) {
       url = url.substring(0, url.length - 1);
+    }
+    // Preserve query parameters through port/IPv6 normalization
+    let queryStart: number = url.indexOf('?');
+    let query: string = '';
+    if (queryStart >= 0) {
+      query = url.substring(queryStart);
+      url = url.substring(0, queryStart);
     }
     let schemeEnd: number = url.indexOf('://');
     if (schemeEnd >= 0) {
@@ -139,7 +146,7 @@ export struct OnboardingView {
         url = scheme + '[' + rest + ']';
       }
     }
-    return url;
+    return url + query;
   }
 
   tryConnect(device?: DeviceEntry): void {
@@ -269,7 +276,7 @@ export struct OnboardingView {
         enableAlbum: false
       };
       
-      let context = getContext(this) as common.UIAbilityContext;
+      let context = getContext() as common.UIAbilityContext;
       let result = await scanBarcode.startScanForResult(context, options);
       if (result.originalValue) {
         let val = result.originalValue;
@@ -278,6 +285,8 @@ export struct OnboardingView {
           let parsed = JSON.parse(val) as Record<string, string>;
           // E.g. { relayUrl: "...", hostId: "...", publicKey: "..." }
           if (parsed.relayUrl && parsed.hostId && parsed.publicKey) {
+            // TODO(phase2): Generate ClientKeyPair via HUKS, store in AppStorage
+            // and initiate ECDH handshake using serverHostPublicKey
             this.serverUrl = parsed.relayUrl + '?role=client&targetHostId=' + parsed.hostId;
             AppStorage.setOrCreate<string>('serverHostPublicKey', parsed.publicKey);
             this.tryConnect();
@@ -285,12 +294,12 @@ export struct OnboardingView {
              this.serverUrl = val;
              this.tryConnect();
           }
-        } catch(e: unknown) {
+        } catch(e) {
           this.serverUrl = val;
           this.tryConnect();
         }
       }
-    } catch (e: unknown) {
+    } catch (e) {
       this.connectError = 'Scan failed: ' + JSON.stringify(e);
     }
   }
