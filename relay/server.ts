@@ -1,18 +1,22 @@
 import { serve } from "bun";
 
-// In-memory maps mapping deviceId to the active WebSocket connections
+// In-memory maps
+// hosts: hostId -> host WebSocket
+// clients: hostId -> Set of client WebSockets bound to this host
 const hosts = new Map<string, any>();
-const clients = new Map<string, any>();
+const clients = new Map<string, Set<any>>();
 
 const server = serve({
   port: 12138,
   fetch(req, server) {
     const url = new URL(req.url);
     const role = url.searchParams.get("role");
-    const deviceId = url.searchParams.get("deviceId");
+    // For hosts, deviceId is their own hostId. 
+    // For clients, targetHostId specifies which host they want to connect to.
+    const hostId = role === "host" ? url.searchParams.get("deviceId") : url.searchParams.get("targetHostId");
 
-    if (!role || !deviceId) {
-      return new Response("Missing role or deviceId", { status: 400 });
+    if (!role || !hostId) {
+      return new Response("Missing role or deviceId/targetHostId", { status: 400 });
     }
 
     if (role !== "host" && role !== "client") {
@@ -20,7 +24,7 @@ const server = serve({
     }
 
     const success = server.upgrade(req, {
-      data: { role, deviceId },
+      data: { role, hostId },
     });
 
     if (success) {
@@ -31,48 +35,57 @@ const server = serve({
   },
   websocket: {
     open(ws) {
-      const { role, deviceId } = ws.data;
-      console.log(`[OPEN] ${role} connected: ${deviceId}`);
+      const { role, hostId } = ws.data;
+      console.log(`[OPEN] ${role} connected. Target/Self hostId: ${hostId}`);
       if (role === "host") {
-        // If an old host was connected, close it to avoid conflicts
-        if (hosts.has(deviceId)) {
-          hosts.get(deviceId).close(1008, "New host connected");
+        if (hosts.has(hostId)) {
+          hosts.get(hostId).close(1008, "New host connected");
         }
-        hosts.set(deviceId, ws);
+        hosts.set(hostId, ws);
       } else if (role === "client") {
-        if (clients.has(deviceId)) {
-          clients.get(deviceId).close(1008, "New client connected");
+        let clientSet = clients.get(hostId);
+        if (!clientSet) {
+          clientSet = new Set();
+          clients.set(hostId, clientSet);
         }
-        clients.set(deviceId, ws);
+        clientSet.add(ws);
       }
     },
     message(ws, message) {
-      const { role, deviceId } = ws.data;
-      console.log(`[MSG] from=${role} device=${deviceId} bytes=${typeof message === "string" ? message.length : message.byteLength ?? 0}`);
+      const { role, hostId } = ws.data;
+      console.log(`[MSG] from=${role} target=${hostId} bytes=${typeof message === "string" ? message.length : message.byteLength ?? 0}`);
       
       if (role === "client") {
-        const hostWs = hosts.get(deviceId);
+        const hostWs = hosts.get(hostId);
         if (hostWs) {
-          console.log(`[FWD] client -> host ${deviceId}`);
+          console.log(`[FWD] client -> host ${hostId}`);
           hostWs.send(message);
         } else {
-          console.log(`[WARN] No host found for deviceId: ${deviceId}`);
+          console.log(`[WARN] No host found for hostId: ${hostId}`);
         }
       } else if (role === "host") {
-        const clientWs = clients.get(deviceId);
-        if (clientWs) {
-          console.log(`[FWD] host -> client ${deviceId}`);
-          clientWs.send(message);
+        const clientSet = clients.get(hostId);
+        if (clientSet && clientSet.size > 0) {
+          console.log(`[FWD] host -> ${clientSet.size} clients for ${hostId}`);
+          for (const clientWs of clientSet) {
+            clientWs.send(message);
+          }
         }
       }
     },
     close(ws, code, message) {
-      const { role, deviceId } = ws.data;
-      console.log(`[CLOSE] ${role} disconnected: ${deviceId} (${code})`);
-      if (role === "host" && hosts.get(deviceId) === ws) {
-        hosts.delete(deviceId);
-      } else if (role === "client" && clients.get(deviceId) === ws) {
-        clients.delete(deviceId);
+      const { role, hostId } = ws.data;
+      console.log(`[CLOSE] ${role} disconnected: ${hostId} (${code})`);
+      if (role === "host" && hosts.get(hostId) === ws) {
+        hosts.delete(hostId);
+      } else if (role === "client") {
+        const clientSet = clients.get(hostId);
+        if (clientSet) {
+          clientSet.delete(ws);
+          if (clientSet.size === 0) {
+            clients.delete(hostId);
+          }
+        }
       }
     },
   },
