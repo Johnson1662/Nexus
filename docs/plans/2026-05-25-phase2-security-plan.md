@@ -11,6 +11,7 @@
 2. **控制平面与数据平面分离**：握手和路由协议（如 `type`, `hostId`, `sessionId`）走明文，维持网络基建兼容；但 Payload（代码、思考、终端）必须全程被 AES-GCM 密文包裹。
 3. **防重放与加密状态同步 (Crypto State Sync)**：断网重连不仅会丢失消息，还会导致 AES-GCM 的 IV (初始化向量) 计数器失步。协议中必须让每一个 Chunk 带上其生成用的随机 IV（或显式同步计数器），确保断点续传时密文能被无缝解开。
 4. **带外信任根 (OOB Trust Root)**：废除基于网络的短数字 PIN 认证，彻底切断公网中间人 (MITM) 及暴力破解的可能。信任的建立必须依赖物理世界“面对面”的二维码扫描。
+5. **前向保密 (Perfect Forward Secrecy, PFS)**：即便 Host 的长期私钥在未来某天泄露，也绝不能被用来解密过去的会话数据。每次 WebSocket 连接建立时，双方必须基于长期公钥进行身份认证，但**必须生成并交换临时的 Ephemeral KeyPair** 来派生本次会话的 AES 对称密钥。连接一旦断开，临时密钥即被安全销毁。
 
 ---
 
@@ -24,7 +25,7 @@
   - PC 端在终端中打印二维码（利用 `qrcode-terminal` 库），二维码 URL 包含：`relayUrl`、`hostId` 及 `HostPublicKey`。
   - 手机端扫码，**天然获取了绝对可信的主机公钥和路由地址**。
 - **无感重连与鉴权 (Reconnection)**：
-  - 因为手机端已经存有可信的 `HostPublicKey`，手机通过 Relay 找到 `targetHostId` 后，直接发起包含自己 `ClientPublicKey` 的 ECDH 握手。由于中间人无法篡改二维码里的公钥，这种鉴权是数学意义上绝对安全的。
+  - 因为手机端已经存有可信的 `HostPublicKey`，手机通过 Relay 找到 `targetHostId` 后，直接发起包含自己临时公钥的握手（以长效私钥签名）。由于中间人无法篡改二维码里的公钥，这种鉴权是数学意义上绝对安全的。
 
 ---
 
@@ -32,9 +33,9 @@
 **目标**：防止公网 Relay Server 窃听代码、终端输出和私人对话。
 
 - **加密握手协议 (Handshake)**：
-  - 客户端通过扫码拿到 `HostPublicKey`，发起 `E2EEHello` 包，附带自己的 `ClientPublicKey`。
-  - 主机收到后，结合自己的 `HostPrivateKey` 算出共享密钥，并回复 `E2EEReady`。
-  - 双方使用 **HKDF** 派生出对称加密的 AES-256-GCM 密钥。
+  - 客户端发起 `E2EEHello` 包，附带自己生成的临时 `EphemeralClientPublicKey`。
+  - 主机收到后，生成临时 `EphemeralHostPublicKey`，结合算出共享密钥，回复 `E2EEReady`。
+  - 双方使用 **HKDF** 派生出本次连接的 AES-256-GCM 密钥。
 - **中继盲发 (Blind Relay)**：
   - Relay Server 只负责查看包头的 `targetHostId`，并将后续的二进制帧无脑桥接给对应的 PC 节点，完全不知晓内部业务。
 - **避坑策略 (Crypto Compatibility)**：
@@ -63,6 +64,8 @@
 - **移动端审批与防死锁 (Deadlock Prevention)**：
   - 当 Agent 尝试调用高危指令时，发给手机审批卡片（卡片内容同受 E2EE 保护）。
   - **防死锁机制**：审批请求必须带有 TTL（如 5 分钟超时）。若手机断网或用户未响应，服务端自动拒绝该权限，防止 Agent 进程永久挂起导致 PC 资源耗尽。
+- **UI 幽灵状态清理**：
+  - 断网会导致客户端残留未响应的 `permission_request` 悬浮卡片。当发生重连时，客户端必须依据服务端的真实会话状态强制清洗 UI 栈，防止产生无法消除的“幽灵弹窗”。
 
 ---
 
@@ -73,10 +76,5 @@
 
 ### 前置依赖准备工作
 在开始实施扫码配对前，必须完成以下环境的配置补齐：
-1. **Bridge Server (Node.js)**：需要在  中引入  以在终端中输出 ASCII 二维码。
-2. **HarmonyOS 客户端**：需要在  中申请摄像头权限 ，并集成  实现原生的扫码解析能力。
-
-### 前置依赖准备工作
-在开始实施扫码配对前，必须完成以下环境的配置补齐：
-1. **Bridge Server (Node.js)**：需要在 package.json 中引入 qrcode-terminal 以在终端中输出 ASCII 二维码。
-2. **HarmonyOS 客户端**：需要在 module.json5 中申请摄像头权限 ohos.permission.CAMERA，并集成 @kit.ScanKit 实现原生的扫码解析能力。
+1. **Bridge Server (Node.js)**：需要在 `package.json` 中引入 `qrcode-terminal` 以在终端中输出 ASCII 二维码。
+2. **HarmonyOS 客户端**：需要在 `module.json5` 中申请摄像头权限 `ohos.permission.CAMERA`，并集成 `@kit.ScanKit` 实现原生的扫码解析能力。
