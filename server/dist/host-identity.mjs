@@ -6,28 +6,42 @@ function generateHostId() {
     return crypto.randomUUID();
 }
 function generateKeyPair() {
-    const pair = crypto.generateKeyPairSync('x25519', {
+    const x25519 = crypto.generateKeyPairSync('x25519', {
         publicKeyEncoding: { type: 'spki', format: 'jwk' },
         privateKeyEncoding: { type: 'pkcs8', format: 'jwk' },
     });
-    const pubJwk = pair.publicKey;
-    const privJwk = pair.privateKey;
+    const xPubJwk = x25519.publicKey;
+    const xPrivJwk = x25519.privateKey;
+    const ed25519 = crypto.generateKeyPairSync('ed25519', {
+        publicKeyEncoding: { type: 'spki', format: 'jwk' },
+        privateKeyEncoding: { type: 'pkcs8', format: 'jwk' },
+    });
+    const ePubJwk = ed25519.publicKey;
+    const ePrivJwk = ed25519.privateKey;
     return {
-        publicKey: Buffer.from(pubJwk.x, 'base64url').toString('hex'),
-        privateKey: Buffer.from(privJwk.d, 'base64url').toString('hex'),
+        publicKey: Buffer.from(xPubJwk.x, 'base64url').toString('hex'),
+        privateKey: Buffer.from(xPrivJwk.d, 'base64url').toString('hex'),
+        ed25519PublicKey: Buffer.from(ePubJwk.x, 'base64url').toString('hex'),
+        ed25519PrivateKey: Buffer.from(ePrivJwk.d, 'base64url').toString('hex'),
     };
 }
 export function getOrCreateHostIdentity() {
+    let schemaVersion = 1;
     let hostId;
     let publicKeyHex;
     let privateKeyHex;
+    let ed25519PublicKeyHex;
+    let ed25519PrivateKeyHex;
     try {
         const raw = fs.readFileSync(IDENTITY_PATH, 'utf-8');
         const data = JSON.parse(raw);
+        schemaVersion = typeof data.schemaVersion === 'number' ? data.schemaVersion : 0;
         if (typeof data.hostId === 'string' && data.hostId.length > 0) {
             hostId = data.hostId;
             publicKeyHex = data.publicKeyHex;
             privateKeyHex = data.privateKeyHex;
+            ed25519PublicKeyHex = data.ed25519PublicKeyHex;
+            ed25519PrivateKeyHex = data.ed25519PrivateKeyHex;
         }
         else {
             hostId = generateHostId();
@@ -37,12 +51,22 @@ export function getOrCreateHostIdentity() {
         hostId = generateHostId();
     }
     // Re-generate keys if missing (but preserve hostId)
-    if (!publicKeyHex || !privateKeyHex) {
+    if (!publicKeyHex || !privateKeyHex || !ed25519PublicKeyHex || !ed25519PrivateKeyHex) {
         const keys = generateKeyPair();
-        publicKeyHex = keys.publicKey;
-        privateKeyHex = keys.privateKey;
+        publicKeyHex ??= keys.publicKey;
+        privateKeyHex ??= keys.privateKey;
+        ed25519PublicKeyHex ??= keys.ed25519PublicKey;
+        ed25519PrivateKeyHex ??= keys.ed25519PrivateKey;
     }
-    const data = { hostId, publicKeyHex, privateKeyHex };
+    schemaVersion = 1;
+    const data = {
+        schemaVersion,
+        hostId,
+        publicKeyHex,
+        privateKeyHex,
+        ed25519PublicKeyHex,
+        ed25519PrivateKeyHex,
+    };
     fs.writeFileSync(IDENTITY_PATH, JSON.stringify(data, null, 2), 'utf-8');
     return data;
 }

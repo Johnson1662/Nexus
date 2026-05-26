@@ -7,6 +7,7 @@ import { ServerSession, HostStore, DeviceEntry } from '../model/WorkspaceInfo';
 import { StorageService, PrefsKeys, saveHosts, loadWorkspaces, saveModelCache, saveSessionCache } from '../../services/StorageService';
 import { WorkspaceStore } from '../model/WorkspaceInfo';
 import { ClientMessage, ServerMessage, AcpUpdate, AgentInfo, ServerInfoMessage } from './WSProtocol';
+import { getOrCreateClientKeyPair, signWithClientKey, generateEphemeralKeyPair } from './CryptoHelper';
 import { ModelItem, ModeItem } from '../model/ChatState';
 
 const DOMAIN: number = 0x0000;
@@ -36,6 +37,8 @@ export class WSClient {
   private suspendRequestId: number | null = null;
   private wsGen: number = 0;
   private everConnected: boolean = false;
+  private _e2eeReady: boolean = false;
+  private _e2eeClientId: string = '';
 
   connect(url: string): void {
     this.cancelReconnect();
@@ -125,6 +128,10 @@ export class WSClient {
       this.reconnectAttempts = 0;
       this.notifyState(true, url);
       this.requestBgTask();
+      // Auto-initiate E2EE for relay connections (URL contains targetHostId)
+      if (url.indexOf('targetHostId=') >= 0) {
+        this.initiateE2EE(url, gen);
+      }
     });
 
     this.ws.on('message', (_err: BusinessError, data: string | ArrayBuffer) => {
@@ -214,6 +221,46 @@ export class WSClient {
       this.ws.send(JSON.stringify(msg));
     } catch (err) {
       hilog.error(DOMAIN, TAG, 'send failed: ' + JSON.stringify(err));
+    }
+  }
+  /** 发送控制消息（E2EE 握手/心跳等 text frame） */
+  sendControl(type: string, payload: Record<string, Object>): void {
+    if (!this.ws) return;
+    try {
+      let data: Record<string, Object> = { type: type };
+      for (let key in payload) {
+        data[key] = payload[key] as Object;
+      }
+      this.ws.send(JSON.stringify(data));
+    } catch (err) {
+      hilog.error(DOMAIN, TAG, 'sendControl failed: ' + JSON.stringify(err));
+    }
+  }
+  private async initiateE2EE(url: string, gen: number): Promise<void> {
+    try {
+      const hostEd25519PubKey: string = AppStorage.get<string>('hostEd25519PublicKey') || '';
+      const hostId: string = AppStorage.get<string>('hostId') || '';
+      if (!hostEd25519PubKey || !hostId) return;
+
+      let ephKeyPair = await generateEphemeralKeyPair();
+      let clientKeyPair = await getOrCreateClientKeyPair();
+      let clientId: string = hostId + '_client_' + Date.now();
+      this._e2eeClientId = clientId;
+
+      let signPayload: string = hostId + ephKeyPair.publicKeyHex + clientId;
+      let signature: string = await signWithClientKey(signPayload);
+
+      this.sendControl('e2ee_hello', {
+        protocolVersion: 1,
+        clientId: clientId,
+        clientPublicKey: clientKeyPair.publicKeyHex,
+        ephemeralKey: ephKeyPair.publicKeyHex,
+        hostId: hostId,
+        signature: signature,
+      } as Record<string, Object>);
+      hilog.info(DOMAIN, TAG, 'E2EEHello sent');
+    } catch (err) {
+      hilog.error(DOMAIN, TAG, 'initiateE2EE failed: ' + JSON.stringify(err));
     }
   }
 
@@ -318,16 +365,37 @@ export class WSClient {
     }
     saveHosts();
     loadWorkspaces(connectedUrl);
+  private handleE2EEMessage(raw: string): void {
+    let parsed: Record<string, Object>;
+    try {
+      parsed = JSON.parse(raw) as Record<string, Object>;
+    } catch { return; }
+    let type: string = String(parsed['type'] || '');
+    if (type === 'e2ee_ready') {
+      let accepted: boolean = Boolean(parsed['accepted']);
+      if (accepted) {
+        this._e2eeReady = true;
+        hilog.info(DOMAIN, TAG, 'E2EE handshake completed');
+      } else {
+        let error: string = String(parsed['error'] || 'unknown');
+        hilog.error(DOMAIN, TAG, 'E2EE handshake rejected: ' + error);
+      }
+    }
   }
 
   private handleMessage(raw: string): void {
+    // E2EE handshake messages are intercepted at control level
+    if (raw.indexOf('"e2ee_hello"') >= 0 || raw.indexOf('"e2ee_ready"') >= 0) {
+      this.handleE2EEMessage(raw);
+      return;
+    }
+
     let msg: ServerMessage;
     try {
       msg = JSON.parse(raw) as ServerMessage;
     } catch {
       return;
     }
-
     switch (msg.type) {
       case 'server_info':
         this.handleServerInfo(msg as ServerInfoMessage);

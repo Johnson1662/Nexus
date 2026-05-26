@@ -8,6 +8,7 @@ import { MessageData } from '../../common/model/MessageData';
 import { scanBarcode, scanCore } from '@kit.ScanKit';
 import { common } from '@kit.AbilityKit';
 import { StorageService, PrefsKeys, loadWorkspaces, saveHosts, loadModelCache } from '../../services/StorageService';
+import { getOrCreateClientKeyPair, signWithClientKey } from '../../common/websocket/CryptoHelper';
 
 interface OnboardingCallbacks {
   onNavigateToWorkspaceSelect: () => void;
@@ -273,26 +274,65 @@ export struct OnboardingView {
         enableMultiMode: false,
         enableAlbum: false
       };
-      
+
       let context = getContext() as common.UIAbilityContext;
       let result = await scanBarcode.startScanForResult(context, options);
       if (result.originalValue) {
-        let val = result.originalValue;
-        // The QR code contains JSON string
-        try {
-          let parsed = JSON.parse(val) as Record<string, string>;
-          // E.g. { relayUrl: "...", hostId: "...", publicKey: "..." }
-          if (parsed.relayUrl && parsed.hostId && parsed.publicKey) {
-            // TODO(phase2): Generate ClientKeyPair via HUKS, store in AppStorage
-            // and initiate ECDH handshake using serverHostPublicKey
-            this.serverUrl = parsed.relayUrl + '?role=client&targetHostId=' + parsed.hostId;
-            AppStorage.setOrCreate<string>('serverHostPublicKey', parsed.publicKey);
-            this.tryConnect();
-          } else {
-             this.serverUrl = val;
-             this.tryConnect();
+        let val: string = result.originalValue;
+
+        // New format: anywhere://pair/#offer=<base64url>
+        let offerIdx: number = val.indexOf('#offer=');
+        if (offerIdx >= 0) {
+          let encoded: string = val.substring(offerIdx + 7);
+          // Decode base64url -> base64
+          let b64: string = '';
+          for (let i: number = 0; i < encoded.length; i++) {
+            let c: string = encoded[i];
+            if (c === '-') b64 += '+';
+            else if (c === '_') b64 += '/';
+            else b64 += c;
           }
-        } catch(e) {
+          while (b64.length % 4 !== 0) b64 += '=';
+          // Decode base64 to bytes
+          let chars: string = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+          let out: number[] = [];
+          let pad: number = 0;
+          for (let i: number = 0; i + 3 < b64.length; i += 4) {
+            let a: number = chars.indexOf(b64[i]);
+            let b: number = chars.indexOf(b64[i + 1]);
+            let c: number = chars.indexOf(b64[i + 2]);
+            let d: number = chars.indexOf(b64[i + 3]);
+            if (a < 0 || b < 0) break;
+            out.push((a << 2) | (b >> 4));
+            if (c >= 0) {
+              out.push(((b & 0x0F) << 4) | (c >> 2));
+              if (d >= 0) {
+                out.push(((c & 0x03) << 6) | d);
+              } else { pad = 1; }
+            } else { pad = 2; }
+          }
+          let jsonStr: string = '';
+          for (let i: number = 0; i < out.length - pad; i++) {
+            jsonStr += String.fromCharCode(out[i]);
+          }
+          try {
+            let offer = JSON.parse(jsonStr) as Record<string, string>;
+            if (offer.v && offer.hostId && offer.ecdhPublicKeyHex && offer.ed25519PublicKeyHex && offer.relayUrl) {
+              let keyPair = await getOrCreateClientKeyPair();
+              AppStorage.setOrCreate<string>('serverHostPublicKey', offer.ecdhPublicKeyHex);
+              AppStorage.setOrCreate<string>('hostEd25519PublicKey', offer.ed25519PublicKeyHex);
+              AppStorage.setOrCreate<string>('hostId', offer.hostId);
+              this.serverUrl = offer.relayUrl + '?role=client&targetHostId=' + offer.hostId;
+              this.tryConnect();
+            } else {
+              this.serverUrl = val;
+              this.tryConnect();
+            }
+          } catch {
+            this.serverUrl = val;
+            this.tryConnect();
+          }
+        } else {
           this.serverUrl = val;
           this.tryConnect();
         }

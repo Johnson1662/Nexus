@@ -2,6 +2,7 @@ import qrcode from 'qrcode-terminal';
 import { WebSocketServer, type WebSocket } from "ws";
 import os from "os";
 import { getOrCreateHostId, getOrCreateHostIdentity } from "./host-identity.mjs";
+import { EncryptedChannel } from "./encrypted-channel.mjs";
 import { RelayHost } from "./relay.mjs";
 import { discoverAgents } from "./discovery/agents.mjs";
 import { handleStart } from "./handlers/start.mjs";
@@ -60,11 +61,15 @@ relay.onDisconnect(() => {
 const relayHostIdentity = getOrCreateHostIdentity();
 relay.connect();
 setTimeout(() => {
-  const qrData = JSON.stringify({
-    relayUrl: RELAY_URL,
+  const offer = {
+    v: 1,
     hostId: relayHostIdentity.hostId,
-    publicKey: relayHostIdentity.publicKeyHex,
-  });
+    ecdhPublicKeyHex: relayHostIdentity.publicKeyHex,
+    ed25519PublicKeyHex: relayHostIdentity.ed25519PublicKeyHex,
+    relayUrl: RELAY_URL,
+  };
+  const encoded = Buffer.from(JSON.stringify(offer)).toString('base64url');
+  const qrData = `anywhere://pair/#offer=${encoded}`;
   console.log('\n[QR] Scan this code in Anywhere App to connect:\n');
   qrcode.generate(qrData, { small: true });
 }, 1000);
@@ -98,123 +103,164 @@ function sendServerInfo(ws: WebSocket | any) {
 function handleIncomingConnection(ws: WebSocket | any, isRelay: boolean = false) {
   console.log(`[server] ${isRelay ? 'Relay' : 'Local'} client connected`);
 
+  // Create EncryptedChannel for E2EE support
+  const identity = getOrCreateHostIdentity();
+  const channel = new EncryptedChannel({ role: 'host', hostIdentity: identity });
+  let e2eeReady = false;
+
+  channel.setEvents({
+    onopen: () => {
+      console.log('[server] E2EE handshake completed');
+      e2eeReady = true;
+    },
+    onclose: () => {
+      console.log('[server] EncryptedChannel closed');
+      e2eeReady = false;
+    },
+    onerror: (err: Error) => {
+      console.log(`[server] EncryptedChannel error: ${err.message}`);
+    },
+    oncontrol: (type: string, _payload: Record<string, unknown>) => {
+      console.log(`[server] control message: ${type}`);
+    },
+  });
+
   sendServerInfo(ws);
 
   ws.on("message", (raw: Buffer) => {
-    let msg: any;
-    try {
-      msg = JSON.parse(raw.toString());
-    } catch {
-      ws.send(JSON.stringify({ type: "error", text: "invalid json" }));
-      return;
-    }
+    // Detect text frames (JSON) vs binary frames
+    // ws library delivers text as Buffer of the UTF-8 string
+    if (raw.length > 0 && (raw[0] === 0x7B || raw[0] === 0x22)) {
+      const rawStr = raw.toString('utf-8');
 
-    const logPrefix = `[server] ← ${msg.type}`;
-    const logDetails = msg.text ? ` text="${msg.text.slice(0, 60)}"` :
-      msg.sessionId ? ` sessionId="${msg.sessionId?.slice(0, 20)}"` : '';
-    console.log(`${logPrefix}${logDetails}`);
-
-    switch (msg.type) {
-      case "start":
-        console.log(`[server] handleStart agent="${msg.agent || "opencode"}" cwd="${msg.cwd || process.cwd()}"`);
-        clearSessionListCache(ws);
-        enqueueWsOp(ws, () => handleStart(ws, msg));
-        break;
-
-      case "list_agents": {
-        const agents = discoverAgents();
-        console.log(`[server] → agent_list (${agents.length} agents)`);
-        ws.send(JSON.stringify({ type: "agent_list", agents }));
-        break;
+      // EncryptedChannel internal: intercept E2EE handshake messages
+      if (rawStr.includes('"e2ee_hello"') || rawStr.includes('"e2ee_ready"')) {
+        channel['handleControl'](rawStr);
+        return;
       }
 
-      case "input":
-        console.log(`[server] handleInput session="${msg.sessionId?.slice(0, 20)}" text="${msg.text?.slice(0, 80)}"`);
-        handleInput(ws, msg.sessionId, msg.text);
-        break;
+      let msg: any;
+      try {
+        msg = JSON.parse(rawStr);
+      } catch {
+        ws.send(JSON.stringify({ type: "error", text: "invalid json" }));
+        return;
+      }
 
-      case "cancel":
-        console.log(`[server] handleCancel session="${msg.sessionId?.slice(0, 20)}"`);
-        handleCancel(ws, msg.sessionId);
-        break;
+      const logPrefix = `[server] ← ${msg.type}`;
+      const logDetails = msg.text ? ` text="${msg.text.slice(0, 60)}"` :
+        msg.sessionId ? ` sessionId="${msg.sessionId?.slice(0, 20)}"` : '';
+      console.log(`${logPrefix}${logDetails}`);
 
-      case "switch_model":
-        console.log(`[server] handleSwitchModel session="${msg.sessionId?.slice(0, 20)}" model="${msg.model}"`);
-        handleSwitchModel(ws, msg.sessionId, msg.model).catch((err: Error) => {
-          console.log(`[server] handleSwitchModel error: ${err.message}`);
-        });
-        break;
+      switch (msg.type) {
+        case "start":
+          console.log(`[server] handleStart agent="${msg.agent || "opencode"}" cwd="${msg.cwd || process.cwd()}"`);
+          clearSessionListCache(ws);
+          enqueueWsOp(ws, () => handleStart(ws, msg));
+          break;
 
-      case "list_models":
-        console.log(`[server] handleListModels agent="${msg.agent || ""}"`);
-        enqueueWsOp(ws, () => handleListModels(ws, msg.agent));
-        break;
-
-      case "list_sessions":
-        console.log(`[server] handleListSessions cwd="${msg.cwd || ""}" agent="${msg.agent || ""}"`);
-        enqueueWsOp(ws, () => handleListSessions(ws, msg.cwd, msg.agent));
-        break;
-
-      case "set_mode":
-        console.log(`[server] handleSetMode session="${msg.sessionId?.slice(0, 20)}" mode="${msg.modeId}"`);
-        handleSetMode(ws, msg.sessionId, msg.modeId).catch((err: Error) => {
-          console.log(`[server] handleSetMode error: ${err.message}`);
-        });
-        break;
-
-      case "set_config":
-        console.log(`[server] handleSetConfig session="${msg.sessionId?.slice(0, 20)}" config="${msg.configId}" value="${msg.value}"`);
-        handleSetConfig(ws, msg.sessionId, msg.configId, msg.value).catch((err: Error) => {
-          console.log(`[server] handleSetConfig error: ${err.message}`);
-        });
-        break;
-
-      case "load_session":
-        console.log(`[server] handleLoadSession target="${msg.sessionId?.slice(0, 20)}" agent="${msg.agent || "opencode"}"`);
-        handleLoadSession(ws, msg).catch((err: Error) => {
-          console.log(`[server] handleLoadSession error: ${err.message}`);
-        });
-        break;
-
-      case "resume_session":
-        console.log(`[server] handleResumeSession target="${msg.sessionId?.slice(0, 20)}" agent="${msg.agent || "opencode"}"`);
-        handleResumeSession(ws, msg).catch((err: Error) => {
-          console.log(`[server] handleResumeSession error: ${err.message}`);
-        });
-        break;
-
-      case "close_session":
-        console.log(`[server] handleCloseSession session="${msg.sessionId?.slice(0, 20)}"`);
-        handleCloseSession(ws, msg.sessionId).catch((err: Error) => {
-          console.log(`[server] handleCloseSession error: ${err.message}`);
-        });
-        break;
-
-      case "permission_response":
-        console.log(`[server] handlePermissionResponse session="${msg.sessionId?.slice(0, 20)}" outcome="${msg.outcome}"`);
-        handlePermissionResponse(
-          ws,
-          msg.sessionId,
-          msg.requestId,
-          msg.outcome,
-          msg.optionId,
-        );
-        break;
-
-      case "authenticate":
-        console.log(`[server] handleAuth session="${msg.sessionId?.slice(0, 20)}" method="${msg.methodId}"`);
-        handleAuth(ws, msg.sessionId, msg.methodId).catch((err: Error) => {
-          console.log(`[server] handleAuth error: ${err.message}`);
-        });
-        break;
-
-      default:
-        if (isRelay && msg.type === 'relay_client_connected') {
-          console.log('[server] new client via relay, resending server_info');
-          sendServerInfo(ws);
-        } else {
-          console.log(`[server] unknown message type: ${msg.type}`);
+        case "list_agents": {
+          const agents = discoverAgents();
+          console.log(`[server] → agent_list (${agents.length} agents)`);
+          ws.send(JSON.stringify({ type: "agent_list", agents }));
+          break;
         }
+
+        case "input":
+          console.log(`[server] handleInput session="${msg.sessionId?.slice(0, 20)}" text="${msg.text?.slice(0, 80)}"`);
+          handleInput(ws, msg.sessionId, msg.text);
+          break;
+
+        case "cancel":
+          console.log(`[server] handleCancel session="${msg.sessionId?.slice(0, 20)}"`);
+          handleCancel(ws, msg.sessionId);
+          break;
+
+        case "switch_model":
+          console.log(`[server] handleSwitchModel session="${msg.sessionId?.slice(0, 20)}" model="${msg.model}"`);
+          handleSwitchModel(ws, msg.sessionId, msg.model).catch((err: Error) => {
+            console.log(`[server] handleSwitchModel error: ${err.message}`);
+          });
+          break;
+
+        case "list_models":
+          console.log(`[server] handleListModels agent="${msg.agent || ""}"`);
+          enqueueWsOp(ws, () => handleListModels(ws, msg.agent));
+          break;
+
+        case "list_sessions":
+          console.log(`[server] handleListSessions cwd="${msg.cwd || ""}" agent="${msg.agent || ""}"`);
+          enqueueWsOp(ws, () => handleListSessions(ws, msg.cwd, msg.agent));
+          break;
+
+        case "set_mode":
+          console.log(`[server] handleSetMode session="${msg.sessionId?.slice(0, 20)}" mode="${msg.modeId}"`);
+          handleSetMode(ws, msg.sessionId, msg.modeId).catch((err: Error) => {
+            console.log(`[server] handleSetMode error: ${err.message}`);
+          });
+          break;
+
+        case "set_config":
+          console.log(`[server] handleSetConfig session="${msg.sessionId?.slice(0, 20)}" config="${msg.configId}" value="${msg.value}"`);
+          handleSetConfig(ws, msg.sessionId, msg.configId, msg.value).catch((err: Error) => {
+            console.log(`[server] handleSetConfig error: ${err.message}`);
+          });
+          break;
+
+        case "load_session":
+          console.log(`[server] handleLoadSession target="${msg.sessionId?.slice(0, 20)}" agent="${msg.agent || "opencode"}"`);
+          handleLoadSession(ws, msg).catch((err: Error) => {
+            console.log(`[server] handleLoadSession error: ${err.message}`);
+          });
+          break;
+
+        case "resume_session":
+          console.log(`[server] handleResumeSession target="${msg.sessionId?.slice(0, 20)}" agent="${msg.agent || "opencode"}"`);
+          handleResumeSession(ws, msg).catch((err: Error) => {
+            console.log(`[server] handleResumeSession error: ${err.message}`);
+          });
+          break;
+
+        case "close_session":
+          console.log(`[server] handleCloseSession session="${msg.sessionId?.slice(0, 20)}"`);
+          handleCloseSession(ws, msg.sessionId).catch((err: Error) => {
+            console.log(`[server] handleCloseSession error: ${err.message}`);
+          });
+          break;
+
+        case "permission_response":
+          console.log(`[server] handlePermissionResponse session="${msg.sessionId?.slice(0, 20)}" outcome="${msg.outcome}"`);
+          handlePermissionResponse(
+            ws,
+            msg.sessionId,
+            msg.requestId,
+            msg.outcome,
+            msg.optionId,
+          );
+          break;
+
+        case "authenticate":
+          console.log(`[server] handleAuth session="${msg.sessionId?.slice(0, 20)}" method="${msg.methodId}"`);
+          handleAuth(ws, msg.sessionId, msg.methodId).catch((err: Error) => {
+            console.log(`[server] handleAuth error: ${err.message}`);
+          });
+          break;
+
+        default:
+          if (isRelay && msg.type === 'relay_client_connected') {
+            console.log('[server] new client via relay, resending server_info');
+            sendServerInfo(ws);
+          } else {
+            console.log(`[server] unknown message type: ${msg.type}`);
+          }
+      }
+    } else {
+      // binary frame — must be encrypted payload
+      if (e2eeReady) {
+        channel['handleBinary'](raw);
+      } else {
+        console.log('[server] binary frame before E2EE ready, dropping');
+      }
     }
   });
 
@@ -222,6 +268,7 @@ function handleIncomingConnection(ws: WebSocket | any, isRelay: boolean = false)
     console.log(`[server] ${isRelay ? 'Relay' : 'Local'} client disconnected, cleaning up sessions`);
     clearSessionListCache(ws);
     cleanupWsSessions(ws);
+    channel.close();
   });
 }
 
