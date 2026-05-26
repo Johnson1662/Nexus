@@ -256,6 +256,8 @@ export function createAcpCallbacks(config) {
             catch { }
         }
         currentSess.terminals.delete(params.terminalId);
+        // Clean up terminal's toolCallIdMap entry
+        currentSess.toolCallIdMap.delete(params.terminalId);
         return {};
     };
     return {

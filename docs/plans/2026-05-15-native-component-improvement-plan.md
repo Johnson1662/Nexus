@@ -2,6 +2,15 @@
 
 > 分析时间：2026-05-15
 > 数据来源：华为官方开发者文档 harmonyos-guides, harmonyos-references, best-practices
+> 
+> **实施状态 (2026-05-26)：**
+> - ✅ Navigation + NavPathStack 已替换手动 if/else 视图切换（Index.ets）
+> - ✅ LazyForEach + @Reusable 已用于消息列表（ChatPage.ets + MessageCard.ets）
+> - ✅ TextArea 已替代单行 TextInput（ChatInputBar.ets）
+> - ✅ Markdown 渲染使用 @luvi/lv-markdown-in（MarkdownRender.ets）
+> - ❌ SideBarContainer 尚未替换手动抽屉（仍使用 Stack.position + zIndex）
+> - ❌ RelativeContainer 尚未用于布局优化
+> - ❌ bindSheet 半模态弹窗尚未替换 PickerSheet
 
 ---
 

@@ -48,6 +48,14 @@ class RelayWsAdapter extends EventEmitter {
 
 relayWsAdapter = new RelayWsAdapter();
 
+// When the relay connection drops, trigger cleanup on the adapter
+relay.onDisconnect(() => {
+  console.log("[server] Relay disconnected, cleaning up relay sessions");
+  if (relayWsAdapter) {
+    relayWsAdapter.emit("close");
+  }
+});
+
 // Print QR code after relay connects
 const relayHostIdentity = getOrCreateHostIdentity();
 relay.connect();

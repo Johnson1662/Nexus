@@ -1,6 +1,8 @@
 import kill from "tree-kill";
 const sessions = new Map();
 const wsOpQueues = new Map();
+// Maximum entries in toolCallIdMap to prevent unbounded growth per session
+const MAX_TOOLCALL_IDS = 500;
 export function enqueueWsOp(ws, fn) {
     const prev = wsOpQueues.get(ws) || Promise.resolve();
     const next = prev.catch(() => { }).then(async () => {
@@ -50,6 +52,24 @@ export function killTerminalProcesses(sess) {
         }
     }
     sess.terminals.clear();
+    // Clean all terminal-related entries from toolCallIdMap
+    const terminalKeys = [];
+    sess.toolCallIdMap.forEach((_v, k) => {
+        if (k.startsWith("term-"))
+            terminalKeys.push(k);
+    });
+    for (const k of terminalKeys)
+        sess.toolCallIdMap.delete(k);
+}
+/** Trim toolCallIdMap to prevent memory leaks in long sessions. */
+export function trimToolCallIds(sess) {
+    if (sess.toolCallIdMap.size <= MAX_TOOLCALL_IDS)
+        return;
+    const entries = [...sess.toolCallIdMap.entries()];
+    const toRemove = entries.slice(0, entries.length - MAX_TOOLCALL_IDS);
+    for (const [key] of toRemove) {
+        sess.toolCallIdMap.delete(key);
+    }
 }
 export function killSessionProcess(sess) {
     try {

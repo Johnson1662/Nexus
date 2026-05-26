@@ -103,6 +103,13 @@ export interface WorkspaceData {
 function sanitizeScope(scope: string): string {
   return scope.replace(/[^a-zA-Z0-9]/g, '_');
 }
+// Configurable fallback scopes for workspace migration/hostId recovery.
+// Populated by the app at startup with known hostname/IPs when needed.
+let fallbackScopes: string[] = [];
+
+export function configureFallbackScopes(scopes: string[]): void {
+  fallbackScopes = scopes;
+}
 
 function getWorkspaceScopes(serverUrl: string): string[] {
   let scopes: string[] = [];
@@ -120,10 +127,12 @@ function getWorkspaceScopes(serverUrl: string): string[] {
     scopes.push(serverUrl);
   }
   
-  // HARDCODED FALLBACK FOR LOST WORKSPACES
-  scopes.push('device_LAPTOP-3FLH46E9'); 
-  scopes.push('ws://192.168.137.215:12138');
-  scopes.push('ws://192.168.137.251:12138');
+  // Append any configured fallback scopes (for hostId migration recovery)
+  for (let i: number = 0; i < fallbackScopes.length; i++) {
+    if (scopes.indexOf(fallbackScopes[i]) < 0) {
+      scopes.push(fallbackScopes[i]);
+    }
+  }
   
   return scopes;
 }
@@ -211,6 +220,19 @@ export async function loadHosts(): Promise<void> {
   } else {
     HostStore.devices = raw as DeviceEntry[];
   }
+
+  // Populate fallback scopes from saved devices for workspace recovery
+  let scopes: string[] = [];
+  for (let i: number = 0; i < HostStore.devices.length; i++) {
+    let d: DeviceEntry = HostStore.devices[i];
+    scopes.push('device_' + d.name);
+    for (let j: number = 0; j < d.urls.length; j++) {
+      if (scopes.indexOf(d.urls[j]) < 0) {
+        scopes.push(d.urls[j]);
+      }
+    }
+  }
+  configureFallbackScopes(scopes);
 }
 
 // ── Persistent Cache (Models, Modes, Sessions) ──

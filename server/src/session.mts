@@ -2,8 +2,10 @@ import kill from "tree-kill";
 import type { SessionState } from "./acp/types.mjs";
 
 const sessions = new Map<string, SessionState>();
-
 const wsOpQueues = new Map<import("ws").WebSocket, Promise<unknown>>();
+
+// Maximum entries in toolCallIdMap to prevent unbounded growth per session
+const MAX_TOOLCALL_IDS = 500;
 
 export function enqueueWsOp(ws: import("ws").WebSocket, fn: () => Promise<void>): void {
   const prev = wsOpQueues.get(ws) || Promise.resolve();
@@ -53,6 +55,22 @@ export function killTerminalProcesses(sess: SessionState): void {
     }
   }
   sess.terminals.clear();
+  // Clean all terminal-related entries from toolCallIdMap
+  const terminalKeys: string[] = [];
+  sess.toolCallIdMap.forEach((_v, k) => {
+    if (k.startsWith("term-")) terminalKeys.push(k);
+  });
+  for (const k of terminalKeys) sess.toolCallIdMap.delete(k);
+}
+
+/** Trim toolCallIdMap to prevent memory leaks in long sessions. */
+export function trimToolCallIds(sess: SessionState): void {
+  if (sess.toolCallIdMap.size <= MAX_TOOLCALL_IDS) return;
+  const entries = [...sess.toolCallIdMap.entries()];
+  const toRemove = entries.slice(0, entries.length - MAX_TOOLCALL_IDS);
+  for (const [key] of toRemove) {
+    sess.toolCallIdMap.delete(key);
+  }
 }
 
 export function killSessionProcess(sess: SessionState): void {

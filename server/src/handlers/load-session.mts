@@ -10,6 +10,7 @@ import {
   getSession,
   killSessionProcess,
   cleanupWsSessions,
+  trimToolCallIds,
 } from "../session.mjs";
 import { createAcpCallbacks } from "../acp-callbacks.mjs";
 import type { SessionState } from "../acp/types.mjs";
@@ -86,6 +87,7 @@ export async function handleLoadSession(
             }
           }
           s.lastToolCallId = rawId;
+          trimToolCallIds(s);
         }
       }
       try {

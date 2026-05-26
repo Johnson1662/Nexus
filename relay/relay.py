@@ -99,6 +99,11 @@ class WSConnection:
             self.close_conn()
             return total
 
+        if opcode == 0x09:
+            # Respond to ping with pong
+            self.transport.write(encode_frame(payload, 0x0A))
+            return total
+
         if opcode in (0x01, 0x02) and self.on_msg:
             self.on_msg(payload)
 

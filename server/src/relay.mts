@@ -2,10 +2,15 @@ import WebSocket from 'ws';
 
 export class RelayHost {
   private ws: WebSocket | null = null;
+  private onDisconnectCallback: (() => void) | null = null;
   public deviceId: string;
 
   constructor(private relayUrl: string, hostId: string, private onMessage: (msg: string) => void) {
     this.deviceId = hostId;
+  }
+
+  onDisconnect(cb: () => void): void {
+    this.onDisconnectCallback = cb;
   }
 
   connect() {
@@ -23,6 +28,9 @@ export class RelayHost {
 
     this.ws.on('close', () => {
       console.log('[Relay] Disconnected, reconnecting in 5s...');
+      if (this.onDisconnectCallback) {
+        this.onDisconnectCallback();
+      }
       setTimeout(() => this.connect(), 5000);
     });
 

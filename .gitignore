@@ -28,3 +28,7 @@ tmpfix/
 
 # ArkTS logs
 .arkts/
+*.pyc
+__pycache__/
+relay/relay.mjs
+relay/anywhere-relay*

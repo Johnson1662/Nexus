@@ -10,6 +10,7 @@ import {
   getSession,
   killSessionProcess,
   cleanupWsSessions,
+  trimToolCallIds,
 } from "../session.mjs";
 import { createAcpCallbacks } from "../acp-callbacks.mjs";
 import type { SessionState } from "../acp/types.mjs";
@@ -96,6 +97,7 @@ export async function handleStart(
             }
           }
           sess.lastToolCallId = rawId;
+          trimToolCallIds(sess);
         }
       }
       console.log(`[server] agent_event type=${type} sessionId=${sessionId?.slice(0, 20)}`);

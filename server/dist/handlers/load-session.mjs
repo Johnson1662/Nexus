@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { AcpClient } from "../acp/client.mjs";
 import { getAgentLaunchArgs, isValidAgent } from "../discovery/agents.mjs";
-import { setSession, deleteSession, getSession, killSessionProcess, cleanupWsSessions, } from "../session.mjs";
+import { setSession, deleteSession, getSession, killSessionProcess, cleanupWsSessions, trimToolCallIds, } from "../session.mjs";
 import { createAcpCallbacks } from "../acp-callbacks.mjs";
 export async function handleLoadSession(ws, params) {
     const { sessionId: targetSessionId, cwd, agent = "opencode", model } = params;
@@ -64,6 +64,7 @@ export async function handleLoadSession(ws, params) {
                         }
                     }
                     s.lastToolCallId = rawId;
+                    trimToolCallIds(s);
                 }
             }
             try {

@@ -4,7 +4,7 @@ import path from "node:path";
 import { AcpClient } from "../acp/client.mjs";
 import { getAgentLaunchArgs } from "../discovery/agents.mjs";
 import { getLastModel } from "../prefs.mjs";
-import { setSession, deleteSession, getSession, killSessionProcess, cleanupWsSessions, } from "../session.mjs";
+import { setSession, deleteSession, getSession, killSessionProcess, cleanupWsSessions, trimToolCallIds, } from "../session.mjs";
 import { createAcpCallbacks } from "../acp-callbacks.mjs";
 export async function handleStart(ws, params) {
     const { agent = "opencode", prompt, cwd, model } = params;
@@ -74,6 +74,7 @@ export async function handleStart(ws, params) {
                         }
                     }
                     sess.lastToolCallId = rawId;
+                    trimToolCallIds(sess);
                 }
             }
             console.log(`[server] agent_event type=${type} sessionId=${sessionId?.slice(0, 20)}`);

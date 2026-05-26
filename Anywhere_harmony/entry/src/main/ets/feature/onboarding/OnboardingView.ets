@@ -110,9 +110,9 @@ export struct OnboardingView {
   normalizeServerUrl(raw: string): string {
     let url: string = raw.trim();
     if (url.length === 0) return '';
-    if (url.startsWith('http://')) {
+    if (url.startsWith('http://') && url.length > 7) {
       url = 'ws://' + url.substring(7);
-    } else if (url.startsWith('https://')) {
+    } else if (url.startsWith('https://') && url.length > 8) {
       url = 'wss://' + url.substring(8);
     } else if (!url.startsWith('ws://') && !url.startsWith('wss://')) {
       url = 'ws://' + url;
@@ -131,15 +131,17 @@ export struct OnboardingView {
     if (schemeEnd >= 0) {
       let scheme: string = url.substring(0, schemeEnd + 3);
       let rest: string = url.substring(schemeEnd + 3);
-      let portSep: number = rest.lastIndexOf(':');
-      if (portSep >= 0) {
-        let host: string = rest.substring(0, portSep);
-        let port: string = rest.substring(portSep + 1);
-        if (host.indexOf(':') >= 0 && !host.startsWith('[')) {
-          url = scheme + '[' + host + ']:' + port;
+      if (rest.length > 0) {
+        let portSep: number = rest.lastIndexOf(':');
+        if (portSep >= 0) {
+          let host: string = rest.substring(0, portSep);
+          let port: string = rest.substring(portSep + 1);
+          if (host.indexOf(':') >= 0 && !host.startsWith('[') && port.length > 0) {
+            url = scheme + '[' + host + ']:' + port;
+          }
+        } else if (rest.indexOf(':') >= 0 && !rest.startsWith('[')) {
+          url = scheme + '[' + rest + ']';
         }
-      } else if (rest.indexOf(':') >= 0 && !rest.startsWith('[')) {
-        url = scheme + '[' + rest + ']';
       }
     }
     return url + query;

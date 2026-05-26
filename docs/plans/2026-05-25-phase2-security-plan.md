@@ -7,7 +7,7 @@
 
 ## 架构强制约束 (Architectural Constraints)
 在进入各阶段实施前，必须遵守以下核心约束，以防止系统分裂或瘫痪：
-1. **网络拓扑必须支持多路复用**：`relay/server.ts` 必须支持多 Client 绑定同一 Host，杜绝新连接直接踢掉旧连接。采用 `Map<string, Set<WebSocket>>` 的数据结构，让 Host 的响应能够多播给旗下所有关联的 Client。
+1. **网络拓扑必须支持多路复用**：`relay/relay.py`（Python 3 部署版）或 `relay/server.ts`（Bun 参考版）必须支持多 Client 绑定同一 Host，杜绝新连接直接踢掉旧连接。采用 `dict[str, set[WebSocket]]` 的数据结构，让 Host 的响应能够多播给旗下所有关联的 Client。
 2. **控制平面与数据平面分离**：握手和路由协议（如 `type`, `hostId`, `sessionId`）走明文，维持网络基建兼容；但 Payload（代码、思考、终端）必须全程被 AES-GCM 密文包裹。
 3. **防重放与加密状态同步 (Crypto State Sync)**：断网重连不仅会丢失消息，还会导致 AES-GCM 的 IV (初始化向量) 计数器失步。协议中必须让每一个 Chunk 带上其生成用的随机 IV（或显式同步计数器），确保断点续传时密文能被无缝解开。
 4. **带外信任根 (OOB Trust Root)**：废除基于网络的短数字 PIN 认证，彻底切断公网中间人 (MITM) 及暴力破解的可能。信任的建立必须依赖物理世界“面对面”的二维码扫描。
@@ -69,12 +69,12 @@
 
 ---
 
-## 实施路径建议
-我们当前处于刚刚稳定 UI 渲染和历史数据恢复的节点。接下来的实施优先级必须是：
-**阶段一 (扫码生成/识别 + Relay多路复用拓扑) -> 阶段二 (打通 ECDH + AES 通道) -> 阶段三 (断线接管)**。
-扫码和加密（阶段一与阶段二）在这一架构下是不可分割的，必须同时上线，一举淘汰明文与弱网验证机制。
+## 实施优先级
+当前阶段一（扫码配对基础设施）已全部落地：PC 端 QR 码生成、手机端扫码解析、Relay 多路复用、`relay_client_connected` 通知均已完成。
+接下来的优先级是：**阶段二 (端到端加密 ECDH + AES-GCM 握手)**，完成后即可淘汰所有明文传输。
 
-### 前置依赖准备工作
-在开始实施扫码配对前，必须完成以下环境的配置补齐：
-1. **Bridge Server (Node.js)**：需要在 `package.json` 中引入 `qrcode-terminal` 以在终端中输出 ASCII 二维码。
-2. **HarmonyOS 客户端**：需要在 `module.json5` 中申请摄像头权限 `ohos.permission.CAMERA`，并集成 `@kit.ScanKit` 实现原生的扫码解析能力。
+
+### 环境依赖
+- **Bridge Server (Node.js)**：已在 `package.json` 中引入 `qrcode-terminal`。
+- **Relay Server**：需要 **Python 3.10+**（默认满足）。
+- **HarmonyOS 客户端**：已在 `module.json5` 中申请 `ohos.permission.CAMERA` 并集成 `@kit.ScanKit`。

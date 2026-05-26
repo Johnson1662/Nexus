@@ -28,25 +28,32 @@ function generateKeyPair() {
 }
 
 export function getOrCreateHostIdentity(): HostIdentityData {
+  let hostId: string;
+  let publicKeyHex: string | undefined;
+  let privateKeyHex: string | undefined;
+
   try {
     const raw = fs.readFileSync(IDENTITY_PATH, 'utf-8');
     const data = JSON.parse(raw) as Partial<HostIdentityData>;
-    if (
-      typeof data.hostId === 'string' && data.hostId.length > 0 &&
-      typeof data.publicKeyHex === 'string' && data.publicKeyHex.length > 0 &&
-      typeof data.privateKeyHex === 'string' && data.privateKeyHex.length > 0
-    ) {
-      return data as HostIdentityData;
+    if (typeof data.hostId === 'string' && data.hostId.length > 0) {
+      hostId = data.hostId;
+      publicKeyHex = data.publicKeyHex;
+      privateKeyHex = data.privateKeyHex;
+    } else {
+      hostId = generateHostId();
     }
-  } catch {}
+  } catch {
+    hostId = generateHostId();
+  }
 
-  const hostId = generateHostId();
-  const keys = generateKeyPair();
-  const data: HostIdentityData = { 
-    hostId,
-    publicKeyHex: keys.publicKey,
-    privateKeyHex: keys.privateKey
-  };
+  // Re-generate keys if missing (but preserve hostId)
+  if (!publicKeyHex || !privateKeyHex) {
+    const keys = generateKeyPair();
+    publicKeyHex = keys.publicKey;
+    privateKeyHex = keys.privateKey;
+  }
+
+  const data: HostIdentityData = { hostId, publicKeyHex, privateKeyHex };
   fs.writeFileSync(IDENTITY_PATH, JSON.stringify(data, null, 2), 'utf-8');
   return data;
 }

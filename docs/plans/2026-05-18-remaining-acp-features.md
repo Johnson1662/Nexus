@@ -71,27 +71,10 @@
 3. 等待 App 的 `permission_response` 回复
 4. 将结果返回给 Agent
 
-**App 端未实现**：`permission_request` 消息到达后无 UI 展示，Agent 的工具调用会一直卡在 `pending` 状态。`WSClient.ets` 中没有 `permission_request` 的 case 处理。
-
-### 实现方案
-
-#### App 端
-
-1. **WSClient.ets 新增消息处理**
-   - `case "permission_request"`: 设置 `ChatStore.pendingPermission` 状态
-   - 新增 `sendPermissionResponse()` 方法：`ws.send({ type: "permission_response", ... })`
-
-2. **新增 `PermissionDialog` 组件**
-   - 显示在消息流顶部或覆盖层
-   - 展示工具调用标题和描述
-   - 四个按钮：Allow once / Always allow / Reject once / Reject always
-   - 点击后自动发送 `permission_response`
-
-3. **ChatState.ets 新增状态字段**
-   - `pendingPermission: { requestId: string; toolCall: { ... }; options: PermissionOption[] } | null`
-   - 权限回复后清空
-
-**工作量**：Bridge 端 ~80 行，App 端 ~150 行（WSClient + 新组件 + state）
+**✅ App 端已完整实现**：
+- `WSClient.ets`：`case 'permission_request'` 解析 `msg.toolCall` 和 `msg.options`，保存到 `ChatStore.pendingPermission`；提供 `sendPermissionResponse()` 方法。
+- `ChatView.ets`：`PermissionSheet` 组件浮层展示，含 Allow once / Reject once 等选项按钮。
+- 无需新增代码。
 
 ---
 
@@ -174,7 +157,7 @@ Bridge 端：如果 `initialize` 响应中包含 `authMethods`，自动调用 `a
 | ✅ | File System (`fs/read*, fs/write*`) | Bridge 端已完成（start.mts / load-session.mts） |
 | ✅ | Terminal (`terminal/*`) | Bridge 端已完成（start.mts / load-session.mts） |
 | ✅ | Session Info Update | App 端已完成（OnboardingView.ets） |
-| **P1** | Permission Request App 端 UI | Bridge 转发已实现，App 端缺 UI |
+|| ✅ | Permission Request | Bridge 转发 + App PermissionSheet 已完整实现 |
 | **P2** | Terminal 输出 App 端展示 | ToolCall terminal 内容类型未处理 |
 | **P3** | Image / Audio Input | 取决于 Agent 能力声明 |
 | **P4** | Auth (authenticate) | 尚无 Agent 需要 |
@@ -183,6 +166,6 @@ Bridge 端：如果 `initialize` 响应中包含 `authMethods`，自动调用 `a
 
 ## 实施顺序建议
 
-1. **Phase 1 (P1)**：Permission Request App 端 — 安全关键，Agent 操作卡在 pending
-2. **Phase 2 (P2)**：Terminal 输出展示 — 终端确实在执行，只是输出不显示
+1. ✅ **Phase 1 (P1)**：Permission Request — 已完整实现
+2. **Phase 2 (P2)**：Terminal 输出 App 端展示 — ToolCall terminal 内容类型未处理
 3. **Phase 3 (P3 + P4)**：富媒体输入 + Auth — 低频需求

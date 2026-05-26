@@ -18,23 +18,31 @@ function generateKeyPair() {
     };
 }
 export function getOrCreateHostIdentity() {
+    let hostId;
+    let publicKeyHex;
+    let privateKeyHex;
     try {
         const raw = fs.readFileSync(IDENTITY_PATH, 'utf-8');
         const data = JSON.parse(raw);
-        if (typeof data.hostId === 'string' && data.hostId.length > 0 &&
-            typeof data.publicKeyHex === 'string' && data.publicKeyHex.length > 0 &&
-            typeof data.privateKeyHex === 'string' && data.privateKeyHex.length > 0) {
-            return data;
+        if (typeof data.hostId === 'string' && data.hostId.length > 0) {
+            hostId = data.hostId;
+            publicKeyHex = data.publicKeyHex;
+            privateKeyHex = data.privateKeyHex;
+        }
+        else {
+            hostId = generateHostId();
         }
     }
-    catch { }
-    const hostId = generateHostId();
-    const keys = generateKeyPair();
-    const data = {
-        hostId,
-        publicKeyHex: keys.publicKey,
-        privateKeyHex: keys.privateKey
-    };
+    catch {
+        hostId = generateHostId();
+    }
+    // Re-generate keys if missing (but preserve hostId)
+    if (!publicKeyHex || !privateKeyHex) {
+        const keys = generateKeyPair();
+        publicKeyHex = keys.publicKey;
+        privateKeyHex = keys.privateKey;
+    }
+    const data = { hostId, publicKeyHex, privateKeyHex };
     fs.writeFileSync(IDENTITY_PATH, JSON.stringify(data, null, 2), 'utf-8');
     return data;
 }

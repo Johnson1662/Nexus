@@ -3,11 +3,15 @@ export class RelayHost {
     relayUrl;
     onMessage;
     ws = null;
+    onDisconnectCallback = null;
     deviceId;
     constructor(relayUrl, hostId, onMessage) {
         this.relayUrl = relayUrl;
         this.onMessage = onMessage;
         this.deviceId = hostId;
+    }
+    onDisconnect(cb) {
+        this.onDisconnectCallback = cb;
     }
     connect() {
         const url = `${this.relayUrl}?role=host&deviceId=${this.deviceId}`;
@@ -21,6 +25,9 @@ export class RelayHost {
         });
         this.ws.on('close', () => {
             console.log('[Relay] Disconnected, reconnecting in 5s...');
+            if (this.onDisconnectCallback) {
+                this.onDisconnectCallback();
+            }
             setTimeout(() => this.connect(), 5000);
         });
         this.ws.on('error', (err) => {
