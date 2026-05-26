@@ -5,6 +5,8 @@ import { WorkspaceInfo, ServerSession } from '../../common/model/WorkspaceInfo';
 import { WSClient } from '../../common/websocket/WSClient';
 import { ClientMessage, AgentInfo } from '../../common/websocket/WSProtocol';
 import { MessageData } from '../../common/model/MessageData';
+import { scanBarcode, scanCore } from '@kit.ScanKit';
+import { common } from '@kit.AbilityKit';
 import { StorageService, PrefsKeys, loadWorkspaces, saveHosts, loadModelCache } from '../../services/StorageService';
 
 interface OnboardingCallbacks {
@@ -258,6 +260,41 @@ export struct OnboardingView {
     this.callbacks.onNavigateToWorkspaceSelect();
   }
 
+
+  async startScan(): Promise<void> {
+    try {
+      let options: scanBarcode.ScanOptions = {
+        scanTypes: [scanCore.ScanType.QR_CODE],
+        enableMultiMode: false,
+        enableAlbum: false
+      };
+      
+      let context = getContext(this) as common.UIAbilityContext;
+      let result = await scanBarcode.startScanForResult(context, options);
+      if (result.originalValue) {
+        let val = result.originalValue;
+        // The QR code contains JSON string
+        try {
+          let parsed = JSON.parse(val);
+          // E.g. { relayUrl: "...", hostId: "...", publicKey: "..." }
+          if (parsed.relayUrl && parsed.hostId && parsed.publicKey) {
+            this.serverUrl = parsed.relayUrl + '?role=client&targetHostId=' + parsed.hostId;
+            AppStorage.setOrCreate<string>('serverHostPublicKey', parsed.publicKey);
+            this.tryConnect();
+          } else {
+             this.serverUrl = val;
+             this.tryConnect();
+          }
+        } catch(e) {
+          this.serverUrl = val;
+          this.tryConnect();
+        }
+      }
+    } catch (e) {
+      this.connectError = 'Scan failed: ' + JSON.stringify(e);
+    }
+  }
+
   build() {
     NavDestination() {
       Stack({ alignContent: Alignment.Top }) {
@@ -341,6 +378,17 @@ Text('Anywhere')
                       .onChange((val: string) => { this.serverUrl = val })
                       .enabled(!this.connecting)
                       .onSubmit(() => { this.tryConnect() })
+
+                    Button() {
+                      SymbolGlyph($r('sys.symbol.viewfinder'))
+                        .fontSize(22).fontWeight(FontWeight.Bold).fontColor([Colors.foregroundMuted])
+                    }
+                    .type(ButtonType.Circle)
+                    .width(44).height(44)
+                    .backgroundColor(Color.Transparent)
+                    .margin({ right: 4 })
+                    .onClick(() => { this.startScan() })
+
 
                     Button() {
                       SymbolGlyph($r('sys.symbol.chevron_right'))
