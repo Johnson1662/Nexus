@@ -1,51 +1,44 @@
-# Anywhere Phase 2: 安全架构与持久化连接实现计划
+# Anywhere Phase 2: 安全架构与持久化连接实现计划 (基于 Paseo 架构重构版)
 
 ## 核心目标
-将 Anywhere 从当前的“信任优先/明文中继”模型，平滑升级为**零信任、抗弱网、端到端加密**的稳定生产力工具。彻底告别反复输入 PIN 码，并保证代码隐私在 Relay 节点绝对安全。
+将 Anywhere 从当前的“信任优先/明文中继”模型，平滑升级为**零信任、抗弱网、端到端加密**的稳定生产力工具。借鉴业界最先进的设计，**彻底淘汰 PIN 码和手工确认**，通过带外扫码 (OOB) 实现“一眼配对，绝对安全”。
 
 ---
 
 ## 架构强制约束 (Architectural Constraints)
 在进入各阶段实施前，必须遵守以下核心约束，以防止系统分裂或瘫痪：
-1. **网络拓扑必须支持多路复用**：`relay/server.ts` 必须支持多 Client 绑定同一 Host，杜绝新连接直接踢掉旧连接的现状。
-2. **控制平面与数据平面分离**：路由信息（如 `hostId`、`sessionId`、协议指令）必须明文或仅受传输层保护；但 Agent 吐出的内容必须被 E2EE 保护。
-3. **能力协商 (Capability Negotiation)**：握手时必须交换 `features` 数组，新旧版本必须能优雅降级回明文模式。
-4. **中继状态强感知**：Relay 必须具备主机在线状态的订阅/广播能力；若 Host 掉线，Relay 必须显式通知所有关联 Client。
-5. **防重放与加密状态同步 (Crypto State Sync)**：断网重连不仅会丢失消息，还会导致 AES-GCM 的 IV (初始化向量) 计数器两端失步。重传机制必须明确包含加密状态的对齐，或采用基于 `messageId` 的确定性 IV。
-6. **防中间人攻击 (MITM) 与 PAKE**：ECDH 密钥交换若无身份认证极易被 Relay 节点劫持（替换公钥）。必须利用 8 位 PIN 码作为预共享密钥 (PSK) 派生 KEK，对初始 ECDH 交换进行签名，或采用 SPAKE2 协议，确保密钥交换无法被篡改。
+1. **网络拓扑必须支持多路复用**：`relay/server.ts` 必须支持多 Client 绑定同一 Host，杜绝新连接直接踢掉旧连接。采用 `Map<string, Set<WebSocket>>` 的数据结构，让 Host 的响应能够多播给旗下所有关联的 Client。
+2. **控制平面与数据平面分离**：握手和路由协议（如 `type`, `hostId`, `sessionId`）走明文，维持网络基建兼容；但 Payload（代码、思考、终端）必须全程被 AES-GCM 密文包裹。
+3. **防重放与加密状态同步 (Crypto State Sync)**：断网重连不仅会丢失消息，还会导致 AES-GCM 的 IV (初始化向量) 计数器失步。协议中必须让每一个 Chunk 带上其生成用的随机 IV（或显式同步计数器），确保断点续传时密文能被无缝解开。
+4. **带外信任根 (OOB Trust Root)**：废除基于网络的短数字 PIN 认证，彻底切断公网中间人 (MITM) 及暴力破解的可能。信任的建立必须依赖物理世界“面对面”的二维码扫描。
 
 ---
 
-## 阶段一：持久化授权模型 (Auth Token 机制)
-**目标**：消除频繁的 PIN 码确认，实现一次配对，永久无感直连。
+## 阶段一：扫码配对与长效信任链 (OOB QR-Pairing)
+**目标**：消除手工输入 PIN 码与键盘敲击 `Y` 的繁琐，实现扫描即连、无感重连。
 
-- **重构身份体系**：
-  - 客户端生成全局唯一的 `clientId`。
-  - 维持服务端刚引入的持久化 `hostId`。
-  - **Relay 路由拓扑升级**：Relay Server 从依赖临时 PIN 码升级为按 `targetHostId` 路由分发流量。
-- **首次发现 (Discovery)**：
-  - 用户在手机端输入 PC 生成的 8 位随机 `relayPin`。
-  - **物理授权确认**：杜绝暴力破解，必须在 PC 控制台敲击 `Y` 确认后，才将该 `clientId` 纳入白名单并下发 `authToken`，同时完成经 PIN 码认证的 ECDH 交换。
-- **无感重连 (Reconnection)**：
-  - 手机端利用 **HarmonyOS HUKS (通用密钥库系统)** 安全存储 `{ hostId, clientId, authToken, 私钥 }`，而非明文写在 Preferences 中。
-  - 下次连接直接通过 Relay 向 `targetHostId` 发起基于 Challenge-Response 的鉴权握手，避免 Token 在链路上被直接抓取。
-- **抗 DDOS 与防爆破**：
-  - 由于 Relay 只做盲路由，Host 面临被恶意 Client 疯狂尝试连接的风险。Host 必须实现连接速率限制 (Rate Limiting)，并在连续 N 次鉴权失败后，通过 Relay 封禁特定来源。
+- **身份与公钥生成**：
+  - PC 端 (Bridge Server) 启动时，基于本地存储生成持久化的 `hostId`，同时生成持久化的 ECDH `HostKeyPair`（主私钥落盘）。
+  - 手机端启动时生成自身的 `clientId` 及长效 `ClientKeyPair`（由 HUKS 硬件级保护）。
+- **首次发现 (Discovery via QR)**：
+  - PC 端在终端中打印二维码（利用 `qrcode-terminal` 库），二维码 URL 包含：`relayUrl`、`hostId` 及 `HostPublicKey`。
+  - 手机端扫码，**天然获取了绝对可信的主机公钥和路由地址**。
+- **无感重连与鉴权 (Reconnection)**：
+  - 因为手机端已经存有可信的 `HostPublicKey`，手机通过 Relay 找到 `targetHostId` 后，直接发起包含自己 `ClientPublicKey` 的 ECDH 握手。由于中间人无法篡改二维码里的公钥，这种鉴权是数学意义上绝对安全的。
 
 ---
 
 ## 阶段二：端到端加密 (E2EE) 重建
 **目标**：防止公网 Relay Server 窃听代码、终端输出和私人对话。
 
-- **加密方案选择**：
-  - 采用 **ECDH** 进行密钥交换（由 PIN 码担保防 MITM）。
-  - 采用 **AES-256-GCM** 进行对称加密通信。
-- **规避前期踩过的坑**：
-  - 严格约束握手时的公钥格式（Raw/SPKI），统一 IV 长度为 12 Bytes，统一将 GCM 的 16 Bytes Auth Tag 追加在密文末尾。
+- **加密握手协议 (Handshake)**：
+  - 客户端通过扫码拿到 `HostPublicKey`，发起 `E2EEHello` 包，附带自己的 `ClientPublicKey`。
+  - 主机收到后，结合自己的 `HostPrivateKey` 算出共享密钥，并回复 `E2EEReady`。
+  - 双方使用 **HKDF** 派生出对称加密的 AES-256-GCM 密钥。
 - **中继盲发 (Blind Relay)**：
-  - Relay Server 只负责根据目标 `hostId` 路由 WebSocket 二进制帧。
-- **加密颗粒度控制**：
-  - AES 应用于逻辑体（Payload Content），而保留 WebSocket 外壳（明文 Type）以维持协议栈兼容和重传。
+  - Relay Server 只负责查看包头的 `targetHostId`，并将后续的二进制帧无脑桥接给对应的 PC 节点，完全不知晓内部业务。
+- **避坑策略 (Crypto Compatibility)**：
+  - Node.js `crypto` 与 HarmonyOS `@kit.CryptoArchitectureKit` 的互通必须严格统一格式：统一采用 Raw 格式导出公钥；统一 IV 长度为 12 Bytes；GCM 的 16 Bytes Auth Tag 统一追加在密文末尾，跨端解密时按字节切割。
 
 ---
 
@@ -55,24 +48,25 @@
 - **消息重传缓冲 (Message Buffer)**：
   - 服务端为每个激活的 Session 维护最近 50 条消息及流式 Chunk 的缓存。
 - **游标同步 (Cursor Sync)**：
-  - 客户端在重连握手时，携带本地接收到的 `lastMessageId`。
+  - 客户端在重连且 E2EE 握手成功后，携带本地接收到的 `lastMessageId` 发起同步。
 - **断点续传与通道重定向 (Re-piping)**：
   - 服务端对比游标，将断线期间错过的状态更新重新推给客户端。
-  - 服务器必须维护 `sessionId` 与当前激活的 WebSocket 连接的绑定，断线重连时必须将旧 Session 的输出重定向至新连接。
+  - 服务器必须维护 `sessionId` 与当前激活的 WebSocket 连接的绑定，断线重连时将旧 Session 的子进程输出管道 (stdout) 重定向至新连接。
 
 ---
 
 ## 阶段四：权限抢占与高危沙盒 (Permissions Sandbox)
-**目标**：建立 PC 端的防御纵深，避免 Agent 失控。
+**目标**：建立 PC 端的防御纵深，避免 Agent 越权操作。
 
 - **拦截策略配置**：
-  - 在 Bridge Server 层配置危险命令正则。
-- **移动端审批与死锁解除 (Deadlock Prevention)**：
-  - 当 Agent 尝试调用高危指令时，发给手机审批卡片。
-  - **防死锁机制**：审批请求必须带有 TTL（如 5 分钟超时）。若手机断网或用户未响应，服务端自动拒绝该权限，防止 Agent 进程永久挂起耗尽 PC 资源。
+  - 在 Bridge Server 层配置危险命令正则拦截（如全局系统修改、敏感目录操作）。
+- **移动端审批与防死锁 (Deadlock Prevention)**：
+  - 当 Agent 尝试调用高危指令时，发给手机审批卡片（卡片内容同受 E2EE 保护）。
+  - **防死锁机制**：审批请求必须带有 TTL（如 5 分钟超时）。若手机断网或用户未响应，服务端自动拒绝该权限，防止 Agent 进程永久挂起导致 PC 资源耗尽。
 
 ---
 
 ## 实施路径建议
-**阶段一 (Auth Token + Relay拓扑升级) -> 阶段三 (断线接管) -> 阶段二 (E2EE)**。
-优先解决**连接体验**和**弱网容错**，最后再补齐**防窃听加密**。
+我们当前处于刚刚稳定 UI 渲染和历史数据恢复的节点。接下来的实施优先级必须是：
+**阶段一 (扫码生成/识别 + Relay多路复用拓扑) -> 阶段二 (打通 ECDH + AES 通道) -> 阶段三 (断线接管)**。
+扫码和加密（阶段一与阶段二）在这一架构下是不可分割的，必须同时上线，一举淘汰明文与弱网验证机制。
