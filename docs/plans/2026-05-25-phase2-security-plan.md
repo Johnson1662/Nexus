@@ -1,22 +1,49 @@
-# Anywhere Phase 2: 安全架构与持久化连接实现计划 (基于 Paseo 架构重构版)
+# Anywhere Phase 2: 安全架构与持久化连接实现计划
+
+> 以 Paseo 为参考，结合 Anywhere 自身特点（自建 Python Relay、HarmonyOS 原生、Node.js Bridge Server）重新设计。
 
 ## 核心目标
-将 Anywhere 从当前的"信任优先/明文中继"模型，平滑升级为**零信任、抗弱网、端到端加密**的稳定生产力工具。借鉴业界最先进的设计，**彻底淘汰 PIN 码和手工确认**，通过带外扫码 (OOB) 实现"一眼配对，绝对安全"。
+将 Anywhere 从当前的"信任优先/明文中继"模型，平滑升级为**零信任、抗弱网、端到端加密**的稳定生产力工具。通过带外扫码 (OOB) 实现"一眼配对，绝对安全"。
+
+---
+
+## 设计原则：与 Paseo 的对比
+
+Anywhere 与 Paseo 共享相同的核心架构模式——Phone ↔ Relay ↔ PC Bridge——但基础设施栈完全不同：
+
+| 维度 | Paseo | Anywhere | 影响 |
+|---|---|---|---|
+| Relay 平台 | Cloudflare Workers + Durable Objects | 自建 Python 3 VPS (1GB RAM) | Anywhere 无法使用 DO 的自动弹性/WebSocket hibernation |
+| 移动端 | React Native (跨平台) | HarmonyOS ArkTS | Anywhere 必须依赖 HarmonyOS 原生加密 API |
+| 服务端 | Daemon (Node.js) | Bridge Server (TypeScript/Node.js) | 架构相似，可以直接借鉴设计 |
+| 网络条件 | 始终公网 | 手机局域网 + 中继 | 离线和切换场景更频繁 |
 
 ---
 
 ## 架构强制约束 (Architectural Constraints)
 
-在进入各阶段实施前，必须遵守以下核心约束，以防止系统分裂或瘫痪：
-
 ### C1. 网络拓扑多路复用
-`relay/relay.py`（Python 3 部署版）或 `relay/server.ts`（Bun 参考版）必须支持多 Client 绑定同一 Host，杜绝新连接直接踢掉旧连接。采用 `dict[str, set[WebSocket]]` 的数据结构，让 Host 的响应能够多播给旗下所有关联的 Client。
+`relay/relay.py` 必须支持多 Client 绑定同一 Host。采用 `dict[str, set[WebSocket]]` 的数据结构，Host 响应多播给所有关联的 Client。✅ 已实现（Paseo v2 协议核心特征，已采纳）。
 
-### C2. 控制平面与数据平面分离
-握手和路由协议（如 `type`, `hostId`, `sessionId`）走明文，维持网络基建兼容；但 Payload（代码、思考、终端）必须全程被密文包裹。
+### C2. 控制平面与数据平面两级分离
+借鉴 Paseo 的 control socket + data socket 分离设计，在单 WebSocket 连接内部实现**逻辑上的控制/数据通道分离**：
 
-### C3. E2EE 边界定义（重要）
-**E2EE 的端点是 Phone ↔ Bridge (PC)**，不是 Phone ↔ Agent Process。架构如下：
+```
+Phone                                Bridge Server
+  │                                       │
+  │  ── 控制消息（握手/心跳/路由）──→     │  明文 JSON，E2EE 前即可交换
+  │  ←─ 控制消息（心跳/事件通知）──       │
+  │                                       │
+  │  ── E2EE 握手 ──────────────────────→ │  经 E2EE 通道协商后切换
+  │  ←─ E2EE 就绪 ─────────────────────── │
+  │                                       │
+  │  ── [加密 Payload] ──────────────────→│  全部密文
+```
+
+**具体实现**：在 `EncryptedChannel` 的 `send()` 里增加一个 `control()` 方法，不加密直接发送明文 JSON。接收端总是先检查 `type` 字段：如果是握手/心跳消息，直接处理绕过解密；否则走解密路径。Paseo 用独立 socket 实现，我们用 message type dispatch 实现（效果相同，不增加连接数）。
+
+### C3. E2EE 边界定义
+**E2EE 端点是 Phone ↔ Bridge (PC)**，不是 Phone ↔ Agent Process。
 
 ```
 Phone ──AES-GCM──→ Relay ──AES-GCM──→ Bridge (PC) ──plaintext──→ Agent
@@ -24,268 +51,205 @@ Phone ──AES-GCM──→ Relay ──AES-GCM──→ Bridge (PC) ──plai
  加密帧              盲转发              解密 + 明文缓存
 ```
 
-- Relay 全程接触密文，无法解密。
-- Bridge 是 **可信端点**：接收密文 → 解密 → 处理 → 发送给 Agent 子进程。
-- Bridge **必须缓存明文** 用于断线恢复。E2EE 不延伸入 Agent 进程内部。
-- 这意味着 Bridge 所在的 PC 是信任边界。如果 PC 被攻陷，E2EE 不提供额外保护。
+- Relay 全程接触密文。
+- Bridge 是可信端点（如果 PC 被攻陷，E2EE 不提供额外保护）。
+- Bridge 缓存明文用于断线恢复。
 
 ### C4. 带外信任根 (OOB Trust Root)
-废除基于网络的短数字 PIN 认证，彻底切断公网中间人 (MITM) 及暴力破解的可能。信任的建立必须依赖物理世界"面对面"的二维码扫描。
-
-**单向信任认清**：OOB 建立的是 **Phone → Host 的单向信任**。手机通过 QR 码获得 Host 的公钥。Host 在第一次握手时获得 Phone 的公钥并缓存，后续连接可利用缓存做双向认证。首次连接 Host 无法验证 Phone 的合法性——这是已知限制，由 DoS 保护机制缓解（见 C9）。
+QR 码是唯一的信任锚点。`#offer=<base64url>` 格式（**从 Paseo 采纳**），QR 内容不直接暴露 JSON。
 
 ### C5. 前向保密 (Perfect Forward Secrecy, PFS)
-即便 Host 的长期私钥在未来某天泄露，也绝不能被用来解密过去的会话数据。每次 WebSocket 连接建立时，双方必须基于长期公钥进行身份认证，但**必须生成并交换临时的 Ephemeral KeyPair** 来派生本次会话的 AES 对称密钥。连接一旦断开，临时密钥即被安全销毁。
+**与 Paseo 不同：Paseo 明确放弃了 PFS。Anywhere 要求 PFS。** 每次连接生成 Ephemeral KeyPair，连接断开即销毁。这个决定增加了握手一次往返时间，但必要性高于 Paseo：
+
+- Paseo 的 DO 端点由 Cloudflare 保护，私钥泄露概率极低。
+- Anywhere 的 `.anywhere-host.json` 在用户的 PC 上，Windows 桌面普通用户环境下泄露风险更高。
 
 ### C6. 会话生命周期隔离
-WebSocket 断线后不立即 kill 会话。引入 **orphaned 状态** 和存活窗口（默认 5 分钟）。在此期间新连接可凭 `sessionId` 接管旧会话。超时后未重连才真正清理子进程和会话资源。此约束是 Phase 3 的前提，但必须在 Phase 2 落地前完成基础设施改造。
+WebSocket 断线后不立即 kill 会话。引入 orphaned 状态 + 5 分钟存活窗口。
 
-### C7. 协议必须携带版本号
-所有握手消息（`E2EEHello`, `E2EEReady`, `SyncRequest` 等）必须包含 `protocolVersion` 字段。版本协商取双方支持的最大公共版本，支持优雅降级。
+### C7. 协议版本号
+`protocolVersion` 字段 + 双向版本协商。
 
-### C8. 消息传递模型：幂等消费
-Relay 和 Bridge 不保证 exactly-once 投递。客户端必须按 `messageId` 去重（幂等消费）。重连恢复时可能收到已处理的消息，客户端必须忽略。
+### C8. 幂等消费
+按 `messageId` 去重。
 
 ### C9. 恶意中继攻击模型
-除窃听外，一个被攻陷的 Relay 可以执行以下攻击。架构必须对每种攻击有缓解措施：
-
-| 攻击 | 效果 | 缓解 |
-|---|---|---|
-| 静默丢包 | 消息丢失 | 序列号 + 超时检测，客户端发起重传请求 |
-| 重排序 | IV 失步，解密失败 | 消息头包含显式序列号，Bridge 按序处理 |
-| 重放旧包 | IV 复用，GCM 密钥信息泄露 | 每个消息包含随机 nonce 或单调递增 counter，服务端检测重复 |
-| 延迟注入 | 连接超时断开 | 应用层心跳（加密 ping/pong），超时独立于传输层 |
+| 攻击 | 缓解 |
+|---|---|
+| 静默丢包 | 序列号 + 超时重传 |
+| 重排序 | 消息头显式序列号 |
+| 重放 | 每次连接随机 nonce，序列号单调递增检测 |
+| 延迟注入 | 应用层加密心跳 |
 
 ---
 
 ## 阶段一：扫码配对与长效信任链 (OOB QR-Pairing)
 
-**目标**：消除手工输入 PIN 码与键盘敲击 `Y` 的繁琐，实现扫描即连、无感重连。
-
 ### 身份与公钥生成
-- PC 端 (Bridge Server) 启动时，基于本地存储生成持久化的 `hostId`，同时生成持久化的 ECDH `HostKeyPair`（主私钥落盘 `.anywhere-host.json`）。
-- 手机端启动时生成自身的 `clientId` 及长效 `ClientKeyPair`。**优先由 HUKS 硬件级保护**；设备不支持 HUKS 时降级为软件密钥（内存中，`AppStorage` 持久化，标记为 `software-backed`）。
+- PC 端（Bridge Server）：`.anywhere-host.json` ➡ `{ hostId, publicKeyHex, privateKeyHex }` ✅ 已实现
+- 手机端：HUKS 优先生成 ClientKeyPair → 降级为软件密钥（`software-backed`）
 
-### 首次发现 (Discovery via QR)
-- PC 端在终端中打印二维码（利用 `qrcode-terminal` 库），二维码 URL 包含：`relayUrl`、`hostId` 及 `HostPublicKey`。
-- 手机端扫码，**天然获取了绝对可信的主机公钥和路由地址**。
-- ✅ **已实现**：服务端 `host-identity.mts` 生成密钥，QR 码包含 hostId + publicKeyHex。手机端 `OnboardingView.ets` 解析并注入连接。
+### Pairing Offer 数据结构（**从 Paseo 采纳 base64url encoding**）
 
-### 无感重连与鉴权
-- 手机端已存有可信的 `HostPublicKey`，通过 Relay 找到 `targetHostId` 后，直接发起包含自己临时公钥的握手（以长效私钥签名）。
+借鉴 Paseo 的 `ConnectionOfferV2Schema` + `encodeOfferToFragmentUrl`，将 QR 码内容改为：
+
+```typescript
+// 当前：直接 JSON 字符串（暴露敏感信息）
+qrData = JSON.stringify({ relayUrl, hostId, publicKey })
+
+// 修改为：URL fragment 编码的 base64url 压缩 offer
+const offer = {
+  v: 1,
+  hostId: "uuid",
+  publicKey: "hex",
+  relayUrl: "ws://host:port"
+};
+const encoded = Buffer.from(JSON.stringify(offer)).toString("base64url");
+const url = `anywhere://connect/#offer=${encoded}`;
+QR: url
+```
+
+**优势**：
+1. Fragment 永不发送到服务器（Paseo 的核心安全设计）
+2. base64url 比原始 JSON 节约 ~30% QR 码空间
+3. 手机扫码后解析 fragment，不会产生网络请求暴露公钥
+
+### 扫描配对流程（**从 Paseo 采纳"试探连接"模式**）
+
+```
+1. 手机扫码 → 解析 #offer= 得到 { v, hostId, publicKey, relayUrl }
+2. 暂存但不保存
+3. 试探连接：通过 relayUrl + role=client&targetHostId=hostId 发起 WS
+4. 等待 server_info（证明 Bridge 可达、hostId 匹配）
+5. 握手成功 → upsertDaemonFromOfferUrl(offerUrl) ← Paseo 模式
+6. 握手失败 → 清除暂存，提示用户重新扫码
+```
 
 ### QR 码重新显示机制
-QR 码**不仅在启动时打印一次**。支持以下方式重新获取：
-- 服务端监听 `stdin`，收到空行或 `qr` 命令时重新输出 QR 码。
-- 增加 `ANYWHERE_SHOW_QR=1` 环境变量，启动时强制重打 QR 码（即使已有存储的身份）。
-- 长期：增加 Bridge 端 HTTP endpoint 或 WS 命令，远程触发 QR 显示（受已有认证保护）。
+- `stdin` 监听 + `ANYWHERE_SHOW_QR=1` ✅ 已记录
+- 长期：WS 命令远程触发
+
+### 无感重连
+手机已存 `HostPublicKey` → 通过 Relay 找到 `targetHostId` → 发起 `E2EEHello`（复用手握流程）。
 
 ---
 
-## 阶段二：端到端加密 (E2EE) 重建
+## 阶段二：端到端加密 (E2EE)
 
-**目标**：防止公网 Relay Server 窃听代码、终端输出和私人对话。
+### 加密选型
 
-### 加密握手协议 (Handshake)
+| 组件 | Paseo（参考） | Anywhere（采用） | 原因 |
+|---|---|---|---|
+| 密钥交换 | Curve25519 ECDH | Curve25519 ECDH | 两者相同，不需要改 |
+| 认证加密 | **XSalsa20-Poly1305** | **AES-256-GCM** | HarmonyOS `@kit.CryptoArchitectureKit` 原生支持 GCM 但不一定支持 XSalsa20；Node.js 也是 GCM 更成熟 |
+| Nonce | 24 字节随机 | 12 字节随机 | GCM 标准 nonce 长度 |
+| Auth Tag | — | 16 字节追加在密文末尾 | GCM 标准，已在计划中 |
+| 密钥派生 | `nacl.box.before` 直接输出 | **HKDF-SHA256** | **Paseo 直接用 ECDH 输出做 AES 密钥不推荐 —— 缺少密钥拉伸，多个上下文重用相同密钥。HKDF 是更好的工程实践。** |
+| 库 | `tweetnacl`（纯 JS） | Node.js `crypto` / HarmonyOS `CryptoArchitectureKit` | 原生 API 零依赖，性能更好 |
+| PFS | ❌ 明确放弃 | ✅ 要求 | 见 C5 |
 
-**协议版本**：`protocolVersion = 1`
-
-**握手流程**：
-
-```
-Client                              Host
-  │                                   │
-  │──── E2EEHello ──────────────────→│
-  │    { protocolVersion: 1,         │
-  │      clientId: "uuid",           │
-  │      ephemeralPublicKey: <32B>,  │
-  │      clientPublicKey: <32B>,     │  ← 长期公钥，首次连接介绍自己
-  │      signature: <64B>,           │  ← 用 client 长期私钥签名 ephemeralPublicKey
-  │      hostId: "target-host-id" }  │
-  │                                   │
-  │←─── E2EEReady ──────────────────│
-  │    { protocolVersion: 1,         │
-  │      ephemeralPublicKey: <32B>,  │
-  │      signature: <64B>,           │  ← 用 host 长期私钥签名 ephemeralPublicKey
-  │      accepted: true }            │
-  │                                   │
-  │   ← 双方计算 ECDH 共享密钥 →      │
-  │   ← HKDF 派生 AES-256-GCM 密钥 →  │
-```
-
-**密钥派生参数**（必须硬编码，跨端统一）：
+### 加密握手协议
 
 ```
-HKDF-Extract(salt = E2EEHello.ephemeralPublicKey[0:16],
-             IKM  = ECDH_shared_secret)
-             → PRK
-
-HKDF-Expand(PRK,
-            info = "anywhere-e2ee-v1",
-            L    = 32)
-            → AES_Key (256-bit GCM key)
+Client                              Host (Bridge)
+  │                                       │
+  │  (OOB: hostId, hostPublicKey)         │
+  │                                       │
+  │  ──── E2EEHello ────────────────────→ │
+  │  { protocolVersion: 1,               │
+  │    clientId: "uuid",                 │
+  │    ephemeralKey: <32B hex>,          │  ← 本次连接临时 X25519 公钥
+  │    hostId: "target-host-id",         │
+  │    signature: <64B hex> }            │  ← sign(hostId + ephemeralKey + clientId)
+  │                                       │
+  │  ←─── E2EEReady ──────────────────── │
+  │  { protocolVersion: 1,               │
+  │    ephemeralKey: <32B hex>,          │  ← Host 的临时 X25519 公钥
+  │    accepted: true,                   │
+  │    signature: <64B hex> }            │  ← sign(hostId + ephemeralKey)
+  │                                       │
+  │  ECDH(clientEphemeral, hostEphemeral) → sharedSecret (32B)
+  │  HKDF-SHA256(sharedSecret, salt=clientEphemeral[0:16], info="anywhere-e2ee-v1") → AES-256-GCM key
 ```
 
-**加密消息格式**（加密后的每一个 payload）：
+**签名密钥**（与 Paseo 不同，Paseo 不做签名）：
+- `signature` 使用**独立的 Ed25519 密钥对**（不是 ECDH 密钥——X25519 不能签名）。
+- Host 的 Ed25519 公钥和 ECDH 公钥一起打包在 QR 码的 offer 中。
+- Client 的 Ed25519 私钥由 HUKS 生成，公钥在 `E2EEHello` 中传输。
+- Client 签名覆盖 `hostId + ephemeralKey + clientId`，防止 Relay 篡改路由。
+- Host 签名覆盖 `hostId + ephemeralKey`。
+
+为什么 Paseo 不做签名而我们要做：Paseo 在 QR 码中直接传输的是 daemon 的 ECDH 公钥，而且它们只做 key exchange 不做身份验证——信任完全建立在 QR 码的 OOB 属性上。如果 QR 被替换，只能通过视觉检查防范。Anywhere 增加签名后，即使 QR 码被篡改，手机也能在握手时检测到 Host 的身份与 QR 码内容不匹配。
+
+### 加密消息格式
 
 ```
-[12 bytes IV (random)]
-[encrypted payload]
+[12 bytes random IV]
+[encrypted payload (AES-256-GCM)]
 [16 bytes GCM Auth Tag]
+→ base64 → WebSocket text frame
 ```
 
-每个消息使用**随机 IV**（nonce），而非计数器递增 IV。这避免了重连后 IV 失步问题（代价：每条消息多 12 字节开销，对 1KB 以下消息约 1% 开销，可接受）。
+### Re-hello 支持（**从 Paseo 采纳**）
 
-消息头中增加 **序列号**（monotonic uint64，以连接生命周期计）用于重排序检测：
+当 Client 重连而 Bridge Server 通过 Relay 依旧存活时，Bridge 可能收到第二个 `E2EEHello`：
 
 ```
-[8 bytes  sequence number (plaintext)]
-[12 bytes IV (random)]
-[encrypted payload]
-[16 bytes GCM Auth Tag]
+// Paseo 的 encrypted-channel.ts: handleDaemonRehello 的精确模式
+onE2EEHello(clientKey):
+  if clientKey == previousClientKey → re-send E2EEReady（不重新密钥）
+  if clientKey != previousClientKey → re-key, drop pending, re-send ready
 ```
 
-Bridge 收到后校验序列号是否单调递增。如果序列号 <= 已处理的最大值，判定为重放攻击，断开连接。
+这解决了 Paseo 在实践中遇到的竞态问题：Client 认为连接断了但其实 Bridge 的 Relay socket 还活着，Client 重连后收到旧的流式数据导致解密失败。
 
-### 首次连接的客户端身份问题
-Host 在收到 `E2EEHello` 时，`clientId` 和 `clientPublicKey` 可能是首次见到。Host **不拒绝**未知客户端（否则无法完成首次配对），但：
-- 记录 `clientId` → `clientPublicKey` 映射到内存缓存。
-- 后续同一 `clientId` 的连接必须提供匹配的 `signature`。
-- **防 DoS**：同一 `hostId` 每秒最多接受 5 次握手尝试（在 Bridge 侧限流）。
-
-### 中继盲发 (Blind Relay)
-Relay Server 只负责查看包头的 `targetHostId`，并将后续的二进制帧无脑桥接给对应的 PC 节点，完全不知晓内部业务。✅ 已实现。
-
-### 跨端避坑策略 (Crypto Compatibility)
-- 公钥格式：统一使用 Raw 32 字节（X25519），导出方式已在 `host-identity.mts` 中通过 JWK 的 `x`/`d` 字段验证。
-- IV：固定 12 字节，每个消息随机生成。
-- Auth Tag：固定 16 字节，追加在密文末尾。
-- 密钥派生：HKDF-SHA256，salt 和 info 如上定义，确保 Node.js `crypto` 与 HarmonyOS `@kit.CryptoArchitectureKit` 互通。
+### 首次连接的客户端身份
+- Host 不拒绝未知 `clientId`。
+- 记录 `clientId → { publicKey, firstSeen }` 到内存缓存。
+- 后续同一 clientId 的连接必须匹配 signature。
+- **防 DoS**：同一 hostId 每秒最多 5 次握手（Bridge 侧限流）。
 
 ---
 
 ## 阶段三：断线无缝接管 (Seamless Session Recovery)
 
-**目标**：在移动网络与 Wi-Fi 切换、锁屏杀后台等场景下，保护 Agent 的流式输出不丢失。
+### 帧缓冲（**从 Paseo 采纳 frame buffering**）
 
-### 前置基础设施改造
+Paseo 在 DO 中为每个 `connectionId` 缓冲最多 200 帧，解决"Client 先连接、Server Data Socket 还没就绪"的竞态条件。Anywhere 的 Relay 也需要同样的机制：
 
-必须在 Phase 2 结束后、Phase 3 开始前，完成以下架构改造：
+```
+relay.py: pendingFrames[hostId] → list[bytes], max 200
+```
 
-#### 3.1 间接 WebSocket 引用
-当前 `SessionState` 和所有 ACP 回调直接持有 `ws` 闭包引用，无法替换。改为间接寻址：
+当 Client 连接时，如果 `hosts[hostId]` 尚不存在（Host 还没连上来），缓冲消息。Host 连上后立即 flush。
 
+### 间接 WebSocket 引用
 ```typescript
-// 改造前
+// 改造 SessionState.ws → SessionState.wsRef
 interface SessionState {
-  ws: WebSocket;           // 常量引用，无法替换
-}
-
-// 改造后
-interface SessionState {
-  wsRef: { current: WebSocket | null };  // 间接引用，可以替换
+  wsRef: { current: WebSocket | null };
+  orphanedAt: number | null;
 }
 ```
 
-所有 `onSessionUpdate`、`onPermissionRequest` 等回调改为通过 `session.wsRef.current` 发送。断线重连时，只需将新 `ws` 赋值给 `wsRef.current`，所有回调自动指向新连接。
+### cleanupWsSessions → Orphan Timeout
+- WS 断开 → 标记 session orphaned → 5 分钟后清理。
+- WS 重连 → 找到 `sessionId` → 接管 orphaned session → 重放缓冲区。
 
-#### 3.2 cleanupWsSessions 改为 Orphan Timeout
+### Turn 级消息缓冲
+与之前计划一致（滑动窗口 10 个 turn，保持 tool_call 引用完整性）。
 
-```typescript
-// 改造后
-export function onWsDisconnected(ws: WebSocket): void {
-  const sessions = findSessionsForWs(ws);
-  for (const sess of sessions) {
-    sess.wsRef.current = null;        // 清空引用
-    sess.orphanedAt = Date.now();     // 记入孤儿时间
-    scheduleCleanup(sess.sessionId, 300_000); // 5分钟后清理
-  }
-}
-
-export function onWsReconnected(ws: WebSocket, sessionId: string): void {
-  const sess = sessions.get(sessionId);
-  if (sess && sess.wsRef.current === null) {
-    sess.wsRef.current = ws;          // 接管旧会话
-    cancelCleanup(sessionId);
-    replayBuffer(sess, ws);           // 重放缓冲
-  }
-}
-```
-
-### 消息重传缓冲 (Message Buffer)
-
-**按 turn 粒度缓存**，保持引用完整性：
-
-```typescript
-interface SessionBuffer {
-  turns: TurnBuffer[];        // 滑动窗口，最多 10 个 turn
-}
-
-interface TurnBuffer {
-  turnId: string;
-  messageId: string;          // 客户端侧的游标
-  entries: BufferEntry[];     // 一个 turn 包含的所有帧
-  closed: boolean;            // turn 结束后不可再添加
-}
-
-interface BufferEntry {
-  messageId: string;          // 全局唯一，幂等去重用
-  type: string;               // "thinking" | "tool_call" | "tool_call_update" | "text_chunk" | "plan" | "turn_ended"
-  data: object;               // 完整的帧数据（密文的明文副本）
-  timestamp: number;
-}
-```
-
-- 每个 `turn` 包含一个 `tool_call` 及其后续的所有 `tool_call_update`。客户端重连时服务器按 `turn` 整体下发，避免 `tool_call_update` 引用不存在的 `tool_call`。
-- `messageId` 用于客户端去重：客户端维护 `lastProcessedMessageId`，服务器回放时跳过 ≤ 该 ID 的条目。
-
-### 游标同步 (Cursor Sync)
-
-```
-Client                                Bridge
-  │                                     │
-  │──── SyncRequest ──────────────────→│
-  │    { protocolVersion: 1,           │
-  │      sessionId: "acp-12345",       │
-  │      lastMessageId: "msg_50" }     │
-  │                                     │
-  │←─── SyncResponse ─────────────────│
-  │    { entries: [entry_51 .. entry_N] }  ← 加密传输
-```
-
-客户端收到后：
-1. 遍历 `entries`，跳过 `messageId ≤ lastMessageId` 的条目。
-2. 按顺序重放每个条目（如同正常 `agent_event` 处理路径）。
-3. 更新 `lastMessageId`。
-4. 与 Bridge 当前活跃的流式状态同步（如正在输出的 terminal、正在 thinking 的文本）。
-
-### 重连恢复后的状态清洗
-客户端重连并完成 cursor sync 后，必须：
-- 清理所有残留 `permission_request` 浮层。
-- 清理所有 stale `tool_call` 卡片（不在重放数据中的）。
-- 如果当前有 turn 活跃，恢复 `turnActive = true` 和流式状态。
+### 游标同步
+与之前计划一致（`SyncRequest` ↔ `SyncResponse`，`lastMessageId` 去重）。
 
 ---
 
 ## 阶段四：权限抢占与高危沙盒 (Permissions Sandbox)
 
-**目标**：建立 PC 端的防御纵深，避免 Agent 越权操作。
-
-### 拦截策略配置
-在 Bridge Server 层配置危险命令正则拦截（如全局系统修改、敏感目录操作）。
-
-### 移动端审批与防死锁 (Deadlock Prevention)
-- 当 Agent 尝试调用高危指令时，发给手机审批卡片（卡片内容同受 E2EE 保护）。
-- **分级 TTL 策略**：
-  - `read_file` → TTL = 10 秒。超时自动允许（读文件不破坏系统）。
-  - `write_file` → TTL = 30 秒。超时自动拒绝。
-  - `execute_command` → TTL = 60 秒。超时自动拒绝。
-  - `global_modification` → TTL = 120 秒。超时自动拒绝。
-- TTL 过期后 `permission_response` 返回 `outcome: "timeout"`，Agent 应捕获错误并选择合适的回退路径（而非重试）。
-- **锁屏保活**：手机端在 `aboutToDisappear`（应用退后台）时弹起通知栏提醒，保持后台任务窗口以延续 WebSocket 连接。如果手机断网导致超时，Agent 获得 `"timeout"` 后可主动提示用户检查手机连接。
-
-### UI 幽灵状态清理
-断网会导致客户端残留未响应的 `permission_request` 悬浮卡片。当发生重连时，客户端必须依据服务端的真实会话状态强制清洗 UI 栈，防止产生无法消除的"幽灵弹窗"。✅ 依赖路径与 Phase 3 cursor sync 耦合，cursor sync 完成后统一清理。
+与之前计划一致，不做变动：
+- Bridge 侧危险命令正则拦截
+- 分级 TTL（read=10s auto-allow → **增加敏感路径自动拒绝**、write=30s、exec=60s、global=120s）
+- 重连后清理 `permission_request` 幽灵浮层
 
 ---
 
@@ -295,38 +259,116 @@ Client                                Bridge
 
 | 密钥 | 生成方式 | 持久化 | 更换时机 |
 |---|---|---|---|
-| Host 长期 KeyPair | `host-identity.mts` Node.js x25519 | `.anywhere-host.json` | 手动删除文件后重启 |
-| Client 长期 KeyPair | HUKS（优先）/ 软件（降级） | HUKS 硬件 / AppStorage | 清除 App 数据或手动重置 |
-| Ephemeral KeyPair | 每次握手时生成 | 不持久化（内存中，握手后销毁） | 每次新连接 |
-| AES Session Key | HKDF 派生 | 不持久化（内存中，连接断开销毁） | 每次新连接 |
+| Host ECDH KeyPair | `host-identity.mts` x25519 | `.anywhere-host.json` | 删除文件后重启 |
+| Host Ed25519 KeyPair | 新增，与 ECDH 一起生成 | **同 `.anywhere-host.json`** | 删除文件后重启 |
+| Client KeyPair | HUKS（优先）/ 软件（降级） | HUKS 硬件 / AppStorage | 清除 App 数据 |
+| Ephemeral KeyPair | 每次握手时生成 | 不持久化 | 每次新连接 |
+| AES Session Key | HKDF 派生 | 不持久化 | 每次新连接 |
 
 ### 密钥泄露恢复
-- **Host 私钥泄露**：删除 `.anywhere-host.json`，重启生成新的 hostId 和密钥。所有已配对手机需重新扫码。旧加密的会话数据不可恢复（符合 PFS 承诺）。
-- **Client 私钥泄露**：清除 App 数据，重新生成 clientId 和密钥。Host 端的旧缓存条目会过期。
-- **密钥轮换**：当前无自动轮换机制，手动重置即可。长期可增加 `ANYWHERE_ROTATE_KEYS=1` 环境变量实现开机自轮换。
+- **Host 私钥泄露**：删除 `.anywhere-host.json` → 重启 → 重新扫码配对。PFS 保证过去会话安全。
+- **Client 私钥泄露**：清除 App 数据 → 重新扫码配对。
+- **密钥轮换**：当前手动重置。长期增加 `ANYWHERE_ROTATE_KEYS=1` 开机自轮换。
 
 ---
 
 ## 实施优先级
 
-当前阶段一（扫码配对基础设施）已全部落地：
-- ✅ PC 端 QR 码生成（`qrcode-terminal`）
-- ✅ 手机端扫码解析（`@kit.ScanKit`）
-- ✅ Relay 多路复用（`relay/relay.py`）
-- ✅ `relay_client_connected` 通知
-- ✅ Host 身份持久化（`host-identity.mts`）
-- ⏳ 手机端 ClientKeyPair 尚未实现（标记 `TODO(phase2)`）
-- ⏳ QR 码重新显示机制尚未实现
+```
+优先期 1 (Phase 2a): 
+  • 控制/数据通道分离改造（C2 的具体实现）
+  • Pairing Offer 改为 #offer=base64url 格式
+  • 手机端 HUKS ClientKeyPair 生成
+  • Ed25519 签名密钥对 + host-identity.mts 改造
+  • 加密握手完整实现（含 signature 校验、版本协商降级）
 
-接下来的实施顺序：
+优先期 2 (Phase 2b):
+  • Re-hello 支持（Bridge Server 侧）
+  • relay.py 帧缓冲（最多 200 帧）
+  • AES-256-GCM 加密/解密通道全链路验证
+  • relay.py 控制通道心跳（明文 ping/pong）
 
-1. **Phase 2a**：ClientKeyPair 生成（手机端 HUKS/软件降级）+ 加密握手协议实现
-2. **Phase 2b**：消息加密/解密通道（Phone ↔ Bridge AES-GCM）+ QR 重新显示
-3. **Phase 3a**：间接 WebSocket 引用 + cleanupWsSessions → orphan timeout 改造
-4. **Phase 3b**：Turn 级消息缓冲 + cursor sync 协议
-5. **Phase 4**：权限沙盒 + 分级 TTL + UI 状态清洗
+优先期 3 (Phase 3a):
+  • wsRef 间接引用 + orphan timeout
+  • Turn 级消息缓冲
+  • Cursor sync 协议
+
+优先期 4 (Phase 3b):
+  • 二维码重新显示机制（stdin / env / WS）
+  • 手机端重连状态清洗
+
+优先期 5 (Phase 4):
+  • 权限沙盒 + 分级 TTL + 敏感路径拦截
+  • 锁屏保活通知
+```
+
+---
+
+## 采用 Paseo 的设计 + 未采用及原因
+
+### ✅ 已采纳
+
+| 设计 | 来源 | 修改程度 | 原因 |
+|---|---|---|---|
+| **`#offer=<base64url>` QR 编码** | `connection-offer.ts` / `pair-scan.tsx` | 修改 | fragment 永不发送到服务器；base64url 节约 30% QR 空间 |
+| **试探连接验证 offer** | `pair-scan.tsx` `connectToDaemon()` | 修改 | 扫码后先试探 WS 握手再保存，防止无效 offer 污染设备列表 |
+| **帧缓冲 (Frame Buffering)** | `cloudflare-adapter.ts` `bufferFrame()` | 全量 | 解决 Client 先连接而 Host 尚未就绪的竞态条件 |
+| **Re-hello 支持** | `encrypted-channel.ts` `handleDaemonRehello()` | 全量 | Relay 模式下 Host socket 保持但 Client 重连时避免密钥失步 |
+| **控制/数据平面分离** | `cloudflare-adapter.ts` v2 三套接字 | 适配 | 单连接内部用 type dispatch 实现相同效果，不增加连接数 |
+| **控制通道心跳** | `relay-transport.ts` ping/pong + stale detection | 全量 | Python relay 已实现 Ping/Pong 处理，Bridge 侧新增 30s 超时检测 |
+| **身份与密钥分离存储** | `server-id.ts` + `daemon-keypair.ts` | 已实现 | Anywhere 的 `.anywhere-host.json` 已天然支持分离 |
+| **连接存活超时级联** | `relay-transport.ts` control ready (8s) + data open (15s) + stale (30s) + backoff (1-30s) | 适配 | 重建 Backoff 策略到 Bridge 侧 RelayHost，目前随机 5s 改为指数退避 |
+| **Turn 级消息缓冲粒度** | relay-architecture.md "缓存引用完整性"思路 | 已有 | 已在 Phase 3 计划中，Paseo 文档验证了方向正确 |
+
+### ❌ 未采纳
+
+| 设计 | 不采用原因 |
+|---|---|
+| **Cloudflare Workers + Durable Objects** | Anywhere 运行在自建 Python VPS（1GB RAM），无法使用 CF Workers。DO 的 WebSocket hibernation、自动弹性、per-serverId 单例都是 PaaS 能力。我们的 `dict[str, set[WebSocket]]` 在单机 VPS 上足够。 |
+| **tweetnacl / XSalsa20-Poly1305** | 需要跨 Node.js ↔ HarmonyOS `@kit.CryptoArchitectureKit` 互通。AES-256-GCM 是两者都原生支持的算法，引入 tweetnacl 会多一层 JS 实现绑定，无端增加跨平台兼容风险。 |
+| **无 PFS（Paseo 的故意取舍）** | Paseo 承认这个取舍但选择了简单。Anywhere 目标场景中 PC 是用户个人设备，私钥泄露风险高于 Paseo 的 CF DO 安全边界。增加一次握手往返换 PFS 是值得的。 |
+| **长期密钥直接做 ECDH（无签名）** | Paseo 的握手不做签名，完全依赖 QR 的 OOB 安全性。Anywhere 增加了 Ed25519 签名层——多一层防御。如果 QR 被屏幕截图泄露，签名能阻断中间人。Paseo 对此的回复是"QR 码视同密码"，但移动端 QR 码被截屏或拍照转发的可能性不可忽视。 |
+| **ConnectionOfferSchema (Zod 验证)** | Paseo 使用 Zod 做编译时 + 运行时 schema 校验。Anywhere 的前端是 ArkTS（不是 TypeScript runtime），后端是 TypeScript。Zod 在前端不可用，手动 parse 更简单统一。 |
+| **E2E 测试套件** | Paseo 有 `encrypted-channel.test.ts`、`dist-handshake-parity.test.ts`、`live-relay.e2e.test.ts` 等丰富测试。Anywhere 受限于 HarmonyOS 构建环境（hvigor 无标准 test runner），测试暂不纳入计划。 |
+| **QR 码仅在 TTY 输出** | Paseo 默认不在非 TTY 环境打印 QR。Anywhere 的场景中用户可能通过远程桌面或 SSH 启动服务端，非 TTY 也需要显示 QR。改为始终打印。 |
+| **Durable Object 自动故障恢复** | DO 自带跨区域自动故障转移。自建 Python relay 没有这个能力——一台 VPS 挂了服务就不可用。这是基础设施层面的差距，架构层面无解。 |
+
+---
 
 ### 环境依赖
-- **Bridge Server (Node.js)**：已在 `package.json` 中引入 `qrcode-terminal`。
-- **Relay Server**：需要 **Python 3.10+**（默认满足）。
-- **HarmonyOS 客户端**：已在 `module.json5` 中申请 `ohos.permission.CAMERA` 并集成 `@kit.ScanKit`。
+- **Bridge Server (Node.js)**：`qrcode-terminal` ✅，需要新增 Ed25519 密钥生成依赖（Node.js `crypto` 已原生支持 Ed25519，无需额外包）。
+- **Relay Server**：Python 3.10+ ✅，帧缓冲仅需新增一个 `defaultdict(list)`，零新依赖。
+- **HarmonyOS 客户端**：`@kit.ScanKit` ✅，`@kit.CryptoArchitectureKit`（已内置）。
+
+---
+
+## 与 Paseo 的架构差异对比总结
+
+```
+Paseo:                                  Anywhere:
+┌──────────────────────┐                ┌──────────────────────┐
+│  Phone (React Native)│                │  Phone (ArkTS)       │
+│  tweetnacl           │                │  CryptoArchitectureKit│
+│  Zod + base64url     │                │  manual parse        │
+└──────┬───────────────┘                └──────┬───────────────┘
+       │ E2EE (XSalsa20-Poly1305)              │ E2EE (AES-256-GCM)
+       │ 无 PFS                                │ PFS 强制
+       │ 无签名                                │ Ed25519 签名
+       ▼                                      ▼
+┌──────────────────────┐                ┌──────────────────────┐
+│  CF Workers + DO     │                │  Python relay.py     │
+│  DO per serverId     │                │  dict[hostId] set[WS]│
+│  自动弹性/故障恢复    │                │  单机 VPS            │
+│  WebSocket hibernation│               │  无 hibernation      │
+└──────┬───────────────┘                └──────┬───────────────┘
+       │ 控制通道 / 数据通道分离                │ 单 WS type dispatch
+       │ 帧缓冲 200 帧                         │ 帧缓冲 200 帧
+       ▼                                      ▼
+┌──────────────────────┐                ┌──────────────────────┐
+│  Daemon (Node.js)    │                │  Bridge (Node.js)    │
+│  server-id + keypair │                │  host-identity.mts  │
+│  独立身份/密钥文件    │                │  合并文件             │
+│  无 PFS              │                │  PFS 强制            │
+│  无签名              │                │  Ed25519 签名        │
+└──────────────────────┘                └──────────────────────┘
+```
