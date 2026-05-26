@@ -23,6 +23,10 @@
     {
       "name": "reason_internet",
       "value": "Need internet permission to connect to remote AI agent bridge"
+    },
+    {
+      "name": "camera_permission_desc",
+      "value": "需要相机权限以扫描电脑端生成的配对二维码"
     }
   ]
 }
