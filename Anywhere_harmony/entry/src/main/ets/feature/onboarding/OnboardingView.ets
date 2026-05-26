@@ -275,7 +275,7 @@ export struct OnboardingView {
         let val = result.originalValue;
         // The QR code contains JSON string
         try {
-          let parsed = JSON.parse(val);
+          let parsed = JSON.parse(val) as Record<string, string>;
           // E.g. { relayUrl: "...", hostId: "...", publicKey: "..." }
           if (parsed.relayUrl && parsed.hostId && parsed.publicKey) {
             this.serverUrl = parsed.relayUrl + '?role=client&targetHostId=' + parsed.hostId;
@@ -285,12 +285,12 @@ export struct OnboardingView {
              this.serverUrl = val;
              this.tryConnect();
           }
-        } catch(e) {
+        } catch(e: unknown) {
           this.serverUrl = val;
           this.tryConnect();
         }
       }
-    } catch (e) {
+    } catch (e: unknown) {
       this.connectError = 'Scan failed: ' + JSON.stringify(e);
     }
   }
@@ -380,7 +380,7 @@ Text('Anywhere')
                       .onSubmit(() => { this.tryConnect() })
 
                     Button() {
-                      SymbolGlyph($r('sys.symbol.viewfinder'))
+                      SymbolGlyph($r('sys.symbol.line_viewfinder'))
                         .fontSize(22).fontWeight(FontWeight.Bold).fontColor([Colors.foregroundMuted])
                     }
                     .type(ButtonType.Circle)
