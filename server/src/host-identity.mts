@@ -41,6 +41,14 @@ function generateKeyPair() {
 }
 
 export function getOrCreateHostIdentity(): HostIdentityData {
+  // Phase 2b: Key rotation via ANYWHERE_ROTATE_KEYS=1
+  if (process.env.ANYWHERE_ROTATE_KEYS === '1') {
+    try {
+      fs.unlinkSync(IDENTITY_PATH);
+      console.log('[host-identity] Key rotation: deleted existing identity file');
+    } catch {}
+  }
+
   let schemaVersion: number = 1;
   let hostId: string;
   let publicKeyHex: string | undefined;

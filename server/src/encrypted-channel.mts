@@ -71,6 +71,25 @@ const DEFAULT_HANDSHAKE_TIMEOUT_MS = 15_000;
 const CURRENT_PROTOCOL_VERSION = 1;
 const MIN_PROTOCOL_VERSION = 1;
 
+// ── Handshake Rate Limiting (Phase 2b) ─────────────────────────────
+// Per-source sliding window: max 5 handshake attempts per 1 second
+const MAX_HANDSHAKES_PER_SECOND = 5;
+const HANDSHAKE_RATE_WINDOW_MS = 1000;
+const handshakeAttempts: number[] = [];
+
+function checkHandshakeRateLimit(): boolean {
+  const now = Date.now();
+  // Prune entries older than the window
+  while (handshakeAttempts.length > 0 && handshakeAttempts[0] < now - HANDSHAKE_RATE_WINDOW_MS) {
+    handshakeAttempts.shift();
+  }
+  if (handshakeAttempts.length >= MAX_HANDSHAKES_PER_SECOND) {
+    return false;
+  }
+  handshakeAttempts.push(now);
+  return true;
+}
+
 // ── EncryptedChannel ───────────────────────────────────────────────
 
 export class EncryptedChannel {
@@ -82,10 +101,12 @@ export class EncryptedChannel {
   private connectTimer: ReturnType<typeof setTimeout> | null = null;
   private handshakeTimer: ReturnType<typeof setTimeout> | null = null;
   private seqNum: number = 0;
+  private lastRemoteSeq: number = -1;
   private aesKey: Buffer | null = null;
 
   // Ephemeral X25519 keypair for PFS
   private ephKeyPair: { publicKey: Buffer; privateKey: Buffer } | null = null;
+  private peerEphemeralKeyHex: string = '';
 
   constructor(opts: EncryptedChannelOptions, events?: EncryptedChannelEvents) {
     this.options = {
@@ -137,7 +158,10 @@ export class EncryptedChannel {
 
   /** 发送控制消息（明文 text frame），不受加密状态影响 */
   control(type: string, payload: Record<string, unknown>): void {
-    const data = JSON.stringify({ type, ...payload });
+    const channelId = this.options.role === 'client' 
+      ? (this.ephKeyPair ? this.ephKeyPair.publicKey.toString('hex').slice(0, 16) : '')
+      : (this.peerEphemeralKeyHex ? this.peerEphemeralKeyHex.slice(0, 16) : '');
+    const data = JSON.stringify({ type, channelId, ...payload });
     if (this.state === 'closed') return;
     if (!this.transport) {
       this.enqueue({ data, isControl: true });
@@ -162,7 +186,14 @@ export class EncryptedChannel {
     const cipher = crypto.createCipheriv('aes-256-gcm', this.aesKey, iv);
     const ciphertext = Buffer.concat([cipher.update(plain), cipher.final()]);
     const tag = cipher.getAuthTag();
-    const frame = Buffer.concat([seqBuf, iv, ciphertext, tag]);
+    
+    // channelId is the first 8 bytes of the client's ephemeral public key
+    const clientEphPubHex = this.options.role === 'client' 
+      ? this.ephKeyPair!.publicKey.toString('hex') 
+      : this.peerEphemeralKeyHex;
+    const channelIdBuf = Buffer.from(clientEphPubHex, 'hex').subarray(0, 8);
+    
+    const frame = Buffer.concat([channelIdBuf, seqBuf, iv, ciphertext, tag]);
     this.transport!.send(frame);
   }
 
@@ -358,6 +389,18 @@ export class EncryptedChannel {
   private handleE2EEHello(msg: Record<string, unknown>): void {
     if (this.state === 'closed') return;
 
+    // Phase 2b: Handshake rate limiting
+    if (!checkHandshakeRateLimit()) {
+      console.log('[encrypted-channel] Handshake rate limit exceeded, rejecting');
+      this.control('e2ee_ready', {
+        protocolVersion: CURRENT_PROTOCOL_VERSION,
+        accepted: false,
+        error: 'rate_limited',
+      } as unknown as Record<string, unknown>);
+      this.close();
+      return;
+    }
+
     const ver = Number(msg['protocolVersion'] ?? 0);
     if (ver < MIN_PROTOCOL_VERSION) {
       // reject
@@ -378,6 +421,7 @@ export class EncryptedChannel {
     const clientId = String(msg['clientId'] ?? '');
     const clientPubHex = String(msg['clientPublicKey'] ?? '');
     const ephHex = String(msg['ephemeralKey'] ?? '');
+    this.peerEphemeralKeyHex = ephHex;
     const signature = String(msg['signature'] ?? '');
     const hostId = String(msg['hostId'] ?? '');
 
@@ -466,6 +510,7 @@ export class EncryptedChannel {
     if (!this.ephKeyPair) return;
 
     const ephHostHex = String(msg['ephemeralKey'] ?? '');
+    this.peerEphemeralKeyHex = ephHostHex;
     const hostSignature = String(msg['signature'] ?? '');
     const hostId = this.options.hostIdentity?.hostId ?? '';
 
@@ -531,15 +576,25 @@ export class EncryptedChannel {
     });
   }
 
-  /** Create Ed25519 public key from hex string */
+  /** Create Ed25519 public key from hex string, accepting both raw 32-byte and DER SPKI format */
   private ed25519PublicKey(publicHex: string): crypto.KeyObject {
+    const raw: Buffer = Buffer.from(publicHex, 'hex');
+    // Raw 32-byte key → JWK format
+    if (raw.length === 32) {
+      return crypto.createPublicKey({
+        key: {
+          kty: 'OKP',
+          crv: 'Ed25519',
+          x: raw.toString('base64url'),
+        },
+        format: 'jwk',
+      });
+    }
+    // DER SPKI format (e.g. from HarmonyOS cryptoFramework.getEncoded())
     return crypto.createPublicKey({
-      key: {
-        kty: 'OKP',
-        crv: 'Ed25519',
-        x: Buffer.from(publicHex, 'hex').toString('base64url'),
-      },
-      format: 'jwk',
+      key: raw,
+      format: 'der',
+      type: 'spki',
     });
   }
 
@@ -573,15 +628,21 @@ export class EncryptedChannel {
   private handleBinary(frame: Buffer): void {
     if (!this.aesKey || this.state !== 'open') return;
 
-    if (frame.length < 36) return; // 8 seq + 12 iv + 16 tag minimum
-    const seqBuf = frame.subarray(0, 8);
-    const iv = frame.subarray(8, 20);
+    if (frame.length < 8 + 36) return; // 8 channelId + 8 seq + 12 iv + 16 tag minimum
+    // The first 8 bytes are the channelId. Skip them.
+    const seqBuf = frame.subarray(8, 16);
+    const iv = frame.subarray(16, 28);
     const tag = frame.subarray(frame.length - 16);
-    const ciphertext = frame.subarray(20, frame.length - 16);
+    const ciphertext = frame.subarray(28, frame.length - 16);
 
     const seq = Number(seqBuf.readBigUInt64BE());
-    // Note: we should validate sequence number monotonicity here
-    // For Phase 2a, basic check — full check needs per-connection state
+    // Phase 2b: Validate sequence number monotonicity (strictly increasing)
+    if (seq <= this.lastRemoteSeq) {
+      console.log(`[encrypted-channel] Invalid sequence: ${seq} <= ${this.lastRemoteSeq}, closing`);
+      this.close();
+      return;
+    }
+    this.lastRemoteSeq = seq;
 
     try {
       const decipher = crypto.createDecipheriv('aes-256-gcm', this.aesKey, iv);

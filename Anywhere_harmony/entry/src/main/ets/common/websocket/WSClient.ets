@@ -1,13 +1,16 @@
 import { webSocket } from '@kit.NetworkKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
+import { util } from '@kit.ArkTS';
 import { backgroundTaskManager } from '@kit.BackgroundTasksKit';
 import { ChatStore } from '../model/ChatState';
 import { ServerSession, HostStore, DeviceEntry } from '../model/WorkspaceInfo';
 import { StorageService, PrefsKeys, saveHosts, loadWorkspaces, saveModelCache, saveSessionCache } from '../../services/StorageService';
 import { WorkspaceStore } from '../model/WorkspaceInfo';
-import { ClientMessage, ServerMessage, AcpUpdate, AgentInfo, ServerInfoMessage } from './WSProtocol';
+import { ClientMessage, ServerMessage, AcpUpdate, AgentInfo, ServerInfoMessage, SyncResponseMessage, SyncResponseEntry } from './WSProtocol';
 import { getOrCreateClientKeyPair, signWithClientKey, generateEphemeralKeyPair } from './CryptoHelper';
+import { PhoneEncryptedChannel } from './PhoneEncryptedChannel';
+
 import { ModelItem, ModeItem } from '../model/ChatState';
 
 const DOMAIN: number = 0x0000;
@@ -39,6 +42,11 @@ export class WSClient {
   private everConnected: boolean = false;
   private _e2eeReady: boolean = false;
   private _e2eeClientId: string = '';
+  private channel: PhoneEncryptedChannel = new PhoneEncryptedChannel();
+  // Heartbeat state (Phase 2b)
+  private lastHeartbeatReceived: number = 0;
+  private heartbeatWatchdog: number | null = null;
+  private readonly HEARTBEAT_WATCHDOG_MS: number = 45_000;  // 45s no heartbeat → disconnect
 
   connect(url: string): void {
     this.cancelReconnect();
@@ -107,10 +115,16 @@ export class WSClient {
     this.ws = webSocket.createWebSocket();
     let gen: number = ++this.wsGen;
     let connectNotified: boolean = false;
+    let connectTimeout = setTimeout(() => {
+      if (!connectNotified) {
+        onConnectFailure('Connect timeout (10s)');
+      }
+    }, 10000);
 
     let onConnectFailure = (detail: string): void => {
       if (connectNotified) return;
       connectNotified = true;
+      clearTimeout(connectTimeout);
       hilog.error(DOMAIN, TAG, detail);
       ChatStore.connected = false;
       this.notifyState(false, detail);
@@ -121,24 +135,58 @@ export class WSClient {
 
     this.ws.on('open', () => {
       if (gen !== this.wsGen) return;
+      clearTimeout(connectTimeout);
       connectNotified = true;
       this.everConnected = true;
       hilog.info(DOMAIN, TAG, 'connected: ' + url);
       ChatStore.connected = true;
+      ChatStore.reconnectAttempt = 0;
       this.reconnectAttempts = 0;
       this.notifyState(true, url);
       this.requestBgTask();
+      // Start heartbeat watchdog
+      this.startHeartbeatWatchdog();
+      // Phase 3b: Clear ghost permission overlay on reconnect
+      ChatStore.pendingPermission = null;
       // Auto-initiate E2EE for relay connections (URL contains targetHostId)
       if (url.indexOf('targetHostId=') >= 0) {
         this.initiateE2EE(url, gen);
+      }
+      // Phase 3b + grill: Request cursor sync if we have a session (reconnect recovery)
+      if (ChatStore.sessionId.length > 0 && ChatStore.lastMessageId.length > 0) {
+        ChatStore.reconnectPhase = 'syncing';
+        this.send({
+          type: 'sync_request',
+          sessionId: ChatStore.sessionId,
+          lastMessageId: ChatStore.lastMessageId,
+        } as ClientMessage);
+      } else {
+        // No session to sync — clear reconnect phase immediately
+        ChatStore.reconnectPhase = '';
       }
     });
 
     this.ws.on('message', (_err: BusinessError, data: string | ArrayBuffer) => {
       if (typeof data === 'string') {
         this.handleMessage(data);
+      } else if (data instanceof ArrayBuffer) {
+        if (this._e2eeReady) {
+          this.channel.decrypt(data).then((plainStr) => {
+            this.handleMessage(plainStr);
+          }).catch((err: Error) => {
+            hilog.error(DOMAIN, TAG, 'decrypt failed: ' + JSON.stringify(err));
+          });
+        } else {
+          // Before E2EE handshake, relay sends all frames as binary (opcode 0x02)
+          // Convert ArrayBuffer to string for plaintext JSON handling
+          let bytes: Uint8Array = new Uint8Array(data);
+          let decoder: util.TextDecoder = new util.TextDecoder('utf-8', { ignoreBOM: true });
+          let raw: string = decoder.decodeToString(bytes);
+          this.handleMessage(raw);
+        }
       }
     });
+
 
     this.ws.on('close', () => {
       if (gen !== this.wsGen) return;
@@ -152,6 +200,7 @@ export class WSClient {
       this.cancelBgTask();
       this.notifyState(false, '');
       if (!this.intentionalClose) {
+        ChatStore.reconnectPhase = 'disconnected';
         this.scheduleReconnect();
       }
     });
@@ -180,6 +229,8 @@ export class WSClient {
     this.reconnectAttempts++;
     const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts - 1), 30000);
     hilog.info(DOMAIN, TAG, `reconnect in ${delay}ms (attempt ${this.reconnectAttempts})`);
+    ChatStore.reconnectPhase = 'reconnecting';
+    ChatStore.reconnectAttempt = this.reconnectAttempts;
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       this.doConnect(this.lastUrl);
@@ -218,18 +269,32 @@ export class WSClient {
       return;
     }
     try {
-      this.ws.send(JSON.stringify(msg));
+      if (this._e2eeReady && this.channel.isReady()) {
+        this.channel.encrypt(JSON.stringify(msg)).then((frame) => {
+          this.ws?.send(frame);
+        }).catch((err: Error) => {
+          hilog.error(DOMAIN, TAG, 'encrypt failed: ' + JSON.stringify(err));
+        });
+      } else {
+        this.ws.send(JSON.stringify(msg));
+      }
     } catch (err) {
       hilog.error(DOMAIN, TAG, 'send failed: ' + JSON.stringify(err));
     }
+
   }
   /** 发送控制消息（E2EE 握手/心跳等 text frame） */
   sendControl(type: string, payload: Record<string, Object>): void {
     if (!this.ws) return;
     try {
-      let data: Record<string, Object> = { type: type };
-      for (let key in payload) {
-        data[key] = payload[key] as Object;
+      let data: Record<string, Object> = {};
+      data['type'] = type;
+      if (type === 'e2ee_hello' && payload['ephemeralKey']) {
+        data['channelId'] = String(payload['ephemeralKey']).slice(0, 16);
+      }
+      let keys: string[] = Object.keys(payload);
+      for (let i: number = 0; i < keys.length; i++) {
+        data[keys[i]] = payload[keys[i]] as Object;
       }
       this.ws.send(JSON.stringify(data));
     } catch (err) {
@@ -250,14 +315,14 @@ export class WSClient {
       let signPayload: string = hostId + ephKeyPair.publicKeyHex + clientId;
       let signature: string = await signWithClientKey(signPayload);
 
-      this.sendControl('e2ee_hello', {
-        protocolVersion: 1,
-        clientId: clientId,
-        clientPublicKey: clientKeyPair.publicKeyHex,
-        ephemeralKey: ephKeyPair.publicKeyHex,
-        hostId: hostId,
-        signature: signature,
-      } as Record<string, Object>);
+      let helloPayload: Record<string, Object> = {};
+      helloPayload['protocolVersion'] = 1;
+      helloPayload['clientId'] = clientId;
+      helloPayload['clientPublicKey'] = clientKeyPair.publicKeyHex;
+      helloPayload['ephemeralKey'] = ephKeyPair.publicKeyHex;
+      helloPayload['hostId'] = hostId;
+      helloPayload['signature'] = signature;
+      this.sendControl('e2ee_hello', helloPayload);
       hilog.info(DOMAIN, TAG, 'E2EEHello sent');
     } catch (err) {
       hilog.error(DOMAIN, TAG, 'initiateE2EE failed: ' + JSON.stringify(err));
@@ -280,6 +345,7 @@ export class WSClient {
       this.ws = null;
     }
     ChatStore.connected = false;
+    this.stopHeartbeatWatchdog();
   }
 
   onStateChange(cb: StateChangeCallback): void {
@@ -351,20 +417,39 @@ export class WSClient {
     let hostname: string = info.hostname;
     let connectedUrl: string = this.lastUrl;
     if (connectedUrl.length === 0) return;
-    HostStore.addOrUpdateDevice({
-      name: hostname,
-      urls: [connectedUrl],
-      hostId: info.hostId,
-      relayPin: info.relayPin,
-    } as DeviceEntry);
+    // Strip query parameters (e.g. from QR code relay URL) for device persistence
+    let qIdx: number = connectedUrl.indexOf('?');
+    let cleanUrl: string = qIdx >= 0 ? connectedUrl.substring(0, qIdx) : connectedUrl;
+    // Dedup: remove all existing devices with same hostId or same hostname
+    let mergedUrls: string[] = [];
     for (let i: number = HostStore.devices.length - 1; i >= 0; i--) {
-      let device = HostStore.devices[i];
-      if (device.name !== hostname && device.urls.indexOf(connectedUrl) >= 0 && (!info.hostId || device.hostId !== info.hostId)) {
+      let d = HostStore.devices[i];
+      let match: boolean = false;
+      if (info.hostId && d.hostId === info.hostId) {
+        match = true;
+      } else if (d.name === hostname) {
+        // Same hostname = same device (regardless of hostId)
+        match = true;
+      }
+      if (match) {
+        for (let j: number = 0; j < d.urls.length; j++) {
+          if (mergedUrls.indexOf(d.urls[j]) < 0) mergedUrls.push(d.urls[j]);
+        }
         HostStore.removeDevice(i);
       }
     }
+    if (mergedUrls.indexOf(cleanUrl) < 0) mergedUrls.push(cleanUrl);
+    HostStore.addOrUpdateDevice({
+      name: hostname,
+      urls: mergedUrls,
+      hostId: info.hostId,
+      relayPin: info.relayPin,
+    } as DeviceEntry);
+
     saveHosts();
     loadWorkspaces(connectedUrl);
+  }
+
   private handleE2EEMessage(raw: string): void {
     let parsed: Record<string, Object>;
     try {
@@ -374,16 +459,75 @@ export class WSClient {
     if (type === 'e2ee_ready') {
       let accepted: boolean = Boolean(parsed['accepted']);
       if (accepted) {
-        this._e2eeReady = true;
         hilog.info(DOMAIN, TAG, 'E2EE handshake completed');
+        const ephHostHex = String(parsed['ephemeralKey'] || '');
+        const hostSignature = String(parsed['signature'] || '');
+        import('./CryptoHelper').then((module) => {
+          module.finishE2EEHandshake(ephHostHex, hostSignature, this._e2eeClientId).then((res) => {
+            if (res) {
+              this._e2eeReady = true;
+              this.setE2EEKey(res.aesKey, res.channelIdHex);
+              hilog.info(DOMAIN, TAG, 'AES key established');
+            }
+          }).catch((err: Error) => hilog.error(DOMAIN, TAG, 'Handshake error: ' + JSON.stringify(err)));
+        });
       } else {
         let error: string = String(parsed['error'] || 'unknown');
         hilog.error(DOMAIN, TAG, 'E2EE handshake rejected: ' + error);
+        // Q6 grill: propagate specific failure reason to UI
+        this.notifyState(false, 'E2EE握手拒绝: ' + error);
       }
     }
   }
 
+  // Set the AES key when handshake completes
+  public setE2EEKey(key: Uint8Array, channelIdHex: string) {
+    this.channel.setAesKey(key, channelIdHex);
+  }
+
+  // ── Heartbeat (Phase 2b) ─────────────────────────────────────────
+
+  private startHeartbeatWatchdog(): void {
+    this.lastHeartbeatReceived = Date.now();
+    this.stopHeartbeatWatchdog();
+    this.heartbeatWatchdog = setInterval(() => {
+      if (Date.now() - this.lastHeartbeatReceived > this.HEARTBEAT_WATCHDOG_MS) {
+        hilog.error(DOMAIN, TAG, 'Heartbeat timeout (45s), disconnecting');
+        this.intentionalClose = false;
+        this.disconnectInternal();
+        this.scheduleReconnect();
+      }
+    }, 15_000);
+  }
+
+  private stopHeartbeatWatchdog(): void {
+    if (this.heartbeatWatchdog !== null) {
+      clearInterval(this.heartbeatWatchdog);
+      this.heartbeatWatchdog = null;
+    }
+  }
+
+  private handleHeartbeat(payload: Record<string, Object>): void {
+    this.lastHeartbeatReceived = Date.now();
+    // Reply with same timestamp, avoiding duplicate type field
+    let hbPayload: Record<string, Object> = {};
+    hbPayload['ts'] = payload['ts'];
+    this.sendControl('heartbeat', hbPayload);
+  }
+
+
   private handleMessage(raw: string): void {
+    // Intercept heartbeat control messages before E2EE handling
+    if (raw.indexOf('"heartbeat"') >= 0 && raw.indexOf('"ts"') >= 0) {
+      try {
+        const hb = JSON.parse(raw) as Record<string, Object>;
+        if (hb['type'] === 'heartbeat') {
+          this.handleHeartbeat(hb as Record<string, Object>);
+          return;
+        }
+      } catch {}
+    }
+
     // E2EE handshake messages are intercepted at control level
     if (raw.indexOf('"e2ee_hello"') >= 0 || raw.indexOf('"e2ee_ready"') >= 0) {
       this.handleE2EEMessage(raw);
@@ -534,6 +678,32 @@ export class WSClient {
         ChatStore.sessionTitle = '';
         ChatStore.configOptions = [];
         break;
+      // Phase 3b: Cursor sync response (reconnect recovery)
+      case 'sync_response': {
+        let syncMsg: SyncResponseMessage = msg as SyncResponseMessage;
+        let entries: Array<SyncResponseEntry> | undefined = syncMsg.entries;
+        hilog.info(DOMAIN, TAG, 'sync_response: ' + (entries !== undefined ? String(entries.length) : '0') + ' entries');
+        if (entries !== undefined) {
+          for (let i = 0; i < entries.length; i++) {
+            let entry: SyncResponseEntry = entries[i];
+            let payload: AcpUpdate | undefined = entry.payload;
+            if (payload !== undefined && payload.sessionUpdate !== undefined) {
+              // Defensive dedup: skip entries already processed
+              if (payload.messageId !== undefined && payload.messageId === ChatStore.lastMessageId) continue;
+              for (let cb of this.updateListeners) {
+                cb(payload);
+              }
+              if (payload.messageId !== undefined) {
+                ChatStore.lastMessageId = String(payload.messageId);
+              }
+            }
+          }
+          // Phase transition: syncing → normal (complete)
+          ChatStore.reconnectPhase = '';
+          hilog.info(DOMAIN, TAG, 'sync_response: processed ' + String(entries.length) + ' entries');
+        }
+        break;
+      }
       default:
         hilog.info(DOMAIN, TAG, 'unhandled: ' + msg.type);
         break;

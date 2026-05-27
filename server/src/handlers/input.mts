@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import path from "node:path";
 import kill from "tree-kill";
 import type { WebSocket } from "ws";
-import { getSession, setSession, killTerminalProcesses } from "../session.mjs";
+import { getSession, setSession, killTerminalProcesses, bufferAgentEvent } from "../session.mjs";
 import { AcpClient } from "../acp/client.mjs";
 import { getAgentLaunchArgs, isValidAgent } from "../discovery/agents.mjs";
 import { isPathWithinCwd, createAcpCallbacks } from "../acp-callbacks.mjs";
@@ -89,8 +89,14 @@ async function ensureSessionAlive(ws: WebSocket, sessionId: string): Promise<boo
       if (toolCallEvt?.sessionUpdate === "tool_call_update") {
         console.log(`[debug] tool_call_update toolCallId=${JSON.stringify(toolCallEvt.toolCallId)} status=${JSON.stringify(toolCallEvt.status)} hasContent=${!!toolCallEvt.content} hasToolCallContent=${!!toolCallEvt.toolCallContent} contentKeys=${toolCallEvt.content ? Object.keys(toolCallEvt.content).join(",") : "none"}`);
       }
+      // Q5 grill: parallel send + buffer — bufferAgentEvent runs
+      // independently even if ws.send() fails (disconnected WS).
+      const eventPayload = { type: "agent_event", sessionId, event: update.update };
       try {
-        ws.send(JSON.stringify({ type: "agent_event", sessionId, event: update.update }));
+        ws.send(JSON.stringify(eventPayload));
+      } catch {}
+      try {
+        bufferAgentEvent(sessionId, eventPayload);
       } catch {}
     },
     onPermissionRequest: (params) => {

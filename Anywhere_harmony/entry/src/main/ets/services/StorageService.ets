@@ -82,6 +82,7 @@ export interface PrefsKeysType {
   WORKSPACES: string;
   WORKSPACE_INDEX: string;
   HOST_LIST: string;
+  LAST_MESSAGE_ID: string;
 }
 
 export const PrefsKeys: PrefsKeysType = {
@@ -90,7 +91,8 @@ export const PrefsKeys: PrefsKeysType = {
   LAST_MODEL_ID: 'last_model_id',
   WORKSPACES: 'workspaces',
   WORKSPACE_INDEX: 'workspace_index',
-  HOST_LIST: 'host_list'
+  HOST_LIST: 'host_list',
+  LAST_MESSAGE_ID: 'last_message_id'
 };
 
 // Workspace data interface for serialization
@@ -237,13 +239,25 @@ export async function loadHosts(): Promise<void> {
 
 // ── Persistent Cache (Models, Modes, Sessions) ──
 
+/** 当前缓存 schema 版本，升级时递增以触发旧缓存失效 */
+export const CACHE_SCHEMA_VERSION: number = 1;
+
+/** 缓存 TTL：5 分钟 */
+const CACHE_TTL_MS: number = 5 * 60 * 1000;
+
+export function isCacheExpired(timestamp: number): boolean {
+  return (Date.now() - timestamp) > CACHE_TTL_MS;
+}
+
 export interface ModelCacheData {
+  schemaVersion: number;
   models: ModelItem[];
   modes: ModeItem[];
   timestamp: number;
 }
 
 export interface SessionCacheData {
+  schemaVersion: number;
   sessions: ServerSession[];
   timestamp: number;
 }
@@ -260,7 +274,12 @@ export async function saveModelCache(agentName: string, models: ModelItem[], mod
   if (agentName.length === 0) return;
   let storage = StorageService.getInstance();
   let key = cacheKey(CACHE_MODEL_PREFIX, agentName);
-  let data: ModelCacheData = { models: models, modes: modes, timestamp: Date.now() };
+  let data: ModelCacheData = {
+    schemaVersion: CACHE_SCHEMA_VERSION,
+    models: models,
+    modes: modes,
+    timestamp: Date.now()
+  };
   await storage.putString(key, JSON.stringify(data));
 }
 
@@ -271,7 +290,10 @@ export async function loadModelCache(agentName: string): Promise<ModelCacheData 
   let raw = await storage.getString(key, '');
   if (raw.length === 0) return null;
   try {
-    return JSON.parse(raw) as ModelCacheData;
+    let data = JSON.parse(raw) as ModelCacheData;
+    if (data.schemaVersion !== CACHE_SCHEMA_VERSION) return null;
+    if (isCacheExpired(data.timestamp)) return null;
+    return data;
   } catch {
     return null;
   }
@@ -281,7 +303,11 @@ export async function saveSessionCache(agentName: string, cwd: string, sessions:
   if (agentName.length === 0 || cwd.length === 0) return;
   let storage = StorageService.getInstance();
   let key = cacheKey(CACHE_SESSION_PREFIX, agentName + '_' + cwd);
-  let data: SessionCacheData = { sessions: sessions, timestamp: Date.now() };
+  let data: SessionCacheData = {
+    schemaVersion: CACHE_SCHEMA_VERSION,
+    sessions: sessions,
+    timestamp: Date.now()
+  };
   await storage.putString(key, JSON.stringify(data));
 }
 
@@ -292,7 +318,10 @@ export async function loadSessionCache(agentName: string, cwd: string): Promise<
   let raw = await storage.getString(key, '');
   if (raw.length === 0) return null;
   try {
-    return JSON.parse(raw) as SessionCacheData;
+    let data = JSON.parse(raw) as SessionCacheData;
+    if (data.schemaVersion !== CACHE_SCHEMA_VERSION) return null;
+    if (isCacheExpired(data.timestamp)) return null;
+    return data;
   } catch {
     return null;
   }

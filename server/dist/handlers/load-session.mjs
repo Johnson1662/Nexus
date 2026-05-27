@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { AcpClient } from "../acp/client.mjs";
 import { getAgentLaunchArgs, isValidAgent } from "../discovery/agents.mjs";
-import { setSession, deleteSession, getSession, killSessionProcess, cleanupWsSessions, trimToolCallIds, } from "../session.mjs";
+import { setSession, deleteSession, getSession, killSessionProcess, cleanupWsSessions, trimToolCallIds, bufferAgentEvent, } from "../session.mjs";
 import { createAcpCallbacks } from "../acp-callbacks.mjs";
 export async function handleLoadSession(ws, params) {
     const { sessionId: targetSessionId, cwd, agent = "opencode", model } = params;
@@ -33,6 +33,8 @@ export async function handleLoadSession(ws, params) {
         pendingPermission: null,
         terminals: new Map(),
         toolCallIdMap: new Map(),
+        orphanedAt: null,
+        messageBuffer: [],
     };
     const client = new AcpClient(proc, {
         onSessionUpdate: async (update) => {
@@ -68,11 +70,13 @@ export async function handleLoadSession(ws, params) {
                 }
             }
             try {
-                ws.send(JSON.stringify({
+                const eventPayload = {
                     type: "agent_event",
                     sessionId: bridgeSessionId,
                     event: update.update,
-                }));
+                };
+                ws.send(JSON.stringify(eventPayload));
+                bufferAgentEvent(bridgeSessionId, eventPayload);
             }
             catch { }
         },

@@ -1,6 +1,15 @@
 import { MessageData } from './MessageData';
 import { ServerSession } from './WorkspaceInfo';
 
+/** 滑动窗口上限 — 防止长时间对话内存膨胀 */
+export const MAX_MESSAGES: number = 500;
+
+export function trimMessages(): void {
+  if (ChatStore.messages.length > MAX_MESSAGES) {
+    ChatStore.messages = ChatStore.messages.slice(ChatStore.messages.length - MAX_MESSAGES);
+  }
+}
+
 export interface ModelItem {
   modelId: string;
   name: string;
@@ -65,6 +74,8 @@ export class PlanEntry {
 @ObservedV2
 export class ChatStoreModel {
   @Trace messages: MessageData[] = [];
+  /** 断线重连游标：最后处理的 messageId（格式 sessionId:seq） */
+  lastMessageId: string = '';
   @Trace planEntries: PlanEntry[] = [];
   @Trace turnActive: boolean = false;
   @Trace sessionId: string = '';
@@ -87,6 +98,10 @@ export class ChatStoreModel {
   @Trace sessionReady: boolean = false;
   @Trace streamingThinking: string = '';
   @Trace lastModelId: string = '';
+  /** 断线重连阶段：'' | 'disconnected' | 'reconnecting' | 'syncing' */
+  @Trace reconnectPhase: string = '';
+  /** 重连尝试次数 */
+  @Trace reconnectAttempt: number = 0;
 }
 
 export const ChatStore: ChatStoreModel = new ChatStoreModel();

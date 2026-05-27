@@ -10,6 +10,7 @@ import {
   getSession,
   killSessionProcess,
   cleanupWsSessions,
+  bufferAgentEvent,
 } from "../session.mjs";
 import { createAcpCallbacks } from "../acp-callbacks.mjs";
 import type { SessionState } from "../acp/types.mjs";
@@ -56,6 +57,8 @@ export async function handleResumeSession(
     pendingPermission: null,
     terminals: new Map(),
     toolCallIdMap: new Map(),
+    orphanedAt: null,
+    messageBuffer: [],
   };
 
   const client = new AcpClient(proc, {
@@ -89,13 +92,13 @@ export async function handleResumeSession(
         }
       }
       try {
-        ws.send(
-          JSON.stringify({
-            type: "agent_event",
-            sessionId: bridgeSessionId,
-            event: update.update,
-          }),
-        );
+        const eventPayload = {
+          type: "agent_event",
+          sessionId: bridgeSessionId,
+          event: update.update,
+        };
+        ws.send(JSON.stringify(eventPayload));
+        bufferAgentEvent(bridgeSessionId, eventPayload);
       } catch {}
     },
     onPermissionRequest: (params) => {

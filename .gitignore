@@ -32,3 +32,13 @@ tmpfix/
 __pycache__/
 relay/relay.mjs
 relay/anywhere-relay*
+*.log
+.anywhere-host.json
+qr.png
+qr-display.html
+start-bridge.cmd
+open_qr.cmd
+^
+query.txt
+wstest/
+UserslneooDesktop*

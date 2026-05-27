@@ -297,11 +297,14 @@ Client                              Host (Bridge)
 
 ```
 binary frame payload:
+  [8 bytes channel ID (first 8 bytes of Client Ephemeral Key)]
   [8 bytes sequence number (uint64, big-endian, monotonic per-connection)]
   [12 bytes random IV]
   [encrypted payload (AES-256-GCM)]
   [16 bytes GCM Auth Tag]
 ```
+
+**多 Client 复用问题（漏洞修复）**：因为 Relay 将多个 Client 的消息盲转发到同一个 Bridge WS 连接，Bridge 收到 binary frame 时必须知道用哪个 AES key 解密。因此在 binary frame 头部增加 8 字节 `channelId`。`channelId` 取自握手时 Client 发送的 `ephemeralKey` 的前 8 字节。
 
 发送方在 `handshaking → open` 时将序列号重置为 0。接收方校验序列号严格单调递增，异常值断开连接。
 

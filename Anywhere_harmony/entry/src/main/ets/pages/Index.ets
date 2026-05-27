@@ -1,5 +1,5 @@
 import { Colors } from '../constants/DesignTokens';
-import { ChatStore } from '../common/model/ChatState';
+import { ChatStore, trimMessages } from '../common/model/ChatState';
 import { WorkspaceStore, WorkspaceInfo } from '../common/model/WorkspaceInfo';
 import { MessageData } from '../common/model/MessageData';
 import { WSClient } from '../common/websocket/WSClient';
@@ -121,6 +121,7 @@ export struct Index {
       return;
     }
     ChatStore.messages = [...ChatStore.messages, new MessageData('user', text, 'text')];
+    trimMessages();
     ChatStore.turnActive = true;
     if (ChatStore.sessionId) {
       this.ws.send({ type: 'input', sessionId: ChatStore.sessionId, text } as ClientMessage);

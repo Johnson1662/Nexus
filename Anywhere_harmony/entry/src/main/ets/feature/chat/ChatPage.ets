@@ -72,8 +72,35 @@ export struct ChatPage {
     }, 50);
   }
 
+  getReconnectBannerText(): string {
+    let phase: string = ChatStore.reconnectPhase;
+    if (phase === 'disconnected') {
+      return '连接已断开，Agent 仍在运行…';
+    } else if (phase === 'reconnecting') {
+      return '正在重连…（第 ' + String(ChatStore.reconnectAttempt) + ' 次尝试）';
+    } else if (phase === 'syncing') {
+      return '已连接，正在同步断线期间的消息…';
+    }
+    return '';
+  }
+
   build() {
     Column() {
+      // Yellow reconnect banner
+      if (ChatStore.reconnectPhase.length > 0) {
+        Row() {
+          SymbolGlyph($r('sys.symbol.xmark_circle'))
+            .fontSize(14).fontColor(['#D97706']).margin({ right: Spacing.sm })
+          Text(this.getReconnectBannerText())
+            .fontSize(FontSize.sm).fontColor('#92400E').fontWeight(FontWeight.Medium)
+            .layoutWeight(1)
+        }
+        .width('100%')
+        .padding({ left: Spacing.lg, right: Spacing.lg, top: Spacing.sm, bottom: Spacing.sm })
+        .backgroundColor('#FEF3C7')
+        .transition(TransitionEffect.OPACITY)
+      }
+
       if (this.messages.length === 0) {
           Column() {
             if (ChatStore.loadingSession) {

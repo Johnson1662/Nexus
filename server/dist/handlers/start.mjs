@@ -4,7 +4,7 @@ import path from "node:path";
 import { AcpClient } from "../acp/client.mjs";
 import { getAgentLaunchArgs } from "../discovery/agents.mjs";
 import { getLastModel } from "../prefs.mjs";
-import { setSession, deleteSession, getSession, killSessionProcess, cleanupWsSessions, trimToolCallIds, } from "../session.mjs";
+import { setSession, deleteSession, getSession, killSessionProcess, cleanupWsSessions, trimToolCallIds, bufferAgentEvent, } from "../session.mjs";
 import { createAcpCallbacks } from "../acp-callbacks.mjs";
 export async function handleStart(ws, params) {
     const { agent = "opencode", prompt, cwd, model } = params;
@@ -28,6 +28,8 @@ export async function handleStart(ws, params) {
         terminals: new Map(),
         restartCount: 0,
         toolCallIdMap: new Map(),
+        orphanedAt: null,
+        messageBuffer: [],
     };
     const client = new AcpClient(proc, {
         onSessionUpdate: async (update) => {
@@ -77,13 +79,19 @@ export async function handleStart(ws, params) {
                     trimToolCallIds(sess);
                 }
             }
-            console.log(`[server] agent_event type=${type} sessionId=${sessionId?.slice(0, 20)}`);
+            // Q5 grill: parallel send + buffer — bufferAgentEvent runs
+            // independently even if ws.send() fails (disconnected WS).
+            const eventPayload = {
+                type: "agent_event",
+                sessionId,
+                event: update.update,
+            };
             try {
-                ws.send(JSON.stringify({
-                    type: "agent_event",
-                    sessionId,
-                    event: update.update,
-                }));
+                ws.send(JSON.stringify(eventPayload));
+            }
+            catch { }
+            try {
+                bufferAgentEvent(sessionId, eventPayload);
             }
             catch { }
         },

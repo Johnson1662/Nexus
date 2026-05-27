@@ -4,7 +4,7 @@ import { realpathSync } from "node:fs";
 import { spawn } from "node:child_process";
 import kill from "tree-kill";
 import type { WebSocket } from "ws";
-import { getSession } from "./session.mjs";
+import { getSession, bufferAgentEvent } from "./session.mjs";
 import type {
   ReadTextFileRequest,
   ReadTextFileResponse,
@@ -65,7 +65,7 @@ export function createAcpCallbacks(config: AcpCallbacksConfig): {
     const originalId = toolCallIdMap?.get(toolCallId);
     const effectiveId = originalId || toolCallId;
     try {
-      ws.send(JSON.stringify({
+      const eventPayload = {
         type: "agent_event",
         sessionId,
         event: {
@@ -74,7 +74,9 @@ export function createAcpCallbacks(config: AcpCallbacksConfig): {
           status,
           toolCallContent: content,
         },
-      }));
+      };
+      ws.send(JSON.stringify(eventPayload));
+      bufferAgentEvent(sessionId, eventPayload);
     } catch {}
   }
 

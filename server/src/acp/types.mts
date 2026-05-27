@@ -36,6 +36,10 @@ export interface SessionState {
   toolCallIdMap: Map<string, string>;
   /** Latest original toolCallId from agent, used by terminal mapping */
   lastToolCallId?: string;
+  /** Timestamp when session was orphaned (WS disconnected), null if active */
+  orphanedAt: number | null;
+  /** Buffered messages for cursor sync replay (Phase 3a) */
+  messageBuffer: Array<{ messageId: string; payload: string; timestamp: number }>;
 }
 
 export interface WSClientMessage {

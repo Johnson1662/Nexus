@@ -48,6 +48,7 @@ export interface ClientMessage {
   value?: string;
   optionId?: string;
   methodId?: string;
+  lastMessageId?: string;
 }
 
 export interface ServerMessage {
@@ -71,6 +72,16 @@ export interface ServerMessage {
   configOptions?: ConfigOption[];
   hostname?: string;
   ips?: string[];
+}
+
+export interface SyncResponseEntry {
+  messageId?: string;
+  payload?: AcpUpdate;
+}
+
+export interface SyncResponseMessage {
+  type: string;
+  entries?: SyncResponseEntry[];
 }
 
 export interface ServerInfoMessage {

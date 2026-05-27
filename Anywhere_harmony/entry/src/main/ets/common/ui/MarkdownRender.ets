@@ -1,4 +1,4 @@
-import { Markdown, MarkdownController } from '@luvi/lv-markdown-in';
+import { Markdown, MarkdownController } from '../../vendor/lv-md';
 import { Colors } from '../../constants/DesignTokens';
 
 @Component

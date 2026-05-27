@@ -43,7 +43,6 @@ export default class EntryAbility extends UIAbility {
       });
       storage.getString(PrefsKeys.LAST_MODEL_ID, '').then((id) => {
         ChatStore.lastModelId = id;
-        // If models are already loaded, try to match persisted model
         if (id.length > 0 && ChatStore.models.length > 0) {
           for (let i = 0; i < ChatStore.models.length; i++) {
             if (ChatStore.models[i].modelId === id) {
@@ -52,6 +51,10 @@ export default class EntryAbility extends UIAbility {
             }
           }
         }
+      });
+      storage.getString(PrefsKeys.LAST_MESSAGE_ID, '').then((mid) => {
+        // Restore cursor position for session recovery after process crash
+        ChatStore.lastMessageId = mid;
       });
     });
   }

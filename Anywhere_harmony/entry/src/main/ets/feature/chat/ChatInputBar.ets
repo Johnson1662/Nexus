@@ -259,7 +259,7 @@ export struct ChatInputBar {
       Column() {
         Row() {
           TextArea({
-            placeholder: this.pendingFileName.length > 0 ? 'Add a message (optional)...' : 'Type a message...',
+            placeholder: this.getPlaceholder(),
             text: this.text,
             controller: this.textAreaController
           })
@@ -342,6 +342,22 @@ export struct ChatInputBar {
     .width('100%')
     .padding({ left: Spacing.md, right: Spacing.md, top: Spacing.md, bottom: Spacing.xl })
     .backgroundColor(Colors.surface0)
+  }
+
+  getPlaceholder(): string {
+    if (ChatStore.reconnectPhase.length > 0) {
+      if (ChatStore.reconnectPhase === 'disconnected') {
+        return '连接已断开，Agent 仍在运行中…';
+      } else if (ChatStore.reconnectPhase === 'reconnecting') {
+        return '正在重连…';
+      } else if (ChatStore.reconnectPhase === 'syncing') {
+        return '正在同步消息…';
+      }
+    }
+    if (this.pendingFileName.length > 0) {
+      return 'Add a message (optional)...';
+    }
+    return 'Type a message...';
   }
 
   hasCommands(): boolean {

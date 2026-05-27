@@ -101,9 +101,10 @@ function findInPath(binaryName) {
     }
     return null;
 }
-function getAgentVersion(binaryPath) {
-    // Try --version first, fall back to --help (some agents only support one or the other)
-    const commands = ["--version", "--help"];
+// Some agents fail on --version but respond to --help
+const SKIP_VERSION_CHECK = new Set(["codex-acp"]);
+function getAgentVersion(binaryPath, binaryName) {
+    const commands = SKIP_VERSION_CHECK.has(binaryName) ? ["--help"] : ["--version", "--help"];
     for (const cmd of commands) {
         try {
             const result = execSync(`"${binaryPath}" ${cmd}`, {
@@ -123,7 +124,7 @@ export function discoverAgents() {
     for (const entry of ACP_AGENTS) {
         const binaryPath = findInPath(entry.binary);
         if (binaryPath) {
-            const version = getAgentVersion(binaryPath);
+            const version = getAgentVersion(binaryPath, entry.binary);
             discovered.push({
                 name: entry.binary,
                 title: entry.title,

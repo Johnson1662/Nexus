@@ -50,11 +50,15 @@ export struct OnboardingView {
   }
 
   getCurrentServerName(): string {
-    if (this.connectedViaSavedDevice) {
-      let device: DeviceEntry | null = this.getDeviceForUrl(this.serverUrl);
-      if (device !== null && device.name.length > 0) {
-        return device.name;
-      }
+    // Try to find device by URL (strips query params for QR relay URLs)
+    let lookupUrl: string = this.serverUrl;
+    let qIdx: number = lookupUrl.indexOf('?');
+    if (qIdx >= 0) {
+      lookupUrl = lookupUrl.substring(0, qIdx);
+    }
+    let device: DeviceEntry | null = this.getDeviceForUrl(lookupUrl);
+    if (device !== null && device.name.length > 0) {
+      return device.name;
     }
     return this.extractIpPort(this.serverUrl);
   }
@@ -296,7 +300,6 @@ export struct OnboardingView {
           // Decode base64 to bytes
           let chars: string = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
           let out: number[] = [];
-          let pad: number = 0;
           for (let i: number = 0; i + 3 < b64.length; i += 4) {
             let a: number = chars.indexOf(b64[i]);
             let b: number = chars.indexOf(b64[i + 1]);
@@ -308,11 +311,11 @@ export struct OnboardingView {
               out.push(((b & 0x0F) << 4) | (c >> 2));
               if (d >= 0) {
                 out.push(((c & 0x03) << 6) | d);
-              } else { pad = 1; }
-            } else { pad = 2; }
+              }
+            }
           }
           let jsonStr: string = '';
-          for (let i: number = 0; i < out.length - pad; i++) {
+          for (let i: number = 0; i < out.length; i++) {
             jsonStr += String.fromCharCode(out[i]);
           }
           try {
@@ -340,6 +343,43 @@ export struct OnboardingView {
     } catch (e) {
       this.connectError = 'Scan failed: ' + JSON.stringify(e);
     }
+  }
+
+  getErrorBg(message: string): string {
+    if (message.indexOf('限流') >= 0 || message.indexOf('rate') >= 0) return '#FEF3C7';
+    if (message.indexOf('超时') >= 0 || message.indexOf('timeout') >= 0) return '#F3F4F6';
+    return '#FEE2E2';
+  }
+
+  getErrorFg(message: string): string {
+    if (message.indexOf('限流') >= 0 || message.indexOf('rate') >= 0) return '#92400E';
+    if (message.indexOf('超时') >= 0 || message.indexOf('timeout') >= 0) return '#4B5563';
+    return '#991B1B';
+  }
+
+  getErrorIcon(message: string): Resource {
+    if (message.indexOf('限流') >= 0 || message.indexOf('rate') >= 0 ||
+        message.indexOf('超时') >= 0 || message.indexOf('timeout') >= 0) {
+      return $r('sys.symbol.clock');
+    }
+    return $r('sys.symbol.xmark_circle');
+  }
+
+  @Builder ClassifiedErrorBox(message: string) {
+    Row() {
+      SymbolGlyph(this.getErrorIcon(message))
+        .fontSize(14).fontColor([this.getErrorFg(message)])
+        .margin({ right: Spacing.sm })
+      Text(message)
+        .fontSize(13).fontColor(this.getErrorFg(message))
+        .layoutWeight(1)
+    }
+    .width('100%')
+    .padding({ left: Spacing.md, right: Spacing.md, top: Spacing.sm, bottom: Spacing.sm })
+    .backgroundColor(this.getErrorBg(message))
+    .borderRadius(Radius.md)
+    .margin({ top: Spacing.md })
+    .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: -10 })))
   }
 
   build() {
@@ -427,12 +467,12 @@ Text('Anywhere')
                       .onSubmit(() => { this.tryConnect() })
 
                     Button() {
-                      SymbolGlyph($r('sys.symbol.line_viewfinder'))
-                        .fontSize(22).fontWeight(FontWeight.Bold).fontColor([Colors.foregroundMuted])
+                      Text('扫码')
+                        .fontSize(12).fontWeight(FontWeight.Bold).fontColor(Colors.accent)
                     }
                     .type(ButtonType.Circle)
                     .width(44).height(44)
-                    .backgroundColor(Color.Transparent)
+                    .backgroundColor(Colors.surface1)
                     .margin({ right: 4 })
                     .onClick(() => { this.startScan() })
 
@@ -457,10 +497,7 @@ Text('Anywhere')
                 }
 
                 if (this.connectError.length > 0) {
-                  Text(this.connectError)
-                    .fontSize(13).fontColor(Colors.error)
-                    .margin({ top: Spacing.md })
-                    .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: -10 })))
+                  this.ClassifiedErrorBox(this.connectError)
                 }
             }
             .width('100%')

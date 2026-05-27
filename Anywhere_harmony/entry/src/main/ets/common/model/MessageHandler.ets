@@ -1,6 +1,7 @@
 import { MessageData } from './MessageData';
-import { ChatStore } from './ChatState';
+import { ChatStore, trimMessages } from './ChatState';
 import { AcpUpdate, AcpToolCallContent, AcpContent } from '../websocket/WSProtocol';
+import { StorageService, PrefsKeys } from '../../services/StorageService';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 
 const DOMAIN: number = 0x0000;
@@ -9,6 +10,12 @@ const TAG: string = 'MsgHandler';
 export function handleAcpUpdate(u: AcpUpdate): void {
   if (ChatStore.loadingSession) {
     ChatStore.loadingSession = false;
+  }
+  // Track lastMessageId for cursor sync on reconnect
+  if (u.messageId && u.messageId.length > 0) {
+    ChatStore.lastMessageId = u.messageId;
+    // Persist to Preferences for process-level crash recovery
+    StorageService.getInstance().putString(PrefsKeys.LAST_MESSAGE_ID, u.messageId);
   }
   let t: string = u.sessionUpdate;
   if (t === 'agent_message_chunk' && u.content?.text) {
@@ -123,6 +130,7 @@ export function handleAcpUpdate(u: AcpUpdate): void {
     }
     ChatStore.turnActive = false;
   }
+  trimMessages();
 }
 
 // Agent sends tool_call_update content in the standard ACP format:

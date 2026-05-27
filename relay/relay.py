@@ -14,6 +14,8 @@ PORT = int(os.environ.get("RELAY_PORT", "12138"))
 
 hosts = {}
 clients = {}
+pending_frames = {}
+
 
 
 def make_accept(key):
@@ -206,6 +208,14 @@ class RelayServerProtocol(asyncio.Protocol):
             if old:
                 old.close_conn()
             hosts[host_id] = ws
+            
+            # Flush any pending frames for this host
+            q = pending_frames.pop(host_id, [])
+            if q:
+                print(f"[FLUSH] sending {len(q)} buffered frames to host {host_id}")
+                for m in q:
+                    ws.send(m)
+
         else:
             s = clients.get(host_id)
             if s is None:
@@ -226,7 +236,10 @@ class RelayServerProtocol(asyncio.Protocol):
                 if hw:
                     hw.send(msg)
                 else:
-                    print(f"[WARN] No host found for hostId: {h}")
+                    print(f"[WARN] No host found for hostId: {h}, buffering...")
+                    q = pending_frames.setdefault(h, [])
+                    if len(q) < 200:
+                        q.append(msg)
             elif ws.role == "host":
                 cs = clients.get(h)
                 if cs:

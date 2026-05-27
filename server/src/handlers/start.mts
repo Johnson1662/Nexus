@@ -11,6 +11,7 @@ import {
   killSessionProcess,
   cleanupWsSessions,
   trimToolCallIds,
+  bufferAgentEvent,
 } from "../session.mjs";
 import { createAcpCallbacks } from "../acp-callbacks.mjs";
 import type { SessionState } from "../acp/types.mjs";
@@ -53,6 +54,8 @@ export async function handleStart(
     terminals: new Map(),
     restartCount: 0,
     toolCallIdMap: new Map(),
+    orphanedAt: null,
+    messageBuffer: [],
   };
 
   const client = new AcpClient(proc, {
@@ -100,15 +103,18 @@ export async function handleStart(
           trimToolCallIds(sess);
         }
       }
-      console.log(`[server] agent_event type=${type} sessionId=${sessionId?.slice(0, 20)}`);
+      // Q5 grill: parallel send + buffer — bufferAgentEvent runs
+      // independently even if ws.send() fails (disconnected WS).
+      const eventPayload = {
+        type: "agent_event",
+        sessionId,
+        event: update.update,
+      };
       try {
-        ws.send(
-          JSON.stringify({
-            type: "agent_event",
-            sessionId,
-            event: update.update,
-          }),
-        );
+        ws.send(JSON.stringify(eventPayload));
+      } catch {}
+      try {
+        bufferAgentEvent(sessionId, eventPayload);
       } catch {}
     },
     onPermissionRequest: (params) => {
