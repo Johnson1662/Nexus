@@ -1,18 +1,29 @@
 # Anywhere — HarmonyOS 远程 AI 编程助手客户端
 
-## 永远用中文回答
+## 永远用中文回答，并用中文输出思考链
+
+## 使用 hmdev-cli skill 查鸿蒙官方文档、构建部署项目
 
 ## 项目概述
 
-Anywhere 是一个 HarmonyOS App，通过 WebSocket 连接到 PC 端 Bridge Server，Bridge Server 再通过 ACP (Agent Client Protocol) 协议与 AI 编程 Agent (如 OpenCode、Claude Code) 通信。App 充当手机上的移动开发工作区。
+Anywhere 是一个 HarmonyOS App，通过混合中继架构连接到 PC 端 Bridge Server，Bridge Server 再通过 ACP (Agent Client Protocol) 协议与 AI 编程 Agent (如 OpenCode、Claude Code) 通信。App 充当手机上的移动开发工作区。
 
 ```
-手机 (HarmonyOS ArkTS)              PC (Node.js Bridge)
-┌────────────────────────┐         ┌─────────────────────────┐
-│  Navigation            │   WS    │  server/dist/server.mjs  │
-│  ├─ OnboardingView     │───────→ │  端口 12138              │
-│  └─ ChatView           │←─────── │  ACP Agent (子进程)      │
-└────────────────────────┘         └─────────────────────────┘
+手机 (HarmonyOS)                     GCloud VM (转发器)            Cloudflare Worker + DO        PC (Node.js Bridge)
+                                    (Python websockets)           (anywhere-relay)               (server/dist/server.mjs)
+┌──────────────┐     WS (无代理)     ┌──────────────────┐   WS    ┌────────────────────┐   WS    ┌─────────────────────┐
+│ Phone App    │ ─────────────────→ │ ws_forwarder.py  │ ──────→ │ Durable Object     │ ──────→ │ serve:12138         │
+│ (HarmonyOS)  │ ←───────────────── │ :12138           │ ←────── │ (配对双向转发)      │ ←────── │ + ACP Agent 子进程  │
+└──────────────┘                     └──────────────────┘         └────────────────────┘         └─────────────────────┘
+                                                                                                            │
+                                                                                               Clash 代理 (127.0.0.1:7890)
+                                                                                                            │
+                                                                                                    ┌───────┴───────┐
+                                                                                                    │ OpenCode       │
+                                                                                                    │ Claude Agent   │
+                                                                                                    │ codex-acp      │
+                                                                                                    │ ...            │
+                                                                                                    └───────────────┘
 ```
 
 ---
@@ -54,6 +65,58 @@ clash-verge 的**全局模式**会劫持所有网络流量，导致手机热点�
 4. `netsh advfirewall firewall show rule name=all dir=in` — 检查防火墙规则
 5. 关闭 clash 全局模式重试
 
+
+
+---
+
+## ⚠️ Relay 中继架构（国内直连方案）
+
+### 现状
+
+```
+手机 (HarmonyOS)                     GCloud VM (转发器)            Cloudflare Worker + DO        PC Bridge
+┌──────────────┐     WS (无代理)     ┌──────────────────┐   WS    ┌────────────────────┐   WS    ┌─────────────┐
+│ ws://relay   │ ─────────────────→ │ Python websockets │ ──────→ │ Durable Object     │ ──────→ │ WSS to CF   │
+│ .anywhere1213│                    │ ws_forwarder.py   │ ←────── │ (配对双向转发)      │ ←────── │             │
+│ 8.lat:12138  │ ←───────────────── │ :12138            │ ←────── │                    │ ←────── │             │
+└──────────────┘                     └──────────────────┘         └────────────────────┘         └─────────────┘
+```
+
+国内手机 → GCloud 转发器（直连，不经过 CF）→ CF Worker DO → PC Bridge。
+
+PC Bridge 通过 Clash 代理直接连 CF（`wss://cf-relay.anywhere12138.lat/ws`）。
+
+### 为什么需要 Durable Object
+
+Cloudflare Worker 的 `fetch` handler 返回后 WebSocket 连接即被操作系统销毁（~30s 超时）。DO 的 `state.acceptWebSocket(ws)` 将 WebSocket 接入 DO 的内存生命周期，使 DO 能同时持有两个 WebSocket 连接并做消息配对转发。
+
+理论上可以去掉 CF/DO，直接在 GCloud VM 上跑一个 WebSocket server 做中心 relay，但 GCloud 200GB 免费流量对当前场景够用，暂不折腾。
+
+### 已知问题 — Python websockets 引号剥离
+
+GCloud 转发器（`ws_forwarder.py`，使用 Python `websockets` v16.0）在转发文本帧时会**去掉 JSON 引号**：
+
+```
+发送:  {"type":"list_agents","sessionId":"abc"}
+到达:  {type:list_agents,sessionId:abc}
+```
+
+这会导致以下故障链：
+
+|环节|表现|原因|解决方案|
+|---|---|---|---|
+|**JSON 解析失败**|`handlePlaintextMessage` 收到无效 JSON，`JSON.parse` 抛异常|键值引号丢失|Bridge 端正则修复（`server.mts` `handlePlaintextMessage` 的 `catch` 分支）|
+|**E2EE 握手失败**|E2EE 检测 `"e2ee_hello"` 字符串匹配不到→不创建加密通道→无心跳→45s 断连|引号丢失，`includes('"e2ee_hello"')` 为 false|增加 `indexOf('type:e2ee_hello') >= 0` 检测无引号变体|
+|**心跳丢失→断连循环**|手机 45s 超时→重连→再次触发 `relay_client_connected`→周期循环|无 E2EE 心跳|引号修复后心跳恢复正常|
+
+**根因未完全定位**：可能是 Python `websockets` v16.0 在 CF Worker DO 场景下的文本帧编码问题。手机 App 端没有此问题（正常发送带引号的 JSON）。
+
+### DNS 与流量路径
+
+|域名|指向|方式|用途|
+|---|---|---|---|
+|`relay.anywhere12138.lat`|`35.212.155.17`|A 记录，proxied=false|手机直连 GCloud 转发器|
+|`cf-relay.anywhere12138.lat`|Cloudflare Edge|CF proxy + Worker route|PC Bridge 通过代理连 CF|
 ---
 
 ## ⚠️ Golden Rule: 优先使用原生 ArkUI 组件
