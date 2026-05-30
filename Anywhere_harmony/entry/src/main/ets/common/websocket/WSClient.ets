@@ -33,6 +33,7 @@ export class WSClient {
   private agentListListeners: AgentListCallback[] = [];
   private errorListeners: ErrorCallback[] = [];
   private sessionStartedListeners: EmptyCallback[] = [];
+  private serverInfoListeners: EmptyCallback[] = [];
   private lastUrl: string = '';
   private reconnectTimer: number | null = null;
   private reconnectAttempts: number = 0;
@@ -153,11 +154,11 @@ export class WSClient {
         this.initiateE2EE(url, gen);
       }
       // Phase 3b + grill: Request cursor sync if we have a session (reconnect recovery)
-      if (ChatStore.sessionId.length > 0 && ChatStore.lastMessageId.length > 0) {
+      if (ChatStore.bridgeSessionId.length > 0 && ChatStore.lastMessageId.length > 0) {
         ChatStore.reconnectPhase = 'syncing';
         this.send({
           type: 'sync_request',
-          sessionId: ChatStore.sessionId,
+          sessionId: ChatStore.bridgeSessionId,
           lastMessageId: ChatStore.lastMessageId,
         } as ClientMessage);
       } else {
@@ -370,6 +371,10 @@ export class WSClient {
     this.sessionStartedListeners.push(cb);
   }
 
+  onServerInfo(cb: EmptyCallback): void {
+    this.serverInfoListeners.push(cb);
+  }
+
   clearListeners(): void {
     this.stateListeners = [];
     this.modelListeners = [];
@@ -377,12 +382,13 @@ export class WSClient {
     this.agentListListeners = [];
     this.errorListeners = [];
     this.sessionStartedListeners = [];
+    this.serverInfoListeners = [];
   }
 
   sendPermissionResponse(optionId: string): void {
     if (!ChatStore.pendingPermission) return;
     let reqId: string = ChatStore.pendingPermission.requestId;
-    let sessionId: string = ChatStore.sessionId;
+    let sessionId: string = ChatStore.bridgeSessionId;
     this.send({
       type: 'permission_response',
       sessionId: sessionId,
@@ -448,6 +454,9 @@ export class WSClient {
 
     saveHosts();
     loadWorkspaces(connectedUrl);
+    for (let cb of this.serverInfoListeners) {
+      cb();
+    }
   }
 
   private handleE2EEMessage(raw: string): void {
@@ -545,11 +554,11 @@ export class WSClient {
         this.handleServerInfo(msg as ServerInfoMessage);
         break;
       case 'session_started':
-        ChatStore.sessionId = msg.sessionId || '';
+        ChatStore.bridgeSessionId = msg.sessionId || '';
         if (msg.loadedSessionId) {
-          ChatStore.loadedSessionId = msg.loadedSessionId;
+          ChatStore.acpSessionId = msg.loadedSessionId;
         } else {
-          ChatStore.loadedSessionId = '';
+          ChatStore.acpSessionId = '';
         }
         if (msg.model) {
           ChatStore.sessionCurrentModelId = msg.model;
@@ -582,7 +591,7 @@ export class WSClient {
             ChatStore.sessions = [...ChatStore.sessions, s];
           }
         }
-        ChatStore.sessionReady = true;
+        ChatStore.loadingSession = false;
         for (let cb of this.sessionStartedListeners) {
           cb();
         }
@@ -631,7 +640,7 @@ export class WSClient {
         break;
       case 'session_list':
         ChatStore.sessions = msg.sessions || [];
-        ChatStore.sessionReady = true;
+        ChatStore.loadingSession = false;
         // Persist to local cache
         if (ChatStore.agentType.length > 0 && WorkspaceStore.currentIndex >= 0 &&
             WorkspaceStore.currentIndex < WorkspaceStore.workspaces.length) {
@@ -672,7 +681,10 @@ export class WSClient {
         }
         break;
       case 'session_closed':
-        ChatStore.sessionId = '';
+        if (msg.sessionId && msg.sessionId !== ChatStore.bridgeSessionId) {
+          break;
+        }
+        ChatStore.bridgeSessionId = '';
         ChatStore.messages = [];
         ChatStore.planEntries = [];
         ChatStore.sessionTitle = '';

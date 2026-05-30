@@ -274,7 +274,7 @@ async function main() {
     console.log("\n⚠️  BRIDGE_URL not set. Starting local test bridge for self-test...\n");
     // Start a minimal bridge for testing
     const { WebSocketServer } = await import("ws");
-    const { EncryptedChannel } = await import("./server/src/encrypted-channel.mjs");
+    const { EncryptedChannel } = await import("./dist/encrypted-channel.mjs");
 
     const wss = new WebSocketServer({ port: 0 }); // random port
     const port = wss.address().port;

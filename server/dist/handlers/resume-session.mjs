@@ -23,7 +23,7 @@ export async function handleResumeSession(ws, params) {
         stdio: ["pipe", "pipe", "pipe"],
         shell: true,
     });
-    const bridgeSessionId = `acp-${Date.now()}`;
+    const bridgeSessionId = `acp-${Date.now()}-${randomUUID().slice(0, 8)}`;
     const sess = {
         ws,
         sessionId: bridgeSessionId,
@@ -74,7 +74,7 @@ export async function handleResumeSession(ws, params) {
                     sessionId: bridgeSessionId,
                     event: update.update,
                 };
-                ws.send(JSON.stringify(eventPayload));
+                sess.ws?.send(JSON.stringify(eventPayload));
                 bufferAgentEvent(bridgeSessionId, eventPayload);
             }
             catch { }
@@ -87,7 +87,7 @@ export async function handleResumeSession(ws, params) {
                     currentSess.pendingPermission = { requestId, resolve };
                 }
                 try {
-                    ws.send(JSON.stringify({
+                    sess.ws?.send(JSON.stringify({
                         type: "permission_request",
                         sessionId: bridgeSessionId,
                         requestId,
@@ -98,7 +98,7 @@ export async function handleResumeSession(ws, params) {
                 catch { }
             });
         },
-        ...createAcpCallbacks({ ws, sessionId: bridgeSessionId, cwd: cwd || process.cwd(), toolCallIdMap: sess.toolCallIdMap }),
+        ...createAcpCallbacks({ sessionId: bridgeSessionId, cwd: cwd || process.cwd(), toolCallIdMap: sess.toolCallIdMap }),
     });
     sess.client = client;
     sess.loadedSessionId = targetSessionId;
@@ -106,7 +106,7 @@ export async function handleResumeSession(ws, params) {
     proc.stderr.on("data", (chunk) => {
         console.log(`[server] stderr: ${chunk.toString().slice(0, 200)}`);
         try {
-            ws.send(JSON.stringify({ type: "agent_stderr", sessionId: bridgeSessionId, text: chunk.toString() }));
+            sess.ws?.send(JSON.stringify({ type: "agent_stderr", sessionId: bridgeSessionId, text: chunk.toString() }));
         }
         catch { }
     });
@@ -121,24 +121,32 @@ export async function handleResumeSession(ws, params) {
     try {
         console.log(`[server] initializing ACP for resume session ${targetSessionId}...`);
         await client.initialize();
-        console.log(`[server] resuming session ${targetSessionId}`);
-        await client.resumeSession(targetSessionId, cwd || process.cwd());
+        console.log(`[server] loading session ${targetSessionId} (via loadSession to replay history)`);
+        const result = await client.loadSession(targetSessionId, cwd || process.cwd());
         sess.acpSessionId = targetSessionId;
+        const models = result.models?.availableModels || [];
+        const modes = result.modes?.availableModes || [];
+        if (models.length > 0 || modes.length > 0) {
+            const mappedModels = models.map((m) => ({ modelId: m.modelId, name: m.name }));
+            const mappedModes = modes.map((m) => ({ value: m.id, name: m.name }));
+            sess.ws?.send(JSON.stringify({ type: "model_list", models: mappedModels, modes: mappedModes }));
+        }
         if (model) {
             await client.setSessionModel(targetSessionId, model).catch(() => { });
         }
-        ws.send(JSON.stringify({
+        sess.ws?.send(JSON.stringify({
             type: "session_started",
             sessionId: bridgeSessionId,
             agent,
             loadedSessionId: targetSessionId,
             resumed: true,
+            ...(model ? { model } : {}),
         }));
     }
     catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         console.log(`[server] resume_session error: ${msg}`);
-        ws.send(JSON.stringify({ type: "error", text: `resume session failed: ${msg}` }));
+        sess.ws?.send(JSON.stringify({ type: "error", text: `resume session failed: ${msg}` }));
         killSessionProcess(sess);
         deleteSession(bridgeSessionId);
     }

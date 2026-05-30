@@ -15,7 +15,8 @@ export namespace CodeBlockImpl {
   export function handleThemeChange(markdownUnion: string, them: CodeTheme) {
     Logger.info("markdownUnion > " + markdownUnion)
     handleCodeHighlight(markdownUnion, them)
-    getContext().eventHub.emit(markdownCodeThemeChangeEventName)
+    let uiCtx = MDBaseController.getMarkdownController(markdownUnion).getUIContext();
+    if (uiCtx) { uiCtx.getHostContext()?.eventHub.emit(markdownCodeThemeChangeEventName); }
   }
 
   export async function copyText(markdownUnion: string, text: string) {

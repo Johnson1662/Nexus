@@ -138,16 +138,13 @@ export function killSessionProcess(sess: SessionState): void {
 export function cleanupWsSessions(ws: import("ws").WebSocket): void {
   for (const [id, sess] of sessions) {
     if (sess.ws === ws) {
-      // Phase 3a + Q4 grill: Don't kill processes on disconnect — keep Agent
-      // running so reconnection can reclaim the session without restart.
-      // Processes are killed after orphan timeout (5 min) in the cleanup timer.
       sess.orphanedAt = Date.now();
+      sess.ws = null as unknown as import("ws").WebSocket;
       console.log(`[session] session ${id.slice(0, 20)} orphaned (process kept alive), will keep for ${ORPHAN_TIMEOUT_MS / 1000}s`);
-      // Start orphan cleanup timer if not already running
       startOrphanCleanup();
     }
   }
-  // Enforce max orphans: kill oldest if over limit
+  wsOpQueues.delete(ws);
   enforceOrphanLimit();
 }
 

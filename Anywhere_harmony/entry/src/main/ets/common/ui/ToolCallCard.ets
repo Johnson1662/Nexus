@@ -11,6 +11,7 @@ export struct ToolCallCard {
   @Prop oldText: string = '';
   @Prop newText: string = '';
   @Prop terminalId: string = '';
+  @StorageLink('pref_toolcall_expanded') prefToolcallExpanded: boolean = true;
   @State breathFlag: boolean = false;
   @State expanded: boolean = false;
 
@@ -21,13 +22,13 @@ export struct ToolCallCard {
       }, 50);
     }
     if (this.hasDetail()) {
-      this.expanded = true;
+      this.expanded = this.prefToolcallExpanded;
     }
   }
 
 
   getFormattedName(): string {
-    if (!this.name) return 'Tool call';
+    if (!this.name) return getContext().resourceManager.getStringSync($r('app.string.tool_default_name'));
     let formatted = this.name.replace(/_/g, ' ');
     return formatted.charAt(0).toUpperCase() + formatted.slice(1);
   }
@@ -140,14 +141,14 @@ export struct ToolCallCard {
     return result;
   }
 
-  getDiffColor(line: string): string {
+  getDiffColor(line: string): Resource {
     if (line.startsWith('+') && !line.startsWith('+++')) return Colors.success;
     if (line.startsWith('-') && !line.startsWith('---')) return Colors.error;
     if (line.startsWith('@@')) return Colors.foregroundLight;
     return Colors.foregroundMuted;
   }
 
-  getDiffBgColor(line: string): string {
+  getDiffBgColor(line: string): ResourceStr {
     if (line.startsWith('+') && !line.startsWith('+++')) return Colors.successLight;
     if (line.startsWith('-') && !line.startsWith('---')) return Colors.errorLight;
     return 'transparent';
@@ -264,7 +265,7 @@ export struct ToolCallCard {
         Blank()
 
         if (this.hasDetail()) {
-          Text(this.expanded ? 'Hide' : 'Show')
+          Text(getContext().resourceManager.getStringSync(this.expanded ? $r('app.string.tool_hide_detail') : $r('app.string.tool_show_detail')))
             .fontSize(FontSize.xs)
             .fontColor(Colors.foregroundLight)
             .margin({ right: Spacing.xs })

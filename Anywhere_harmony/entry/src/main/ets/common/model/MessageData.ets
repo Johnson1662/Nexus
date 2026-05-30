@@ -4,6 +4,7 @@ export class MessageData {
   @Trace role: string = '';
   @Trace content: string = '';
   @Trace type: string = 'text';
+  @Trace sendStatus: string = '';
   @Trace toolName: string = '';
   @Trace toolStatus: string = '';
   @Trace toolCallId: string = '';
@@ -16,11 +17,15 @@ export class MessageData {
   @Trace toolTerminalId: string = '';
   @Trace timestamp: number = 0;
 
+  private static msgCounter: number = 0;
+
   constructor(role: string, content: string, type: string = 'text') {
-    this.id = 'msg_' + Date.now().toString();
+    MessageData.msgCounter++;
+    this.id = 'msg_' + Date.now().toString() + '_' + MessageData.msgCounter.toString();
     this.role = role;
     this.content = content;
     this.type = type;
+    this.sendStatus = role === 'user' ? 'sending' : '';
     this.timestamp = Date.now();
   }
 }

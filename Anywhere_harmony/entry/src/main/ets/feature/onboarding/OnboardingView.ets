@@ -11,7 +11,7 @@ import { StorageService, PrefsKeys, loadWorkspaces, saveHosts, loadModelCache } 
 import { getOrCreateClientKeyPair, signWithClientKey } from '../../common/websocket/CryptoHelper';
 
 interface OnboardingCallbacks {
-  onNavigateToWorkspaceSelect: () => void;
+  onNavigateToChat: () => void;
 }
 
 @Component
@@ -25,9 +25,10 @@ export struct OnboardingView {
   @State connectedViaSavedDevice: boolean = false;
 
   ws: WSClient = new WSClient();
-  callbacks: OnboardingCallbacks = { onNavigateToWorkspaceSelect: () => {} };
-
   @State showSavedServers: boolean = true;
+  @State serverDeleteConfirmIndex: number = -1;
+  callbacks: OnboardingCallbacks = { onNavigateToChat: () => {} };
+
 
   aboutToAppear() {
     setTimeout(() => {
@@ -72,8 +73,7 @@ export struct OnboardingView {
   }
 
   deleteHost(index: number): void {
-    HostStore.removeDevice(index);
-    saveHosts();
+    this.serverDeleteConfirmIndex = index;
   }
 
   selectHost(device: DeviceEntry): void {
@@ -197,11 +197,21 @@ export struct OnboardingView {
           AppStorage.setOrCreate<string>('serverUrl', detail);
           StorageService.getInstance().putString(PrefsKeys.SERVER_URL, detail);
         }
-        if (ChatStore.selectedAgentName.length > 0 && ChatStore.messages.length > 0) {
+        // On reconnect: let sync_request handle session recovery — don't start a new one
+        if (ChatStore.bridgeSessionId.length > 0) {
           this.connecting = false;
-          this.ws.send({ type: 'start', agent: ChatStore.selectedAgentName } as ClientMessage);
         } else if (ChatStore.selectedAgentName.length === 0) {
-          this.ws.send({ type: 'list_agents' } as ClientMessage);
+          if (this.serverUrl.indexOf('targetHostId=') >= 0) {
+            let sent: boolean = false;
+            this.ws.onServerInfo(() => {
+              if (!sent) {
+                sent = true;
+                this.ws.send({ type: 'list_agents' } as ClientMessage);
+              }
+            });
+          } else {
+            this.ws.send({ type: 'list_agents' } as ClientMessage);
+          }
         }
       }
     });
@@ -249,7 +259,7 @@ export struct OnboardingView {
     StorageService.getInstance().putString(PrefsKeys.LAST_AGENT, agent.name);
     ChatStore.messages = [];
     ChatStore.planEntries = [];
-    ChatStore.sessionId = '';
+    ChatStore.bridgeSessionId = '';
     // Load cached models immediately for instant display
     loadModelCache(agent.name).then((cached) => {
       if (cached !== null) {
@@ -267,7 +277,7 @@ export struct OnboardingView {
     });
     // Refresh model list once from server — server caches this per agent to avoid temp sessions
     this.ws.send({ type: 'list_models' } as ClientMessage);
-    this.callbacks.onNavigateToWorkspaceSelect();
+    this.callbacks.onNavigateToChat();
   }
 
 
@@ -404,7 +414,7 @@ Text('Anywhere')
   .letterSpacing(-1.2)
   .margin({ bottom: Spacing.xxs })
 
-              Text('Seamlessly connected AI workspace.')
+              Text($r('app.string.onboarding_subtitle'))
                 .fontSize(15)
                 .fontColor(Colors.foregroundMuted)
                 .fontWeight(FontWeight.Medium)
@@ -417,14 +427,13 @@ Text('Anywhere')
             // CONNECTION
             Column() {
                 if (ChatStore.connected) {
-                  // 连上后的连接栏 — 显示主机名 — IP:端口
                   Row() {
                     Circle().width(8).height(8).fill(Colors.success).margin({ left: 16, right: 10 })
                     Text(this.getCurrentServerName())
                       .fontSize(14).fontColor(Colors.foreground)
                       .fontWeight(FontWeight.Medium)
                       .layoutWeight(1)
-                    Button('断开')
+                    Button($r('app.string.connect_disconnect'))
                       .fontSize(13).fontColor(Colors.foregroundMuted).backgroundColor(Color.Transparent)
                       .fontWeight(FontWeight.Medium)
                       .margin({ right: 8 })
@@ -440,10 +449,11 @@ Text('Anywhere')
                   .shadow(Shadow.sm)
                   .transition(TransitionEffect.OPACITY.combine(TransitionEffect.scale({ x: 0.95, y: 0.95 })))
                 } else if (this.connecting) {
-                  // 连接中 — 显示主机名 + 加载动画，无红字
                   Row() {
                     LoadingProgress().width(22).height(22).color(Colors.accent).margin({ left: 16, right: 10 })
-                    Text(this.connectingDeviceName.length > 0 ? '正在连接 ' + this.connectingDeviceName + '…' : '正在连接…')
+                    Text(this.connectingDeviceName.length > 0
+                      ? getContext().resourceManager.getStringSync($r('app.string.connect_connecting_to'), this.connectingDeviceName)
+                      : getContext().resourceManager.getStringSync($r('app.string.connect_connecting')))
                       .fontSize(14).fontColor(Colors.foregroundMuted)
                       .fontWeight(FontWeight.Medium)
                       .layoutWeight(1)
@@ -455,7 +465,7 @@ Text('Anywhere')
                   .transition(TransitionEffect.OPACITY)
                 } else {
                   Row() {
-                    TextInput({ text: this.serverUrl, placeholder: 'Bridge WS URL or IP:Port' })
+                    TextInput({ text: this.serverUrl, placeholder: getContext().resourceManager.getStringSync($r('app.string.connect_placeholder')) })
                       .layoutWeight(1)
                       .height(52)
                       .backgroundColor(Color.Transparent)
@@ -467,7 +477,7 @@ Text('Anywhere')
                       .onSubmit(() => { this.tryConnect() })
 
                     Button() {
-                      Text('扫码')
+                      Text($r('app.string.connect_scan_qr'))
                         .fontSize(12).fontWeight(FontWeight.Bold).fontColor(Colors.accent)
                     }
                     .type(ButtonType.Circle)
@@ -506,7 +516,7 @@ Text('Anywhere')
             // SAVED SERVERS
             Column() {
               Row() {
-                Text('SAVED SERVERS')
+                Text($r('app.string.onboarding_saved_servers'))
                   .fontSize(11).fontColor(Colors.foregroundLight)
                   .fontWeight(FontWeight.Bold)
                   .letterSpacing(2)
@@ -524,7 +534,7 @@ Text('Anywhere')
               if (this.showSavedServers) {
                 if (HostStore.devices.length === 0) {
                   Row() {
-                    Text('No saved servers yet')
+                    Text($r('app.string.onboarding_no_saved_servers'))
                       .fontSize(13).fontColor(Colors.foregroundLight)
                       .padding({ left: Spacing.md })
                   }
@@ -556,7 +566,7 @@ Text('Anywhere')
                           }
                         })
                         if (device.urls.length > 1) {
-                          Text(device.urls.length + ' addresses')
+                          Text(getContext().resourceManager.getStringSync($r('app.string.onboarding_ip_addresses'), device.urls.length))
                             .fontSize(11).fontColor(Colors.foregroundMuted)
                         }
                       }
@@ -588,7 +598,7 @@ Text('Anywhere')
               if (this.connecting && this.discoveredAgents.length === 0) {
                 Column() {
                   LoadingProgress().width(32).height(32).color(Colors.foregroundMuted)
-                  Text('Discovering agents...')
+                  Text($r('app.string.onboarding_discovering_agents'))
                     .fontSize(14).fontColor(Colors.foregroundMuted)
                     .margin({ top: Spacing.md })
                 }
@@ -598,8 +608,9 @@ Text('Anywhere')
                 .transition(TransitionEffect.OPACITY)
               } else if (this.discoveredAgents.length > 0) {
                 Column() {
-                  Text('AVAILABLE AGENTS')
+                  Text($r('app.string.onboarding_available_agents'))
                     .fontSize(11).fontColor(Colors.foregroundLight)
+                    .fontWeight(FontWeight.Bold)
                     .fontWeight(FontWeight.Bold)
                     .letterSpacing(2)
                     .width('100%').margin({ bottom: Spacing.md })
@@ -610,7 +621,7 @@ Text('Anywhere')
                       Stack() {
                         Circle().width(44).height(44).fill(Colors.surface1)
                         Text(this.getFirstLetter(agent))
-                          .fontSize(18).fontWeight(FontWeight.Bolder).fontColor(Colors.accent)
+                          .fontSize(18).fontWeight(FontWeight.Bold).fontColor(Colors.accent)
                         Image(this.getAgentIconUrl(agent))
                           .width(44).height(44)
                           .borderRadius(22)
@@ -661,6 +672,48 @@ Text('Anywhere')
         }
         .width('100%').height('100%')
         .scrollBar(BarState.Off)
+
+        // Server delete confirmation overlay
+        if (this.serverDeleteConfirmIndex >= 0) {
+          Column() {
+            Row().width('100%').layoutWeight(1)
+              .onClick(() => { this.serverDeleteConfirmIndex = -1 })
+            Column() {
+              Text($r('app.string.server_delete_confirm_title'))
+                .fontSize(FontSize.xl).fontWeight(FontWeight.Bold).fontColor(Colors.foreground)
+                .width('100%').padding({ left: Spacing.xl, right: Spacing.xl, top: Spacing.xl })
+              Text(HostStore.devices[this.serverDeleteConfirmIndex]?.name || '')
+                .fontSize(FontSize.base).fontColor(Colors.foregroundMuted)
+                .width('100%').padding({ left: Spacing.xl, right: Spacing.xl, top: Spacing.sm, bottom: Spacing.lg })
+              Row() {
+                Button($r('app.string.ws_cancel'))
+                  .layoutWeight(1).height(44)
+                  .backgroundColor(Colors.surface1).fontColor(Colors.foreground)
+                  .fontSize(FontSize.base)
+                  .onClick(() => { this.serverDeleteConfirmIndex = -1 })
+                Button($r('app.string.server_delete_confirm_ok'))
+                  .layoutWeight(1).height(44)
+                  .backgroundColor(Colors.error).fontColor(Color.White)
+                  .fontSize(FontSize.base).borderRadius(Radius.md)
+                  .margin({ left: Spacing.md })
+                  .onClick(() => {
+                    let i = this.serverDeleteConfirmIndex;
+                    this.serverDeleteConfirmIndex = -1;
+                    HostStore.removeDevice(i);
+                    saveHosts();
+                  })
+              }
+              .width('100%').padding({ left: Spacing.xl, right: Spacing.xl, bottom: Spacing.xxxl })
+            }
+            .width('100%')
+            .backgroundColor(Colors.surface0)
+            .borderRadius({ topLeft: Radius.xl, topRight: Radius.xl })
+          }
+          .width('100%').height('100%')
+          .backgroundColor(Colors.overlayDim)
+          .zIndex(120)
+          .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: 20 })))
+        }
       }
       .width('100%').height('100%')
       .backgroundColor('#FAFAFA')

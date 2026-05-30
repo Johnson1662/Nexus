@@ -2,10 +2,11 @@ import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import kill from "tree-kill";
-import { getSession, setSession, killTerminalProcesses, bufferAgentEvent } from "../session.mjs";
+import { getSession, setSession, killTerminalProcesses, killSessionProcess, bufferAgentEvent } from "../session.mjs";
 import { AcpClient } from "../acp/client.mjs";
 import { getAgentLaunchArgs } from "../discovery/agents.mjs";
 import { createAcpCallbacks } from "../acp-callbacks.mjs";
+import { getLastModel } from "../prefs.mjs";
 const PROMPT_TIMEOUT = 120 * 1000; // 2 minutes
 const MODEL_ERROR_PATTERNS = [
     /rate limit/i, /quota/i, /429/i, /402/i, /insufficient_quota/i,
@@ -95,7 +96,7 @@ async function ensureSessionAlive(ws, sessionId) {
             // independently even if ws.send() fails (disconnected WS).
             const eventPayload = { type: "agent_event", sessionId, event: update.update };
             try {
-                ws.send(JSON.stringify(eventPayload));
+                sess.ws?.send(JSON.stringify(eventPayload));
             }
             catch { }
             try {
@@ -110,12 +111,12 @@ async function ensureSessionAlive(ws, sessionId) {
                 if (s)
                     s.pendingPermission = { requestId, resolve };
                 try {
-                    ws.send(JSON.stringify({ type: "permission_request", sessionId, requestId, toolCall: params.toolCall, options: params.options }));
+                    sess.ws?.send(JSON.stringify({ type: "permission_request", sessionId, requestId, toolCall: params.toolCall, options: params.options }));
                 }
                 catch { }
             });
         },
-        ...createAcpCallbacks({ ws, sessionId, cwd, toolCallIdMap: sess.toolCallIdMap }),
+        ...createAcpCallbacks({ sessionId, cwd, toolCallIdMap: sess.toolCallIdMap }),
     });
     proc.stderr.on("data", (chunk) => {
         console.log(`[server] stderr: ${chunk.toString().slice(0, 200)}`);
@@ -155,6 +156,12 @@ async function ensureSessionAlive(ws, sessionId) {
     sess.acpSessionId = acpSessionId;
     sess.pendingPermission = null;
     sess.restartCount = 0;
+    const lastModel = getLastModel(sess.agent);
+    if (lastModel) {
+        client.setSessionModel(acpSessionId, lastModel).catch((err) => {
+            console.log(`[server] restore model failed: ${err.message}`);
+        });
+    }
     // Re-insert into map in case old exit handler deleted it
     setSession(sessionId, sess);
     console.log(`[server] ACP session restarted: ${sessionId} → ${acpSessionId}`);
@@ -200,6 +207,14 @@ function doPrompt(ws, sessionId, text) {
     const startTime = Date.now();
     let timedOut = false;
     let errorDetected = false;
+    const keepAlive = setInterval(() => {
+        if (timedOut || errorDetected)
+            return;
+        try {
+            ws.send(JSON.stringify({ type: "heartbeat", sessionId, ts: Date.now() }));
+        }
+        catch { }
+    }, 3000);
     let stderrHandler = null;
     if (sess.process?.stderr) {
         stderrHandler = (chunk) => {
@@ -209,9 +224,12 @@ function doPrompt(ws, sessionId, text) {
             for (const pattern of MODEL_ERROR_PATTERNS) {
                 if (pattern.test(stderrText)) {
                     errorDetected = true;
+                    clearInterval(keepAlive);
+                    clearTimeout(timer);
                     console.log(`[server] model error detected: ${stderrText.slice(0, 200)}`);
                     sess.client.cancel(sess.acpSessionId).catch(() => { });
-                    sess.client.destroy();
+                    killSessionProcess(sess);
+                    bufferAgentEvent(sessionId, { type: "agent_event", sessionId, event: { sessionUpdate: 'turn_ended', stopReason: "error" } });
                     ws.send(JSON.stringify({ type: "turn_ended", sessionId, stopReason: "error" }));
                     ws.send(JSON.stringify({ type: "error", sessionId, text: `Model error: ${stderrText.slice(0, 300).trim()}` }));
                     break;
@@ -224,6 +242,7 @@ function doPrompt(ws, sessionId, text) {
         if (errorDetected)
             return;
         timedOut = true;
+        clearInterval(keepAlive);
         console.log(`[server] prompt TIMEOUT after ${Date.now() - startTime}ms for ${sessionId}`);
         if (stderrHandler && sess.process?.stderr) {
             try {
@@ -232,7 +251,8 @@ function doPrompt(ws, sessionId, text) {
             catch { }
         }
         sess.client.cancel(sess.acpSessionId).catch(() => { });
-        sess.client.destroy();
+        killSessionProcess(sess);
+        bufferAgentEvent(sessionId, { type: "agent_event", sessionId, event: { sessionUpdate: 'turn_ended', stopReason: "timeout" } });
         ws.send(JSON.stringify({ type: "turn_ended", sessionId, stopReason: "timeout" }));
         ws.send(JSON.stringify({ type: "error", sessionId, text: `[Timeout] No response in 2 minutes. Switch model and try again.` }));
     }, PROMPT_TIMEOUT);
@@ -240,6 +260,7 @@ function doPrompt(ws, sessionId, text) {
         .then((result) => {
         if (timedOut || errorDetected)
             return;
+        clearInterval(keepAlive);
         clearTimeout(timer);
         if (stderrHandler && sess.process?.stderr) {
             try {
@@ -248,11 +269,13 @@ function doPrompt(ws, sessionId, text) {
             catch { }
         }
         console.log(`[server] turn ended after ${Math.floor((Date.now() - startTime) / 1000)}s: ${result?.stopReason}`);
+        bufferAgentEvent(sessionId, { type: "agent_event", sessionId, event: { sessionUpdate: 'turn_ended', stopReason: result?.stopReason } });
         ws.send(JSON.stringify({ type: "turn_ended", sessionId, stopReason: result?.stopReason }));
     })
         .catch((err) => {
         if (timedOut || errorDetected)
             return;
+        clearInterval(keepAlive);
         clearTimeout(timer);
         if (stderrHandler && sess.process?.stderr) {
             try {
@@ -262,6 +285,7 @@ function doPrompt(ws, sessionId, text) {
         }
         const msg = err?.message || String(err);
         console.log(`[server] prompt error after ${Math.floor((Date.now() - startTime) / 1000)}s: ${msg}`);
+        bufferAgentEvent(sessionId, { type: "agent_event", sessionId, event: { sessionUpdate: 'turn_ended', stopReason: "error" } });
         ws.send(JSON.stringify({ type: "turn_ended", sessionId, stopReason: "error" }));
         ws.send(JSON.stringify({ type: "error", sessionId, text: msg.includes("closed") || msg.includes("abort")
                 ? `[Session expired] Send a message to auto-restart.` : `Agent error: ${msg}` }));

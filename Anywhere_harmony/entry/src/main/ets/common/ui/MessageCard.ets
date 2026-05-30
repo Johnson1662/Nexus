@@ -43,44 +43,40 @@ function parseFilePrefix(content: string): FilePrefixInfo {
 }
 
 @Component
-@Reusable
 export struct MessageCard {
-  @State isUser: boolean = false;
-  @State time: string = '';
-  @State status: string = '';
-  @State msgContent: string = '';
-  @State msgType: string = 'text';
-  @State msgToolName: string = '';
-  @State msgToolStatus: string = '';
-  @State msgToolKind: string = '';
-  @State msgToolContent: string = '';
-  @State msgToolContentType: string = '';
-  @State msgToolPath: string = '';
-  @State msgToolOldText: string = '';
-  @State msgToolNewText: string = '';
-  @State msgToolTerminalId: string = '';
-  @State streaming: boolean = false;
+  @Prop isUser: boolean = false;
+  @Prop msgId: string = '';
+  @Prop msgSendStatus: string = '';
+  @Prop time: string = '';
+  @Prop status: string = '';
+  @Prop @Watch('onMsgContentChange') msgContent: string = '';
+  @Prop msgType: string = 'text';
+  @Prop msgToolName: string = '';
+  @Prop msgToolStatus: string = '';
+  @Prop msgToolKind: string = '';
+  @Prop msgToolContent: string = '';
+  @Prop msgToolContentType: string = '';
+  @Prop msgToolPath: string = '';
+  @Prop msgToolOldText: string = '';
+  @Prop msgToolNewText: string = '';
+  @Prop msgToolTerminalId: string = '';
+  @Prop streaming: boolean = false;
+  onRetry?: (id: string, content: string) => void;
   @State parsedFileType: string = '';
   @State parsedFileName: string = '';
   @State parsedDataUri: string = '';
   @State parsedRestText: string = '';
 
-  aboutToReuse(params: Record<string, object>): void {
-    this.isUser = Boolean(params['isUser']);
-    this.time = String(params['time']);
-    this.status = String(params['status']);
-    this.msgContent = String(params['msgContent']);
-    this.msgType = String(params['msgType']) || 'text';
-    this.msgToolName = String(params['msgToolName']);
-    this.msgToolStatus = String(params['msgToolStatus']);
-    this.msgToolKind = String(params['msgToolKind']);
-    this.msgToolContent = String(params['msgToolContent']);
-    this.msgToolContentType = String(params['msgToolContentType']);
-    this.msgToolPath = String(params['msgToolPath']);
-    this.msgToolOldText = String(params['msgToolOldText']);
-    this.msgToolNewText = String(params['msgToolNewText']);
-    this.msgToolTerminalId = String(params['msgToolTerminalId']);
-    this.streaming = Boolean(params['streaming']);
+  aboutToAppear(): void {
+    this.parseFilePrefixInternal();
+  }
+
+  // When @Prop values change, re-parse file prefix
+  onMsgContentChange(): void {
+    this.parseFilePrefixInternal();
+  }
+
+  private parseFilePrefixInternal(): void {
     let info: FilePrefixInfo = parseFilePrefix(this.msgContent);
     this.parsedFileType = info.fileType;
     this.parsedFileName = info.fileName;
@@ -89,11 +85,13 @@ export struct MessageCard {
   }
 
   copyContent() {
-    let pasteData = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, this.msgContent);
-    let systemPasteboard = pasteboard.getSystemPasteboard();
-    systemPasteboard.setData(pasteData).then(() => {
-      this.getUIContext().getPromptAction().openToast({ message: 'Copied' });
-    });
+    try {
+      let pasteData = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, this.msgContent);
+      let systemPasteboard = pasteboard.getSystemPasteboard();
+      systemPasteboard.setData(pasteData).then(() => {
+        this.getUIContext().getPromptAction().showToast({ message: getContext().resourceManager.getStringSync($r('app.string.chat_copy_confirm')) });
+      })
+    } catch (e) {}
   }
 
   build() {
@@ -113,14 +111,7 @@ export struct MessageCard {
                 newText: this.msgToolNewText, terminalId: this.msgToolTerminalId })
             } else {
               if (this.msgContent.length > 0) {
-                if (this.streaming) {
-                  Text(this.msgContent)
-                    .fontSize(FontSize.base)
-                    .fontColor(Colors.foreground)
-                    .lineHeight(24)
-                } else {
-                  MarkdownRender({ text: this.msgContent })
-                }
+                MarkdownRender({ text: this.msgContent, streaming: this.streaming })
               }
             }
           }
@@ -184,6 +175,14 @@ export struct MessageCard {
           .backgroundColor(Colors.userBubble)
           .borderRadius({ topLeft: Radius.xl, topRight: Radius.xl, bottomLeft: Radius.xl, bottomRight: Radius.xs })
           .alignItems(HorizontalAlign.Start)
+
+          if (this.msgSendStatus === 'failed') {
+            SymbolGlyph($r('sys.symbol.xmark_circle'))
+              .fontSize(16)
+              .fontColor([Colors.error])
+              .margin({ top: Spacing.xs })
+              .onClick(() => { if (this.onRetry) this.onRetry(this.msgId, this.msgContent) })
+          }
         }
       }
       .constraintSize(this.isUser ? { maxWidth: '85%' } : { minWidth: '100%' })

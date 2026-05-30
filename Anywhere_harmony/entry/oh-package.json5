@@ -6,7 +6,6 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "@luvi/lv-markdown-in": "^3.4.1",
     "@cangjie-tpc/formula_hybrid": "1.2.7"
   },
   "devDependencies": {},

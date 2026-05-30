@@ -23,7 +23,7 @@ export async function handleLoadSession(ws, params) {
         stdio: ["pipe", "pipe", "pipe"],
         shell: true,
     });
-    const bridgeSessionId = `acp-${Date.now()}`;
+    const bridgeSessionId = `acp-${Date.now()}-${randomUUID().slice(0, 8)}`;
     const sess = {
         ws,
         sessionId: bridgeSessionId,
@@ -75,7 +75,7 @@ export async function handleLoadSession(ws, params) {
                     sessionId: bridgeSessionId,
                     event: update.update,
                 };
-                ws.send(JSON.stringify(eventPayload));
+                sess.ws?.send(JSON.stringify(eventPayload));
                 bufferAgentEvent(bridgeSessionId, eventPayload);
             }
             catch { }
@@ -88,7 +88,7 @@ export async function handleLoadSession(ws, params) {
                     currentSess.pendingPermission = { requestId, resolve };
                 }
                 try {
-                    ws.send(JSON.stringify({
+                    sess.ws?.send(JSON.stringify({
                         type: "permission_request",
                         sessionId: bridgeSessionId,
                         requestId,
@@ -99,7 +99,7 @@ export async function handleLoadSession(ws, params) {
                 catch { }
             });
         },
-        ...createAcpCallbacks({ ws, sessionId: bridgeSessionId, cwd: cwd || process.cwd(), toolCallIdMap: sess.toolCallIdMap }),
+        ...createAcpCallbacks({ sessionId: bridgeSessionId, cwd: cwd || process.cwd(), toolCallIdMap: sess.toolCallIdMap }),
     });
     sess.client = client;
     sess.loadedSessionId = targetSessionId;
@@ -107,7 +107,7 @@ export async function handleLoadSession(ws, params) {
     proc.stderr.on("data", (chunk) => {
         console.log(`[server] stderr: ${chunk.toString().slice(0, 200)}`);
         try {
-            ws.send(JSON.stringify({
+            sess.ws?.send(JSON.stringify({
                 type: "agent_stderr",
                 sessionId: bridgeSessionId,
                 text: chunk.toString(),
@@ -127,22 +127,30 @@ export async function handleLoadSession(ws, params) {
         console.log(`[server] initializing ACP for load session ${targetSessionId}...`);
         await client.initialize();
         console.log(`[server] loading session ${targetSessionId}`);
-        await client.loadSession(targetSessionId, cwd || process.cwd());
+        const loadResult = await client.loadSession(targetSessionId, cwd || process.cwd());
         sess.acpSessionId = targetSessionId;
+        const models = loadResult.models?.availableModels || [];
+        const modes = loadResult.modes?.availableModes || [];
+        if (models.length > 0 || modes.length > 0) {
+            const mappedModels = models.map((m) => ({ modelId: m.modelId, name: m.name }));
+            const mappedModes = modes.map((m) => ({ value: m.id, name: m.name }));
+            sess.ws?.send(JSON.stringify({ type: "model_list", models: mappedModels, modes: mappedModes }));
+        }
         if (model) {
             await client.setSessionModel(targetSessionId, model).catch(() => { });
         }
-        ws.send(JSON.stringify({
+        sess.ws?.send(JSON.stringify({
             type: "session_started",
             sessionId: bridgeSessionId,
             agent,
             loadedSessionId: targetSessionId,
+            ...(model ? { model } : {}),
         }));
     }
     catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         console.log(`[server] load_session error: ${msg}`);
-        ws.send(JSON.stringify({
+        sess.ws?.send(JSON.stringify({
             type: "error",
             text: `load session failed: ${msg}`,
         }));

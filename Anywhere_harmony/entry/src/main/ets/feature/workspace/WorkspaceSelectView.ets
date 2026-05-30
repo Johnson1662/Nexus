@@ -13,9 +13,8 @@ export struct WorkspaceSelectView {
       Column() {
         // 头部
         Row() {
-          Text('Workspaces')
+          Text($r('app.string.ws_title'))
             .fontSize(FontSize.xl)
-            .fontWeight(FontWeight.Medium)
             .fontColor(Colors.foreground)
           Blank()
         }

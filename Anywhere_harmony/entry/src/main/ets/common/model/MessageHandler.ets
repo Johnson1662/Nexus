@@ -8,17 +8,20 @@ const DOMAIN: number = 0x0000;
 const TAG: string = 'MsgHandler';
 
 export function handleAcpUpdate(u: AcpUpdate): void {
-  if (ChatStore.loadingSession) {
-    ChatStore.loadingSession = false;
-  }
-  // Track lastMessageId for cursor sync on reconnect
-  if (u.messageId && u.messageId.length > 0) {
-    ChatStore.lastMessageId = u.messageId;
-    // Persist to Preferences for process-level crash recovery
-    StorageService.getInstance().putString(PrefsKeys.LAST_MESSAGE_ID, u.messageId);
-  }
   let t: string = u.sessionUpdate;
+
+  if (ChatStore.loadingSession &&
+    (t === 'agent_message_chunk' || t === 'user_message_chunk' || t === 'tool_call')) {
+    ChatStore.messages = [];
+    ChatStore.planEntries = [];
+    ChatStore.streamingThinking = '';
+    ChatStore.turnActive = false;
+  }
+
   if (t === 'agent_message_chunk' && u.content?.text) {
+    if (ChatStore.loadingSession) {
+      ChatStore.loadingSession = false;
+    }
     if (ChatStore.streamingThinking.length > 0) {
       ChatStore.messages = [...ChatStore.messages, new MessageData('assistant', ChatStore.streamingThinking, 'thinking')];
       ChatStore.streamingThinking = '';
@@ -27,6 +30,9 @@ export function handleAcpUpdate(u: AcpUpdate): void {
   } else if (t === 'agent_thought_chunk' && u.content?.text) {
     ChatStore.streamingThinking += u.content.text;
   } else if (t === 'tool_call' && u.toolCallId) {
+    if (ChatStore.loadingSession) {
+      ChatStore.loadingSession = false;
+    }
     hilog.info(DOMAIN, TAG, 'tool_call: id=' + u.toolCallId + ' title=' + (u.title || '') + ' kind=' + (u.kind || ''));
     if (ChatStore.streamingThinking.length > 0) {
       ChatStore.messages = [...ChatStore.messages, new MessageData('assistant', ChatStore.streamingThinking, 'thinking')];
@@ -107,10 +113,17 @@ export function handleAcpUpdate(u: AcpUpdate): void {
     }
     ChatStore.planEntries = u.entries;
   } else if (t === 'user_message_chunk' && u.content?.text) {
+    if (ChatStore.loadingSession) {
+      ChatStore.loadingSession = false;
+    }
+    let prev = ChatStore.messages.length > 0 ? ChatStore.messages[ChatStore.messages.length - 1] : undefined;
+    if (prev && prev.role === 'user') {
+      return;
+    }
     ChatStore.messages = [...ChatStore.messages, new MessageData('user', u.content.text, 'text')];
   } else if (t === 'session_info_update' && u.title) {
     ChatStore.sessionTitle = u.title;
-    let targetSessionId = ChatStore.loadedSessionId || ChatStore.sessionId;
+    let targetSessionId = ChatStore.acpSessionId || ChatStore.bridgeSessionId;
     for (let i = 0; i < ChatStore.sessions.length; i++) {
       if (ChatStore.sessions[i].sessionId === targetSessionId) {
         ChatStore.sessions[i].title = u.title;

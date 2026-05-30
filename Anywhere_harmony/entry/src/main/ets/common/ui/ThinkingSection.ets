@@ -3,30 +3,26 @@ import { Colors, FontSize, Spacing } from '../../constants/DesignTokens';
 @Component
 export struct ThinkingSection {
   @Prop thinking: string = '';
-  @Prop isStreaming: boolean = false;
+  @Prop @Watch('onStreamingChange') isStreaming: boolean = false;
+  @StorageLink('pref_thinking_expanded') prefThinkingExpanded: boolean = true;
   @State expanded: boolean = true;
 
   aboutToAppear(): void {
-    if (!this.isStreaming) {
-      this.expanded = false;
+    if (this.isStreaming) {
+      this.expanded = true;
+    } else {
+      this.expanded = this.prefThinkingExpanded;
+    }
+  }
+
+  onStreamingChange(): void {
+    if (!this.isStreaming && this.expanded) {
+      this.expanded = this.prefThinkingExpanded;
     }
   }
 
   build() {
     Column() {
-      // Hidden trigger — references @Prop isStreaming DIRECTLY in template to subscribe.
-      // When isStreaming transitions true→false, this Text appears and onAppear fires once,
-      // collapsing this section independently.
-      if (!this.isStreaming) {
-        Text('')
-          .visibility(Visibility.None)
-          .onAppear(() => {
-            if (this.expanded) {
-              this.expanded = false;
-            }
-          })
-      }
-
       // Header
       Row() {
         SymbolGlyph(this.isStreaming ? $r('sys.symbol.lightbulb') : $r('sys.symbol.checkmark'))
@@ -35,12 +31,12 @@ export struct ThinkingSection {
           .margin({ right: Spacing.sm })
 
         if (this.isStreaming) {
-          Text('Thinking')
+          Text($r('app.string.thinking_label'))
             .fontSize(FontSize.sm)
             .fontColor(Colors.foregroundMuted)
             .fontWeight(FontWeight.Medium)
         } else {
-          Text('Thought process')
+          Text($r('app.string.thinking_done_label'))
             .fontSize(FontSize.sm)
             .fontColor(Colors.foregroundMuted)
             .fontWeight(FontWeight.Medium)
@@ -51,6 +47,7 @@ export struct ThinkingSection {
         SymbolGlyph($r('sys.symbol.chevron_down'))
           .fontSize(FontSize.md)
           .fontColor([Colors.foregroundMuted])
+          .accessibilityText(this.expanded ? 'Collapse thinking' : 'Expand thinking')
           .rotate({ z: 1, angle: this.expanded ? 0 : -90 })
           .animation({ duration: 200, curve: Curve.EaseInOut })
       }

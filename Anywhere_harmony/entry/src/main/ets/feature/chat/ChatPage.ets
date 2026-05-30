@@ -45,12 +45,14 @@ export struct ChatPage {
   @Prop @Watch('onMessagesChange') messages: MessageData[] = [];
   @Prop @Watch('onStreamingChange') streamingThinking: string = '';
   onSendMessage?: (text: string) => void;
+  onRetry?: (id: string, content: string) => void;
 
   private scroller: Scroller = new Scroller();
   private dataSource: MessageDataSource = new MessageDataSource([]);
 
   @State iconScale: number = 1.0;
-
+  @State followsOutput: boolean = true;   // Stage 2: scroll anchoring
+  @State showJumpButton: boolean = false; // Stage 2: floating jump-to-bottom
   aboutToAppear(): void {
     this.dataSource = new MessageDataSource(this.messages);
     setTimeout(() => {
@@ -60,62 +62,62 @@ export struct ChatPage {
 
   onMessagesChange(): void {
     this.dataSource.updateData(this.messages);
-    setTimeout(() => {
-      this.scroller.scrollEdge(Edge.Bottom);
-    }, 50);
+    if (this.followsOutput) {
+      setTimeout(() => { this.scroller.scrollEdge(Edge.Bottom); }, 50);
+    }
   }
 
   onStreamingChange(): void {
-    // Scroll to follow streaming thinking output
-    setTimeout(() => {
-      this.scroller.scrollEdge(Edge.Bottom);
-    }, 50);
+    if (this.followsOutput) {
+      setTimeout(() => { this.scroller.scrollEdge(Edge.Bottom); }, 50);
+    }
   }
-
   getReconnectBannerText(): string {
     let phase: string = ChatStore.reconnectPhase;
     if (phase === 'disconnected') {
-      return '连接已断开，Agent 仍在运行…';
+      return getContext().resourceManager.getStringSync($r('app.string.chat_reconnect_disconnected'));
     } else if (phase === 'reconnecting') {
-      return '正在重连…（第 ' + String(ChatStore.reconnectAttempt) + ' 次尝试）';
+      return getContext().resourceManager.getStringSync($r('app.string.chat_reconnect_reconnecting'), ChatStore.reconnectAttempt);
     } else if (phase === 'syncing') {
-      return '已连接，正在同步断线期间的消息…';
+      return getContext().resourceManager.getStringSync($r('app.string.chat_reconnect_syncing'));
     }
     return '';
   }
 
   build() {
     Column() {
-      // Yellow reconnect banner
       if (ChatStore.reconnectPhase.length > 0) {
         Row() {
           SymbolGlyph($r('sys.symbol.xmark_circle'))
-            .fontSize(14).fontColor(['#D97706']).margin({ right: Spacing.sm })
+            .fontSize(14).fontColor([Colors.warning]).margin({ right: Spacing.sm })
           Text(this.getReconnectBannerText())
-            .fontSize(FontSize.sm).fontColor('#92400E').fontWeight(FontWeight.Medium)
+            .fontSize(FontSize.sm).fontColor(Colors.warningFgDark).fontWeight(FontWeight.Medium)
             .layoutWeight(1)
         }
         .width('100%')
         .padding({ left: Spacing.lg, right: Spacing.lg, top: Spacing.sm, bottom: Spacing.sm })
-        .backgroundColor('#FEF3C7')
+        .backgroundColor(Colors.warningLight)
+      }
+
+      if (ChatStore.loadingSession) {
+        Row() {
+          LoadingProgress().width(20).height(20).color(Colors.accent)
+          Text($r('app.string.chat_loading_session'))
+            .fontSize(FontSize.sm).fontColor(Colors.foregroundLight)
+            .margin({ left: Spacing.sm })
+        }
+        .width('100%')
+        .padding({ left: Spacing.lg, right: Spacing.lg, top: Spacing.sm, bottom: Spacing.sm })
         .transition(TransitionEffect.OPACITY)
+        .accessibilityText('Loading session')
       }
 
       if (this.messages.length === 0) {
           Column() {
-            if (ChatStore.loadingSession) {
-              Column() {
-                LoadingProgress().width(24).height(24).color(Colors.accent)
-                Text('Loading session...')
-                  .fontSize(FontSize.sm).fontColor(Colors.foregroundLight)
-                  .margin({ top: Spacing.sm })
-              }
-              .alignItems(HorizontalAlign.Center)
-              .transition(TransitionEffect.OPACITY)
-            } else if (ChatStore.turnActive) {
+            if (ChatStore.turnActive) {
               Column() {
                 LoadingProgress().width(20).height(20).color(Colors.accent)
-                Text('Waiting for response')
+                Text($r('app.string.chat_waiting_response'))
                   .fontSize(FontSize.sm).fontColor(Colors.foregroundLight)
                   .margin({ top: Spacing.sm })
               }
@@ -131,9 +133,9 @@ export struct ChatPage {
                   .opacity(0.3)
                   .scale({ x: this.iconScale, y: this.iconScale })
                   .animation({ duration: 2500, curve: Curve.EaseInOut, playMode: PlayMode.Alternate, iterations: -1 })
-Text('Anywhere')
-  .fontSize(FontSize.xxl).fontColor(Colors.foreground).fontWeight(FontWeight.Bold).fontFamily('serif')
-                Text('Select a workspace and start typing.')
+                Text($r('app.string.app_name'))
+                  .fontSize(FontSize.xxl).fontColor(Colors.foreground).fontWeight(FontWeight.Bold).fontFamily('serif')
+                Text($r('app.string.chat_empty_prompt'))
                   .fontSize(FontSize.sm).fontColor(Colors.foregroundMuted)
                   .margin({ top: Spacing.xs })
               }
@@ -157,6 +159,8 @@ Text('Anywhere')
               } else {
                 MessageCard({
                   isUser: msg.role === 'user',
+                  msgId: msg.id,
+                  msgSendStatus: msg.sendStatus,
                   time: this.formatTime(msg.timestamp),
                   status: (msg.role === 'assistant' && msg.type === 'text'
                     && ChatStore.turnActive) ? 'Running' : '',
@@ -171,7 +175,8 @@ Text('Anywhere')
                   msgToolOldText: msg.toolOldText,
                   msgToolNewText: msg.toolNewText,
                   msgToolTerminalId: msg.toolTerminalId,
-                  streaming: ChatStore.turnActive && msg.role === 'assistant' && msg.id === ChatStore.messages[ChatStore.messages.length - 1]?.id
+                  streaming: ChatStore.turnActive && msg.role === 'assistant' && msg.id === ChatStore.messages[ChatStore.messages.length - 1]?.id,
+                  onRetry: (id: string, content: string) => { if (this.onRetry) this.onRetry(id, content) }
                 })
                   .margin({ bottom: msg.role === 'user' ? Spacing.lg : 0 })
               }
@@ -202,10 +207,24 @@ Text('Anywhere')
         .layoutWeight(1)
         .width('100%')
         .edgeEffect(EdgeEffect.Spring)
+        .onTouch((event: TouchEvent) => { if (event.type === TouchType.Down) { this.followsOutput = false; this.showJumpButton = true; } })
+      }
+
+      // Stage 2: jump-to-bottom button when user has scrolled up during turn
+      if (this.showJumpButton && ChatStore.turnActive) {
+        Row() {
+          Text($r('app.string.chat_jump_latest'))
+            .fontSize(FontSize.xs).fontColor(Colors.accent)
+            .fontWeight(FontWeight.Medium)
+        }
+        .width('100%').justifyContent(FlexAlign.Center)
+        .padding({ bottom: Spacing.xs })
+        .transition(TransitionEffect.OPACITY)
+        .onClick(() => { this.scroller.scrollEdge(Edge.Bottom); this.followsOutput = true; this.showJumpButton = false; })
       }
 
       ChatInputBar({
-        disabled: ChatStore.turnActive || !ChatStore.sessionReady,
+        disabled: ChatStore.turnActive || ChatStore.loadingSession,
         showCancel: ChatStore.turnActive,
         onSend: (text) => { if (this.onSendMessage) this.onSendMessage(text); },
         onCancel: () => { if (this.onSendMessage) this.onSendMessage('__cancel__'); }

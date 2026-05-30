@@ -1,30 +1,52 @@
+import { resourceManager } from '@kit.LocalizationKit';
+
 export class Colors {
-  static readonly surface0: string = '#FFFFFF';
-  static readonly surface1: string = '#F4F4F4';
-  static readonly surface2: string = '#E5E5EA';
-  static readonly surfaceElevated: string = '#FFFFFF';
-  static readonly userBubble: string = '#F4F4F4';
+  // Surfaces
+  static readonly surface0: Resource = $r('app.color.surface0');
+  static readonly surface1: Resource = $r('app.color.surface1');
+  static readonly surface2: Resource = $r('app.color.surface2');
+  static readonly surfaceElevated: Resource = $r('app.color.surface_elevated');
+  static readonly userBubble: Resource = $r('app.color.user_bubble');
 
-  static readonly foreground: string = '#1A1D23';
-  static readonly foregroundMuted: string = '#6B7280';
-  static readonly foregroundLight: string = '#9CA3AF';
+  // Foreground
+  static readonly foreground: Resource = $r('app.color.foreground');
+  static readonly foregroundMuted: Resource = $r('app.color.foreground_muted');
+  static readonly foregroundLight: Resource = $r('app.color.foreground_light');
 
-  static readonly accent: string = '#202123';
-  static readonly accentDark: string = '#000000';
-  static readonly accentLight: string = '#ECECF1';
-  static readonly accentTransparent: string = '#20212312';
+  // Accent
+  static readonly accent: Resource = $r('app.color.accent');
+  static readonly accentDark: Resource = $r('app.color.accent_dark');
+  static readonly accentLight: Resource = $r('app.color.accent_light');
+  static readonly accentTransparent: Resource = $r('app.color.accent_transparent');
 
-  static readonly success: string = '#10A37F';
-  static readonly successLight: string = '#D1FAE5';
-  static readonly warning: string = '#F59E0B';
-  static readonly warningLight: string = '#FEF3C7';
-  static readonly error: string = '#EF4146';
-  static readonly errorLight: string = '#FEE2E2';
+  // Semantic
+  static readonly success: Resource = $r('app.color.success');
+  static readonly successLight: Resource = $r('app.color.success_light');
+  static readonly warning: Resource = $r('app.color.warning');
+  static readonly warningLight: Resource = $r('app.color.warning_light');
+  static readonly warningFgDark: Resource = $r('app.color.warning_fg_dark');
+  static readonly error: Resource = $r('app.color.error');
+  static readonly errorLight: Resource = $r('app.color.error_light');
+  static readonly errorFgDark: Resource = $r('app.color.error_fg_dark');
+  static readonly timeoutBg: Resource = $r('app.color.timeout_bg');
+  static readonly timeoutFg: Resource = $r('app.color.timeout_fg');
 
-  static readonly border: string = '#D9D9E3';
-  static readonly borderLight: string = '#E5E5EA';
-  static readonly borderFocus: string = '#202123';
+  // Border
+  static readonly border: Resource = $r('app.color.border');
+  static readonly borderLight: Resource = $r('app.color.border_light');
+  static readonly borderFocus: Resource = $r('app.color.border_focus');
 
+  // Special
+  static readonly overlayDim: Resource = $r('app.color.overlay_dim');
+  static readonly terminalBg: Resource = $r('app.color.terminal_bg');
+  static readonly terminalFg: Resource = $r('app.color.terminal_fg');
+  static readonly onboardingBg: Resource = $r('app.color.onboarding_bg');
+  static readonly inlineCodeBg: Resource = $r('app.color.inline_code_bg');
+
+  // String fallbacks for runtime logic (no dark-mode switch needed for these)
+  static readonly transparent: string = 'transparent';
+  static readonly colorWhite: string = '#FFFFFF';
+  static readonly colorBlack: string = '#000000';
 }
 
 export class Spacing {
@@ -78,4 +100,9 @@ export class Duration {
   static readonly normal: number = 250;
   static readonly slow: number = 400;
   static readonly slower: number = 600;
+}
+
+/** Get localized string. Caches result to avoid repeated resourceManager lookups. */
+export function getLocalizedString(res: Resource): string {
+  return getContext().resourceManager.getStringSync(res);
 }

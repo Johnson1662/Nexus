@@ -27,7 +27,12 @@ export function isPathWithinCwd(target, cwd) {
     return !relative.startsWith("..") && !path.isAbsolute(relative);
 }
 export function createAcpCallbacks(config) {
-    const { ws, sessionId, cwd, toolCallIdMap } = config;
+    const { sessionId, cwd, toolCallIdMap } = config;
+    // Resolve WS dynamically from session map — supports session reclaim after reconnect
+    function getSessionWs() {
+        const sess = getSession(sessionId);
+        return sess?.ws || undefined;
+    }
     function sendToolCallUpdate(toolCallId, status, content) {
         const originalId = toolCallIdMap?.get(toolCallId);
         const effectiveId = originalId || toolCallId;
@@ -42,7 +47,9 @@ export function createAcpCallbacks(config) {
                     toolCallContent: content,
                 },
             };
-            ws.send(JSON.stringify(eventPayload));
+            const wss = getSessionWs();
+            if (wss)
+                wss.send(JSON.stringify(eventPayload));
             bufferAgentEvent(sessionId, eventPayload);
         }
         catch { }

@@ -15,6 +15,8 @@ export struct WorkspaceDrawer {
   onClose?: () => void;
   onSwitchHost?: () => void;
   onAddWorkspace?: (path: string) => void;
+  onSettings?: () => void;
+  onHostManage?: () => void;
 
   build() {
     Column() {
@@ -25,9 +27,8 @@ export struct WorkspaceDrawer {
           .fontColor([Colors.foreground])
           .onClick(() => { if (this.onClose) this.onClose() })
 
-        Text('Workspaces')
+        Text($r('app.string.ws_title'))
           .fontSize(FontSize.xl)
-          .fontWeight(FontWeight.Medium)
           .fontColor(Colors.foreground)
           .margin({ left: Spacing.sm })
         Blank()
@@ -37,7 +38,18 @@ export struct WorkspaceDrawer {
       .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: -10 })))
 
       // Workspace list
-      List() {
+      if (this.workspaces.length === 0) {
+        Column() {
+          Text('暂无工作区')
+            .fontSize(FontSize.base).fontColor(Colors.foregroundMuted)
+          Text('点击下方添加')
+            .fontSize(FontSize.sm).fontColor(Colors.foregroundLight)
+            .margin({ top: Spacing.xs })
+        }
+        .width('100%').layoutWeight(1)
+        .justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center)
+      } else {
+        List() {
         ForEach(this.workspaces, (ws: WorkspaceInfo, index: number) => {
           ListItem() {
             Row() {
@@ -87,9 +99,41 @@ export struct WorkspaceDrawer {
       .width('100%')
       .layoutWeight(1)
       .divider({ strokeWidth: 0.5, color: Colors.borderLight, startMargin: Spacing.xl, endMargin: Spacing.xl })
+      }
 
       // Bottom area
       Column() {
+        // Navigation entries
+        if (this.onHostManage) {
+          Row() {
+            SymbolGlyph($r('sys.symbol.ohos_wifi'))
+              .fontSize(18)
+              .fontColor([Colors.foregroundMuted])
+              .margin({ right: Spacing.sm })
+            Text('Host 管理')
+              .fontSize(FontSize.base)
+              .fontColor(Colors.foregroundMuted)
+          }
+          .width('100%')
+          .padding({ left: Spacing.xl, right: Spacing.xl, top: Spacing.lg, bottom: Spacing.sm })
+          .onClick(() => { if (this.onHostManage) this.onHostManage() })
+        }
+
+        if (this.onSettings) {
+          Row() {
+            SymbolGlyph($r('sys.symbol.ellipsis_message_1'))
+              .fontSize(18)
+              .fontColor([Colors.foregroundMuted])
+              .margin({ right: Spacing.sm })
+            Text('设置')
+              .fontSize(FontSize.base)
+              .fontColor(Colors.foregroundMuted)
+          }
+          .width('100%')
+          .padding({ left: Spacing.xl, right: Spacing.xl, top: Spacing.sm, bottom: Spacing.sm })
+          .onClick(() => { if (this.onSettings) this.onSettings() })
+        }
+
         if (this.showForm) {
           Column() {
             TextInput({ placeholder: '/path/to/project', text: this.newPath })

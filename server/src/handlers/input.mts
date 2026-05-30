@@ -3,10 +3,11 @@ import { randomUUID } from "node:crypto";
 import path from "node:path";
 import kill from "tree-kill";
 import type { WebSocket } from "ws";
-import { getSession, setSession, killTerminalProcesses, bufferAgentEvent } from "../session.mjs";
+import { getSession, setSession, killTerminalProcesses, killSessionProcess, bufferAgentEvent } from "../session.mjs";
 import { AcpClient } from "../acp/client.mjs";
 import { getAgentLaunchArgs, isValidAgent } from "../discovery/agents.mjs";
 import { isPathWithinCwd, createAcpCallbacks } from "../acp-callbacks.mjs";
+import { getLastModel } from "../prefs.mjs";
 
 const PROMPT_TIMEOUT = 120 * 1000; // 2 minutes
 const MODEL_ERROR_PATTERNS: RegExp[] = [
@@ -93,7 +94,7 @@ async function ensureSessionAlive(ws: WebSocket, sessionId: string): Promise<boo
       // independently even if ws.send() fails (disconnected WS).
       const eventPayload = { type: "agent_event", sessionId, event: update.update };
       try {
-        ws.send(JSON.stringify(eventPayload));
+        sess.ws?.send(JSON.stringify(eventPayload));
       } catch {}
       try {
         bufferAgentEvent(sessionId, eventPayload);
@@ -105,11 +106,11 @@ async function ensureSessionAlive(ws: WebSocket, sessionId: string): Promise<boo
         const s = getSession(sessionId);
         if (s) s.pendingPermission = { requestId, resolve };
         try {
-          ws.send(JSON.stringify({ type: "permission_request", sessionId, requestId, toolCall: params.toolCall, options: params.options }));
+          sess.ws?.send(JSON.stringify({ type: "permission_request", sessionId, requestId, toolCall: params.toolCall, options: params.options }));
         } catch {}
       });
     },
-    ...createAcpCallbacks({ ws, sessionId, cwd, toolCallIdMap: sess.toolCallIdMap }),
+    ...createAcpCallbacks({ sessionId, cwd, toolCallIdMap: sess.toolCallIdMap }),
   });
 
   proc.stderr.on("data", (chunk: Buffer) => {
@@ -151,6 +152,13 @@ async function ensureSessionAlive(ws: WebSocket, sessionId: string): Promise<boo
   sess.acpSessionId = acpSessionId;
   sess.pendingPermission = null;
   sess.restartCount = 0;
+
+  const lastModel = getLastModel(sess.agent);
+  if (lastModel) {
+    client.setSessionModel(acpSessionId, lastModel).catch((err: Error) => {
+      console.log(`[server] restore model failed: ${err.message}`);
+    });
+  }
 
   // Re-insert into map in case old exit handler deleted it
   setSession(sessionId, sess);
@@ -211,6 +219,11 @@ function doPrompt(
   let timedOut = false;
   let errorDetected = false;
 
+  const keepAlive = setInterval(() => {
+    if (timedOut || errorDetected) return;
+    try { ws.send(JSON.stringify({ type: "heartbeat", sessionId, ts: Date.now() })); } catch {}
+  }, 3000);
+
   let stderrHandler: ((chunk: Buffer) => void) | null = null;
   if (sess.process?.stderr) {
     stderrHandler = (chunk: Buffer) => {
@@ -219,9 +232,12 @@ function doPrompt(
       for (const pattern of MODEL_ERROR_PATTERNS) {
         if (pattern.test(stderrText)) {
           errorDetected = true;
+          clearInterval(keepAlive);
+          clearTimeout(timer);
           console.log(`[server] model error detected: ${stderrText.slice(0, 200)}`);
           sess.client.cancel(sess.acpSessionId).catch(() => {});
-          sess.client.destroy();
+          killSessionProcess(sess);
+          bufferAgentEvent(sessionId, { type: "agent_event", sessionId, event: { sessionUpdate: 'turn_ended', stopReason: "error" } });
           ws.send(JSON.stringify({ type: "turn_ended", sessionId, stopReason: "error" }));
           ws.send(JSON.stringify({ type: "error", sessionId, text: `Model error: ${stderrText.slice(0, 300).trim()}` }));
           break;
@@ -234,34 +250,42 @@ function doPrompt(
   const timer = setTimeout(() => {
     if (errorDetected) return;
     timedOut = true;
+    clearInterval(keepAlive);
     console.log(`[server] prompt TIMEOUT after ${Date.now() - startTime}ms for ${sessionId}`);
     if (stderrHandler && sess.process?.stderr) {
       try { sess.process.stderr.removeListener("data", stderrHandler); } catch {}
     }
     sess.client.cancel(sess.acpSessionId).catch(() => {});
-    sess.client.destroy();
+    killSessionProcess(sess);
+    bufferAgentEvent(sessionId, { type: "agent_event", sessionId, event: { sessionUpdate: 'turn_ended', stopReason: "timeout" } });
     ws.send(JSON.stringify({ type: "turn_ended", sessionId, stopReason: "timeout" }));
     ws.send(JSON.stringify({ type: "error", sessionId, text: `[Timeout] No response in 2 minutes. Switch model and try again.` }));
+
   }, PROMPT_TIMEOUT);
 
   sess.client.prompt(sess.acpSessionId, text)
     .then((result) => {
       if (timedOut || errorDetected) return;
+      clearInterval(keepAlive);
       clearTimeout(timer);
       if (stderrHandler && sess.process?.stderr) {
         try { sess.process.stderr.removeListener("data", stderrHandler); } catch {}
       }
       console.log(`[server] turn ended after ${Math.floor((Date.now() - startTime) / 1000)}s: ${result?.stopReason}`);
+      bufferAgentEvent(sessionId, { type: "agent_event", sessionId, event: { sessionUpdate: 'turn_ended', stopReason: result?.stopReason } });
       ws.send(JSON.stringify({ type: "turn_ended", sessionId, stopReason: result?.stopReason }));
     })
+
     .catch((err: Error) => {
       if (timedOut || errorDetected) return;
+      clearInterval(keepAlive);
       clearTimeout(timer);
       if (stderrHandler && sess.process?.stderr) {
         try { sess.process.stderr.removeListener("data", stderrHandler); } catch {}
       }
       const msg = err?.message || String(err);
       console.log(`[server] prompt error after ${Math.floor((Date.now() - startTime) / 1000)}s: ${msg}`);
+      bufferAgentEvent(sessionId, { type: "agent_event", sessionId, event: { sessionUpdate: 'turn_ended', stopReason: "error" } });
       ws.send(JSON.stringify({ type: "turn_ended", sessionId, stopReason: "error" }));
       ws.send(JSON.stringify({ type: "error", sessionId, text: msg.includes("closed") || msg.includes("abort")
         ? `[Session expired] Send a message to auto-restart.` : `Agent error: ${msg}` }));

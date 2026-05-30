@@ -1,0 +1,332 @@
+{
+  "string": [
+    {
+      "name": "app_desc",
+      "value": "HarmonyOS AI Agent 客户端"
+    },
+    {
+      "name": "module_desc",
+      "value": "Anywhere 入口模块"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "主能力"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "Anywhere"
+    },
+    {
+      "name": "reason_internet",
+      "value": "需要网络权限以连接远程 AI Agent 桥接服务"
+    },
+    {
+      "name": "camera_permission_desc",
+      "value": "需要相机权限以扫描电脑端生成的配对二维码"
+    },
+    {
+      "name": "connect_placeholder",
+      "value": "Bridge WS 地址或 IP:端口"
+    },
+    {
+      "name": "connect_error_empty_url",
+      "value": "请输入服务器地址"
+    },
+    {
+      "name": "connect_scan_qr",
+      "value": "扫码"
+    },
+    {
+      "name": "connect_disconnect",
+      "value": "断开"
+    },
+    {
+      "name": "connect_connecting",
+      "value": "正在连接\u2026"
+    },
+    {
+      "name": "connect_connecting_to",
+      "value": "正在连接 %s\u2026"
+    },
+    {
+      "name": "connect_scan_failed",
+      "value": "扫描失败"
+    },
+    {
+      "name": "onboarding_subtitle",
+      "value": "无缝连接的 AI 工作区。"
+    },
+    {
+      "name": "onboarding_saved_servers",
+      "value": "已保存的服务器"
+    },
+    {
+      "name": "onboarding_no_saved_servers",
+      "value": "暂无已保存的服务器"
+    },
+    {
+      "name": "onboarding_discovering_agents",
+      "value": "正在发现 Agent\u2026"
+    },
+    {
+      "name": "onboarding_available_agents",
+      "value": "可用 Agent"
+    },
+    {
+      "name": "onboarding_no_agents",
+      "value": "未发现 ACP Agent。"
+    },
+    {
+      "name": "onboarding_ip_addresses",
+      "value": "%d 个地址"
+    },
+    {
+      "name": "onboarding_scan_result_empty",
+      "value": "二维码未包含可用数据"
+    },
+    {
+      "name": "chat_empty_prompt",
+      "value": "选择工作区并开始输入。"
+    },
+    {
+      "name": "chat_loading_session",
+      "value": "正在加载会话\u2026"
+    },
+    {
+      "name": "chat_waiting_response",
+      "value": "等待响应中"
+    },
+    {
+      "name": "chat_reconnect_disconnected",
+      "value": "连接已断开，Agent 仍在运行\u2026"
+    },
+    {
+      "name": "chat_reconnect_reconnecting",
+      "value": "正在重连\u2026（第 %d 次尝试）"
+    },
+    {
+      "name": "chat_reconnect_syncing",
+      "value": "已连接，正在同步断线期间的消息\u2026"
+    },
+    {
+      "name": "chat_new_session",
+      "value": "新会话"
+    },
+    {
+      "name": "chat_no_session",
+      "value": "无会话"
+    },
+    {
+      "name": "chat_session_fallback",
+      "value": "会话"
+    },
+    {
+      "name": "chat_input_placeholder",
+      "value": "输入消息\u2026"
+    },
+    {
+      "name": "chat_input_file_placeholder",
+      "value": "添加消息（可选）\u2026"
+    },
+    {
+      "name": "chat_input_disconnected_placeholder",
+      "value": "连接已断开，Agent 仍在运行中\u2026"
+    },
+    {
+      "name": "chat_input_reconnecting_placeholder",
+      "value": "正在重连\u2026"
+    },
+    {
+      "name": "chat_input_syncing_placeholder",
+      "value": "正在同步消息\u2026"
+    },
+    {
+      "name": "chat_recording",
+      "value": "录音中\u2026"
+    },
+    {
+      "name": "chat_voice_transcribed",
+      "value": "[语音转录] "
+    },
+    {
+      "name": "chat_file_image_label",
+      "value": "图片"
+    },
+    {
+      "name": "chat_file_text_label",
+      "value": "文本文件"
+    },
+    {
+      "name": "chat_file_binary_label",
+      "value": "二进制文件"
+    },
+    {
+      "name": "chat_file_large_warning",
+      "value": "大图片发送可能较慢"
+    },
+    {
+      "name": "chat_send_button",
+      "value": "发送消息"
+    },
+    {
+      "name": "chat_cancel_button",
+      "value": "取消生成"
+    },
+    {
+      "name": "chat_toggle_drawer",
+      "value": "切换工作区抽屉"
+    },
+    {
+      "name": "chat_jump_latest",
+      "value": "↓ 回到最新"
+    },
+    {
+      "name": "chat_new_chat_button",
+      "value": "新建聊天"
+    },
+    {
+      "name": "chat_more_menu",
+      "value": "更多选项"
+    },
+    {
+      "name": "chat_copy_confirm",
+      "value": "已复制"
+    },
+    {
+      "name": "ws_session_name_placeholder",
+      "value": "会话名称"
+    },
+    {
+      "name": "ws_title",
+      "value": "工作区"
+    },
+    {
+      "name": "ws_add_button",
+      "value": "添加工作区"
+    },
+    {
+      "name": "ws_path_placeholder",
+      "value": "/项目/路径"
+    },
+    {
+      "name": "ws_cancel",
+      "value": "取消"
+    },
+    {
+      "name": "ws_add",
+      "value": "添加"
+    },
+    {
+      "name": "ws_empty_prompt",
+      "value": "暂无工作区"
+    },
+    {
+      "name": "ws_empty_subtitle",
+      "value": "添加项目路径以开始使用"
+    },
+    {
+      "name": "ws_delete_confirm_title",
+      "value": "删除工作区"
+    },
+    {
+      "name": "ws_delete_confirm_message",
+      "value": "删除 \u201c%s\u201d？此操作无法撤销。"
+    },
+    {
+      "name": "ws_delete_confirm_ok",
+      "value": "删除"
+    },
+    {
+      "name": "server_delete_confirm_title",
+      "value": "移除服务器"
+    },
+    {
+      "name": "server_delete_confirm_message",
+      "value": "从已保存的服务器中移除 \u201c%s\u201d？"
+    },
+    {
+      "name": "server_delete_confirm_ok",
+      "value": "移除"
+    },
+    {
+      "name": "picker_sessions",
+      "value": "会话"
+    },
+    {
+      "name": "picker_models",
+      "value": "模型"
+    },
+    {
+      "name": "picker_modes",
+      "value": "模式"
+    },
+    {
+      "name": "menu_switch_session",
+      "value": "切换会话"
+    },
+    {
+      "name": "menu_switch_model",
+      "value": "切换模型"
+    },
+    {
+      "name": "menu_switch_mode",
+      "value": "切换 Agent 模式"
+    },
+    {
+      "name": "perm_title",
+      "value": "需要授权"
+    },
+    {
+      "name": "thinking_label",
+      "value": "思考中"
+    },
+    {
+      "name": "thinking_done_label",
+      "value": "思考过程"
+    },
+    {
+      "name": "thinking_expand",
+      "value": "展开思考"
+    },
+    {
+      "name": "thinking_collapse",
+      "value": "收起思考"
+    },
+    {
+      "name": "tool_default_name",
+      "value": "工具调用"
+    },
+    {
+      "name": "tool_hide_detail",
+      "value": "收起"
+    },
+    {
+      "name": "tool_show_detail",
+      "value": "展开"
+    },
+    {
+      "name": "tool_diff_no_changes",
+      "value": "无变化"
+    },
+    {
+      "name": "tool_content_truncated",
+      "value": "\u2026 已截断"
+    },
+    {
+      "name": "tool_diff_truncated",
+      "value": "@@ \u2026 @@"
+    },
+    {
+      "name": "error_rate_limited",
+      "value": "限流"
+    },
+    {
+      "name": "error_timeout",
+      "value": "超时"
+    },
+    {
+      "name": "disconnected_message_dropped",
+      "value": "未连接，消息未发送。"
+    }
+  ]
+}

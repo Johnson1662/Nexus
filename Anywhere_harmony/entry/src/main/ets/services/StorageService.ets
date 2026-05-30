@@ -33,43 +33,61 @@ export class StorageService {
 
   async putString(key: string, value: string): Promise<void> {
     if (!this.dataPreferences) return;
-    await this.dataPreferences.put(key, value);
-    await this.dataPreferences.flush();
+    try {
+      await this.dataPreferences.put(key, value);
+      await this.dataPreferences.flush();
+    } catch (e) {}
   }
 
   async getString(key: string, def: string): Promise<string> {
     if (!this.dataPreferences) return def;
-    return await this.dataPreferences.get(key, def) as string;
+    try {
+      return await this.dataPreferences.get(key, def) as string;
+    } catch (e) {
+      return def;
+    }
   }
 
   async putStringArray(key: string, value: string[]): Promise<void> {
     if (!this.dataPreferences) return;
-    await this.dataPreferences.put(key, JSON.stringify(value));
-    await this.dataPreferences.flush();
+    try {
+      await this.dataPreferences.put(key, JSON.stringify(value));
+      await this.dataPreferences.flush();
+    } catch (e) {}
   }
 
   async getStringArray(key: string, def: string[]): Promise<string[]> {
     if (!this.dataPreferences) return def;
-    let raw = await this.dataPreferences.get(key, JSON.stringify(def)) as string;
     try {
-      return JSON.parse(raw) as string[];
-    } catch {
+      let raw = await this.dataPreferences.get(key, JSON.stringify(def)) as string;
+      try {
+        return JSON.parse(raw) as string[];
+      } catch {
+        return def;
+      }
+    } catch (e) {
       return def;
     }
   }
 
   async putObject(key: string, value: object): Promise<void> {
     if (!this.dataPreferences) return;
-    await this.dataPreferences.put(key, JSON.stringify(value));
-    await this.dataPreferences.flush();
+    try {
+      await this.dataPreferences.put(key, JSON.stringify(value));
+      await this.dataPreferences.flush();
+    } catch (e) {}
   }
 
   async getObject<T>(key: string, def: T): Promise<T> {
     if (!this.dataPreferences) return def;
-    let raw = await this.dataPreferences.get(key, JSON.stringify(def)) as string;
     try {
-      return JSON.parse(raw) as T;
-    } catch {
+      let raw = await this.dataPreferences.get(key, JSON.stringify(def)) as string;
+      try {
+        return JSON.parse(raw) as T;
+      } catch {
+        return def;
+      }
+    } catch (e) {
       return def;
     }
   }

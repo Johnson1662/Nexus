@@ -5,6 +5,7 @@ export class WorkspaceInfo {
 }
 
 export class ServerSession {
+  /** ACP Session ID — AI Agent 的真实会话 ID，用于 load/resume，非 bridge session */
   sessionId: string = '';
   title: string = '';
   currentModel?: string;

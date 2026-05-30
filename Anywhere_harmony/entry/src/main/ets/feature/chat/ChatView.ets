@@ -17,15 +17,23 @@ export struct ChatView {
   @State titleBarOpacity: number = 0;
   @State showRename: boolean = false;
   @State renameText: string = '';
+  @State deleteConfirmIndex: number = -1;
   onSendMessage?: (text: string) => void;
+  onRetry?: (id: string, content: string) => void;
   onSwitchModel?: (index: number) => void;
   onSwitchMode?: (index: number) => void;
   onNewSession?: () => void;
   onSelectSession?: (i: number) => void;
   onWorkspaceSelect?: (index: number) => void;
   onPermissionResponse?: (optionId: string) => void;
+  onNavigateToOnboarding?: () => void;
+  onNavigateToSettings?: () => void;
+  onNavigateToHostManage?: () => void;
 
   aboutToAppear(): void {
+    if (WorkspaceStore.currentIndex < 0) {
+      setTimeout(() => { this.showDrawer = true; }, 200);
+    }
     if (WorkspaceStore.currentIndex >= 0 && this.onWorkspaceSelect) {
       this.onWorkspaceSelect(WorkspaceStore.currentIndex);
     }
@@ -35,14 +43,14 @@ export struct ChatView {
   }
 
   getSessionTitle(): string {
-    if (!ChatStore.sessionId && !ChatStore.loadedSessionId) {
+    if (!ChatStore.bridgeSessionId && !ChatStore.acpSessionId) {
       return 'New Session';
     }
     // Prefer the live sessionTitle from server updates
     if (ChatStore.sessionTitle.length > 0) {
       return ChatStore.sessionTitle;
     }
-    let targetId = ChatStore.loadedSessionId || ChatStore.sessionId;
+    let targetId = ChatStore.acpSessionId || ChatStore.bridgeSessionId;
     for (let i = 0; i < ChatStore.sessions.length; i++) {
       if (ChatStore.sessions[i].sessionId === targetId) {
         return ChatStore.sessions[i].title || ChatStore.sessions[i].sessionId.substring(0, 8);
@@ -63,13 +71,25 @@ export struct ChatView {
 
 
 
+  /** Create and persist a new workspace in the global store. */
+  static addWorkspace(path: string): WorkspaceInfo {
+    let ws = new WorkspaceInfo();
+    ws.id = Date.now().toString();
+    ws.name = path.split('\\').pop() || path.split('/').pop() || 'Project';
+    ws.path = path;
+    WorkspaceStore.workspaces.push(ws);
+    WorkspaceStore.currentIndex = WorkspaceStore.workspaces.length - 1;
+    saveWorkspaces(AppStorage.get<string>('serverUrl') || '');
+    return ws;
+  }
+
   doRename(): void {
     this.showRename = false;
     let newTitle = this.renameText.trim();
     if (newTitle.length === 0) return;
     ChatStore.sessionTitle = newTitle;
     // Update local sessions array
-    let targetId = ChatStore.loadedSessionId || ChatStore.sessionId;
+    let targetId = ChatStore.acpSessionId || ChatStore.bridgeSessionId;
     for (let i = 0; i < ChatStore.sessions.length; i++) {
       if (ChatStore.sessions[i].sessionId === targetId) {
         ChatStore.sessions[i].title = newTitle;
@@ -77,14 +97,13 @@ export struct ChatView {
       }
     }
   }
-
   openPicker(mode: number): void {
     if (mode === 0) {
-      this.pickerTitle = 'Sessions';
+      this.pickerTitle = getContext().resourceManager.getStringSync($r('app.string.picker_sessions'));
     } else if (mode === 1) {
-      this.pickerTitle = 'Models';
+      this.pickerTitle = getContext().resourceManager.getStringSync($r('app.string.picker_models'));
     } else if (mode === 2) {
-      this.pickerTitle = 'Modes';
+      this.pickerTitle = getContext().resourceManager.getStringSync($r('app.string.picker_modes'));
     }
     this.pickerMode = mode;
     this.showPicker = true;
@@ -117,24 +136,17 @@ export struct ChatView {
               if (this.onWorkspaceSelect) this.onWorkspaceSelect(i);
             },
             onDelete: (i: number) => {
-              WorkspaceStore.workspaces.splice(i, 1);
-              if (WorkspaceStore.currentIndex >= WorkspaceStore.workspaces.length) {
-                WorkspaceStore.currentIndex = WorkspaceStore.workspaces.length - 1;
-              }
-              saveWorkspaces(AppStorage.get<string>('serverUrl') || '');
+              this.deleteConfirmIndex = i;
             },
             onClose: () => { this.getUIContext()?.animateTo({ duration: Duration.normal }, () => { this.showDrawer = false }) },
             onAddWorkspace: (p: string) => {
-              let ws = new WorkspaceInfo();
-              ws.id = Date.now().toString();
-              ws.name = p.split('\\').pop() || p.split('/').pop() || 'Project';
-              ws.path = p;
-              WorkspaceStore.workspaces.push(ws);
-              WorkspaceStore.currentIndex = WorkspaceStore.workspaces.length - 1;
-              saveWorkspaces(AppStorage.get<string>('serverUrl') || '');
+              ChatView.addWorkspace(p);
               this.getUIContext()?.animateTo({ duration: Duration.normal }, () => { this.showDrawer = false });
               if (this.onWorkspaceSelect) this.onWorkspaceSelect(WorkspaceStore.workspaces.length - 1);
-            }
+            },
+            onSwitchHost: () => { if (this.onNavigateToOnboarding) this.onNavigateToOnboarding() },
+            onSettings: () => { if (this.onNavigateToSettings) this.onNavigateToSettings() },
+            onHostManage: () => { if (this.onNavigateToHostManage) this.onNavigateToHostManage() }
           })
 
           Column() {
@@ -157,13 +169,7 @@ export struct ChatView {
                   .onClick(() => {
                     let p = this.newPath.trim();
                     if (p.length > 0) {
-                      let ws = new WorkspaceInfo();
-                      ws.id = Date.now().toString();
-                      ws.name = p.split('\\').pop() || p.split('/').pop() || 'Project';
-                      ws.path = p;
-                      WorkspaceStore.workspaces.push(ws);
-                      WorkspaceStore.currentIndex = WorkspaceStore.workspaces.length - 1;
-                      saveWorkspaces(AppStorage.get<string>('serverUrl') || '');
+                      ChatView.addWorkspace(p);
                       this.newPath = '';
                       this.showPathInput = false;
                       if (this.onWorkspaceSelect) this.onWorkspaceSelect(WorkspaceStore.workspaces.length - 1);
@@ -178,7 +184,8 @@ export struct ChatView {
             ChatPage({
               messages: ChatStore.messages,
               streamingThinking: ChatStore.streamingThinking,
-              onSendMessage: (t: string) => { if (this.onSendMessage) this.onSendMessage(t) }
+              onSendMessage: (t: string) => { if (this.onSendMessage) this.onSendMessage(t) },
+              onRetry: (id: string, content: string) => { if (this.onRetry) this.onRetry(id, content) }
             }).layoutWeight(1)
           }
           .width('100%').height('100%')
@@ -204,7 +211,7 @@ export struct ChatView {
             .constraintSize({ maxHeight: '70%' })
           }
           .width('100%').height('100%')
-          .backgroundColor('#33000000')
+          .backgroundColor(Colors.overlayDim)
           .zIndex(100)
           .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: 30 })))
         }
@@ -226,9 +233,55 @@ export struct ChatView {
             .width('100%')
           }
           .width('100%').height('100%')
-          .backgroundColor('#33000000')
+          .backgroundColor(Colors.overlayDim)
           .zIndex(110)
           .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: 30 })))
+        }
+
+        // Delete workspace confirmation
+        if (this.deleteConfirmIndex >= 0) {
+          Column() {
+            Row().width('100%').layoutWeight(1)
+              .onClick(() => { this.deleteConfirmIndex = -1 })
+
+            Column() {
+              Text($r('app.string.ws_delete_confirm_title'))
+                .fontSize(FontSize.xl).fontWeight(FontWeight.Bold).fontColor(Colors.foreground)
+                .width('100%').padding({ left: Spacing.xl, right: Spacing.xl, top: Spacing.xl })
+              Text(WorkspaceStore.workspaces[this.deleteConfirmIndex]?.name || '')
+                .fontSize(FontSize.base).fontColor(Colors.foregroundMuted)
+                .width('100%').padding({ left: Spacing.xl, right: Spacing.xl, top: Spacing.sm, bottom: Spacing.lg })
+              Row() {
+                Button($r('app.string.ws_cancel'))
+                  .layoutWeight(1).height(44)
+                  .backgroundColor(Colors.surface1).fontColor(Colors.foreground)
+                  .fontSize(FontSize.base)
+                  .onClick(() => { this.deleteConfirmIndex = -1 })
+                Button($r('app.string.ws_delete_confirm_ok'))
+                  .layoutWeight(1).height(44)
+                  .backgroundColor(Colors.error).fontColor(Color.White)
+                  .fontSize(FontSize.base).borderRadius(Radius.md)
+                  .margin({ left: Spacing.md })
+                  .onClick(() => {
+                    let i = this.deleteConfirmIndex;
+                    this.deleteConfirmIndex = -1;
+                    WorkspaceStore.workspaces.splice(i, 1);
+                    if (WorkspaceStore.currentIndex >= WorkspaceStore.workspaces.length) {
+                      WorkspaceStore.currentIndex = WorkspaceStore.workspaces.length - 1;
+                    }
+                    saveWorkspaces(AppStorage.get<string>('serverUrl') || '');
+                  })
+              }
+              .width('100%').padding({ left: Spacing.xl, right: Spacing.xl, bottom: Spacing.xxxl })
+            }
+            .width('100%')
+            .backgroundColor(Colors.surface0)
+            .borderRadius({ topLeft: Radius.xl, topRight: Radius.xl })
+          }
+          .width('100%').height('100%')
+          .backgroundColor(Colors.overlayDim)
+          .zIndex(120)
+          .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: 20 })))
         }
       }
       .width('100%').height('100%')
@@ -238,13 +291,13 @@ export struct ChatView {
     .width('100%').height('100%')
     .backgroundColor(Colors.surface0)
   }
-
   @Builder
   TitleBar() {
     Row() {
       SymbolGlyph(this.showDrawer ? $r('sys.symbol.close_sidebar') : $r('sys.symbol.open_sidebar'))
         .fontSize(24)
         .fontColor([Colors.foreground])
+        .accessibilityText(this.showDrawer ? 'Close workspace drawer' : 'Open workspace drawer')
         .onClick(() => { this.getUIContext()?.animateTo({ duration: Duration.normal }, () => { this.showDrawer = !this.showDrawer }) })
 
       Column() {
@@ -274,25 +327,25 @@ export struct ChatView {
           }
           .width('100%')
           .onClick(() => {
-            if (ChatStore.sessionId || ChatStore.loadedSessionId) {
+            if (ChatStore.bridgeSessionId || ChatStore.acpSessionId) {
               this.renameText = this.getSessionTitle();
               this.showRename = true;
             }
           })
         }
 
-        if (!this.showRename) {
-          if (!ChatStore.sessionId && !ChatStore.loadedSessionId) {
-            Text('No session')
-              .fontSize(FontSize.xs).fontColor(Colors.foregroundLight)
-              .lineHeight(16).maxLines(1)
-              .width('100%')
-          } else if (ChatStore.models.length > 0) {
-            Text(this.getModelName())
-              .fontSize(FontSize.xs).fontColor(Colors.foregroundMuted)
-              .lineHeight(16).maxLines(1)
-              .width('100%')
-          }
+        if (!ChatStore.bridgeSessionId && !ChatStore.acpSessionId) {
+          Text($r('app.string.chat_no_session'))
+            .fontSize(FontSize.xs).fontColor(Colors.foregroundLight)
+            .lineHeight(16).maxLines(1)
+            .width('100%')
+            .accessibilityText('No active session')
+        } else if (ChatStore.models.length > 0) {
+          Text(this.getModelName())
+            .fontSize(FontSize.xs).fontColor(Colors.foregroundMuted)
+            .lineHeight(16).maxLines(1)
+            .width('100%')
+            .accessibilityText('Current model: ' + this.getModelName())
         }
       }
       .alignItems(HorizontalAlign.Start)
@@ -301,14 +354,16 @@ export struct ChatView {
 
       SymbolGlyph($r('sys.symbol.plus'))
         .fontColor([Colors.foreground]).fontSize(24).margin({ right: Spacing.md })
+        .accessibilityText('New chat')
         .onClick(() => { if (this.onNewSession) this.onNewSession() })
 
       SymbolGlyph($r('sys.symbol.dot_grid_2x2'))
         .fontColor([Colors.foreground]).fontSize(24)
+        .accessibilityText('More options')
         .bindMenu([
-          { value: 'Switch Session', action: () => { this.openPicker(0) } },
-          { value: 'Switch Model', action: () => { this.openPicker(1) } },
-          { value: 'Switch Agent Mode', action: () => { this.openPicker(2) } },
+          { value: $r('app.string.menu_switch_session'), action: () => { this.openPicker(0) } },
+          { value: $r('app.string.menu_switch_model'), action: () => { this.openPicker(1) } },
+          { value: $r('app.string.menu_switch_mode'), action: () => { this.openPicker(2) } },
         ])
     }
     .width('100%').height(56)
@@ -326,8 +381,9 @@ struct PermissionSheet {
   build() {
     Column() {
       Row() {
-        Text('Permission Required')
+        Text($r('app.string.perm_title'))
           .fontSize(FontSize.xl).fontWeight(FontWeight.Bold).fontColor(Colors.foreground)
+          .accessibilityText('Permission request')
       }
       .width('100%')
       .padding({ left: Spacing.xl, right: Spacing.xl, top: Spacing.xl, bottom: Spacing.md })
@@ -384,22 +440,34 @@ struct PickerSheet {
 
       if (this.getItems().length === 0) {
         Row() {
-          LoadingProgress().width(20).height(20).color(Colors.accent)
+          Text('暂无数据')
+            .fontSize(FontSize.sm).fontColor(Colors.foregroundLight)
         }
-        .width('100%').height(80)
-        .justifyContent(FlexAlign.Center).alignItems(VerticalAlign.Center)
+        .width('100%').height(80).justifyContent(FlexAlign.Center)
       } else {
         List() {
           ForEach(this.getItems(), (item: string, index: number) => {
             ListItem() {
-              Text(item)
-                .fontSize(FontSize.base).fontColor(Colors.foreground)
-                .padding({ top: Spacing.md, bottom: Spacing.md, left: Spacing.md, right: Spacing.md })
-                .width('100%')
+              Row() {
+                Text(item)
+                  .fontSize(FontSize.base)
+                  .fontColor(index === this.getCurrentIndex() ? Colors.accent : Colors.foreground)
+                  .fontWeight(index === this.getCurrentIndex() ? FontWeight.Medium : FontWeight.Normal)
+                  .layoutWeight(1)
+                if (index === this.getCurrentIndex()) {
+                  SymbolGlyph($r('sys.symbol.checkmark'))
+                    .fontSize(16).fontColor([Colors.accent])
+                    .margin({ left: Spacing.sm })
+                    .accessibilityText('Currently selected')
+                }
+              }
+              .width('100%')
+              .padding({ top: Spacing.md, bottom: Spacing.md, left: Spacing.md, right: Spacing.md })
             }
             .width('100%').borderRadius(Radius.md)
-            .backgroundColor(Colors.surface1)
+            .backgroundColor(index === this.getCurrentIndex() ? Colors.accentLight : Colors.surface1)
             .margin({ bottom: Spacing.xs })
+            .accessibilityText(item + (index === this.getCurrentIndex() ? ', selected' : ''))
             .onClick(() => {
               if (this.onSelect) this.onSelect(index);
             })
@@ -428,5 +496,18 @@ struct PickerSheet {
     if (this.pickerMode === 1) return ChatStore.models.map(m => m.name);
     if (this.pickerMode === 2) return ChatStore.modes.map(m => m.name);
     return [];
+  }
+
+  getCurrentIndex(): number {
+    if (this.pickerMode === 0) {
+      let targetId = ChatStore.acpSessionId || ChatStore.bridgeSessionId;
+      for (let j = 0; j < ChatStore.sessions.length; j++) {
+        if (ChatStore.sessions[j].sessionId === targetId) return j;
+      }
+      return -1;
+    }
+    if (this.pickerMode === 1) return ChatStore.modelIndex;
+    if (this.pickerMode === 2) return ChatStore.modeIndex;
+    return -1;
   }
 }

@@ -19,11 +19,11 @@ export struct CodeRender {
   }
 
   aboutToDisappear(): void {
-    getContext().eventHub.off(markdownCodeThemeChangeEventName)
+    this.getUIContext().getHostContext()?.eventHub.off(markdownCodeThemeChangeEventName)
   }
 
   codeThemeChangeListener() {
-    getContext().eventHub.on(markdownCodeThemeChangeEventName, () => {
+    this.getUIContext().getHostContext()?.eventHub.on(markdownCodeThemeChangeEventName, () => {
       this.getHighlightNode()
     })
   }

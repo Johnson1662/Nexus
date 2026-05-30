@@ -17,7 +17,7 @@ export async function handleStart(ws, params) {
         stdio: ["pipe", "pipe", "pipe"],
         shell: true,
     });
-    const sessionId = `acp-${Date.now()}`;
+    const sessionId = `acp-${Date.now()}-${randomUUID().slice(0, 8)}`;
     const sess = {
         ws,
         sessionId,
@@ -87,7 +87,7 @@ export async function handleStart(ws, params) {
                 event: update.update,
             };
             try {
-                ws.send(JSON.stringify(eventPayload));
+                sess.ws?.send(JSON.stringify(eventPayload));
             }
             catch { }
             try {
@@ -103,7 +103,7 @@ export async function handleStart(ws, params) {
                     currentSess.pendingPermission = { requestId, resolve };
                 }
                 try {
-                    ws.send(JSON.stringify({
+                    sess.ws?.send(JSON.stringify({
                         type: "permission_request",
                         sessionId,
                         requestId,
@@ -114,7 +114,7 @@ export async function handleStart(ws, params) {
                 catch { }
             });
         },
-        ...createAcpCallbacks({ ws, sessionId, cwd: cwd || process.cwd(), toolCallIdMap: sess.toolCallIdMap }),
+        ...createAcpCallbacks({ sessionId, cwd: cwd || process.cwd(), toolCallIdMap: sess.toolCallIdMap }),
     });
     sess.client = client;
     setSession(sessionId, sess);
@@ -122,14 +122,14 @@ export async function handleStart(ws, params) {
         const text = chunk.toString();
         console.log(`[server] stderr: ${text.slice(0, 200)}`);
         try {
-            ws.send(JSON.stringify({ type: "agent_stderr", sessionId, text }));
+            sess.ws?.send(JSON.stringify({ type: "agent_stderr", sessionId, text }));
         }
         catch { }
     });
     proc.on("error", (err) => {
         console.log(`[server] ${sessionId} spawn error: ${err.message}`);
         try {
-            ws.send(JSON.stringify({ type: "error", text: `spawn failed: ${err.message}` }));
+            sess.ws?.send(JSON.stringify({ type: "error", text: `spawn failed: ${err.message}` }));
         }
         catch { }
         deleteSession(sessionId);
@@ -137,10 +137,12 @@ export async function handleStart(ws, params) {
     proc.on("exit", (code) => {
         console.log(`[server] ${sessionId} exited with code ${code}`);
         try {
-            ws.send(JSON.stringify({ type: "session_ended", sessionId, exitCode: code }));
+            sess.ws?.send(JSON.stringify({ type: "session_ended", sessionId, exitCode: code }));
         }
         catch { }
-        deleteSession(sessionId);
+        if (sess.orphanedAt === null) {
+            deleteSession(sessionId);
+        }
     });
     try {
         console.log(`[server] initializing ACP for ${sessionId}...`);
@@ -178,7 +180,7 @@ export async function handleStart(ws, params) {
             name: m.name,
         }));
         try {
-            ws.send(JSON.stringify({
+            sess.ws?.send(JSON.stringify({
                 type: "model_list",
                 models: mappedModels,
                 modes: mappedModes,
@@ -187,7 +189,7 @@ export async function handleStart(ws, params) {
         catch { }
         try {
             const sessionTitle = prompt ? prompt.slice(0, 50) + (prompt.length > 50 ? "\u2026" : "") : "New Session";
-            ws.send(JSON.stringify({
+            sess.ws?.send(JSON.stringify({
                 type: "session_started",
                 sessionId,
                 agent,
@@ -199,10 +201,19 @@ export async function handleStart(ws, params) {
         }
         catch { }
         if (prompt) {
+            // Keep WS alive while agent processes (mobile carrier NAT timeout workaround)
+            const keepAlive = setInterval(() => {
+                try {
+                    sess.ws?.send(JSON.stringify({ type: "heartbeat", sessionId, ts: Date.now() }));
+                }
+                catch { }
+            }, 3000);
             client.prompt(acpSessionId, prompt).then((result) => {
+                clearInterval(keepAlive);
                 console.log(`[server] turn ended: ${result?.stopReason}`);
                 try {
-                    ws.send(JSON.stringify({
+                    bufferAgentEvent(sessionId, { type: "agent_event", sessionId, event: { sessionUpdate: 'turn_ended', stopReason: result?.stopReason } });
+                    sess.ws?.send(JSON.stringify({
                         type: "turn_ended",
                         sessionId,
                         stopReason: result?.stopReason,
@@ -210,11 +221,13 @@ export async function handleStart(ws, params) {
                 }
                 catch { }
             }, (err) => {
+                clearInterval(keepAlive);
                 const msg = err instanceof Error ? err.message : String(err);
                 console.log(`[server] prompt error: ${msg}`);
                 try {
-                    ws.send(JSON.stringify({ type: "turn_ended", sessionId, stopReason: "error" }));
-                    ws.send(JSON.stringify({ type: "error", sessionId, text: `Agent error: ${msg}` }));
+                    bufferAgentEvent(sessionId, { type: "agent_event", sessionId, event: { sessionUpdate: 'turn_ended', stopReason: "error" } });
+                    sess.ws?.send(JSON.stringify({ type: "turn_ended", sessionId, stopReason: "error" }));
+                    sess.ws?.send(JSON.stringify({ type: "error", sessionId, text: `Agent error: ${msg}` }));
                 }
                 catch { }
             });
@@ -224,7 +237,7 @@ export async function handleStart(ws, params) {
         const msg = err instanceof Error ? err.message : String(err);
         console.log(`[server] ACP init error: ${msg}`);
         try {
-            ws.send(JSON.stringify({
+            sess.ws?.send(JSON.stringify({
                 type: "error",
                 text: `ACP initialization failed: ${msg}`,
             }));

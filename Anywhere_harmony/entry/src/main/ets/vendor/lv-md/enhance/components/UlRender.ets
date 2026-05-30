@@ -38,7 +38,7 @@ export struct UlRender {
           size = checkBoxSize
         }
         if (typeof checkBoxSize == "object") {
-          getContext().resourceManager.getStringValue(checkBoxSize).then((res: string) => {
+          this.getUIContext().getHostContext()?.resourceManager?.getStringValue(checkBoxSize).then((res: string) => {
             size = Number(res)
           })
         }

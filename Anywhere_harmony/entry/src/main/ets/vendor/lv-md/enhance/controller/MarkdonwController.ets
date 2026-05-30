@@ -13,6 +13,7 @@ import { image } from '@kit.ImageKit';
 export class MarkdownController {
   // 随机字符串
   private union: string = ""
+  private uiContext: UIContext | null = null;
   // ** ================================================= 标题 ==================================================== **
   // 标题-文字颜色
   @Trace private titleColor: ResourceColor | [ResourceColor, ResourceColor, ResourceColor, ResourceColor, ResourceColor, ResourceColor] =
@@ -75,9 +76,9 @@ export class MarkdownController {
   @Trace private codeHighlight: CodeHighlight = new CodeHighlight()
   // 代码块-点击复制回调
   @Trace private codeCopyListener: (text: string) => void = (text: string) => {
-    promptAction.showToast({
-      message: "复制失败，请检查 setCodeCopyListener 接口实现",
-    })
+    if (this.uiContext) {
+      this.uiContext.getPromptAction().showToast({ message: "复制失败，请检查 setCodeCopyListener 接口实现" });
+    }
   }
   // ** ================================================= 图片 ==================================================== **
   // 图片-宽度
@@ -168,9 +169,9 @@ export class MarkdownController {
   @Trace private textSelectionEnable: boolean = false
   // 跨 Text 选区复制监听
   @Trace private textSelectionCopyListener: (text: string) => void = (_text: string) => {
-    promptAction.showToast({
-      message: "复制失败，请检查 setTextSelectionCopyListener 接口实现",
-    })
+    if (this.uiContext) {
+      this.uiContext.getPromptAction().showToast({ message: "复制失败，请检查 setTextSelectionCopyListener 接口实现" });
+    }
   }
   // ** ================================================= 块级元素间距 ==================================================== **
   // 块级元素间距
@@ -185,6 +186,14 @@ export class MarkdownController {
 
   getUnion() {
     return this.union
+  }
+
+  setUIContext(uiContext: UIContext): void {
+    this.uiContext = uiContext;
+  }
+
+  getUIContext(): UIContext | null {
+    return this.uiContext;
   }
 
   // ** ================================================= 标题 ==================================================== **
@@ -454,9 +463,13 @@ export class MarkdownController {
    * @param codeBlockIdxState
    */
   setCodeBlockIdxState(codeBlockIdxState: boolean) {
-    animateTo({ duration: 200 }, () => {
+    if (this.uiContext) {
+      this.uiContext.animateTo({ duration: 200 }, () => {
+        this.codeBlockIdxState = codeBlockIdxState
+      })
+    } else {
       this.codeBlockIdxState = codeBlockIdxState
-    })
+    }
     return this
   }
 

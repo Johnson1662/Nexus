@@ -25,6 +25,22 @@ const RELAY_URL = process.env.ANYWHERE_RELAY_URL || "wss://cf-relay.anywhere1213
 const PHONE_RELAY_URL = process.env.ANYWHERE_PHONE_RELAY_URL || "ws://relay.anywhere12138.lat:12138";
 const wss = new WebSocketServer({ host: HOST, port: PORT });
 console.log(`[server] listening on ws://${HOST}:${PORT}`);
+// WebSocket keep-alive: ping all connected clients every 15s
+const pingInterval = setInterval(() => {
+    wss.clients.forEach((sock) => {
+        if (sock.isDead)
+            return;
+        try {
+            sock.ping();
+        }
+        catch { }
+    });
+}, 15000);
+wss.on('connection', (sock) => {
+    sock.isDead = false;
+    sock.on('pong', () => { sock.isDead = false; });
+    sock.on('close', () => { sock.isDead = true; });
+});
 const HOST_ID = getOrCreateHostId();
 // The relay message handler is wired directly into handleIncomingConnection
 // via a shared callback, bypassing the EventEmitter indirection which has
@@ -234,6 +250,8 @@ function handleIncomingConnection(transport, isRelay = false) {
         switch (msg.type) {
             case "start":
                 console.log(`[server] handleStart agent="${msg.agent || "opencode"}" cwd="${msg.cwd || process.cwd()}"`);
+                // Send immediate ack before spawning agent to prevent WS timeout
+                transport.send(JSON.stringify({ type: "start_ack" }));
                 clearSessionListCache(transport);
                 enqueueWsOp(transport, () => handleStart(transport, msg));
                 break;
@@ -286,21 +304,17 @@ function handleIncomingConnection(transport, isRelay = false) {
                 break;
             case "load_session":
                 console.log(`[server] handleLoadSession target="${msg.sessionId?.slice(0, 20)}" agent="${msg.agent || "opencode"}"`);
-                handleLoadSession(transport, msg).catch((err) => {
-                    console.log(`[server] handleLoadSession error: ${err.message}`);
-                });
+                clearSessionListCache(transport);
+                enqueueWsOp(transport, () => handleLoadSession(transport, msg));
                 break;
             case "resume_session":
                 console.log(`[server] handleResumeSession target="${msg.sessionId?.slice(0, 20)}" agent="${msg.agent || "opencode"}"`);
-                handleResumeSession(transport, msg).catch((err) => {
-                    console.log(`[server] handleResumeSession error: ${err.message}`);
-                });
+                clearSessionListCache(transport);
+                enqueueWsOp(transport, () => handleResumeSession(transport, msg));
                 break;
             case "close_session":
                 console.log(`[server] handleCloseSession session="${msg.sessionId?.slice(0, 20)}"`);
-                handleCloseSession(transport, msg.sessionId).catch((err) => {
-                    console.log(`[server] handleCloseSession error: ${err.message}`);
-                });
+                enqueueWsOp(transport, () => handleCloseSession(transport, msg.sessionId));
                 break;
             case "permission_response":
                 console.log(`[server] handlePermissionResponse session="${msg.sessionId?.slice(0, 20)}" outcome="${msg.outcome}"`);
@@ -322,7 +336,10 @@ function handleIncomingConnection(transport, isRelay = false) {
                     const safeEntries = entries
                         .map(e => {
                         try {
-                            return { messageId: e.messageId, payload: JSON.parse(e.payload), timestamp: e.timestamp };
+                            const parsed = JSON.parse(e.payload);
+                            // payload is stored as {type:"agent_event", sessionId, event: {...}}
+                            // client expects just the inner event object; fallback to parsed for non-event payloads
+                            return { messageId: e.messageId, payload: parsed.event || parsed, timestamp: e.timestamp };
                         }
                         catch {
                             return null;
@@ -350,6 +367,8 @@ function handleIncomingConnection(transport, isRelay = false) {
                 console.log('[server] WS command: re-displaying QR code');
                 printQR();
                 transport.send(JSON.stringify({ type: "qr_displayed" }));
+                break;
+            case "heartbeat":
                 break;
             default:
                 if (isRelay && msg.type === 'relay_client_connected') {

@@ -46,13 +46,11 @@ export struct ChatInputBar {
   @State text: string = '';
   @Prop disabled: boolean = false;
   @Prop showCancel: boolean = false;
-  @State isRecording: boolean = false;
   @State pendingFileName: string = '';
   @State pendingFileContent: string = '';
   @State pendingFileType: string = '';
   @State pendingFileBase64: string = '';
   @State pendingFileMime: string = '';
-  private recordingStart: number = 0;
   onSend?: (text: string) => void;
   onCancel?: () => void;
 
@@ -87,7 +85,9 @@ export struct ChatInputBar {
   }
 
   pickFile(): void {
-    let documentPicker = new picker.DocumentViewPicker(getContext(this));
+    let ctx = this.getUIContext().getHostContext();
+    if (!ctx) return;
+    let documentPicker = new picker.DocumentViewPicker(ctx);
     try {
       documentPicker.select().then((uris: string[]) => {
         if (uris.length === 0) return;
@@ -155,17 +155,6 @@ export struct ChatInputBar {
       this.pendingFileMime = mime;
     } catch (err) {
       hilog.error(DOMAIN, TAG, `readBinaryFile failed: ${err}`);
-    }
-  }
-
-  toggleRecording(): void {
-    if (this.isRecording) {
-      this.isRecording = false;
-      this.recordingStart = 0;
-      this.text = this.text + '[Voice recording transcribed] ';
-    } else {
-      this.isRecording = true;
-      this.recordingStart = Date.now();
     }
   }
 
@@ -268,7 +257,6 @@ export struct ChatInputBar {
             .padding({ left: Spacing.md, right: Spacing.sm })
             .fontSize(FontSize.base)
             .enabled(!this.disabled)
-            .minLines(1)
             .enterKeyType(EnterKeyType.Send)
             .onChange((val: string) => { this.text = val })
             .onSubmit(() => { this.doSend() })
@@ -285,23 +273,6 @@ export struct ChatInputBar {
               .enabled(!this.disabled)
               .onClick(() => { if (!this.disabled) this.pickFile() })
               .animation({ duration: Duration.fast, curve: Curve.EaseOut })
-
-            if (this.isRecording) {
-              Row() {
-                Circle().width(6).height(6).fill(Colors.error).margin({ right: 4 })
-                Text('Recording...')
-                  .fontSize(11).fontColor(Colors.error)
-              }
-              .onClick(() => { this.toggleRecording() })
-              .animation({ duration: Duration.fast })
-            } else {
-              SymbolGlyph($r('sys.symbol.mic'))
-                .fontSize(22)
-                .fontColor([this.disabled ? Colors.border : Colors.foregroundMuted])
-                .enabled(!this.disabled)
-                .onClick(() => { if (!this.disabled) this.toggleRecording() })
-                .animation({ duration: Duration.fast, curve: Curve.EaseOut })
-            }
           }
           .alignItems(VerticalAlign.Center)
 
@@ -311,6 +282,7 @@ export struct ChatInputBar {
             SymbolGlyph($r('sys.symbol.smallcircle_filled_circle'))
               .fontColor([Colors.error])
               .fontSize(28)
+              .accessibilityText('Cancel generation')
               .onClick(() => { if (this.onCancel) this.onCancel() })
               .transition(TransitionEffect.OPACITY.combine(TransitionEffect.scale({ x: 0.5, y: 0.5 })))
               .animation({ duration: Duration.fast, curve: Curve.EaseOut })
@@ -318,13 +290,15 @@ export struct ChatInputBar {
             SymbolGlyph($r('sys.symbol.arrow_up_circle_fill'))
               .fontColor([Colors.foreground])
               .fontSize(28)
+              .accessibilityText('Send message')
               .onClick(() => { this.doSend() })
               .transition(TransitionEffect.OPACITY.combine(TransitionEffect.scale({ x: 0.5, y: 0.5 })))
               .animation({ duration: Duration.fast, curve: Curve.EaseOut })
           } else {
-            Text('agent')
+            Text($r('app.string.EntryAbility_label'))
               .fontSize(FontSize.xs)
               .fontColor(Colors.foregroundLight)
+              .accessibilityText('Message input inactive')
               .transition(TransitionEffect.OPACITY)
               .animation({ duration: Duration.fast })
           }
@@ -340,24 +314,25 @@ export struct ChatInputBar {
       .width('100%')
     }
     .width('100%')
-    .padding({ left: Spacing.md, right: Spacing.md, top: Spacing.md, bottom: Spacing.xl })
+    .padding({ left: Spacing.md, right: Spacing.md, top: Spacing.md, bottom: Spacing.xxxl })
     .backgroundColor(Colors.surface0)
+    .accessibilityGroup(true)
   }
 
   getPlaceholder(): string {
     if (ChatStore.reconnectPhase.length > 0) {
       if (ChatStore.reconnectPhase === 'disconnected') {
-        return '连接已断开，Agent 仍在运行中…';
+        return getContext().resourceManager.getStringSync($r('app.string.chat_input_disconnected_placeholder'));
       } else if (ChatStore.reconnectPhase === 'reconnecting') {
-        return '正在重连…';
+        return getContext().resourceManager.getStringSync($r('app.string.chat_input_reconnecting_placeholder'));
       } else if (ChatStore.reconnectPhase === 'syncing') {
-        return '正在同步消息…';
+        return getContext().resourceManager.getStringSync($r('app.string.chat_input_syncing_placeholder'));
       }
     }
     if (this.pendingFileName.length > 0) {
-      return 'Add a message (optional)...';
+      return getContext().resourceManager.getStringSync($r('app.string.chat_input_file_placeholder'));
     }
-    return 'Type a message...';
+    return getContext().resourceManager.getStringSync($r('app.string.chat_input_placeholder'));
   }
 
   hasCommands(): boolean {

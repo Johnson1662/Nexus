@@ -44,7 +44,7 @@ export function isPathWithinCwd(target: string, cwd: string): boolean {
 }
 
 interface AcpCallbacksConfig {
-  ws: WebSocket;
+  ws?: import("ws").WebSocket;
   sessionId: string;
   cwd: string;
   toolCallIdMap?: Map<string, string>;
@@ -59,7 +59,13 @@ export function createAcpCallbacks(config: AcpCallbacksConfig): {
   onKillTerminal: (params: KillTerminalRequest) => Promise<KillTerminalResponse | void>;
   onReleaseTerminal: (params: ReleaseTerminalRequest) => Promise<ReleaseTerminalResponse | void>;
 } {
-  const { ws, sessionId, cwd, toolCallIdMap } = config;
+  const { sessionId, cwd, toolCallIdMap } = config;
+  
+  // Resolve WS dynamically from session map — supports session reclaim after reconnect
+  function getSessionWs(): import("ws").WebSocket | undefined {
+    const sess = getSession(sessionId);
+    return sess?.ws || undefined;
+  }
 
   function sendToolCallUpdate(toolCallId: string, status: string, content: object[]): void {
     const originalId = toolCallIdMap?.get(toolCallId);
@@ -75,7 +81,8 @@ export function createAcpCallbacks(config: AcpCallbacksConfig): {
           toolCallContent: content,
         },
       };
-      ws.send(JSON.stringify(eventPayload));
+      const wss = getSessionWs();
+      if (wss) wss.send(JSON.stringify(eventPayload));
       bufferAgentEvent(sessionId, eventPayload);
     } catch {}
   }

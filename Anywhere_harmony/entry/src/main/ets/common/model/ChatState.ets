@@ -74,12 +74,14 @@ export class PlanEntry {
 @ObservedV2
 export class ChatStoreModel {
   @Trace messages: MessageData[] = [];
-  /** 断线重连游标：最后处理的 messageId（格式 sessionId:seq） */
+  /** 断线重连游标：最后处理的 messageId（格式 bridgeSessionId:seq） */
   lastMessageId: string = '';
   @Trace planEntries: PlanEntry[] = [];
   @Trace turnActive: boolean = false;
-  @Trace sessionId: string = '';
-  @Trace loadedSessionId: string = '';
+  /** 当前 WS 桥接会话 ID，用于 input/cancel/sync 等操作 */
+  @Trace bridgeSessionId: string = '';
+  /** AI Agent 的真实 ACP 会话 ID，用于 load/switch session */
+  @Trace acpSessionId: string = '';
   @Trace connected: boolean = false;
   @Trace sessions: ServerSession[] = [];
   @Trace models: ModelItem[] = [];
@@ -95,8 +97,8 @@ export class ChatStoreModel {
   @Trace availableCommands: AvailableCommand[] = [];
   @Trace lastUsage: UsageInfo | null = null;
   @Trace pendingPermission: PendingPermission | null = null;
-  @Trace sessionReady: boolean = false;
   @Trace streamingThinking: string = '';
+  @Trace streamingText: string = '';
   @Trace lastModelId: string = '';
   /** 断线重连阶段：'' | 'disconnected' | 'reconnecting' | 'syncing' */
   @Trace reconnectPhase: string = '';

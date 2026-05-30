@@ -3,6 +3,126 @@
     {
       "name": "start_window_background",
       "value": "#000000"
+    },
+    {
+      "name": "surface0",
+      "value": "#1A1D23"
+    },
+    {
+      "name": "surface1",
+      "value": "#2D2D2F"
+    },
+    {
+      "name": "surface2",
+      "value": "#3A3A3C"
+    },
+    {
+      "name": "surface_elevated",
+      "value": "#2C2C2E"
+    },
+    {
+      "name": "user_bubble",
+      "value": "#2D2D2F"
+    },
+    {
+      "name": "foreground",
+      "value": "#E5E5EA"
+    },
+    {
+      "name": "foreground_muted",
+      "value": "#98989D"
+    },
+    {
+      "name": "foreground_light",
+      "value": "#636368"
+    },
+    {
+      "name": "accent",
+      "value": "#FFFFFF"
+    },
+    {
+      "name": "accent_dark",
+      "value": "#000000"
+    },
+    {
+      "name": "accent_light",
+      "value": "#3A3A3C"
+    },
+    {
+      "name": "accent_transparent",
+      "value": "#FFFFFF12"
+    },
+    {
+      "name": "success",
+      "value": "#34D399"
+    },
+    {
+      "name": "success_light",
+      "value": "#064E3B"
+    },
+    {
+      "name": "warning",
+      "value": "#FBBF24"
+    },
+    {
+      "name": "warning_light",
+      "value": "#78350F"
+    },
+    {
+      "name": "warning_fg_dark",
+      "value": "#FDE68A"
+    },
+    {
+      "name": "error",
+      "value": "#F87171"
+    },
+    {
+      "name": "error_light",
+      "value": "#7F1D1D"
+    },
+    {
+      "name": "error_fg_dark",
+      "value": "#FCA5A5"
+    },
+    {
+      "name": "timeout_bg",
+      "value": "#374151"
+    },
+    {
+      "name": "timeout_fg",
+      "value": "#9CA3AF"
+    },
+    {
+      "name": "border",
+      "value": "#3A3A3C"
+    },
+    {
+      "name": "border_light",
+      "value": "#2D2D2F"
+    },
+    {
+      "name": "border_focus",
+      "value": "#FFFFFF"
+    },
+    {
+      "name": "overlay_dim",
+      "value": "#55000000"
+    },
+    {
+      "name": "terminal_bg",
+      "value": "#1E1E1E"
+    },
+    {
+      "name": "terminal_fg",
+      "value": "#D4D4D4"
+    },
+    {
+      "name": "onboarding_bg",
+      "value": "#1A1D23"
+    },
+    {
+      "name": "inline_code_bg",
+      "value": "#26E8E8ED"
     }
   ]
 }

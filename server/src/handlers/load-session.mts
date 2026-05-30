@@ -47,7 +47,7 @@ export async function handleLoadSession(
     shell: true,
   });
 
-  const bridgeSessionId = `acp-${Date.now()}`;
+  const bridgeSessionId = `acp-${Date.now()}-${randomUUID().slice(0, 8)}`;
 
   const sess: Partial<SessionState> = {
     ws,
@@ -99,7 +99,7 @@ export async function handleLoadSession(
           sessionId: bridgeSessionId,
           event: update.update,
         };
-        ws.send(JSON.stringify(eventPayload));
+        sess.ws?.send(JSON.stringify(eventPayload));
         bufferAgentEvent(bridgeSessionId, eventPayload);
       } catch {}
     },
@@ -111,7 +111,7 @@ export async function handleLoadSession(
           currentSess.pendingPermission = { requestId, resolve };
         }
         try {
-          ws.send(
+          sess.ws?.send(
             JSON.stringify({
               type: "permission_request",
               sessionId: bridgeSessionId,
@@ -123,7 +123,7 @@ export async function handleLoadSession(
         } catch {}
       });
     },
-    ...createAcpCallbacks({ ws, sessionId: bridgeSessionId, cwd: cwd || process.cwd(), toolCallIdMap: sess.toolCallIdMap }),
+    ...createAcpCallbacks({ sessionId: bridgeSessionId, cwd: cwd || process.cwd(), toolCallIdMap: sess.toolCallIdMap }),
   });
 
   sess.client = client;
@@ -133,7 +133,7 @@ export async function handleLoadSession(
   proc.stderr.on("data", (chunk: Buffer) => {
     console.log(`[server] stderr: ${chunk.toString().slice(0, 200)}`);
     try {
-      ws.send(
+      sess.ws?.send(
         JSON.stringify({
           type: "agent_stderr",
           sessionId: bridgeSessionId,
@@ -158,25 +158,34 @@ export async function handleLoadSession(
     await client.initialize();
 
     console.log(`[server] loading session ${targetSessionId}`);
-    await client.loadSession(targetSessionId, cwd || process.cwd());
+    const loadResult = await client.loadSession(targetSessionId, cwd || process.cwd());
     sess.acpSessionId = targetSessionId;
+
+    const models = (loadResult as any).models?.availableModels || [];
+    const modes = (loadResult as any).modes?.availableModes || [];
+    if (models.length > 0 || modes.length > 0) {
+      const mappedModels = models.map((m: any) => ({ modelId: m.modelId, name: m.name }));
+      const mappedModes = modes.map((m: any) => ({ value: m.id, name: m.name }));
+      sess.ws?.send(JSON.stringify({ type: "model_list", models: mappedModels, modes: mappedModes }));
+    }
 
     if (model) {
       await client.setSessionModel(targetSessionId, model).catch(() => {});
     }
 
-    ws.send(
+    sess.ws?.send(
       JSON.stringify({
         type: "session_started",
         sessionId: bridgeSessionId,
         agent,
         loadedSessionId: targetSessionId,
+        ...(model ? { model } : {}),
       }),
     );
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     console.log(`[server] load_session error: ${msg}`);
-    ws.send(
+    sess.ws?.send(
       JSON.stringify({
         type: "error",
         text: `load session failed: ${msg}`,

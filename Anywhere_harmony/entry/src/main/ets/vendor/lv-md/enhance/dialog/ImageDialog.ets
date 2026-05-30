@@ -83,7 +83,7 @@ export struct ImageItemView {
   // Swipe whether to switch
   @Consume isDisableSwipe: boolean;
   @Consume @Watch('onImageReset') isImageReset: boolean;
-  private context: common.UIAbilityContext = getContext() as common.UIAbilityContext;
+  private context: common.UIAbilityContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
   private imageWHRatio: number = 0;
 
   aboutToAppear(): void {

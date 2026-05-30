@@ -67,6 +67,7 @@ export async function signWithClientKey(data: string): Promise<string> {
 
 /** 生成 X25519 临时密钥对（hex 格式，用于 PFS 握手的 ephemeral key） */
 export async function generateEphemeralKeyPair(): Promise<EphemeralKeyPair> {
+  try {
   const generator: cryptoFramework.AsyKeyGenerator = cryptoFramework.createAsyKeyGenerator('X25519');
   const keyPair: cryptoFramework.KeyPair = await generator.generateKeyPair();
   const pubBlob: cryptoFramework.DataBlob = await keyPair.pubKey.getEncoded();
@@ -77,6 +78,7 @@ export async function generateEphemeralKeyPair(): Promise<EphemeralKeyPair> {
   };
   _currentEphKeyPair = ephPair;
   return _currentEphKeyPair;
+  } catch (e) { throw new Error(String(e)); }
 }
 
 /** 完成 E2EE 握手，验证服务端签名并派生 AES Key */
@@ -129,6 +131,7 @@ export async function computeEcdhSharedSecret(
   myPrivateKeyHex: string,
   theirPublicKeyHex: string,
 ): Promise<Uint8Array> {
+  try {
   const generator: cryptoFramework.AsyKeyGenerator = cryptoFramework.createAsyKeyGenerator('X25519');
   const emptyData: cryptoFramework.DataBlob = { data: new Uint8Array(0) };
   const myPrivData: cryptoFramework.DataBlob = { data: hexToBytes(myPrivateKeyHex) };
@@ -138,10 +141,12 @@ export async function computeEcdhSharedSecret(
   const keyAgreement: cryptoFramework.KeyAgreement = cryptoFramework.createKeyAgreement('X25519');
   const sharedSecret: cryptoFramework.DataBlob = await keyAgreement.generateSecret(myKeyPair.priKey, theirKeyPair.pubKey);
   return new Uint8Array(sharedSecret.data);
+  } catch (e) { throw new Error(String(e)); }
 }
 
 /** HKDF-SHA256: 从 shared secret 派生 32 字节 AES key */
 export async function hkdfExpand(secret: Uint8Array, salt: Uint8Array, info: string): Promise<Uint8Array> {
+  try {
   // Step 1: PRK = HMAC-SHA256(salt, secret)
   const mac1: cryptoFramework.Mac = cryptoFramework.createMac('SHA256');
   const keyGen1: cryptoFramework.SymKeyGenerator = cryptoFramework.createSymKeyGenerator('HMAC');
@@ -179,6 +184,7 @@ export async function hkdfExpand(secret: Uint8Array, salt: Uint8Array, info: str
   const t1: Uint8Array = new Uint8Array(t1Blob.data);
 
   return t1.subarray(0, 32);
+  } catch (e) { throw new Error(String(e)); }
 }
 
 /** AES-256-GCM 加密（异步，使用 cryptoFramework） */
@@ -187,6 +193,7 @@ export async function encryptAesGcm(
   key: Uint8Array,
   iv: Uint8Array,
 ): Promise<EncryptResult> {
+  try {
   const symKeyGenerator: cryptoFramework.SymKeyGenerator = cryptoFramework.createSymKeyGenerator('AES256');
   const keyData: cryptoFramework.DataBlob = { data: key };
   const symKey: cryptoFramework.SymKey = await symKeyGenerator.convertKey(keyData);
@@ -209,6 +216,7 @@ export async function encryptAesGcm(
   const tag: Uint8Array = combined.subarray(combined.length - tagLen);
   const encResult: EncryptResult = { ciphertext: ciphertext, iv: iv, tag: tag };
   return encResult;
+  } catch (e) { throw new Error(String(e)); }
 }
 
 /** AES-256-GCM 解密（异步，使用 cryptoFramework） */
@@ -218,6 +226,7 @@ export async function decryptAesGcm(
   iv: Uint8Array,
   tag: Uint8Array,
 ): Promise<Uint8Array> {
+  try {
   const symKeyGenerator: cryptoFramework.SymKeyGenerator = cryptoFramework.createSymKeyGenerator('AES256');
   const keyData: cryptoFramework.DataBlob = { data: key };
   const symKey: cryptoFramework.SymKey = await symKeyGenerator.convertKey(keyData);
@@ -238,6 +247,7 @@ export async function decryptAesGcm(
   const combinedData: cryptoFramework.DataBlob = { data: combined };
   const result: cryptoFramework.DataBlob = await cipher.doFinal(combinedData);
   return new Uint8Array(result.data);
+  } catch (e) { throw new Error(String(e)); }
 }
 
 // ── Private helpers: key conversion wrappers ───────────────────────
@@ -251,8 +261,10 @@ function keyPairFromPubKey(
   generator: cryptoFramework.AsyKeyGenerator,
   pubKey: cryptoFramework.DataBlob
 ): Promise<cryptoFramework.KeyPair> {
+  try {
   const emptyKey: cryptoFramework.DataBlob = { data: new Uint8Array(0) };
   return generator.convertKey(pubKey, emptyKey);
+  } catch (e) { throw new Error(String(e)); }
 }
 
 function keyPairFromPubAndPriv(
@@ -260,12 +272,15 @@ function keyPairFromPubAndPriv(
   pubKey: cryptoFramework.DataBlob,
   priKey: cryptoFramework.DataBlob
 ): Promise<cryptoFramework.KeyPair> {
+  try {
   return generator.convertKey(pubKey, priKey);
+  } catch (e) { throw new Error(String(e)); }
 }
 
 // ── Private: Software Ed25519 ──────────────────────────────────────
 
 async function generateSoftwareKey(): Promise<SoftwareKeyPair> {
+  try {
   if (_swKeyPair !== null) return _swKeyPair;
 
   const generator: cryptoFramework.AsyKeyGenerator = cryptoFramework.createAsyKeyGenerator('Ed25519');
@@ -279,9 +294,11 @@ async function generateSoftwareKey(): Promise<SoftwareKeyPair> {
   const sw: SoftwareKeyPair = { publicKeyHex: pubHex, privateKeyHex: privHex };
   _swKeyPair = sw;
   return _swKeyPair;
+  } catch (e) { throw new Error(String(e)); }
 }
 
 async function signSoftware(data: string): Promise<string> {
+  try {
   const sw: SoftwareKeyPair = await generateSoftwareKey();
   const pubBlob: cryptoFramework.DataBlob = { data: hexToBytes(sw.publicKeyHex) };
   const privBlob: cryptoFramework.DataBlob = { data: hexToBytes(sw.privateKeyHex) };
@@ -293,6 +310,7 @@ async function signSoftware(data: string): Promise<string> {
   const inputData: cryptoFramework.DataBlob = { data: stringToUint8Array(data) };
   const sig: cryptoFramework.DataBlob = await signer.sign(inputData);
   return bytesToHex(new Uint8Array(sig.data));
+  } catch (e) { throw new Error(String(e)); }
 }
 
 // ── Utilities ──────────────────────────────────────────────────────
