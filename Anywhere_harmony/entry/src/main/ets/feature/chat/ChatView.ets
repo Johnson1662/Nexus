@@ -1,5 +1,6 @@
 import { Colors, FontSize, Spacing, Radius, Duration } from '../../constants/DesignTokens';
 import { ChatStore, PendingPermission, PermissionOption } from '../../common/model/ChatState';
+import { CustomIcon } from '../../common/ui/CustomIcon';
 import { WorkspaceStore } from '../../common/model/WorkspaceInfo';
 import { WorkspaceInfo } from '../../common/model/WorkspaceInfo';
 import { StorageService, saveWorkspaces } from '../../services/StorageService';
@@ -324,8 +325,11 @@ export struct ChatView {
       .layoutWeight(1)
       .margin({ left: Spacing.sm })
 
-      SymbolGlyph($r('sys.symbol.plus'))
-        .fontColor([Colors.foreground]).fontSize(24).margin({ right: Spacing.md })
+      CustomIcon({
+        name: 'new_chat',
+        iconSize: 24,
+        color: Colors.foreground
+      }).margin({ right: Spacing.md })
         .accessibilityText('New chat')
         .onClick(() => { if (this.onNewSession) this.onNewSession() })
 

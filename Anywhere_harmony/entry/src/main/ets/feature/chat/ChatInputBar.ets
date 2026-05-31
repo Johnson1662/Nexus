@@ -1,5 +1,6 @@
 import { Colors, FontSize, Spacing, Radius, Shadow, Duration } from '../../constants/DesignTokens';
 import { ChatStore, AvailableCommand } from '../../common/model/ChatState';
+import { CustomIcon } from '../../common/ui/CustomIcon';
 import { picker } from '@kit.CoreFileKit';
 import { fileIo } from '@kit.CoreFileKit';
 import { util } from '@kit.ArkTS';
@@ -280,9 +281,11 @@ export struct ChatInputBar {
           Blank()
 
           if (this.showCancel) {
-            SymbolGlyph($r('sys.symbol.smallcircle_filled_circle'))
-              .fontColor([Colors.error])
-              .fontSize(28)
+            CustomIcon({
+              name: 'stop',
+              iconSize: 28,
+              color: Colors.error
+            })
               .accessibilityText('Cancel generation')
               .onClick(() => { if (this.onCancel) this.onCancel() })
               .transition(TransitionEffect.OPACITY.combine(TransitionEffect.scale({ x: 0.5, y: 0.5 })))

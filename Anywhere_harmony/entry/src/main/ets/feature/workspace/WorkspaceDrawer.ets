@@ -122,7 +122,7 @@ export struct WorkspaceDrawer {
 
         if (this.onSettings) {
           Row() {
-            SymbolGlyph($r('sys.symbol.ellipsis_message_1'))
+            SymbolGlyph($r('sys.symbol.gearshape'))
               .fontSize(22)
               .fontColor([Colors.foreground])
               .margin({ right: Spacing.md })

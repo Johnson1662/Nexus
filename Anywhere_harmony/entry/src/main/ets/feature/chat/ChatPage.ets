@@ -1,5 +1,6 @@
 import { Colors, FontSize, Spacing, Radius, Duration } from '../../constants/DesignTokens';
 import { ChatStore } from '../../common/model/ChatState';
+import { CustomIcon } from '../../common/ui/CustomIcon';
 import { MessageData } from '../../common/model/MessageData';
 import { MessageCard } from '../../common/ui/MessageCard';
 import { ThinkingSection } from '../../common/ui/ThinkingSection';
@@ -88,8 +89,11 @@ export struct ChatPage {
     Column() {
       if (ChatStore.reconnectPhase.length > 0) {
         Row() {
-          SymbolGlyph($r('sys.symbol.xmark_circle'))
-            .fontSize(14).fontColor([Colors.warning]).margin({ right: Spacing.sm })
+          CustomIcon({
+            name: 'warning',
+            iconSize: 14,
+            color: Colors.warning
+          }).margin({ right: Spacing.sm })
           Text(this.getReconnectBannerText())
             .fontSize(FontSize.sm).fontColor(Colors.warningFgDark).fontWeight(FontWeight.Medium)
             .layoutWeight(1)

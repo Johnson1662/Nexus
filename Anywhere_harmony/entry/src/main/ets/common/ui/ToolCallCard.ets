@@ -1,5 +1,5 @@
 import { Colors, FontSize, Spacing, Duration, Radius } from '../../constants/DesignTokens';
-
+import { CustomIcon } from './CustomIcon';
 @Component
 export struct ToolCallCard {
   @Prop name: string = '';
@@ -33,10 +33,9 @@ export struct ToolCallCard {
     return formatted.charAt(0).toUpperCase() + formatted.slice(1);
   }
 
-  getIconResource(): Resource {
+  getIconResource(): Resource | string {
     const n = this.name.toLowerCase();
     
-    // Web / Browser / Fetch / Search
     if (n.includes('web') || n.includes('fetch') || n.includes('browser') || n.includes('url') ||
         n.includes('search') || n.includes('find') || n.includes('glob') || n.includes('grep')) {
       return $r('sys.symbol.magnifyingglass');
@@ -48,9 +47,8 @@ export struct ToolCallCard {
       return $r('sys.symbol.gearshape');
     }
     
-    // Edit / Write / Modify
     if (n.includes('edit') || n.includes('write') || n.includes('modify')) {
-      return $r('sys.symbol.pencil_waveform');
+      return 'edit';
     }
     
     // Read / View
@@ -74,7 +72,11 @@ export struct ToolCallCard {
     }
     
     // Fallback
-    return $r('sys.symbol.paperclip'); 
+    return 'tool';
+  }
+
+  isCustomIcon(icon: Resource | string): boolean {
+    return typeof icon === 'string';
   }
 
   getPathLabel(): string {
@@ -252,10 +254,19 @@ export struct ToolCallCard {
   build() {
     Column() {
       Row() {
-        SymbolGlyph(this.getIconResource())
-          .fontSize(FontSize.md)
-          .fontColor([Colors.foregroundMuted])
-          .margin({ right: Spacing.sm })
+        if (this.isCustomIcon(this.getIconResource())) {
+          CustomIcon({
+            name: this.getIconResource() as string,
+            iconSize: 14,
+            color: Colors.foregroundMuted
+          }).margin({ right: Spacing.sm })
+        } else {
+          SymbolGlyph(this.getIconResource() as Resource)
+            .fontSize(FontSize.md)
+            .fontColor([Colors.foregroundMuted])
+            .margin({ right: Spacing.sm })
+        }
+
 
         Text(this.getFormattedName())
           .fontSize(FontSize.sm)
@@ -278,14 +289,17 @@ export struct ToolCallCard {
         }
 
         if (this.status === 'in_progress') {
-          SymbolGlyph($r('sys.symbol.clock'))
-            .fontSize(FontSize.sm)
-            .fontColor([Colors.foregroundMuted])
+          CustomIcon({
+            name: 'progress',
+            iconSize: 14,
+            color: Colors.foregroundMuted
+          })
             .opacity(this.breathFlag ? 0.3 : 1.0)
+            .rotate({ angle: this.breathFlag ? 360 : 0 })
             .animation({
-              duration: 800,
-              curve: Curve.EaseInOut,
-              playMode: PlayMode.Alternate,
+              duration: 1500,
+              curve: Curve.Linear,
+              playMode: PlayMode.Normal,
               iterations: -1
             })
         } else if (this.status === 'completed' || this.status === 'success') {

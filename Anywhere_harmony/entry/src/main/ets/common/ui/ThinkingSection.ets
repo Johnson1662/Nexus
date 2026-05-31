@@ -1,5 +1,5 @@
 import { Colors, FontSize, Spacing } from '../../constants/DesignTokens';
-
+import { CustomIcon } from './CustomIcon';
 @Component
 export struct ThinkingSection {
   @Prop thinking: string = '';
@@ -25,10 +25,11 @@ export struct ThinkingSection {
     Column() {
       // Header
       Row() {
-        SymbolGlyph(this.isStreaming ? $r('sys.symbol.lightbulb') : $r('sys.symbol.checkmark'))
-          .fontSize(FontSize.md)
-          .fontColor([Colors.foregroundMuted])
-          .margin({ right: Spacing.sm })
+        CustomIcon({
+          name: this.isStreaming ? 'thinking' : 'thinking_done',
+          iconSize: 16,
+          color: Colors.foregroundMuted
+        }).margin({ right: Spacing.sm })
 
         if (this.isStreaming) {
           Text($r('app.string.thinking_label'))
