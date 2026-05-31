@@ -1,6 +1,6 @@
 /**
- * CustomIcon — 语义精确的自定义矢量图标。
- * Path 坐标根据实际 iconSize 动态计算，原生大小渲染。
+ * CustomIcon — 基于 ArkUI 原生 Shape 子组件的自定义矢量图标。
+ * 使用 Rect/Circle/Polygon 等原生组件，天然适配任意尺寸。
  */
 import { Colors } from '../../constants/DesignTokens';
 
@@ -11,46 +11,176 @@ export struct CustomIcon {
   @Prop color: ResourceColor = Colors.foreground;
 
   build() {
-    Path()
-      .width(this.iconSize)
-      .height(this.iconSize)
-      .commands(this.getCommands())
-      .fill(this.color)
-      .stroke(Color.Transparent)
+    Stack() {
+      if (this.name === 'stop' || this.name === 'cancel') {
+        // 停止：实心方块，居中约 60% 大小
+        Rect()
+          .width(this.iconSize * 0.55)
+          .height(this.iconSize * 0.55)
+          .fill(this.color)
+          .radius(this.iconSize * 0.08)
+      } else if (this.name === 'warning' || this.name === 'alert') {
+        // 警告：三角 + 感叹号
+        Column() {
+          Polygon()
+            .points(this.trianglePoints())
+            .fill(this.color)
+            .width(this.iconSize * 0.85)
+            .height(this.iconSize * 0.62)
+          // 感叹号竖线
+          Rect()
+            .width(this.iconSize * 0.08)
+            .height(this.iconSize * 0.2)
+            .fill(this.color)
+            .margin({ top: this.iconSize * 0.02 })
+          // 感叹号圆点
+          Circle()
+            .width(this.iconSize * 0.08)
+            .height(this.iconSize * 0.08)
+            .fill(this.color)
+            .margin({ top: this.iconSize * 0.04 })
+        }
+        .alignItems(HorizontalAlign.Center)
+        .justifyContent(FlexAlign.Center)
+      } else if (this.name === 'edit' || this.name === 'pencil') {
+        // 铅笔：斜矩形条 + 三角形笔尖
+        Row() {
+          Rect()
+            .width(this.iconSize * 0.1)
+            .height(this.iconSize * 0.7)
+            .fill(this.color)
+            .borderRadius(this.iconSize * 0.02)
+            .rotate({ angle: -30 })
+          Polygon()
+            .points(this.pencilTipPoints())
+            .fill(this.color)
+            .width(this.iconSize * 0.22)
+            .height(this.iconSize * 0.35)
+            .margin({ left: -this.iconSize * 0.02 })
+            .rotate({ angle: -30 })
+        }
+        .alignItems(VerticalAlign.Center)
+        .justifyContent(FlexAlign.Center)
+      } else if (this.name === 'thinking') {
+        // 思考中：三个小圆点 (类似于省略号但垂直错位)
+        Row({ space: this.iconSize * 0.1 }) {
+          Circle().width(this.iconSize * 0.18).height(this.iconSize * 0.18).fill(this.color)
+            .margin({ top: -this.iconSize * 0.1 })
+          Circle().width(this.iconSize * 0.18).height(this.iconSize * 0.18).fill(this.color)
+          Circle().width(this.iconSize * 0.18).height(this.iconSize * 0.18).fill(this.color)
+            .margin({ top: -this.iconSize * 0.15 })
+        }
+        .alignItems(VerticalAlign.Center)
+        .justifyContent(FlexAlign.Center)
+      } else if (this.name === 'thinking_done') {
+        // 思考完成：对勾
+        Polygon()
+          .points(this.checkmarkPoints())
+          .fill(this.color)
+          .width(this.iconSize * 0.6)
+          .height(this.iconSize * 0.45)
+      } else if (this.name === 'tool' || this.name === 'wrench') {
+        // 工具：大圆 + 矩形手柄
+        Column() {
+          Circle()
+            .width(this.iconSize * 0.5)
+            .height(this.iconSize * 0.5)
+            .fill(this.color)
+          Rect()
+            .width(this.iconSize * 0.15)
+            .height(this.iconSize * 0.35)
+            .fill(this.color)
+            .margin({ top: -this.iconSize * 0.02 })
+            .borderRadius(this.iconSize * 0.03)
+        }
+        .alignItems(HorizontalAlign.Center)
+        .justifyContent(FlexAlign.Center)
+      } else if (this.name === 'progress' || this.name === 'spinner') {
+        // 旋转进度：圆弧 (用部分圆环模拟)
+        Circle()
+          .width(this.iconSize * 0.65)
+          .height(this.iconSize * 0.65)
+          .fill(Color.Transparent)
+          .stroke(this.color)
+          .strokeWidth(this.iconSize * 0.08)
+          .strokeDashArray([this.iconSize * 1.0, this.iconSize * 2.0])
+      } else if (this.name === 'new_chat' || this.name === 'compose') {
+        // 新建会话：圆角矩形气泡 + 加号
+        Stack() {
+          Rect()
+            .width(this.iconSize * 0.8)
+            .height(this.iconSize * 0.65)
+            .fill(this.color)
+            .radius(this.iconSize * 0.15)
+          // 小三角尾巴
+          Polygon()
+            .points(this.bubbleTailPoints())
+            .fill(this.color)
+            .width(this.iconSize * 0.2)
+            .height(this.iconSize * 0.2)
+            .margin({ left: -this.iconSize * 0.3, top: this.iconSize * 0.5 })
+          // 加号
+          Column() {
+            Rect().width(this.iconSize * 0.28).height(this.iconSize * 0.06)
+              .fill('#FFFFFF').borderRadius(this.iconSize * 0.03)
+            Rect().width(this.iconSize * 0.06).height(this.iconSize * 0.28)
+              .fill('#FFFFFF').borderRadius(this.iconSize * 0.03)
+              .margin({ top: -this.iconSize * 0.06 })
+          }
+          .alignItems(HorizontalAlign.Center)
+          .justifyContent(FlexAlign.Center)
+          .margin({ top: -this.iconSize * 0.02 })
+        }
+        .alignContent(Alignment.Center)
+      } else {
+        // 默认：圆点
+        Circle()
+          .width(this.iconSize * 0.5)
+          .height(this.iconSize * 0.5)
+          .fill(this.color)
+      }
+    }
+    .width(this.iconSize)
+    .height(this.iconSize)
+    .alignContent(Alignment.Center)
   }
 
-  private sx(v: number): number {
-    return Math.round(v * this.iconSize / 24);
+  private trianglePoints(): Array<[number, number]> {
+    const s: number = this.iconSize;
+    return [
+      [s * 0.43, 0],
+      [s * 0.85, s * 0.62],
+      [0, s * 0.62]
+    ];
   }
 
-  private getCommands(): string {
-    const n: string = this.name.toLowerCase();
-    const S: (v: number) => number = (v: number): number => { return this.sx(v); };
-    if (n === 'stop' || n === 'cancel') {
-      return `M${S(7)} ${S(7)}h${S(10)}v${S(10)}H${S(7)}z`;
-    }
-    if (n === 'new_chat' || n === 'compose') {
-      return `M${S(20)} ${S(2)}H${S(4)}c-${S(1.1)} 0-${S(2)} ${S(0.9)}-${S(2)} ${S(2)}v${S(18)}l${S(4)}-${S(4)}h${S(14)}c${S(1.1)} 0 ${S(2)}-${S(0.9)} ${S(2)}-${S(2)}V${S(4)}c0-${S(1.1)}-${S(0.9)}-${S(2)}-${S(2)}-${S(2)}zm-${S(4)} ${S(10)}h-${S(3)}v${S(3)}h-${S(2)}v-${S(3)}H${S(8)}v-${S(2)}h${S(3)}V${S(7)}h${S(2)}v${S(3)}h${S(3)}v${S(2)}z`;
-    }
-    if (n === 'thinking') {
-      return `M${S(12)} ${S(3)}C${S(9.5)} ${S(3)} ${S(7.3)} ${S(4.9)} ${S(6.9)} ${S(7.3)}C${S(5.2)} ${S(7.8)} ${S(4)} ${S(9.4)} ${S(4)} ${S(11.3)}c0 ${S(2.2)} ${S(1.8)} ${S(4)} ${S(4)} ${S(4)}h${S(8)}c${S(2.2)} 0 ${S(4)}-${S(1.8)} ${S(4)}-${S(4)} 0-${S(1.9)}-${S(1.2)}-${S(3.5)}-${S(2.9)}-${S(4.1)}C${S(16.7)} ${S(4.9)} ${S(14.5)} ${S(3)} ${S(12)} ${S(3)}zm0 ${S(2)}c${S(1.7)} 0 ${S(3)} ${S(1.3)} ${S(3.1)} ${S(3)}h-${S(0.1)}v${S(1)}h${S(1)}c${S(0.1)} ${S(0.3)} ${S(0.1)} ${S(0.7)} ${S(0.1)} ${S(1)} 0 ${S(1.1)}-${S(0.9)} ${S(2)}-${S(2)} ${S(2)}h-${S(4.2)}c-${S(1.1)} 0-${S(2)}-${S(0.9)}-${S(2)}-${S(2)} 0-${S(0.3)} 0-${S(0.7)} ${S(0.1)}-${S(1)}h${S(1)}v-${S(1)}h-${S(0.1)}c0-${S(1.7)} ${S(1.3)}-${S(3)} ${S(3.1)}-${S(3)}z`;
-    }
-    if (n === 'thinking_done') {
-      return `M${S(12)} ${S(2)}C${S(9.2)} ${S(2)} ${S(6.8)} ${S(4)} ${S(6.3)} ${S(6.7)}C${S(4.5)} ${S(7.3)} ${S(3)} ${S(9.1)} ${S(3)} ${S(11.3)}c0 ${S(2.5)} ${S(2)} ${S(4.5)} ${S(4.5)} ${S(4.5)}h${S(1.3)}l${S(0.7)} ${S(1.4)} ${S(2.1)}-${S(4.2)} ${S(1.6)} ${S(3.2)} ${S(0.9)}-${S(1.8)}H${S(16)}c${S(2.5)} 0 ${S(4.5)}-${S(2)} ${S(4.5)}-${S(4.5)} 0-${S(2.1)}-${S(1.3)}-${S(3.9)}-${S(3.2)}-${S(4.5)}C${S(16.8)} ${S(4)} ${S(14.5)} ${S(2)} ${S(12)} ${S(2)}zm-${S(2.5)} ${S(9.5)}L${S(7)} ${S(9)}l-${S(1.4)} ${S(1.4)} ${S(3.9)} ${S(3.9)} ${S(1.4)}-${S(1.4)}-${S(1.4)}-${S(1.4)}zm${S(9)} ${S(3.5)}l-${S(1.8)} ${S(1.8)}-${S(1)}-${S(1)}-${S(1.4)} ${S(1.4)} ${S(2.4)} ${S(2.4)} ${S(3.2)}-${S(3.2)}-${S(1.4)}-${S(1.4)}z`;
-    }
-    if (n === 'edit' || n === 'pencil') {
-      return `M${S(3)} ${S(17.25)}V${S(21)}h${S(3.75)}L${S(17.81)} ${S(9.94)}l-${S(3.75)}-${S(3.75)}L${S(3)} ${S(17.25)}zM${S(20.71)} ${S(7.04)}c${S(0.39)}-${S(0.39)} ${S(0.39)}-${S(1.02)} 0-${S(1.41)}l-${S(2.34)}-${S(2.34)}c-${S(0.39)}-${S(0.39)}-${S(1.02)}-${S(0.39)}-${S(1.41)} 0l-${S(1.83)} ${S(1.83)} ${S(3.75)} ${S(3.75)} ${S(1.83)}-${S(1.83)}z`;
-    }
-    if (n === 'tool' || n === 'wrench') {
-      return `M${S(22.7)} ${S(19)}l-${S(9.1)}-${S(9.1)}c${S(0.9)}-${S(2.3)} ${S(0.4)}-${S(5)}-${S(1.5)}-${S(6.9)}-${S(2)}-${S(2)}-${S(5)}-${S(2.4)}-${S(7.4)}-${S(1.3)}L${S(9)} ${S(6)} ${S(6)} ${S(9)} ${S(1.6)} ${S(4.7)}C${S(0.4)} ${S(7.1)} ${S(0.9)} ${S(10.1)} ${S(2.9)} ${S(12.1)}c${S(1.9)} ${S(1.9)} ${S(4.6)} ${S(2.4)} ${S(6.9)} ${S(1.5)}l${S(9.1)} ${S(9.1)}c${S(0.4)} ${S(0.4)} ${S(1)} ${S(0.4)} ${S(1.4)} 0l${S(2.3)}-${S(2.3)}c${S(0.5)}-${S(0.4)} ${S(0.5)}-${S(1.1)} ${S(0.1)}-${S(1.4)}z`;
-    }
-    if (n === 'progress' || n === 'spinner') {
-      return `M${S(12)} ${S(2)}C${S(6.48)} ${S(2)} ${S(2)} ${S(6.48)} ${S(2)} ${S(12)}s${S(4.48)} ${S(10)} ${S(12)} ${S(10)} ${S(12)}-${S(4.48)} ${S(12)}-${S(10)}c0-${S(1.1)}-${S(0.9)}-${S(2)}-${S(2)}-${S(2)}s-${S(2)} ${S(0.9)}-${S(2)} ${S(2)}c0 ${S(4.42)}-${S(3.58)} ${S(8)}-${S(8)} ${S(8)}s-${S(8)}-${S(3.58)}-${S(8)}-${S(8)} ${S(3.58)}-${S(8)} ${S(8)}-${S(8)}c${S(1.1)} 0 ${S(2)}-${S(0.9)} ${S(2)}-${S(2)}s-${S(0.9)}-${S(2)}-${S(2)}-${S(2)}z`;
-    }
-    if (n === 'warning' || n === 'alert') {
-      return `M${S(1)} ${S(21)}h${S(22)}L${S(12)} ${S(2)} ${S(1)} ${S(21)}zm${S(12)}-${S(3)}h-${S(2)}v-${S(2)}h${S(2)}v${S(2)}zm0-${S(4)}h-${S(2)}v-${S(4)}h${S(2)}v${S(4)}z`;
-    }
+  private checkmarkPoints(): Array<[number, number]> {
+    const s: number = this.iconSize;
+    return [
+      [0, s * 0.25],
+      [s * 0.15, s * 0.1],
+      [s * 0.4, s * 0.45],
+      [s * 0.6, 0],
+      [s * 0.45, s * 0.4],
+      [s * 0.35, s * 0.35]
+    ];
+  }
 
-    return `M${S(12)} ${S(2)}C${S(6.48)} ${S(2)} ${S(2)} ${S(6.48)} ${S(2)} ${S(12)}s${S(4.48)} ${S(10)} ${S(12)} ${S(10)} ${S(12)}-${S(4.48)} ${S(12)}-${S(10)}S${S(17.52)} ${S(2)} ${S(12)} ${S(2)}z`;
+  private pencilTipPoints(): Array<[number, number]> {
+    const s: number = this.iconSize;
+    return [
+      [0, 0],
+      [s * 0.22, s * 0.17],
+      [0, s * 0.35]
+    ];
+  }
+
+  private bubbleTailPoints(): Array<[number, number]> {
+    const s: number = this.iconSize;
+    return [
+      [0, 0],
+      [s * 0.2, 0],
+      [0, s * 0.2]
+    ];
   }
 }
