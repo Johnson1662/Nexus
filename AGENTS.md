@@ -146,7 +146,37 @@ GCloud 转发器（`ws_forwarder.py`，使用 Python `websockets` v16.0）在转
 
 参考：https://developer.huawei.com/consumer/cn/design/harmonyos-symbol/
 
-**如果系统图标库中不存在我们需要的图标，就用svg自己写一个，或者去别的地方找现成的**
+### 自定义图标 — SVG 文件 + Image.fillColor
+
+当系统符号库没有语义匹配的图标时，用 SVG 文件代替。**严禁使用 `Path().commands()` 绘制自定义图标** — ArkUI `Path` 的坐标是绝对 px，无 `viewBox` 缩放机制，任何尺寸的坐标都会在高分屏上变成极小像素点。
+
+**正确做法**：
+1. 创建 `<svg viewBox="0 0 24 24">` 文件，放到 `entry/src/main/resources/base/media/` 目录（例如 `ic_stop.svg`）
+2. 用 `Image($r('app.media.ic_xxx')).fillColor(color)` 加载 — ArkUI `Image` 组件原生支持 SVG viewBox 缩放
+3. 通过 `CustomIcon` 组件统一调用：`CustomIcon({ name: 'stop', iconSize: 28, color: Colors.error })`
+
+```ets
+// CustomIcon.ets — 加载 resources/base/media/ 下的 SVG
+@Component
+export struct CustomIcon {
+  @Prop name: string = '';
+  @Prop iconSize: number = 24;
+  @Prop color: ResourceColor = Colors.foreground;
+  build() {
+    Image(this.getResource())
+      .width(this.iconSize).height(this.iconSize)
+      .fillColor(this.color).objectFit(ImageFit.Contain)
+  }
+  private getResource(): Resource {
+    // 映射 name → app.media.ic_xxx
+    if (name === 'stop') return $r('app.media.ic_stop');
+    // ...
+  }
+}
+```
+
+现有的自定义 SVG 图标：`ic_stop`、`ic_warning`、`ic_edit`、`ic_wrench`、`ic_progress`、`ic_new_chat`、`ic_thinking`、`ic_check`。
+
 
 ### 导航
 - `Navigation(NavPathStack)` + `.navDestination(this.PagesMap)` — `PagesMap` 是 `@Builder` 引用，不是 lambda
