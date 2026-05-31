@@ -1,4 +1,5 @@
 import { Colors, FontSize, Spacing } from '../../constants/DesignTokens';
+import { CustomIcon } from './CustomIcon';
 
 @Component
 export struct ThinkingSection {
@@ -25,10 +26,11 @@ export struct ThinkingSection {
     Column() {
       // Header
       Row() {
-        SymbolGlyph(this.isStreaming ? $r('sys.symbol.lightbulb') : $r('sys.symbol.checkmark'))
-          .fontSize(FontSize.md)
-          .fontColor([Colors.foregroundMuted])
-          .margin({ right: Spacing.sm })
+        CustomIcon({
+          name: this.isStreaming ? 'lightbulb' : 'checkmark',
+          iconSize: 16,
+          color: Colors.foregroundMuted
+        }).margin({ right: Spacing.sm })
 
         if (this.isStreaming) {
           Text($r('app.string.thinking_label'))
@@ -44,9 +46,11 @@ export struct ThinkingSection {
 
         Blank()
 
-        SymbolGlyph($r('sys.symbol.chevron_down'))
-          .fontSize(FontSize.md)
-          .fontColor([Colors.foregroundMuted])
+        CustomIcon({
+          name: 'chevron_down',
+          iconSize: 16,
+          color: Colors.foregroundMuted
+        })
           .accessibilityText(this.expanded ? 'Collapse thinking' : 'Expand thinking')
           .rotate({ z: 1, angle: this.expanded ? 0 : -90 })
           .animation({ duration: 200, curve: Curve.EaseInOut })

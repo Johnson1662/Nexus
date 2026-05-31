@@ -1,5 +1,6 @@
 import { Colors, FontSize, Spacing, Radius, Shadow, Duration } from '../../constants/DesignTokens';
 import { ChatStore, AvailableCommand } from '../../common/model/ChatState';
+import { CustomIcon } from '../../common/ui/CustomIcon';
 import { picker } from '@kit.CoreFileKit';
 import { fileIo } from '@kit.CoreFileKit';
 import { util } from '@kit.ArkTS';
@@ -211,8 +212,11 @@ export struct ChatInputBar {
               .width(28).height(28).borderRadius(Radius.sm)
               .objectFit(ImageFit.Cover).margin({ right: Spacing.xs })
           } else {
-            SymbolGlyph($r('sys.symbol.paperclip'))
-              .fontSize(14).fontColor([Colors.accent])
+            CustomIcon({
+              name: 'paperclip',
+              iconSize: 14,
+              color: Colors.accent
+            })
               .margin({ right: Spacing.xs })
           }
           Column() {
@@ -232,9 +236,11 @@ export struct ChatInputBar {
           }
           .layoutWeight(1).alignItems(HorizontalAlign.Start)
           .margin({ left: Spacing.xs, right: Spacing.xs })
-
-          SymbolGlyph($r('sys.symbol.xmark'))
-            .fontSize(14).fontColor([Colors.foregroundMuted])
+          CustomIcon({
+            name: 'close',
+            iconSize: 14,
+            color: Colors.foregroundMuted
+          })
             .onClick(() => { this.clearPendingFile() })
         }
         .width('100%')
@@ -268,10 +274,11 @@ export struct ChatInputBar {
 
         Row() {
           Row({ space: Spacing.sm }) {
-            SymbolGlyph($r('sys.symbol.paperclip'))
-              .fontSize(22)
-              .fontColor([this.disabled ? Colors.border : Colors.foregroundMuted])
-              .enabled(!this.disabled)
+            CustomIcon({
+              name: 'paperclip',
+              iconSize: 22,
+              color: this.disabled ? Colors.border : Colors.foregroundMuted
+            })
               .onClick(() => { if (!this.disabled) this.pickFile() })
               .animation({ duration: Duration.fast, curve: Curve.EaseOut })
           }
@@ -280,25 +287,31 @@ export struct ChatInputBar {
           Blank()
 
           if (this.showCancel) {
-            SymbolGlyph($r('sys.symbol.smallcircle_filled_circle'))
-              .fontColor([Colors.error])
-              .fontSize(28)
+            CustomIcon({
+              name: 'close',
+              iconSize: 28,
+              color: Colors.error
+            })
               .accessibilityText('Cancel generation')
               .onClick(() => { if (this.onCancel) this.onCancel() })
               .transition(TransitionEffect.OPACITY.combine(TransitionEffect.scale({ x: 0.5, y: 0.5 })))
               .animation({ duration: Duration.fast, curve: Curve.EaseOut })
           } else if (this.text.length > 0 || this.pendingFileName.length > 0) {
-            SymbolGlyph($r('sys.symbol.arrow_up_circle_fill'))
-              .fontColor([Colors.foreground])
-              .fontSize(28)
+            CustomIcon({
+              name: 'send',
+              iconSize: 28,
+              color: Colors.foreground
+            })
               .accessibilityText('Send message')
               .onClick(() => { this.doSend() })
               .transition(TransitionEffect.OPACITY.combine(TransitionEffect.scale({ x: 0.5, y: 0.5 })))
               .animation({ duration: Duration.fast, curve: Curve.EaseOut })
           } else {
-            SymbolGlyph($r('sys.symbol.arrow_up_circle_fill'))
-              .fontColor([Colors.borderLight])
-              .fontSize(28)
+            CustomIcon({
+              name: 'send',
+              iconSize: 28,
+              color: Colors.borderLight
+            })
               .accessibilityText('Send message')
               .transition(TransitionEffect.OPACITY.combine(TransitionEffect.scale({ x: 0.5, y: 0.5 })))
               .animation({ duration: Duration.fast, curve: Curve.EaseOut })

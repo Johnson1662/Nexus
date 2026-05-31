@@ -1,5 +1,6 @@
 import { Colors, FontSize, Spacing, Radius, Duration } from '../../constants/DesignTokens';
 import { HostStore, DeviceEntry } from '../../common/model/WorkspaceInfo';
+import { CustomIcon } from '../../common/ui/CustomIcon';
 import { ChatStore } from '../../common/model/ChatState';
 import { saveHosts } from '../../services/StorageService';
 
@@ -36,9 +37,11 @@ export struct HostManagePage {
             ForEach(HostStore.devices, (device: DeviceEntry, index: number) => {
               ListItem() {
                 Row() {
-                  SymbolGlyph($r('sys.symbol.ohos_wifi'))
-                    .fontSize(20)
-                    .fontColor([Colors.foregroundMuted])
+                  CustomIcon({
+                    name: 'wifi',
+                    iconSize: 20,
+                    color: Colors.foregroundMuted
+                  })
                     .margin({ right: Spacing.md })
 
                   Column() {
@@ -54,8 +57,11 @@ export struct HostManagePage {
                   .layoutWeight(1)
 
                   if (ChatStore.connected) {
-                    SymbolGlyph($r('sys.symbol.checkmark'))
-                      .fontSize(16).fontColor([Colors.accent])
+                    CustomIcon({
+                      name: 'checkmark',
+                      iconSize: 16,
+                      color: Colors.accent
+                    })
                       .margin({ right: Spacing.sm })
                     Text('切换')
                       .fontSize(FontSize.xs).fontColor(Colors.accent)
