@@ -13,9 +13,22 @@ import { PhoneEncryptedChannel } from './PhoneEncryptedChannel';
 
 import { ModelItem, ModeItem } from '../model/ChatState';
 
+function repairRelayJson(raw: string): string {
+  let trimmed = raw.trim();
+  if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+    if (trimmed.indexOf('"') < 0 && trimmed.indexOf('\'') < 0) {
+      // Repaired missing quotes in key-value pairs (e.g. {type:heartbeat,ts:12345} -> {"type":"heartbeat","ts":"12345"})
+      let repaired = trimmed
+        .replace(/([{,])\s*([a-zA-Z0-9_]+)\s*:/g, '$1"$2":') 
+        .replace(/:\s*([a-zA-Z0-9_\-\.]+)\s*([,}])/g, ':"$1"$2');
+      return repaired;
+    }
+  }
+  return raw;
+}
+
 const DOMAIN: number = 0x0000;
 const TAG: string = 'WSClient';
-
 export type StateChangeCallback = (connected: boolean, detail: string) => void;
 export type ModelListCallback = (models: ModelItem[], modes: ModeItem[]) => void;
 export type SessionListCallback = (sessions: ServerSession[]) => void;
@@ -47,6 +60,7 @@ export class WSClient {
   // Heartbeat state (Phase 2b)
   private lastHeartbeatReceived: number = 0;
   private heartbeatWatchdog: number | null = null;
+  private heartbeatSender: number | null = null;
   private readonly HEARTBEAT_WATCHDOG_MS: number = 45_000;  // 45s no heartbeat → disconnect
 
   connect(url: string): void {
@@ -507,12 +521,25 @@ export class WSClient {
         this.scheduleReconnect();
       }
     }, 15_000);
+
+    // Active heartbeat sender (every 15s) - keep the connection alive
+    this.heartbeatSender = setInterval(() => {
+      if (ChatStore.connected) {
+        let hbPayload: Record<string, Object> = {};
+        hbPayload['ts'] = Date.now();
+        this.sendControl('heartbeat', hbPayload);
+      }
+    }, 15_000);
   }
 
   private stopHeartbeatWatchdog(): void {
     if (this.heartbeatWatchdog !== null) {
       clearInterval(this.heartbeatWatchdog);
       this.heartbeatWatchdog = null;
+    }
+    if (this.heartbeatSender !== null) {
+      clearInterval(this.heartbeatSender);
+      this.heartbeatSender = null;
     }
   }
 
@@ -526,8 +553,12 @@ export class WSClient {
 
 
   private handleMessage(raw: string): void {
+    raw = repairRelayJson(raw);
+
     // Intercept heartbeat control messages before E2EE handling
-    if (raw.indexOf('"heartbeat"') >= 0 && raw.indexOf('"ts"') >= 0) {
+    let isHeartbeat = (raw.indexOf('"heartbeat"') >= 0 && raw.indexOf('"ts"') >= 0) ||
+                      (raw.indexOf('type:heartbeat') >= 0 && raw.indexOf('ts:') >= 0);
+    if (isHeartbeat) {
       try {
         const hb = JSON.parse(raw) as Record<string, Object>;
         if (hb['type'] === 'heartbeat') {
@@ -538,10 +569,13 @@ export class WSClient {
     }
 
     // E2EE handshake messages are intercepted at control level
-    if (raw.indexOf('"e2ee_hello"') >= 0 || raw.indexOf('"e2ee_ready"') >= 0) {
+    let isE2EE = (raw.indexOf('"e2ee_hello"') >= 0 || raw.indexOf('"e2ee_ready"') >= 0) ||
+                 (raw.indexOf('type:e2ee_hello') >= 0 || raw.indexOf('type:e2ee_ready') >= 0);
+    if (isE2EE) {
       this.handleE2EEMessage(raw);
       return;
     }
+
 
     let msg: ServerMessage;
     try {

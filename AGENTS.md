@@ -136,7 +136,7 @@ GCloud 转发器（`ws_forwarder.py`，使用 Python `websockets` v16.0）在转
 
 ### 图标 — SymbolGlyph（关键）
 
-**始终**使用 `SymbolGlyph($r('sys.symbol.xxx'))`，禁用 SVG/Unicode 字符。
+尽量使用 `SymbolGlyph($r('sys.symbol.xxx'))`。
 
 已验证可用的 symbol 名：`ohos_trash`、`ohos_wifi`、`ohos_folder_badge_plus`、`ohos_folder`、`checkmark`、`circle`、`chevron_down`、`xmark`、`xmark_circle`、`ellipsis_message_1`、`arrow_up_circle_fill`、`paperclip`、`mic`、`waveform`、`clock`、`doc`、`AI`、`square`
 
@@ -145,6 +145,8 @@ GCloud 转发器（`ws_forwarder.py`，使用 Python `websockets` v16.0）在转
 `fontColor` 必须是数组：`fontColor([Colors.accent])`，不是 `fontColor(Colors.accent)`。
 
 参考：https://developer.huawei.com/consumer/cn/design/harmonyos-symbol/
+
+**如果系统图标库中不存在我们需要的图标，就用svg自己写一个，或者去别的地方找现成的**
 
 ### 导航
 - `Navigation(NavPathStack)` + `.navDestination(this.PagesMap)` — `PagesMap` 是 `@Builder` 引用，不是 lambda

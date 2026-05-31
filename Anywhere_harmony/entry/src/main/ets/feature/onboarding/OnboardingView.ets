@@ -1,7 +1,6 @@
 import { Colors, FontSize, Spacing, Radius, Duration, Shadow } from '../../constants/DesignTokens';
 import { ChatStore, ModelItem, ModeItem } from '../../common/model/ChatState';
 import { WorkspaceStore, HostStore, DeviceEntry } from '../../common/model/WorkspaceInfo';
-import { CustomIcon } from '../../common/ui/CustomIcon';
 import { WorkspaceInfo, ServerSession } from '../../common/model/WorkspaceInfo';
 import { WSClient } from '../../common/websocket/WSClient';
 import { ClientMessage, AgentInfo } from '../../common/websocket/WSProtocol';
@@ -384,21 +383,19 @@ export struct OnboardingView {
     return '#991B1B';
   }
 
-  getErrorIconName(message: string): string {
+  getErrorIcon(message: string): Resource {
     if (message.indexOf('限流') >= 0 || message.indexOf('rate') >= 0 ||
         message.indexOf('超时') >= 0 || message.indexOf('timeout') >= 0) {
-      return 'clock';
+      return $r('sys.symbol.clock');
     }
-    return 'close';
+    return $r('sys.symbol.xmark_circle');
   }
 
   @Builder ClassifiedErrorBox(message: string) {
     Row() {
-      CustomIcon({
-        name: this.getErrorIconName(message),
-        iconSize: 14,
-        color: this.getErrorFg(message)
-      }).margin({ right: Spacing.sm })
+      SymbolGlyph(this.getErrorIcon(message))
+        .fontSize(14).fontColor([this.getErrorFg(message)])
+        .margin({ right: Spacing.sm })
       Text(message)
         .fontSize(13).fontColor(this.getErrorFg(message))
         .layoutWeight(1)
@@ -507,11 +504,8 @@ Text('Anywhere')
 
 
                     Button() {
-                      CustomIcon({
-                        name: 'chevron_right',
-                        iconSize: 22,
-                        color: Color.White
-                      })
+                      SymbolGlyph($r('sys.symbol.chevron_right'))
+                        .fontSize(22).fontWeight(FontWeight.Bold).fontColor([Color.White])
                     }
                     .type(ButtonType.Circle)
                     .width(44).height(44)
@@ -543,11 +537,8 @@ Text('Anywhere')
                   .fontWeight(FontWeight.Bold)
                   .letterSpacing(2)
                 Blank()
-                CustomIcon({
-                  name: 'chevron_down',
-                  iconSize: 16,
-                  color: Colors.foregroundLight
-                })
+                SymbolGlyph($r('sys.symbol.chevron_down'))
+                  .fontSize(16).fontColor([Colors.foregroundLight])
                   .margin({ left: Spacing.sm })
                   .rotate({ angle: this.showSavedServers ? 180 : 0 })
                   .animation({ duration: Duration.normal })
@@ -568,11 +559,8 @@ Text('Anywhere')
                 } else {
                   ForEach(HostStore.devices, (device: DeviceEntry, index: number) => {
                     Row() {
-                      CustomIcon({
-                        name: 'wifi',
-                        iconSize: 18,
-                        color: device.urls.indexOf(this.serverUrl) >= 0 ? Colors.accent : Colors.foregroundMuted
-                      })
+                      SymbolGlyph($r('sys.symbol.ohos_wifi'))
+                        .fontSize(18).fontColor([device.urls.indexOf(this.serverUrl) >= 0 ? Colors.accent : Colors.foregroundMuted])
                         .margin({ right: Spacing.md })
                       Column() {
                         Row() {
@@ -581,13 +569,9 @@ Text('Anywhere')
                             .fontWeight(device.urls.indexOf(this.serverUrl) >= 0 ? FontWeight.Medium : FontWeight.Normal)
                             .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
                           if (device.urls.indexOf(this.serverUrl) >= 0) {
-                          if (device.urls.indexOf(this.serverUrl) >= 0) {
-                            CustomIcon({
-                              name: 'checkmark',
-                              iconSize: 14,
-                              color: Colors.accent
-                            }).margin({ left: Spacing.sm })
-                          }
+                            SymbolGlyph($r('sys.symbol.checkmark'))
+                              .fontSize(14).fontColor([Colors.accent])
+                              .margin({ left: Spacing.sm })
                           }
                         }
                         .onClick(() => {
@@ -675,11 +659,8 @@ Text('Anywhere')
                       .alignItems(HorizontalAlign.Start)
                       .layoutWeight(1)
 
-                      CustomIcon({
-                        name: 'chevron_right',
-                        iconSize: 16,
-                        color: Colors.foregroundLight
-                      })
+                      SymbolGlyph($r('sys.symbol.chevron_right'))
+                        .fontSize(16).fontColor([Colors.foregroundLight])
                     }
                     .width('100%')
                     .padding(Spacing.lg)

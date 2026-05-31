@@ -1,6 +1,5 @@
 import { Colors, FontSize, Spacing, Radius, Duration } from '../../constants/DesignTokens';
 import { WorkspaceInfo } from '../../common/model/WorkspaceInfo';
-import { CustomIcon } from '../../common/ui/CustomIcon';
 
 @Component
 export struct WorkspaceDrawer {
@@ -23,11 +22,9 @@ export struct WorkspaceDrawer {
     Column() {
       // Header
       Row() {
-        CustomIcon({
-          name: 'close_sidebar',
-          iconSize: 24,
-          color: Colors.foreground
-        })
+        SymbolGlyph($r('sys.symbol.close_sidebar'))
+          .fontSize(24)
+          .fontColor([Colors.foreground])
           .onClick(() => { if (this.onClose) this.onClose() })
 
         Text($r('app.string.ws_title'))
@@ -56,11 +53,9 @@ export struct WorkspaceDrawer {
         ForEach(this.workspaces, (ws: WorkspaceInfo, index: number) => {
           ListItem() {
             Row() {
-              CustomIcon({
-                name: 'folder',
-                iconSize: 22,
-                color: index === this.currentIndex ? Colors.accent : Colors.foregroundMuted
-              })
+              SymbolGlyph($r('sys.symbol.folder'))
+                .fontSize(22)
+                .fontColor([index === this.currentIndex ? Colors.accent : Colors.foregroundMuted])
                 .margin({ right: Spacing.md })
 
               Column() {
@@ -81,11 +76,9 @@ export struct WorkspaceDrawer {
               .alignItems(HorizontalAlign.Start)
               .layoutWeight(1)
               Row() {
-                CustomIcon({
-                  name: 'trash',
-                  iconSize: 20,
-                  color: Colors.foregroundMuted
-                })
+                SymbolGlyph($r('sys.symbol.trash'))
+                  .fontSize(20)
+                  .fontColor([Colors.foregroundMuted])
                   .padding({ left: Spacing.sm, right: Spacing.xs, top: Spacing.sm, bottom: Spacing.sm })
                   .onClick(() => {
                     if (this.onDelete) this.onDelete(index);
@@ -113,11 +106,9 @@ export struct WorkspaceDrawer {
         // Navigation entries
         if (this.onHostManage) {
           Row() {
-            CustomIcon({
-              name: 'wifi',
-              iconSize: 22,
-              color: Colors.foreground
-            })
+            SymbolGlyph($r('sys.symbol.ohos_wifi'))
+              .fontSize(22)
+              .fontColor([Colors.foreground])
               .margin({ right: Spacing.md })
             Text('Host 管理')
               .fontSize(FontSize.base)
@@ -131,11 +122,9 @@ export struct WorkspaceDrawer {
 
         if (this.onSettings) {
           Row() {
-            CustomIcon({
-              name: 'dialog',
-              iconSize: 22,
-              color: Colors.foreground
-            })
+            SymbolGlyph($r('sys.symbol.ellipsis_message_1'))
+              .fontSize(22)
+              .fontColor([Colors.foreground])
               .margin({ right: Spacing.md })
             Text('设置')
               .fontSize(FontSize.base)
@@ -180,11 +169,9 @@ export struct WorkspaceDrawer {
           .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: 10 })))
         } else {
           Row() {
-            CustomIcon({
-              name: 'plus',
-              iconSize: 22,
-              color: Colors.foreground
-            })
+            SymbolGlyph($r('sys.symbol.plus'))
+              .fontSize(22)
+              .fontColor([Colors.foreground])
               .margin({ right: Spacing.md })
             Text('Add Workspace')
               .fontSize(FontSize.base)

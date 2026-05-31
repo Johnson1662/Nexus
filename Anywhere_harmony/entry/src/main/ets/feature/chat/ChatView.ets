@@ -1,5 +1,4 @@
 import { Colors, FontSize, Spacing, Radius, Duration } from '../../constants/DesignTokens';
-import { CustomIcon } from '../../common/ui/CustomIcon';
 import { ChatStore, PendingPermission, PermissionOption } from '../../common/model/ChatState';
 import { WorkspaceStore } from '../../common/model/WorkspaceInfo';
 import { WorkspaceInfo } from '../../common/model/WorkspaceInfo';
@@ -267,13 +266,12 @@ export struct ChatView {
   @Builder
   TitleBar() {
     Row() {
-      CustomIcon({
-        name: this.showDrawer ? 'close_sidebar' : 'open_sidebar',
-        iconSize: 24,
-        color: Colors.foreground
-      })
+      SymbolGlyph(this.showDrawer ? $r('sys.symbol.close_sidebar') : $r('sys.symbol.open_sidebar'))
+        .fontSize(24)
+        .fontColor([Colors.foreground])
         .accessibilityText(this.showDrawer ? 'Close workspace drawer' : 'Open workspace drawer')
         .onClick(() => { this.getUIContext()?.animateTo({ duration: Duration.normal }, () => { this.showDrawer = !this.showDrawer }) })
+
       Column() {
         if (this.showRename) {
           Row() {
@@ -284,11 +282,9 @@ export struct ChatView {
               .fontSize(FontSize.base).fontColor(Colors.foreground).fontWeight(FontWeight.Medium)
               .onChange((v: string) => { this.renameText = v })
               .onSubmit(() => { this.doRename() })
-            CustomIcon({
-              name: 'close',
-              iconSize: 16,
-              color: Colors.foregroundMuted
-            })
+
+            SymbolGlyph($r('sys.symbol.xmark'))
+              .fontSize(16).fontColor([Colors.foregroundMuted])
               .margin({ left: Spacing.xs })
               .onClick(() => { this.showRename = false })
           }
@@ -328,20 +324,13 @@ export struct ChatView {
       .layoutWeight(1)
       .margin({ left: Spacing.sm })
 
-      CustomIcon({
-        name: 'plus',
-        iconSize: 24,
-        color: Colors.foreground
-      })
-        .margin({ right: Spacing.md })
+      SymbolGlyph($r('sys.symbol.plus'))
+        .fontColor([Colors.foreground]).fontSize(24).margin({ right: Spacing.md })
         .accessibilityText('New chat')
         .onClick(() => { if (this.onNewSession) this.onNewSession() })
 
-      CustomIcon({
-        name: 'dot_grid',
-        iconSize: 24,
-        color: Colors.foreground
-      })
+      SymbolGlyph($r('sys.symbol.dot_grid_2x2'))
+        .fontColor([Colors.foreground]).fontSize(24)
         .accessibilityText('More options')
         .bindMenu([
           { value: $r('app.string.menu_switch_session'), action: () => { this.openPicker(0) } },
@@ -445,11 +434,8 @@ struct PickerSheet {
                   .fontWeight(index === this.getCurrentIndex() ? FontWeight.Medium : FontWeight.Normal)
                   .layoutWeight(1)
                 if (index === this.getCurrentIndex()) {
-                  CustomIcon({
-                    name: 'checkmark',
-                    iconSize: 16,
-                    color: Colors.accent
-                  })
+                  SymbolGlyph($r('sys.symbol.checkmark'))
+                    .fontSize(16).fontColor([Colors.accent])
                     .margin({ left: Spacing.sm })
                     .accessibilityText('Currently selected')
                 }
