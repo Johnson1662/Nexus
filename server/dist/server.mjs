@@ -21,7 +21,7 @@ import { handleAuth } from "./handlers/auth.mjs";
 import { cleanupWsSessions, enqueueWsOp, getSession, getBufferedAfter, reclaimOrphanedSession } from "./session.mjs";
 const PORT = 12138;
 const HOST = "0.0.0.0";
-const RELAY_URL = process.env.ANYWHERE_RELAY_URL || "wss://cf-relay.anywhere12138.lat/ws";
+const RELAY_URL = process.env.ANYWHERE_RELAY_URL || "ws://relay.anywhere12138.lat:12138";
 const PHONE_RELAY_URL = process.env.ANYWHERE_PHONE_RELAY_URL || "ws://relay.anywhere12138.lat:12138";
 const wss = new WebSocketServer({ host: HOST, port: PORT });
 console.log(`[server] listening on ws://${HOST}:${PORT}`);

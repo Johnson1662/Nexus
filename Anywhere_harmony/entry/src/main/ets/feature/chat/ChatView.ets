@@ -17,7 +17,6 @@ export struct ChatView {
   @State titleBarOpacity: number = 0;
   @State showRename: boolean = false;
   @State renameText: string = '';
-  @State deleteConfirmIndex: number = -1;
   onSendMessage?: (text: string) => void;
   onRetry?: (id: string, content: string) => void;
   onSwitchModel?: (index: number) => void;
@@ -120,6 +119,48 @@ export struct ChatView {
     }
   }
 
+  showDeleteConfirmDialog(index: number) {
+    let wsName = WorkspaceStore.workspaces[index]?.name || '';
+    this.getUIContext().showAlertDialog({
+      title: getContext().resourceManager.getStringSync($r('app.string.ws_delete_confirm_title')),
+      message: wsName,
+      primaryButton: {
+        value: getContext().resourceManager.getStringSync($r('app.string.ws_cancel')),
+        action: () => {}
+      },
+      secondaryButton: {
+        value: getContext().resourceManager.getStringSync($r('app.string.ws_delete_confirm_ok')),
+        fontColor: Colors.error,
+        action: () => {
+          WorkspaceStore.workspaces.splice(index, 1);
+          if (WorkspaceStore.currentIndex >= WorkspaceStore.workspaces.length) {
+            WorkspaceStore.currentIndex = WorkspaceStore.workspaces.length - 1;
+          }
+          saveWorkspaces(AppStorage.get<string>('serverUrl') || '');
+        }
+      }
+    });
+  }
+
+  @Builder
+  PickerSheetBuilder() {
+    PickerSheet({
+      pickerMode: this.pickerMode,
+      pickerTitle: this.pickerTitle,
+      onSelect: (index: number) => { this.doPickerSelect(index) }
+    })
+  }
+
+  @Builder
+  PermissionSheetBuilder() {
+    PermissionSheet({
+      permission: ChatStore.pendingPermission,
+      onSelect: (optionId: string) => {
+        if (this.onPermissionResponse) this.onPermissionResponse(optionId);
+      }
+    })
+  }
+
   build() {
     NavDestination() {
       Stack() {
@@ -136,7 +177,7 @@ export struct ChatView {
               if (this.onWorkspaceSelect) this.onWorkspaceSelect(i);
             },
             onDelete: (i: number) => {
-              this.deleteConfirmIndex = i;
+              this.showDeleteConfirmDialog(i);
             },
             onClose: () => { this.getUIContext()?.animateTo({ duration: Duration.normal }, () => { this.showDrawer = false }) },
             onAddWorkspace: (p: string) => {
@@ -190,103 +231,34 @@ export struct ChatView {
           }
           .width('100%').height('100%')
         }
+          .bindSheet($$this.showPicker, this.PickerSheetBuilder(), {
+            height: SheetSize.MEDIUM,
+            dragBar: true,
+            backgroundColor: Colors.surface0,
+            showClose: false
+          })
         .showSideBar(this.showDrawer)
         .showControlButton(false)
         .sideBarWidth('100%')
         .maxSideBarWidth('100%')
         .width('100%').height('100%')
 
-        // Picker overlay
-        if (this.showPicker) {
-          Column() {
-            Row().width('100%').layoutWeight(1)
-              .onClick(() => { this.showPicker = false })
-
-            PickerSheet({
-              pickerMode: this.pickerMode,
-              pickerTitle: this.pickerTitle,
-              onSelect: (index: number) => { this.doPickerSelect(index) }
-            })
-            .width('100%')
-            .constraintSize({ maxHeight: '70%' })
-          }
-          .width('100%').height('100%')
-          .backgroundColor(Colors.overlayDim)
-          .zIndex(100)
-          .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: 30 })))
-        }
-
-        // Permission request overlay
-        if (ChatStore.pendingPermission !== null) {
-          Column() {
-            Row().width('100%').layoutWeight(1)
-              .onClick(() => {
-                if (this.onPermissionResponse) this.onPermissionResponse('reject_once');
-              })
-
-            PermissionSheet({
-              permission: ChatStore.pendingPermission,
-              onSelect: (optionId: string) => {
-                if (this.onPermissionResponse) this.onPermissionResponse(optionId);
-              }
-            })
-            .width('100%')
-          }
-          .width('100%').height('100%')
-          .backgroundColor(Colors.overlayDim)
-          .zIndex(110)
-          .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: 30 })))
-        }
-
-        // Delete workspace confirmation
-        if (this.deleteConfirmIndex >= 0) {
-          Column() {
-            Row().width('100%').layoutWeight(1)
-              .onClick(() => { this.deleteConfirmIndex = -1 })
-
-            Column() {
-              Text($r('app.string.ws_delete_confirm_title'))
-                .fontSize(FontSize.xl).fontWeight(FontWeight.Bold).fontColor(Colors.foreground)
-                .width('100%').padding({ left: Spacing.xl, right: Spacing.xl, top: Spacing.xl })
-              Text(WorkspaceStore.workspaces[this.deleteConfirmIndex]?.name || '')
-                .fontSize(FontSize.base).fontColor(Colors.foregroundMuted)
-                .width('100%').padding({ left: Spacing.xl, right: Spacing.xl, top: Spacing.sm, bottom: Spacing.lg })
-              Row() {
-                Button($r('app.string.ws_cancel'))
-                  .layoutWeight(1).height(44)
-                  .backgroundColor(Colors.surface1).fontColor(Colors.foreground)
-                  .fontSize(FontSize.base)
-                  .onClick(() => { this.deleteConfirmIndex = -1 })
-                Button($r('app.string.ws_delete_confirm_ok'))
-                  .layoutWeight(1).height(44)
-                  .backgroundColor(Colors.error).fontColor(Color.White)
-                  .fontSize(FontSize.base).borderRadius(Radius.md)
-                  .margin({ left: Spacing.md })
-                  .onClick(() => {
-                    let i = this.deleteConfirmIndex;
-                    this.deleteConfirmIndex = -1;
-                    WorkspaceStore.workspaces.splice(i, 1);
-                    if (WorkspaceStore.currentIndex >= WorkspaceStore.workspaces.length) {
-                      WorkspaceStore.currentIndex = WorkspaceStore.workspaces.length - 1;
-                    }
-                    saveWorkspaces(AppStorage.get<string>('serverUrl') || '');
-                  })
-              }
-              .width('100%').padding({ left: Spacing.xl, right: Spacing.xl, bottom: Spacing.xxxl })
-            }
-            .width('100%')
-            .backgroundColor(Colors.surface0)
-            .borderRadius({ topLeft: Radius.xl, topRight: Radius.xl })
-          }
-          .width('100%').height('100%')
-          .backgroundColor(Colors.overlayDim)
-          .zIndex(120)
-          .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: 20 })))
-        }
+        // Overlay elements are now handled natively via system dialogs and bindSheet.
       }
       .width('100%').height('100%')
     }
     .hideTitleBar(true)
+    .bindSheet(ChatStore.pendingPermission !== null, this.PermissionSheetBuilder(), {
+      height: SheetSize.MEDIUM,
+      dragBar: true,
+      backgroundColor: Colors.surface0,
+      showClose: false,
+      onDisappear: () => {
+        if (ChatStore.pendingPermission !== null && this.onPermissionResponse) {
+          this.onPermissionResponse('reject_once');
+        }
+      }
+    })
     .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: 20 })))
     .width('100%').height('100%')
     .backgroundColor(Colors.surface0)
@@ -362,6 +334,13 @@ export struct ChatView {
         .accessibilityText('More options')
         .bindMenu([
           { value: $r('app.string.menu_switch_session'), action: () => { this.openPicker(0) } },
+          { value: 'Rename Session', action: () => {
+              if (ChatStore.bridgeSessionId || ChatStore.acpSessionId) {
+                this.renameText = this.getSessionTitle();
+                this.showRename = true;
+              }
+            }
+          },
           { value: $r('app.string.menu_switch_model'), action: () => { this.openPicker(1) } },
           { value: $r('app.string.menu_switch_mode'), action: () => { this.openPicker(2) } },
         ])
@@ -369,7 +348,7 @@ export struct ChatView {
     .width('100%').height(56)
     .padding({ left: Spacing.lg, right: Spacing.lg })
     .backgroundColor(Colors.surfaceElevated)
-    .shadow({ radius: 0, color: '#00000008', offsetY: 1 })
+    .shadow({ radius: 2, color: '#0000000A', offsetY: 1 })
   }
 }
 

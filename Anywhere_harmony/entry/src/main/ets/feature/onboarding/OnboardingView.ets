@@ -26,7 +26,6 @@ export struct OnboardingView {
 
   ws: WSClient = new WSClient();
   @State showSavedServers: boolean = true;
-  @State serverDeleteConfirmIndex: number = -1;
   callbacks: OnboardingCallbacks = { onNavigateToChat: () => {} };
 
 
@@ -72,9 +71,26 @@ export struct OnboardingView {
     return url;
   }
 
-  deleteHost(index: number): void {
-    this.serverDeleteConfirmIndex = index;
+  showDeleteConfirmDialog(index: number) {
+    let devName = HostStore.devices[index]?.name || '';
+    this.getUIContext().showAlertDialog({
+      title: getContext().resourceManager.getStringSync($r('app.string.server_delete_confirm_title')),
+      message: devName,
+      primaryButton: {
+        value: getContext().resourceManager.getStringSync($r('app.string.ws_cancel')),
+        action: () => {}
+      },
+      secondaryButton: {
+        value: getContext().resourceManager.getStringSync($r('app.string.server_delete_confirm_ok')),
+        fontColor: Colors.error,
+        action: () => {
+          HostStore.removeDevice(index);
+          saveHosts();
+        }
+      }
+    });
   }
+
 
   selectHost(device: DeviceEntry): void {
     if (device.urls.length > 0) {
@@ -404,7 +420,7 @@ export struct OnboardingView {
                 .fillColor(Colors.accent)
                 .margin({ bottom: Spacing.lg })
                 .scale({ x: this.iconScale, y: this.iconScale })
-                .animation({ duration: 2500, curve: Curve.EaseInOut, playMode: PlayMode.Alternate, iterations: -1 })
+                .animation({ duration: Duration.slow, curve: Curve.EaseOut })
 
 Text('Anywhere')
   .fontSize(36)
@@ -579,7 +595,7 @@ Text('Anywhere')
                     .margin({ bottom: Spacing.xs })
                     .gesture(
                       LongPressGesture({ repeat: false, duration: 600 })
-                        .onAction(() => { this.deleteHost(index) })
+                        .onAction(() => { this.showDeleteConfirmDialog(index) })
                     )
                     .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: -8 })))
                     .animation({ duration: Duration.normal, curve: Curve.EaseOut, delay: index * 30 })
@@ -673,47 +689,6 @@ Text('Anywhere')
         .width('100%').height('100%')
         .scrollBar(BarState.Off)
 
-        // Server delete confirmation overlay
-        if (this.serverDeleteConfirmIndex >= 0) {
-          Column() {
-            Row().width('100%').layoutWeight(1)
-              .onClick(() => { this.serverDeleteConfirmIndex = -1 })
-            Column() {
-              Text($r('app.string.server_delete_confirm_title'))
-                .fontSize(FontSize.xl).fontWeight(FontWeight.Bold).fontColor(Colors.foreground)
-                .width('100%').padding({ left: Spacing.xl, right: Spacing.xl, top: Spacing.xl })
-              Text(HostStore.devices[this.serverDeleteConfirmIndex]?.name || '')
-                .fontSize(FontSize.base).fontColor(Colors.foregroundMuted)
-                .width('100%').padding({ left: Spacing.xl, right: Spacing.xl, top: Spacing.sm, bottom: Spacing.lg })
-              Row() {
-                Button($r('app.string.ws_cancel'))
-                  .layoutWeight(1).height(44)
-                  .backgroundColor(Colors.surface1).fontColor(Colors.foreground)
-                  .fontSize(FontSize.base)
-                  .onClick(() => { this.serverDeleteConfirmIndex = -1 })
-                Button($r('app.string.server_delete_confirm_ok'))
-                  .layoutWeight(1).height(44)
-                  .backgroundColor(Colors.error).fontColor(Color.White)
-                  .fontSize(FontSize.base).borderRadius(Radius.md)
-                  .margin({ left: Spacing.md })
-                  .onClick(() => {
-                    let i = this.serverDeleteConfirmIndex;
-                    this.serverDeleteConfirmIndex = -1;
-                    HostStore.removeDevice(i);
-                    saveHosts();
-                  })
-              }
-              .width('100%').padding({ left: Spacing.xl, right: Spacing.xl, bottom: Spacing.xxxl })
-            }
-            .width('100%')
-            .backgroundColor(Colors.surface0)
-            .borderRadius({ topLeft: Radius.xl, topRight: Radius.xl })
-          }
-          .width('100%').height('100%')
-          .backgroundColor(Colors.overlayDim)
-          .zIndex(120)
-          .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: 20 })))
-        }
       }
       .width('100%').height('100%')
       .backgroundColor('#FAFAFA')

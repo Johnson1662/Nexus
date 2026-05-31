@@ -28,7 +28,8 @@ export struct WorkspaceDrawer {
           .onClick(() => { if (this.onClose) this.onClose() })
 
         Text($r('app.string.ws_title'))
-          .fontSize(FontSize.xl)
+          .fontSize(FontSize.lg)
+          .fontWeight(FontWeight.Bold)
           .fontColor(Colors.foreground)
           .margin({ left: Spacing.sm })
         Blank()
@@ -36,20 +37,19 @@ export struct WorkspaceDrawer {
       .width('100%')
       .padding({ left: Spacing.lg, right: Spacing.lg, top: Spacing.lg, bottom: Spacing.lg })
       .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: -10 })))
-
       // Workspace list
       if (this.workspaces.length === 0) {
         Column() {
-          Text('暂无工作区')
-            .fontSize(FontSize.base).fontColor(Colors.foregroundMuted)
-          Text('点击下方添加')
+          Text('No Workspaces')
+            .fontSize(FontSize.lg).fontWeight(FontWeight.Bold).fontColor(Colors.foregroundMuted)
+          Text('Add a path to get started')
             .fontSize(FontSize.sm).fontColor(Colors.foregroundLight)
             .margin({ top: Spacing.xs })
         }
         .width('100%').layoutWeight(1)
         .justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center)
       } else {
-        List() {
+        List({ space: Spacing.sm }) {
         ForEach(this.workspaces, (ws: WorkspaceInfo, index: number) => {
           ListItem() {
             Row() {
@@ -60,14 +60,14 @@ export struct WorkspaceDrawer {
 
               Column() {
                 Text(ws.name)
-                  .fontSize(FontSize.base)
+                  .fontSize(FontSize.lg)
+                  .fontWeight(FontWeight.Bold)
                   .fontColor(index === this.currentIndex ? Colors.accent : Colors.foreground)
-                  .fontWeight(index === this.currentIndex ? FontWeight.Medium : FontWeight.Normal)
                   .maxLines(1)
                   .textOverflow({ overflow: TextOverflow.Ellipsis })
-
+                  .margin({ bottom: Spacing.xs })
                 Text(ws.path)
-                  .fontSize(FontSize.xs)
+                  .fontSize(FontSize.sm)
                   .fontColor(Colors.foregroundMuted)
                   .maxLines(1)
                   .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -75,22 +75,21 @@ export struct WorkspaceDrawer {
               }
               .alignItems(HorizontalAlign.Start)
               .layoutWeight(1)
-
-              if (index === this.currentIndex) {
-                SymbolGlyph($r('sys.symbol.checkmark'))
-                  .fontSize(16)
-                  .fontColor([Colors.accent])
+              Row() {
+                SymbolGlyph($r('sys.symbol.trash'))
+                  .fontSize(20)
+                  .fontColor([Colors.foregroundMuted])
+                  .padding({ left: Spacing.sm, right: Spacing.xs, top: Spacing.sm, bottom: Spacing.sm })
+                  .onClick(() => {
+                    if (this.onDelete) this.onDelete(index);
+                  })
               }
             }
             .width('100%')
-            .padding({ left: Spacing.xl, right: Spacing.xl, top: Spacing.md, bottom: Spacing.md })
+            .padding({ left: Spacing.lg, right: Spacing.lg, top: Spacing.lg, bottom: Spacing.lg })
             .backgroundColor(index === this.currentIndex ? Colors.surface1 : 'transparent')
-            .borderRadius(Radius.md)
+            .borderRadius(Radius.lg)
             .onClick(() => { if (this.onSelect) this.onSelect(index) })
-            .gesture(
-              LongPressGesture({ repeat: false, duration: 600 })
-                .onAction(() => { if (this.onDelete) this.onDelete(index) })
-            )
             .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ x: -20 })))
             .animation({ duration: Duration.normal, curve: Curve.EaseOut, delay: index * 40 })
           }
@@ -98,21 +97,23 @@ export struct WorkspaceDrawer {
       }
       .width('100%')
       .layoutWeight(1)
-      .divider({ strokeWidth: 0.5, color: Colors.borderLight, startMargin: Spacing.xl, endMargin: Spacing.xl })
+      .padding({ left: Spacing.sm, right: Spacing.sm })
       }
 
       // Bottom area
       Column() {
+        Divider().color(Colors.borderLight).strokeWidth(0.5).margin({ left: Spacing.xl, right: Spacing.xl })
         // Navigation entries
         if (this.onHostManage) {
           Row() {
             SymbolGlyph($r('sys.symbol.ohos_wifi'))
-              .fontSize(18)
-              .fontColor([Colors.foregroundMuted])
-              .margin({ right: Spacing.sm })
+              .fontSize(22)
+              .fontColor([Colors.foreground])
+              .margin({ right: Spacing.md })
             Text('Host 管理')
               .fontSize(FontSize.base)
-              .fontColor(Colors.foregroundMuted)
+              .fontColor(Colors.foreground)
+              .fontWeight(FontWeight.Medium)
           }
           .width('100%')
           .padding({ left: Spacing.xl, right: Spacing.xl, top: Spacing.lg, bottom: Spacing.sm })
@@ -122,12 +123,13 @@ export struct WorkspaceDrawer {
         if (this.onSettings) {
           Row() {
             SymbolGlyph($r('sys.symbol.ellipsis_message_1'))
-              .fontSize(18)
-              .fontColor([Colors.foregroundMuted])
-              .margin({ right: Spacing.sm })
+              .fontSize(22)
+              .fontColor([Colors.foreground])
+              .margin({ right: Spacing.md })
             Text('设置')
               .fontSize(FontSize.base)
-              .fontColor(Colors.foregroundMuted)
+              .fontColor(Colors.foreground)
+              .fontWeight(FontWeight.Medium)
           }
           .width('100%')
           .padding({ left: Spacing.xl, right: Spacing.xl, top: Spacing.sm, bottom: Spacing.sm })
@@ -138,21 +140,21 @@ export struct WorkspaceDrawer {
           Column() {
             TextInput({ placeholder: '/path/to/project', text: this.newPath })
               .width('100%').height(44)
-              .backgroundColor(Colors.surface1).borderRadius(Radius.sm)
+              .backgroundColor(Colors.surface1).borderRadius(Radius.md)
               .padding({ left: Spacing.md, right: Spacing.md })
-              .fontSize(FontSize.sm)
+              .fontSize(FontSize.base)
               .onChange((v: string) => { this.newPath = v })
 
             Row() {
               Button('Cancel')
-                .layoutWeight(1).height(40)
+                .layoutWeight(1).height(44)
                 .backgroundColor('transparent').fontColor(Colors.foregroundMuted)
-                .fontSize(FontSize.sm)
+                .fontSize(FontSize.base)
                 .onClick(() => { this.showForm = false; this.newPath = '' })
               Button('Add')
-                .layoutWeight(1).height(40)
+                .layoutWeight(1).height(44)
                 .backgroundColor(Colors.accent).fontColor(Color.White)
-                .borderRadius(Radius.md).fontSize(FontSize.sm)
+                .borderRadius(Radius.md).fontSize(FontSize.base)
                 .onClick(() => {
                   if (this.newPath.length > 0 && this.onAddWorkspace) {
                     this.onAddWorkspace(this.newPath);
@@ -168,12 +170,13 @@ export struct WorkspaceDrawer {
         } else {
           Row() {
             SymbolGlyph($r('sys.symbol.plus'))
-              .fontSize(18)
-              .fontColor([Colors.foregroundMuted])
-              .margin({ right: Spacing.sm })
+              .fontSize(22)
+              .fontColor([Colors.foreground])
+              .margin({ right: Spacing.md })
             Text('Add Workspace')
               .fontSize(FontSize.base)
-              .fontColor(Colors.foregroundMuted)
+              .fontColor(Colors.foreground)
+              .fontWeight(FontWeight.Medium)
           }
           .width('100%')
           .padding({ left: Spacing.xl, right: Spacing.xl, bottom: Spacing.xxl, top: Spacing.lg })

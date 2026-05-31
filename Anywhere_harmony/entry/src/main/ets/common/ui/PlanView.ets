@@ -40,6 +40,10 @@ export struct PlanView {
       }, (entry: PlanEntry, index: number) => entry.content + index.toString())
     }
     .width('100%')
+    .backgroundColor(Colors.surface1)
+    .borderRadius(12)
+    .border({ width: 1, color: Colors.borderLight })
+    .padding({ left: Spacing.lg, right: Spacing.lg, top: Spacing.md, bottom: Spacing.md })
     .alignItems(HorizontalAlign.Start)
   }
 }

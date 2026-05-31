@@ -299,7 +299,7 @@ export struct ToolCallCard {
         }
       }
       .width('100%')
-      .height(32)
+      .padding({ left: Spacing.sm, right: Spacing.md, top: Spacing.xs, bottom: Spacing.xs })
       .alignItems(VerticalAlign.Center)
       .enabled(this.hasDetail())
       .onClick(() => {
@@ -319,7 +319,10 @@ export struct ToolCallCard {
         .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: -5 })))
       }
     }
-    .width('100%')
+    .width('auto')
+    .backgroundColor(Colors.surface1)
+    .borderRadius(Radius.md)
+    .padding({ left: Spacing.xs, right: Spacing.xs })
     .animation({ duration: Duration.fast, curve: Curve.EaseOut })
   }
 }

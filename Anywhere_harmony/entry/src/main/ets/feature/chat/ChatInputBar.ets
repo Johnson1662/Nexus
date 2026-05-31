@@ -252,9 +252,10 @@ export struct ChatInputBar {
             text: this.text,
             controller: this.textAreaController
           })
+            .constraintSize({ maxHeight: 150 })
             .layoutWeight(1)
             .backgroundColor('transparent')
-            .padding({ left: Spacing.md, right: Spacing.sm })
+            .padding({ left: Spacing.md, right: Spacing.md })
             .fontSize(FontSize.base)
             .enabled(!this.disabled)
             .enterKeyType(EnterKeyType.Send)
@@ -263,7 +264,7 @@ export struct ChatInputBar {
         }
         .width('100%')
         .alignItems(VerticalAlign.Top)
-        .padding({ top: Spacing.sm, bottom: Spacing.xs })
+        .padding({ top: Spacing.md, bottom: Spacing.xs })
 
         Row() {
           Row({ space: Spacing.sm }) {
@@ -295,26 +296,26 @@ export struct ChatInputBar {
               .transition(TransitionEffect.OPACITY.combine(TransitionEffect.scale({ x: 0.5, y: 0.5 })))
               .animation({ duration: Duration.fast, curve: Curve.EaseOut })
           } else {
-            Text($r('app.string.EntryAbility_label'))
-              .fontSize(FontSize.xs)
-              .fontColor(Colors.foregroundLight)
-              .accessibilityText('Message input inactive')
-              .transition(TransitionEffect.OPACITY)
-              .animation({ duration: Duration.fast })
+            SymbolGlyph($r('sys.symbol.arrow_up_circle_fill'))
+              .fontColor([Colors.borderLight])
+              .fontSize(28)
+              .accessibilityText('Send message')
+              .transition(TransitionEffect.OPACITY.combine(TransitionEffect.scale({ x: 0.5, y: 0.5 })))
+              .animation({ duration: Duration.fast, curve: Curve.EaseOut })
           }
         }
         .width('100%')
-        .padding({ left: Spacing.lg, right: Spacing.lg, bottom: Spacing.sm })
+        .padding({ left: Spacing.lg, right: Spacing.lg, bottom: Spacing.md })
         .alignItems(VerticalAlign.Center)
       }
       .backgroundColor(Colors.surfaceElevated)
-      .borderRadius(Radius.xl)
+      .borderRadius(Radius.xxl)
       .border({ width: 1, color: Colors.borderLight })
-      .shadow(Shadow.sm)
+      .shadow(Shadow.md)
       .width('100%')
     }
     .width('100%')
-    .padding({ left: Spacing.md, right: Spacing.md, top: Spacing.md, bottom: Spacing.xxxl })
+    .padding({ left: Spacing.md, right: Spacing.md, top: Spacing.md, bottom: Spacing.lg })
     .backgroundColor(Colors.surface0)
     .accessibilityGroup(true)
   }

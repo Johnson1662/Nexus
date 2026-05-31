@@ -162,14 +162,18 @@ export struct Index {
       OnboardingView({
         ws: this.ws,
         callbacks: {
-          onNavigateToChat: () => { this.navStack.pushPath({ name: 'chat' }) }
+          onNavigateToChat: () => {
+            this.navStack.pushPath({ name: 'chat' });
+          }
         }
       })
     }
     .navDestination(this.PagesMap)
     .hideTitleBar(true)
-    .width('100%').height('100%')
+    .width('100%')
+    .height('100%')
     .backgroundColor(Colors.surface1)
     .mode(NavigationMode.Stack)
+    .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
   }
 }

@@ -132,7 +132,7 @@ export struct ChatPage {
                   .margin({ bottom: Spacing.lg })
                   .opacity(0.3)
                   .scale({ x: this.iconScale, y: this.iconScale })
-                  .animation({ duration: 2500, curve: Curve.EaseInOut, playMode: PlayMode.Alternate, iterations: -1 })
+                  .animation({ duration: Duration.slow, curve: Curve.EaseOut })
                 Text($r('app.string.app_name'))
                   .fontSize(FontSize.xxl).fontColor(Colors.foreground).fontWeight(FontWeight.Bold).fontFamily('serif')
                 Text($r('app.string.chat_empty_prompt'))
@@ -178,7 +178,7 @@ export struct ChatPage {
                   streaming: ChatStore.turnActive && msg.role === 'assistant' && msg.id === ChatStore.messages[ChatStore.messages.length - 1]?.id,
                   onRetry: (id: string, content: string) => { if (this.onRetry) this.onRetry(id, content) }
                 })
-                  .margin({ bottom: msg.role === 'user' ? Spacing.lg : 0 })
+                  .margin({ bottom: Spacing.lg })
               }
             }
             .height('auto')
@@ -207,7 +207,7 @@ export struct ChatPage {
         .layoutWeight(1)
         .width('100%')
         .edgeEffect(EdgeEffect.Spring)
-        .onTouch((event: TouchEvent) => { if (event.type === TouchType.Down) { this.followsOutput = false; this.showJumpButton = true; } })
+        .onScrollStart(() => { this.followsOutput = false; this.showJumpButton = true; })
       }
 
       // Stage 2: jump-to-bottom button when user has scrolled up during turn

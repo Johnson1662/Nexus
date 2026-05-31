@@ -42,6 +42,7 @@ function parseFilePrefix(content: string): FilePrefixInfo {
   return result;
 }
 
+@Reusable
 @Component
 export struct MessageCard {
   @Prop isUser: boolean = false;
@@ -67,9 +68,32 @@ export struct MessageCard {
   @State parsedDataUri: string = '';
   @State parsedRestText: string = '';
 
+
   aboutToAppear(): void {
     this.parseFilePrefixInternal();
   }
+
+  aboutToReuse(params: Record<string, Object>): void {
+    this.isUser = Boolean(params['isUser']);
+    this.msgId = String(params['msgId'] || '');
+    this.msgSendStatus = String(params['msgSendStatus'] || '');
+    this.time = String(params['time'] || '');
+    this.status = String(params['status'] || '');
+    this.msgContent = String(params['msgContent'] || '');
+    this.msgType = String(params['msgType'] || 'text');
+    this.msgToolName = String(params['msgToolName'] || '');
+    this.msgToolStatus = String(params['msgToolStatus'] || '');
+    this.msgToolKind = String(params['msgToolKind'] || '');
+    this.msgToolContent = String(params['msgToolContent'] || '');
+    this.msgToolContentType = String(params['msgToolContentType'] || '');
+    this.msgToolPath = String(params['msgToolPath'] || '');
+    this.msgToolOldText = String(params['msgToolOldText'] || '');
+    this.msgToolNewText = String(params['msgToolNewText'] || '');
+    this.msgToolTerminalId = String(params['msgToolTerminalId'] || '');
+    this.streaming = Boolean(params['streaming']);
+    this.parseFilePrefixInternal();
+  }
+
 
   // When @Prop values change, re-parse file prefix
   onMsgContentChange(): void {
@@ -121,6 +145,7 @@ export struct MessageCard {
           })
           .alignItems(HorizontalAlign.Start)
           .width('100%')
+          .gesture(LongPressGesture().onAction(() => { this.copyContent() }))
 
         } else {
           Column() {
@@ -175,6 +200,7 @@ export struct MessageCard {
           .backgroundColor(Colors.userBubble)
           .borderRadius({ topLeft: Radius.xl, topRight: Radius.xl, bottomLeft: Radius.xl, bottomRight: Radius.xs })
           .alignItems(HorizontalAlign.Start)
+          .gesture(LongPressGesture().onAction(() => { this.copyContent() }))
 
           if (this.msgSendStatus === 'failed') {
             SymbolGlyph($r('sys.symbol.xmark_circle'))
