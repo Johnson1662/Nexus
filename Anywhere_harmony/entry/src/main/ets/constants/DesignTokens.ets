@@ -1,4 +1,5 @@
 import { resourceManager } from '@kit.LocalizationKit';
+import { common } from '@kit.AbilityKit';
 
 export class Colors {
   // Surfaces
@@ -6,7 +7,6 @@ export class Colors {
   static readonly surface1: Resource = $r('app.color.surface1');
   static readonly surface2: Resource = $r('app.color.surface2');
   static readonly surfaceElevated: Resource = $r('app.color.surface_elevated');
-  static readonly userBubble: Resource = $r('app.color.user_bubble');
 
   // Foreground
   static readonly foreground: Resource = $r('app.color.foreground');
@@ -40,7 +40,6 @@ export class Colors {
   static readonly overlayDim: Resource = $r('app.color.overlay_dim');
   static readonly terminalBg: Resource = $r('app.color.terminal_bg');
   static readonly terminalFg: Resource = $r('app.color.terminal_fg');
-  static readonly onboardingBg: Resource = $r('app.color.onboarding_bg');
   static readonly inlineCodeBg: Resource = $r('app.color.inline_code_bg');
 
   // String fallbacks for runtime logic (no dark-mode switch needed for these)
@@ -58,6 +57,11 @@ export class Spacing {
   static readonly xl: number = 20;
   static readonly xxl: number = 24;
   static readonly xxxl: number = 32;
+}
+
+export class Layout {
+  static readonly pageGutter: number = 20;
+  static readonly contentWidth: string = 'calc(100% - 40vp)';
 }
 
 export class Radius {
@@ -90,9 +94,9 @@ export interface ShadowStyle {
 }
 
 export class Shadow {
-  static readonly sm: ShadowStyle = { radius: 4, color: '#00000008', offsetY: 2 };
-  static readonly md: ShadowStyle = { radius: 8, color: '#00000010', offsetY: 4 };
-  static readonly lg: ShadowStyle = { radius: 16, color: '#00000015', offsetY: 8 };
+  static readonly sm: ShadowStyle = { radius: 4, color: '#1A1D2306', offsetY: 2 };
+  static readonly md: ShadowStyle = { radius: 8, color: '#1A1D230C', offsetY: 4 };
+  static readonly lg: ShadowStyle = { radius: 16, color: '#1A1D2310', offsetY: 8 };
 }
 
 export class Duration {
@@ -102,7 +106,7 @@ export class Duration {
   static readonly slower: number = 600;
 }
 
-/** Get localized string. Caches result to avoid repeated resourceManager lookups. */
-export function getLocalizedString(res: Resource): string {
-  return getContext().resourceManager.getStringSync(res);
+/** Get localized string via UIContext-host context (non-deprecated path). */
+export function getLocalizedString(context: common.Context, res: Resource): string {
+  return context.resourceManager.getStringSync(res.id);
 }

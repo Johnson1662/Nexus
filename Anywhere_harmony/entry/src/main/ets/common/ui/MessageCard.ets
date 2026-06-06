@@ -113,7 +113,7 @@ export struct MessageCard {
       let pasteData = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, this.msgContent);
       let systemPasteboard = pasteboard.getSystemPasteboard();
       systemPasteboard.setData(pasteData).then(() => {
-        this.getUIContext().getPromptAction().showToast({ message: getContext().resourceManager.getStringSync($r('app.string.chat_copy_confirm')) });
+        (this.getUIContext() as UIContext).getPromptAction().showToast({ message: getContext(this).resourceManager.getStringSync($r('app.string.chat_copy_confirm').id) });
       })
     } catch (e) {}
   }
@@ -186,7 +186,7 @@ export struct MessageCard {
               if (this.msgContent.length > 0) {
                 Text(this.msgContent)
                   .fontSize(FontSize.base)
-                  .fontColor(Colors.foreground)
+                  .fontColor(Colors.surface0)
                   .lineHeight(22)
               }
             }
@@ -197,7 +197,7 @@ export struct MessageCard {
             left: Spacing.lg,
             right: Spacing.lg
           })
-          .backgroundColor(Colors.userBubble)
+          .backgroundColor(Colors.foreground)
           .borderRadius({ topLeft: Radius.xl, topRight: Radius.xl, bottomLeft: Radius.xl, bottomRight: Radius.xs })
           .alignItems(HorizontalAlign.Start)
           .gesture(LongPressGesture().onAction(() => { this.copyContent() }))
@@ -211,12 +211,13 @@ export struct MessageCard {
           }
         }
       }
-      .constraintSize(this.isUser ? { maxWidth: '85%' } : { minWidth: '100%' })
+      .layoutWeight(this.isUser ? 0 : 1)
+      .constraintSize(this.isUser ? { maxWidth: '85%' } : { maxWidth: '100%' })
     }
     .width('100%')
     .padding({
-      left: Spacing.lg,
-      right: Spacing.lg,
+      left: Spacing.xl,
+      right: Spacing.xl,
       top: (this.msgType === 'thinking' || this.msgType === 'tool_call') ? 0 : Spacing.xs,
       bottom: (this.msgType === 'thinking' || this.msgType === 'tool_call') ? 0 : Spacing.xs
     })

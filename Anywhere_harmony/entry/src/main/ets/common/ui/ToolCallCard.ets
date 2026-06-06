@@ -28,7 +28,7 @@ export struct ToolCallCard {
 
 
   getFormattedName(): string {
-    if (!this.name) return getContext().resourceManager.getStringSync($r('app.string.tool_default_name'));
+    if (!this.name) return getContext(this).resourceManager.getStringSync($r('app.string.tool_default_name').id);
     let formatted = this.name.replace(/_/g, ' ');
     return formatted.charAt(0).toUpperCase() + formatted.slice(1);
   }
@@ -44,7 +44,7 @@ export struct ToolCallCard {
     // Command Line / Shell / Tools
     if (n.includes('bash') || n.includes('cmd') || n.includes('shell') || n.includes('terminal') ||
         n.includes('tool') || n.includes('exec') || n.includes('run') || n.includes('deploy')) {
-      return $r('sys.symbol.gearshape');
+      return 'tool';
     }
     
     if (n.includes('edit') || n.includes('write') || n.includes('modify')) {
@@ -53,7 +53,7 @@ export struct ToolCallCard {
     
     // Read / View
     if (n.includes('read') || n.includes('cat')) {
-      return $r('sys.symbol.doc_text');
+      return $r('sys.symbol.doc');
     }
     
     // Create / New
@@ -72,7 +72,7 @@ export struct ToolCallCard {
     }
     
     // Fallback
-    return 'tool';
+    return $r('sys.symbol.paperclip');
   }
 
   isCustomIcon(icon: Resource | string): boolean {
@@ -276,7 +276,7 @@ export struct ToolCallCard {
         Blank()
 
         if (this.hasDetail()) {
-          Text(getContext().resourceManager.getStringSync(this.expanded ? $r('app.string.tool_hide_detail') : $r('app.string.tool_show_detail')))
+          Text(getContext(this).resourceManager.getStringSync(this.expanded ? $r('app.string.tool_hide_detail').id : $r('app.string.tool_show_detail').id))
             .fontSize(FontSize.xs)
             .fontColor(Colors.foregroundLight)
             .margin({ right: Spacing.xs })
@@ -333,10 +333,10 @@ export struct ToolCallCard {
         .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: -5 })))
       }
     }
-    .width('auto')
-    .backgroundColor(Colors.surface1)
+    .width('100%')
+    .backgroundColor(Colors.surface0)
     .borderRadius(Radius.md)
-    .padding({ left: Spacing.xs, right: Spacing.xs })
+    .padding({ left: 0, right: 0 })
     .animation({ duration: Duration.fast, curve: Curve.EaseOut })
   }
 }

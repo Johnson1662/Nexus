@@ -1,7 +1,6 @@
-import { Colors, FontSize, Spacing, Radius, Duration } from '../../constants/DesignTokens';
+import { Colors, FontSize, Spacing, Radius, Layout } from '../../constants/DesignTokens';
 import { HostStore, DeviceEntry } from '../../common/model/WorkspaceInfo';
 import { ChatStore } from '../../common/model/ChatState';
-import { saveHosts } from '../../services/StorageService';
 
 @Component
 export struct HostManagePage {
@@ -11,6 +10,21 @@ export struct HostManagePage {
   onConnect?: (url: string) => void;
   onDeleteHost?: (index: number) => void;
 
+  isCurrentHost(urls: string[]): boolean {
+    let current: string = this.serverUrl;
+    if (current.length === 0) return false;
+    for (let i: number = 0; i < urls.length; i++) {
+      if (urls[i].length > 0 && current.indexOf(urls[i]) >= 0) return true;
+      if (urls[i].length > 0 && urls[i].indexOf(current) >= 0) return true;
+    }
+    if (ChatStore.connected) {
+      for (let i: number = 0; i < urls.length; i++) {
+        if (urls[i].length > 0 && current === urls[i]) return true;
+      }
+    }
+    return false;
+  }
+
   build() {
     NavDestination() {
       Column() {
@@ -18,8 +32,8 @@ export struct HostManagePage {
           Text('Host 管理')
             .fontSize(FontSize.xl).fontColor(Colors.foreground).fontWeight(FontWeight.Bold)
         }
-        .width('100%')
-        .padding({ left: Spacing.lg, right: Spacing.lg, top: Spacing.lg, bottom: Spacing.lg })
+        .width(Layout.contentWidth)
+        .padding({ top: Spacing.lg, bottom: Spacing.lg })
 
         if (HostStore.devices.length === 0) {
           Column() {
@@ -29,16 +43,16 @@ export struct HostManagePage {
               .fontSize(FontSize.sm).fontColor(Colors.foregroundLight)
               .margin({ top: Spacing.xs })
           }
-          .width('100%').layoutWeight(1)
+          .width(Layout.contentWidth).layoutWeight(1)
           .justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center)
         } else {
-          List() {
+          List({ space: Spacing.sm }) {
             ForEach(HostStore.devices, (device: DeviceEntry, index: number) => {
               ListItem() {
                 Row() {
-                  SymbolGlyph($r('sys.symbol.ohos_wifi'))
-                    .fontSize(20)
-                    .fontColor([Colors.foregroundMuted])
+                  Image($r('app.media.ic_terminal_window'))
+                    .width(20).height(20)
+                    .fillColor(Colors.foregroundMuted)
                     .margin({ right: Spacing.md })
 
                   Column() {
@@ -53,17 +67,27 @@ export struct HostManagePage {
                   .alignItems(HorizontalAlign.Start)
                   .layoutWeight(1)
 
-                  if (ChatStore.connected) {
+                  if (ChatStore.connected && this.isCurrentHost(device.urls)) {
                     SymbolGlyph($r('sys.symbol.checkmark'))
                       .fontSize(16).fontColor([Colors.accent])
                       .margin({ right: Spacing.sm })
-                    Text('切换')
+                    Text('当前')
                       .fontSize(FontSize.xs).fontColor(Colors.accent)
-                      .onClick(() => { if (this.onConnect && device.urls.length > 0) this.onConnect(device.urls[0]) })
+                  } else {
+                    Text(ChatStore.connected ? '切换' : '连接')
+                      .fontSize(FontSize.xs).fontColor(Colors.accent)
+                      .margin({ right: Spacing.sm })
                   }
                 }
                 .width('100%')
                 .padding({ left: Spacing.lg, right: Spacing.lg, top: Spacing.md, bottom: Spacing.md })
+                .backgroundColor(Colors.surface1)
+                .borderRadius(Radius.xl)
+                .onClick(() => {
+                  if (!this.isCurrentHost(device.urls) && this.onConnect && device.urls.length > 0) {
+                    this.onConnect(device.urls[0]);
+                  }
+                })
               }
               .width('100%')
               .gesture(
@@ -72,7 +96,7 @@ export struct HostManagePage {
               )
             }, (device: DeviceEntry, index: number) => device.hostId || device.name + index.toString())
           }
-          .width('100%')
+          .width(Layout.contentWidth)
           .layoutWeight(1)
         }
 
@@ -105,19 +129,20 @@ export struct HostManagePage {
                 })
             }
             .width('100%')
-            .padding({ left: Spacing.lg, right: Spacing.lg, bottom: Spacing.md })
+            .padding({ bottom: Spacing.md })
           } else {
             Button('添加服务器')
               .width('100%').height(44)
               .backgroundColor(Colors.accent).fontColor(Color.White)
               .borderRadius(Radius.sm).fontSize(FontSize.base)
-              .margin({ left: Spacing.lg, right: Spacing.lg, bottom: Spacing.xxxl })
+              .margin({ bottom: Spacing.xxxl })
               .onClick(() => { this.showForm = true })
           }
         }
-        .width('100%')
+        .width(Layout.contentWidth)
       }
       .width('100%').height('100%')
+      .alignItems(HorizontalAlign.Center)
       .backgroundColor(Colors.surface0)
     }
     .hideTitleBar(true)

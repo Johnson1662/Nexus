@@ -96,11 +96,11 @@ async function ensureSessionAlive(ws, sessionId) {
             // independently even if ws.send() fails (disconnected WS).
             const eventPayload = { type: "agent_event", sessionId, event: update.update };
             try {
-                sess.ws?.send(JSON.stringify(eventPayload));
+                bufferAgentEvent(sessionId, eventPayload);
             }
             catch { }
             try {
-                bufferAgentEvent(sessionId, eventPayload);
+                sess.ws?.send(JSON.stringify(eventPayload));
             }
             catch { }
         },

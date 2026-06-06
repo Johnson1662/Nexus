@@ -74,8 +74,8 @@ export async function handleResumeSession(ws, params) {
                     sessionId: bridgeSessionId,
                     event: update.update,
                 };
-                sess.ws?.send(JSON.stringify(eventPayload));
                 bufferAgentEvent(bridgeSessionId, eventPayload);
+                sess.ws?.send(JSON.stringify(eventPayload));
             }
             catch { }
         },
@@ -116,7 +116,15 @@ export async function handleResumeSession(ws, params) {
     });
     proc.on("exit", (code) => {
         console.log(`[server] ${bridgeSessionId} exited with code ${code}`);
-        deleteSession(bridgeSessionId);
+        try {
+            sess.ws?.send(JSON.stringify({
+                type: "session_ended", sessionId: bridgeSessionId, exitCode: code
+            }));
+        }
+        catch { }
+        if (sess.orphanedAt === null) {
+            deleteSession(bridgeSessionId);
+        }
     });
     try {
         console.log(`[server] initializing ACP for resume session ${targetSessionId}...`);

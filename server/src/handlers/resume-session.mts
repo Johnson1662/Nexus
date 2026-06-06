@@ -97,8 +97,8 @@ export async function handleResumeSession(
           sessionId: bridgeSessionId,
           event: update.update,
         };
-        sess.ws?.send(JSON.stringify(eventPayload));
         bufferAgentEvent(bridgeSessionId, eventPayload);
+        sess.ws?.send(JSON.stringify(eventPayload));
       } catch {}
     },
     onPermissionRequest: (params) => {
@@ -142,7 +142,14 @@ export async function handleResumeSession(
 
   proc.on("exit", (code: number | null) => {
     console.log(`[server] ${bridgeSessionId} exited with code ${code}`);
-    deleteSession(bridgeSessionId);
+    try {
+      sess.ws?.send(JSON.stringify({
+        type: "session_ended", sessionId: bridgeSessionId, exitCode: code
+      }));
+    } catch {}
+    if (sess.orphanedAt === null) {
+      deleteSession(bridgeSessionId);
+    }
   });
 
   try {

@@ -5,11 +5,22 @@ import { util } from '@kit.ArkTS';
 import { backgroundTaskManager } from '@kit.BackgroundTasksKit';
 import { ChatStore } from '../model/ChatState';
 import { ServerSession, HostStore, DeviceEntry } from '../model/WorkspaceInfo';
-import { StorageService, PrefsKeys, saveHosts, loadWorkspaces, saveModelCache, saveSessionCache } from '../../services/StorageService';
+import {
+  StorageService,
+  PrefsKeys,
+  saveHosts,
+  loadWorkspaces,
+  saveWorkspaceModelCache,
+  saveWorkspaceSessionCache,
+  saveAgentCache,
+  saveLastModelSelection,
+  loadLastModelSelection
+} from '../../services/StorageService';
 import { WorkspaceStore } from '../model/WorkspaceInfo';
 import { ClientMessage, ServerMessage, AcpUpdate, AgentInfo, ServerInfoMessage, SyncResponseMessage, SyncResponseEntry } from './WSProtocol';
 import { getOrCreateClientKeyPair, signWithClientKey, generateEphemeralKeyPair } from './CryptoHelper';
 import { PhoneEncryptedChannel } from './PhoneEncryptedChannel';
+import { DeviceAgentStore } from '../model/DeviceAgentStore';
 
 import { ModelItem, ModeItem } from '../model/ChatState';
 
@@ -29,6 +40,94 @@ function repairRelayJson(raw: string): string {
 
 const DOMAIN: number = 0x0000;
 const TAG: string = 'WSClient';
+
+function stripQuery(url: string): string {
+  let qIdx: number = url.indexOf('?');
+  return qIdx >= 0 ? url.substring(0, qIdx) : url;
+}
+
+function getUrlScheme(url: string): string {
+  let schemeEnd: number = url.indexOf('://');
+  if (schemeEnd > 0) {
+    return url.substring(0, schemeEnd);
+  }
+  return 'ws';
+}
+
+function getUrlPort(url: string): string {
+  let cleanUrl: string = stripQuery(url);
+  let schemeEnd: number = cleanUrl.indexOf('://');
+  let rest: string = schemeEnd >= 0 ? cleanUrl.substring(schemeEnd + 3) : cleanUrl;
+  if (rest.startsWith('[')) {
+    let closeBracket: number = rest.indexOf(']');
+    if (closeBracket >= 0 && closeBracket + 2 < rest.length && rest[closeBracket + 1] === ':') {
+      return rest.substring(closeBracket + 2);
+    }
+  }
+  let portSep: number = rest.lastIndexOf(':');
+  if (portSep >= 0 && portSep + 1 < rest.length) {
+    return rest.substring(portSep + 1);
+  }
+  return '12138';
+}
+
+function buildWsUrlFromIp(ip: string, port: string, scheme: string): string {
+  if (ip.length === 0 || ip.startsWith('HOST:')) {
+    return '';
+  }
+  let host: string = ip;
+  if (host.indexOf(':') >= 0 && !host.startsWith('[')) {
+    host = '[' + host + ']';
+  }
+  return scheme + '://' + host + ':' + port;
+}
+
+function addUniqueUrl(urls: string[], url: string): void {
+  if (url.length > 0 && urls.indexOf(url) < 0) {
+    urls.push(url);
+  }
+}
+
+function getMessageSessionId(messageId: string): string {
+  let idx: number = messageId.lastIndexOf(':');
+  if (idx <= 0) return '';
+  return messageId.substring(0, idx);
+}
+
+function getMessageSeq(messageId: string): number {
+  let idx: number = messageId.lastIndexOf(':');
+  if (idx < 0 || idx + 1 >= messageId.length) return 0;
+  return parseInt(messageId.substring(idx + 1), 10) || 0;
+}
+
+function hasProcessedMessage(messageId: string): boolean {
+  if (messageId.length === 0 || ChatStore.lastMessageId.length === 0) return false;
+  if (messageId === ChatStore.lastMessageId) return true;
+  let sessionId: string = getMessageSessionId(messageId);
+  let currentSessionId: string = getMessageSessionId(ChatStore.lastMessageId);
+  if (sessionId.length === 0 || sessionId !== currentSessionId) return false;
+  let seq: number = getMessageSeq(messageId);
+  let currentSeq: number = getMessageSeq(ChatStore.lastMessageId);
+  return seq > 0 && currentSeq > 0 && seq <= currentSeq;
+}
+
+let lastMessagePersistTime: number = 0;
+
+function rememberMessageId(messageId: string): void {
+  if (messageId.length === 0) return;
+  ChatStore.lastMessageId = messageId;
+  let now: number = Date.now();
+  if (now - lastMessagePersistTime >= 1000) {
+    lastMessagePersistTime = now;
+    StorageService.getInstance().putString(PrefsKeys.LAST_MESSAGE_ID, messageId);
+  }
+}
+
+function clearMessageId(): void {
+  ChatStore.lastMessageId = '';
+  StorageService.getInstance().putString(PrefsKeys.LAST_MESSAGE_ID, '');
+}
+
 export type StateChangeCallback = (connected: boolean, detail: string) => void;
 export type ModelListCallback = (models: ModelItem[], modes: ModeItem[]) => void;
 export type SessionListCallback = (sessions: ServerSession[]) => void;
@@ -108,6 +207,10 @@ export class WSClient {
 
   // Connect to the fastest reachable URL from a device, then use that URL
   async connectBest(urls: string[]): Promise<void> {
+    if (urls.length === 0) {
+      hilog.error(DOMAIN, TAG, 'connectBest: empty urls, abort');
+      return;
+    }
     let bestUrl: string = urls[0];
     let bestLatency: number = -1;
     let results: Promise<number>[] = [];
@@ -212,6 +315,7 @@ export class WSClient {
       this.everConnected = false;
       hilog.info(DOMAIN, TAG, 'disconnected: ' + url);
       ChatStore.connected = false;
+      ChatStore.currentDeviceId = '';
       this.cancelBgTask();
       this.notifyState(false, '');
       if (!this.intentionalClose) {
@@ -360,6 +464,7 @@ export class WSClient {
       this.ws = null;
     }
     ChatStore.connected = false;
+    ChatStore.currentDeviceId = '';
     this.stopHeartbeatWatchdog();
   }
 
@@ -437,9 +542,8 @@ export class WSClient {
     let hostname: string = info.hostname;
     let connectedUrl: string = this.lastUrl;
     if (connectedUrl.length === 0) return;
-    // Strip query parameters (e.g. from QR code relay URL) for device persistence
-    let qIdx: number = connectedUrl.indexOf('?');
-    let cleanUrl: string = qIdx >= 0 ? connectedUrl.substring(0, qIdx) : connectedUrl;
+    let isRelayPairUrl: boolean = connectedUrl.indexOf('targetHostId=') >= 0;
+    let primaryUrl: string = isRelayPairUrl ? connectedUrl : stripQuery(connectedUrl);
     // Dedup: remove all existing devices with same hostId or same hostname
     let mergedUrls: string[] = [];
     for (let i: number = HostStore.devices.length - 1; i >= 0; i--) {
@@ -458,7 +562,14 @@ export class WSClient {
         HostStore.removeDevice(i);
       }
     }
-    if (mergedUrls.indexOf(cleanUrl) < 0) mergedUrls.push(cleanUrl);
+    addUniqueUrl(mergedUrls, primaryUrl);
+    if (!isRelayPairUrl && info.ips) {
+      let port: string = getUrlPort(connectedUrl);
+      let scheme: string = getUrlScheme(connectedUrl);
+      for (let i: number = 0; i < info.ips.length; i++) {
+        addUniqueUrl(mergedUrls, buildWsUrlFromIp(info.ips[i], port, scheme));
+      }
+    }
     HostStore.addOrUpdateDevice({
       name: hostname,
       urls: mergedUrls,
@@ -466,6 +577,7 @@ export class WSClient {
       relayPin: info.relayPin,
     } as DeviceEntry);
 
+    ChatStore.currentDeviceId = info.hostId || hostname;
     saveHosts();
     loadWorkspaces(connectedUrl);
     for (let cb of this.serverInfoListeners) {
@@ -588,6 +700,9 @@ export class WSClient {
         this.handleServerInfo(msg as ServerInfoMessage);
         break;
       case 'session_started':
+        if (msg.sessionId !== undefined && msg.sessionId !== ChatStore.bridgeSessionId) {
+          clearMessageId();
+        }
         ChatStore.bridgeSessionId = msg.sessionId || '';
         if (msg.loadedSessionId) {
           ChatStore.acpSessionId = msg.loadedSessionId;
@@ -598,6 +713,15 @@ export class WSClient {
           ChatStore.sessionCurrentModelId = msg.model;
           ChatStore.lastModelId = msg.model;
           StorageService.getInstance().putString(PrefsKeys.LAST_MODEL_ID, msg.model);
+          if (ChatStore.agentType.length > 0 && WorkspaceStore.currentIndex >= 0 &&
+              WorkspaceStore.currentIndex < WorkspaceStore.workspaces.length) {
+            saveLastModelSelection(
+              ChatStore.currentDeviceId || this.lastUrl,
+              WorkspaceStore.workspaces[WorkspaceStore.currentIndex].path,
+              ChatStore.agentType,
+              msg.model
+            );
+          }
           for (let i = 0; i < ChatStore.models.length; i++) {
             if (ChatStore.models[i].modelId === msg.model) {
               ChatStore.modelIndex = i;
@@ -632,8 +756,16 @@ export class WSClient {
         break;
       case 'agent_event':
         if (msg.event) {
+          let messageId: string = msg.messageId || msg.event.messageId || '';
+          if (messageId.length > 0 && hasProcessedMessage(messageId)) break;
+          if (messageId.length > 0) {
+            msg.event.messageId = messageId;
+          }
           for (let cb of this.updateListeners) {
             cb(msg.event);
+          }
+          if (messageId.length > 0) {
+            rememberMessageId(messageId);
           }
         }
         break;
@@ -657,8 +789,27 @@ export class WSClient {
             }
           }
         }
-        // If session didn't set a model, try persisted lastModelId
-        if (!ChatStore.sessionCurrentModelId && ChatStore.lastModelId.length > 0) {
+        let hostId: string = ChatStore.currentDeviceId || this.lastUrl;
+        let workspacePath: string = WorkspaceStore.currentIndex >= 0 &&
+          WorkspaceStore.currentIndex < WorkspaceStore.workspaces.length
+          ? WorkspaceStore.workspaces[WorkspaceStore.currentIndex].path
+          : '';
+        if (!ChatStore.sessionCurrentModelId && workspacePath.length > 0 &&
+            (ChatStore.agentType || ChatStore.selectedAgentName).length > 0) {
+          loadLastModelSelection(hostId, workspacePath, ChatStore.agentType || ChatStore.selectedAgentName)
+            .then((lastModelId: string) => {
+              if (lastModelId.length === 0) {
+                return;
+              }
+              ChatStore.lastModelId = lastModelId;
+              for (let i = 0; i < ChatStore.models.length; i++) {
+                if (ChatStore.models[i].modelId === lastModelId) {
+                  ChatStore.modelIndex = i;
+                  break;
+                }
+              }
+            });
+        } else if (!ChatStore.sessionCurrentModelId && ChatStore.lastModelId.length > 0) {
           for (let i = 0; i < ChatStore.models.length; i++) {
             if (ChatStore.models[i].modelId === ChatStore.lastModelId) {
               ChatStore.modelIndex = i;
@@ -666,26 +817,43 @@ export class WSClient {
             }
           }
         }
-        // Persist to local cache
-        saveModelCache(ChatStore.agentType || ChatStore.selectedAgentName, msg.models || [], msg.modes || []);
+        if (hostId.length > 0 && workspacePath.length > 0 && (ChatStore.agentType || ChatStore.selectedAgentName).length > 0) {
+          saveWorkspaceModelCache(
+            hostId,
+            workspacePath,
+            ChatStore.agentType || ChatStore.selectedAgentName,
+            msg.models || [],
+            msg.modes || []
+          );
+        }
         for (let cb of this.modelListeners) {
           cb(msg.models || [], msg.modes || []);
         }
         break;
       case 'session_list':
-        ChatStore.sessions = msg.sessions || [];
+        let sessions: ServerSession[] = msg.sessions || [];
+        let now: number = Date.now();
+        for (let i = 0; i < sessions.length; i++) {
+          if (sessions[i].createdAt <= 0) {
+            sessions[i].createdAt = now;
+          }
+        }
+        ChatStore.sessions = sessions;
         ChatStore.loadingSession = false;
-        // Persist to local cache
         if (ChatStore.agentType.length > 0 && WorkspaceStore.currentIndex >= 0 &&
             WorkspaceStore.currentIndex < WorkspaceStore.workspaces.length) {
           let cwd: string = WorkspaceStore.workspaces[WorkspaceStore.currentIndex].path;
-          saveSessionCache(ChatStore.agentType, cwd, msg.sessions || []);
+          saveWorkspaceSessionCache(ChatStore.currentDeviceId || this.lastUrl, cwd, sessions);
         }
         for (let cb of this.sessionListeners) {
-          cb(msg.sessions || []);
+          cb(sessions);
         }
         break;
       case 'agent_list':
+        if (ChatStore.currentDeviceId.length > 0 && msg.agents) {
+          DeviceAgentStore.saveAgents(ChatStore.currentDeviceId, msg.agents);
+          saveAgentCache(ChatStore.currentDeviceId, msg.agents);
+        }
         for (let cb of this.agentListListeners) {
           cb(msg.agents || []);
         }
@@ -729,25 +897,33 @@ export class WSClient {
         let syncMsg: SyncResponseMessage = msg as SyncResponseMessage;
         let entries: Array<SyncResponseEntry> | undefined = syncMsg.entries;
         hilog.info(DOMAIN, TAG, 'sync_response: ' + (entries !== undefined ? String(entries.length) : '0') + ' entries');
+        if (syncMsg.overflow === true) {
+          for (let cb of this.errorListeners) {
+            cb('部分断线输出已超出缓存，请重新加载会话查看完整历史');
+          }
+        }
         if (entries !== undefined) {
           for (let i = 0; i < entries.length; i++) {
             let entry: SyncResponseEntry = entries[i];
             let payload: AcpUpdate | undefined = entry.payload;
+            let messageId: string = entry.messageId || payload?.messageId || '';
+            if (messageId.length > 0 && hasProcessedMessage(messageId)) continue;
             if (payload !== undefined && payload.sessionUpdate !== undefined) {
-              // Defensive dedup: skip entries already processed
-              if (payload.messageId !== undefined && payload.messageId === ChatStore.lastMessageId) continue;
+              if (messageId.length > 0) {
+                payload.messageId = messageId;
+              }
               for (let cb of this.updateListeners) {
                 cb(payload);
               }
-              if (payload.messageId !== undefined) {
-                ChatStore.lastMessageId = String(payload.messageId);
+              if (messageId.length > 0) {
+                rememberMessageId(messageId);
               }
             }
           }
           // Phase transition: syncing → normal (complete)
-          ChatStore.reconnectPhase = '';
           hilog.info(DOMAIN, TAG, 'sync_response: processed ' + String(entries.length) + ' entries');
         }
+        ChatStore.reconnectPhase = '';
         break;
       }
       default:

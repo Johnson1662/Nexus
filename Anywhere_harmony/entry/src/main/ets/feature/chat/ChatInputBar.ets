@@ -1,4 +1,4 @@
-import { Colors, FontSize, Spacing, Radius, Shadow, Duration } from '../../constants/DesignTokens';
+import { Colors, FontSize, Spacing, Radius, Shadow, Duration, Layout } from '../../constants/DesignTokens';
 import { ChatStore, AvailableCommand } from '../../common/model/ChatState';
 import { CustomIcon } from '../../common/ui/CustomIcon';
 import { picker } from '@kit.CoreFileKit';
@@ -86,7 +86,7 @@ export struct ChatInputBar {
   }
 
   pickFile(): void {
-    let ctx = this.getUIContext().getHostContext();
+    let ctx = (this.getUIContext() as UIContext).getHostContext();
     if (!ctx) return;
     let documentPicker = new picker.DocumentViewPicker(ctx);
     try {
@@ -194,7 +194,7 @@ export struct ChatInputBar {
             }
           }, (cmd: AvailableCommand) => cmd.name)
         }
-        .width('100%')
+        .width(Layout.contentWidth)
         .height(this.getDropdownHeight())
         .backgroundColor(Colors.surfaceElevated)
         .borderRadius(Radius.lg)
@@ -238,7 +238,7 @@ export struct ChatInputBar {
             .fontSize(14).fontColor([Colors.foregroundMuted])
             .onClick(() => { this.clearPendingFile() })
         }
-        .width('100%')
+        .width(Layout.contentWidth)
         .padding({ left: Spacing.lg, right: Spacing.lg, top: Spacing.sm, bottom: Spacing.xs })
         .backgroundColor(Colors.surface1)
         .borderRadius({ topLeft: Radius.lg, topRight: Radius.lg })
@@ -281,11 +281,9 @@ export struct ChatInputBar {
           Blank()
 
           if (this.showCancel) {
-            CustomIcon({
-              name: 'stop',
-              iconSize: 28,
-              color: Colors.error
-            })
+            SymbolGlyph($r('sys.symbol.xmark_circle'))
+              .fontSize(28)
+              .fontColor([Colors.error])
               .accessibilityText('Cancel generation')
               .onClick(() => { if (this.onCancel) this.onCancel() })
               .transition(TransitionEffect.OPACITY.combine(TransitionEffect.scale({ x: 0.5, y: 0.5 })))
@@ -315,10 +313,11 @@ export struct ChatInputBar {
       .borderRadius(Radius.xxl)
       .border({ width: 1, color: Colors.borderLight })
       .shadow(Shadow.md)
-      .width('100%')
+      .width(Layout.contentWidth)
     }
     .width('100%')
-    .padding({ left: Spacing.md, right: Spacing.md, top: Spacing.md, bottom: Spacing.lg })
+    .alignItems(HorizontalAlign.Center)
+    .padding({ top: Spacing.md, bottom: Spacing.lg })
     .backgroundColor(Colors.surface0)
     .accessibilityGroup(true)
   }
@@ -326,17 +325,20 @@ export struct ChatInputBar {
   getPlaceholder(): string {
     if (ChatStore.reconnectPhase.length > 0) {
       if (ChatStore.reconnectPhase === 'disconnected') {
-        return getContext().resourceManager.getStringSync($r('app.string.chat_input_disconnected_placeholder'));
+        return getContext(this).resourceManager.getStringSync($r('app.string.chat_input_disconnected_placeholder').id);
       } else if (ChatStore.reconnectPhase === 'reconnecting') {
-        return getContext().resourceManager.getStringSync($r('app.string.chat_input_reconnecting_placeholder'));
+        return getContext(this).resourceManager.getStringSync($r('app.string.chat_input_reconnecting_placeholder').id);
       } else if (ChatStore.reconnectPhase === 'syncing') {
-        return getContext().resourceManager.getStringSync($r('app.string.chat_input_syncing_placeholder'));
+        return getContext(this).resourceManager.getStringSync($r('app.string.chat_input_syncing_placeholder').id);
       }
     }
     if (this.pendingFileName.length > 0) {
-      return getContext().resourceManager.getStringSync($r('app.string.chat_input_file_placeholder'));
+      return getContext(this).resourceManager.getStringSync($r('app.string.chat_input_file_placeholder').id);
     }
-    return getContext().resourceManager.getStringSync($r('app.string.chat_input_placeholder'));
+    if ((ChatStore.selectedAgentName || ChatStore.agentType).length === 0) {
+      return getContext(this).resourceManager.getStringSync($r('app.string.chat_input_agent_required_placeholder').id);
+    }
+    return getContext(this).resourceManager.getStringSync($r('app.string.chat_input_placeholder').id);
   }
 
   hasCommands(): boolean {

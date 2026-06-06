@@ -18,10 +18,11 @@ const MAX_MESSAGE_BUFFER = 500;
 export function bufferAgentEvent(sessionId, eventPayload) {
     const sess = sessions.get(sessionId);
     if (!sess)
-        return;
+        return undefined;
     let seq = (sessionSeqCounter.get(sessionId) || 0) + 1;
     sessionSeqCounter.set(sessionId, seq);
     const messageId = `${sessionId}:${seq}`;
+    eventPayload.messageId = messageId;
     sess.messageBuffer.push({
         messageId,
         payload: JSON.stringify(eventPayload),
@@ -31,22 +32,30 @@ export function bufferAgentEvent(sessionId, eventPayload) {
     if (sess.messageBuffer.length > MAX_MESSAGE_BUFFER) {
         sess.messageBuffer = sess.messageBuffer.slice(sess.messageBuffer.length - MAX_MESSAGE_BUFFER);
     }
+    return messageId;
 }
 /** Get buffered messages after a given messageId (cursor sync) */
 export function getBufferedAfter(sessionId, lastMessageId) {
     const sess = sessions.get(sessionId);
     if (!sess)
-        return [];
+        return { entries: [], overflow: false };
     let lastSeq = 0;
     if (lastMessageId) {
         const parts = lastMessageId.split(':');
         lastSeq = parseInt(parts[parts.length - 1]) || 0;
     }
-    return sess.messageBuffer.filter((m) => {
+    let firstBufferedSeq = 0;
+    if (sess.messageBuffer.length > 0) {
+        const firstParts = sess.messageBuffer[0].messageId.split(':');
+        firstBufferedSeq = parseInt(firstParts[firstParts.length - 1]) || 0;
+    }
+    const overflow = lastSeq > 0 && firstBufferedSeq > 0 && lastSeq < firstBufferedSeq - 1;
+    const entries = sess.messageBuffer.filter((m) => {
         const mParts = m.messageId.split(':');
         const mSeq = parseInt(mParts[mParts.length - 1]) || 0;
         return mSeq > lastSeq;
     });
+    return { entries, overflow };
 }
 export function enqueueWsOp(ws, fn) {
     const prev = wsOpQueues.get(ws) || Promise.resolve();
@@ -170,6 +179,7 @@ function startOrphanCleanup() {
                 killTerminalProcesses(sess);
                 killSessionProcess(sess);
                 sessions.delete(id);
+                sessionSeqCounter.delete(id);
                 console.log(`[session] cleaned up orphaned session ${id.slice(0, 20)}`);
             }
         }
@@ -194,6 +204,7 @@ function enforceOrphanLimit() {
                 killTerminalProcesses(sess);
                 killSessionProcess(sess);
                 sessions.delete(id);
+                sessionSeqCounter.delete(id);
                 console.log(`[session] evicted oldest orphan session ${id.slice(0, 20)}`);
             }
         }

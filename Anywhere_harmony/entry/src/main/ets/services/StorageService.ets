@@ -1,7 +1,7 @@
 import { preferences } from '@kit.ArkData';
 import { common } from '@kit.AbilityKit';
 import { WorkspaceStore, WorkspaceInfo, HostStore, DeviceEntry, HostInfo, ServerSession } from '../common/model/WorkspaceInfo';
-import { ModelItem, ModeItem } from '../common/model/ChatState';
+import { ChatStore, ModelItem, ModeItem } from '../common/model/ChatState';
 
 const PREF_NAME = 'app_settings';
 
@@ -101,6 +101,8 @@ export interface PrefsKeysType {
   WORKSPACE_INDEX: string;
   HOST_LIST: string;
   LAST_MESSAGE_ID: string;
+  DEVICE_AGENTS_CACHE: string;
+  HIERARCHY_CACHE: string;
 }
 
 export const PrefsKeys: PrefsKeysType = {
@@ -110,7 +112,9 @@ export const PrefsKeys: PrefsKeysType = {
   WORKSPACES: 'workspaces',
   WORKSPACE_INDEX: 'workspace_index',
   HOST_LIST: 'host_list',
-  LAST_MESSAGE_ID: 'last_message_id'
+  LAST_MESSAGE_ID: 'last_message_id',
+  DEVICE_AGENTS_CACHE: 'device_agents_cache',
+  HIERARCHY_CACHE: 'hierarchy_cache_v2'
 };
 
 // Workspace data interface for serialization
@@ -257,90 +261,305 @@ export async function loadHosts(): Promise<void> {
 
 // ── Persistent Cache (Models, Modes, Sessions) ──
 
-/** 当前缓存 schema 版本，升级时递增以触发旧缓存失效 */
-export const CACHE_SCHEMA_VERSION: number = 1;
+export const CACHE_SCHEMA_VERSION: number = 2;
 
-/** 缓存 TTL：5 分钟 */
-const CACHE_TTL_MS: number = 5 * 60 * 1000;
+export interface ModelProviderGroup {
+  providerId: string;
+  providerName: string;
+  models: ModelItem[];
+}
 
-export function isCacheExpired(timestamp: number): boolean {
-  return (Date.now() - timestamp) > CACHE_TTL_MS;
+export interface AgentCacheData {
+  schemaVersion: number;
+  hostId: string;
+  dayKey: string;
+  fetchedAt: number;
+  agents: import('../common/websocket/WSProtocol').AgentInfo[];
 }
 
 export interface ModelCacheData {
   schemaVersion: number;
+  hostId: string;
+  workspacePath: string;
+  agentName: string;
+  providers: ModelProviderGroup[];
   models: ModelItem[];
   modes: ModeItem[];
-  timestamp: number;
+  dayKey: string;
+  fetchedAt: number;
 }
 
 export interface SessionCacheData {
   schemaVersion: number;
+  hostId: string;
+  workspacePath: string;
   sessions: ServerSession[];
-  timestamp: number;
+  fetchedAt: number;
 }
 
-function cacheKey(prefix: string, agentName: string): string {
-  let sanitized: string = agentName.replace(/[^a-zA-Z0-9_\-]/g, '_');
-  return prefix + sanitized;
+export interface WorkspaceSelectionData {
+  lastAgentByWorkspace: Record<string, string>;
+  lastModelByAgent: Record<string, string>;
 }
 
-const CACHE_MODEL_PREFIX = 'cm_';
-const CACHE_SESSION_PREFIX = 'cs_';
+export interface HostWorkspaceCache {
+  modelsByAgent: Record<string, ModelCacheData>;
+  sessions: SessionCacheData | null;
+  selection: WorkspaceSelectionData;
+}
 
-export async function saveModelCache(agentName: string, models: ModelItem[], modes: ModeItem[]): Promise<void> {
-  if (agentName.length === 0) return;
-  let storage = StorageService.getInstance();
-  let key = cacheKey(CACHE_MODEL_PREFIX, agentName);
-  let data: ModelCacheData = {
+export interface HostCacheBucket {
+  agents: AgentCacheData | null;
+  workspaces: Record<string, HostWorkspaceCache>;
+}
+
+export interface HierarchyCacheData {
+  schemaVersion: number;
+  hosts: Record<string, HostCacheBucket>;
+}
+
+function sanitizeCacheSegment(value: string): string {
+  if (value.length === 0) {
+    return '__empty__';
+  }
+  return value.replace(/[^a-zA-Z0-9_\-:.\\/]/g, '_');
+}
+
+function getTodayKey(): string {
+  let date: Date = new Date();
+  let year: string = date.getFullYear().toString();
+  let month: string = (date.getMonth() + 1).toString().padStart(2, '0');
+  let day: string = date.getDate().toString().padStart(2, '0');
+  return year + '-' + month + '-' + day;
+}
+
+function isDailyCacheExpired(dayKey: string): boolean {
+  return dayKey.length === 0 || dayKey !== getTodayKey();
+}
+
+function getHierarchyDefault(): HierarchyCacheData {
+  return {
     schemaVersion: CACHE_SCHEMA_VERSION,
+    hosts: {}
+  };
+}
+
+async function readHierarchyCache(): Promise<HierarchyCacheData> {
+  let storage = StorageService.getInstance();
+  let data: HierarchyCacheData = await storage.getObject<HierarchyCacheData>(PrefsKeys.HIERARCHY_CACHE, getHierarchyDefault());
+  if (data.schemaVersion !== CACHE_SCHEMA_VERSION || data.hosts === undefined) {
+    return getHierarchyDefault();
+  }
+  return data;
+}
+
+async function writeHierarchyCache(data: HierarchyCacheData): Promise<void> {
+  data.schemaVersion = CACHE_SCHEMA_VERSION;
+  await StorageService.getInstance().putObject(PrefsKeys.HIERARCHY_CACHE, data);
+}
+
+function ensureHostBucket(data: HierarchyCacheData, hostId: string): HostCacheBucket {
+  let safeHostId: string = sanitizeCacheSegment(hostId);
+  if (data.hosts[safeHostId] === undefined) {
+    data.hosts[safeHostId] = {
+      agents: null,
+      workspaces: {}
+    };
+  }
+  return data.hosts[safeHostId];
+}
+
+function ensureWorkspaceBucket(host: HostCacheBucket, workspacePath: string): HostWorkspaceCache {
+  let key: string = sanitizeCacheSegment(workspacePath);
+  if (host.workspaces[key] === undefined) {
+    host.workspaces[key] = {
+      modelsByAgent: {},
+      sessions: null,
+      selection: {
+        lastAgentByWorkspace: {},
+        lastModelByAgent: {}
+      }
+    };
+  }
+  return host.workspaces[key];
+}
+
+function inferProviderId(model: ModelItem): string {
+  let source: string = model.modelId || model.name;
+  let slashIndex: number = source.indexOf('/');
+  if (slashIndex > 0) {
+    return source.substring(0, slashIndex);
+  }
+  let colonIndex: number = source.indexOf(':');
+  if (colonIndex > 0) {
+    return source.substring(0, colonIndex);
+  }
+  let dashIndex: number = source.indexOf('-');
+  if (dashIndex > 0) {
+    return source.substring(0, dashIndex);
+  }
+  return 'default';
+}
+
+function buildProviderGroups(models: ModelItem[]): ModelProviderGroup[] {
+  let grouped: Record<string, ModelItem[]> = {};
+  for (let i: number = 0; i < models.length; i++) {
+    let providerId: string = inferProviderId(models[i]);
+    if (grouped[providerId] === undefined) {
+      grouped[providerId] = [];
+    }
+    grouped[providerId].push(models[i]);
+  }
+  let keys: string[] = Object.keys(grouped);
+  let result: ModelProviderGroup[] = [];
+  for (let i: number = 0; i < keys.length; i++) {
+    result.push({
+      providerId: keys[i],
+      providerName: keys[i],
+      models: grouped[keys[i]]
+    });
+  }
+  return result;
+}
+
+export async function saveAgentCache(hostId: string, agents: import('../common/websocket/WSProtocol').AgentInfo[]): Promise<void> {
+  if (hostId.length === 0) return;
+  let data: HierarchyCacheData = await readHierarchyCache();
+  let host: HostCacheBucket = ensureHostBucket(data, hostId);
+  host.agents = {
+    schemaVersion: CACHE_SCHEMA_VERSION,
+    hostId: hostId,
+    dayKey: getTodayKey(),
+    fetchedAt: Date.now(),
+    agents: agents
+  };
+  await writeHierarchyCache(data);
+}
+
+export async function loadAgentCache(hostId: string): Promise<AgentCacheData | null> {
+  if (hostId.length === 0) return null;
+  let data: HierarchyCacheData = await readHierarchyCache();
+  let host: HostCacheBucket = ensureHostBucket(data, hostId);
+  if (host.agents === null || isDailyCacheExpired(host.agents.dayKey)) {
+    return null;
+  }
+  return host.agents;
+}
+
+export async function saveWorkspaceModelCache(hostId: string, workspacePath: string, agentName: string,
+  models: ModelItem[], modes: ModeItem[]): Promise<void> {
+  if (hostId.length === 0 || workspacePath.length === 0 || agentName.length === 0) return;
+  let data: HierarchyCacheData = await readHierarchyCache();
+  let host: HostCacheBucket = ensureHostBucket(data, hostId);
+  let workspace: HostWorkspaceCache = ensureWorkspaceBucket(host, workspacePath);
+  workspace.modelsByAgent[sanitizeCacheSegment(agentName)] = {
+    schemaVersion: CACHE_SCHEMA_VERSION,
+    hostId: hostId,
+    workspacePath: workspacePath,
+    agentName: agentName,
+    providers: buildProviderGroups(models),
     models: models,
     modes: modes,
-    timestamp: Date.now()
+    dayKey: getTodayKey(),
+    fetchedAt: Date.now()
   };
-  await storage.putString(key, JSON.stringify(data));
+  await writeHierarchyCache(data);
+}
+
+export async function loadWorkspaceModelCache(hostId: string, workspacePath: string, agentName: string): Promise<ModelCacheData | null> {
+  if (hostId.length === 0 || workspacePath.length === 0 || agentName.length === 0) return null;
+  let data: HierarchyCacheData = await readHierarchyCache();
+  let host: HostCacheBucket = ensureHostBucket(data, hostId);
+  let workspace: HostWorkspaceCache = ensureWorkspaceBucket(host, workspacePath);
+  let cached: ModelCacheData | undefined = workspace.modelsByAgent[sanitizeCacheSegment(agentName)];
+  if (cached === undefined || isDailyCacheExpired(cached.dayKey)) {
+    return null;
+  }
+  return cached;
+}
+
+export async function saveWorkspaceSessionCache(hostId: string, workspacePath: string, sessions: ServerSession[]): Promise<void> {
+  if (hostId.length === 0 || workspacePath.length === 0) return;
+  let data: HierarchyCacheData = await readHierarchyCache();
+  let host: HostCacheBucket = ensureHostBucket(data, hostId);
+  let workspace: HostWorkspaceCache = ensureWorkspaceBucket(host, workspacePath);
+  workspace.sessions = {
+    schemaVersion: CACHE_SCHEMA_VERSION,
+    hostId: hostId,
+    workspacePath: workspacePath,
+    sessions: sessions,
+    fetchedAt: Date.now()
+  };
+  await writeHierarchyCache(data);
+}
+
+export async function loadWorkspaceSessionCache(hostId: string, workspacePath: string): Promise<SessionCacheData | null> {
+  if (hostId.length === 0 || workspacePath.length === 0) return null;
+  let data: HierarchyCacheData = await readHierarchyCache();
+  let host: HostCacheBucket = ensureHostBucket(data, hostId);
+  let workspace: HostWorkspaceCache = ensureWorkspaceBucket(host, workspacePath);
+  return workspace.sessions;
+}
+
+export async function saveLastAgentSelection(hostId: string, workspacePath: string, agentName: string): Promise<void> {
+  if (hostId.length === 0 || workspacePath.length === 0 || agentName.length === 0) return;
+  let data: HierarchyCacheData = await readHierarchyCache();
+  let host: HostCacheBucket = ensureHostBucket(data, hostId);
+  let workspace: HostWorkspaceCache = ensureWorkspaceBucket(host, workspacePath);
+  workspace.selection.lastAgentByWorkspace[sanitizeCacheSegment(workspacePath)] = agentName;
+  await writeHierarchyCache(data);
+}
+
+export async function loadLastAgentSelection(hostId: string, workspacePath: string): Promise<string> {
+  if (hostId.length === 0 || workspacePath.length === 0) return '';
+  let data: HierarchyCacheData = await readHierarchyCache();
+  let host: HostCacheBucket = ensureHostBucket(data, hostId);
+  let workspace: HostWorkspaceCache = ensureWorkspaceBucket(host, workspacePath);
+  let result: string | undefined = workspace.selection.lastAgentByWorkspace[sanitizeCacheSegment(workspacePath)];
+  return result || '';
+}
+
+export async function saveLastModelSelection(hostId: string, workspacePath: string, agentName: string, modelId: string): Promise<void> {
+  if (hostId.length === 0 || workspacePath.length === 0 || agentName.length === 0 || modelId.length === 0) return;
+  let data: HierarchyCacheData = await readHierarchyCache();
+  let host: HostCacheBucket = ensureHostBucket(data, hostId);
+  let workspace: HostWorkspaceCache = ensureWorkspaceBucket(host, workspacePath);
+  workspace.selection.lastModelByAgent[sanitizeCacheSegment(agentName)] = modelId;
+  await writeHierarchyCache(data);
+}
+
+export async function loadLastModelSelection(hostId: string, workspacePath: string, agentName: string): Promise<string> {
+  if (hostId.length === 0 || workspacePath.length === 0 || agentName.length === 0) return '';
+  let data: HierarchyCacheData = await readHierarchyCache();
+  let host: HostCacheBucket = ensureHostBucket(data, hostId);
+  let workspace: HostWorkspaceCache = ensureWorkspaceBucket(host, workspacePath);
+  let result: string | undefined = workspace.selection.lastModelByAgent[sanitizeCacheSegment(agentName)];
+  return result || '';
+}
+
+// Legacy wrappers retained for gradual migration.
+export async function saveModelCache(agentName: string, models: ModelItem[], modes: ModeItem[]): Promise<void> {
+  let hostId: string = ChatStore.currentDeviceId || AppStorage.get<string>('serverUrl') || '';
+  let workspacePath: string = WorkspaceStore.currentIndex >= 0 && WorkspaceStore.currentIndex < WorkspaceStore.workspaces.length
+    ? WorkspaceStore.workspaces[WorkspaceStore.currentIndex].path
+    : '__global__';
+  await saveWorkspaceModelCache(hostId, workspacePath, agentName, models, modes);
 }
 
 export async function loadModelCache(agentName: string): Promise<ModelCacheData | null> {
-  if (agentName.length === 0) return null;
-  let storage = StorageService.getInstance();
-  let key = cacheKey(CACHE_MODEL_PREFIX, agentName);
-  let raw = await storage.getString(key, '');
-  if (raw.length === 0) return null;
-  try {
-    let data = JSON.parse(raw) as ModelCacheData;
-    if (data.schemaVersion !== CACHE_SCHEMA_VERSION) return null;
-    if (isCacheExpired(data.timestamp)) return null;
-    return data;
-  } catch {
-    return null;
-  }
+  let hostId: string = ChatStore.currentDeviceId || AppStorage.get<string>('serverUrl') || '';
+  let workspacePath: string = WorkspaceStore.currentIndex >= 0 && WorkspaceStore.currentIndex < WorkspaceStore.workspaces.length
+    ? WorkspaceStore.workspaces[WorkspaceStore.currentIndex].path
+    : '__global__';
+  return loadWorkspaceModelCache(hostId, workspacePath, agentName);
 }
 
 export async function saveSessionCache(agentName: string, cwd: string, sessions: ServerSession[]): Promise<void> {
-  if (agentName.length === 0 || cwd.length === 0) return;
-  let storage = StorageService.getInstance();
-  let key = cacheKey(CACHE_SESSION_PREFIX, agentName + '_' + cwd);
-  let data: SessionCacheData = {
-    schemaVersion: CACHE_SCHEMA_VERSION,
-    sessions: sessions,
-    timestamp: Date.now()
-  };
-  await storage.putString(key, JSON.stringify(data));
+  let hostId: string = ChatStore.currentDeviceId || AppStorage.get<string>('serverUrl') || '';
+  await saveWorkspaceSessionCache(hostId, cwd, sessions);
 }
 
 export async function loadSessionCache(agentName: string, cwd: string): Promise<SessionCacheData | null> {
-  if (agentName.length === 0 || cwd.length === 0) return null;
-  let storage = StorageService.getInstance();
-  let key = cacheKey(CACHE_SESSION_PREFIX, agentName + '_' + cwd);
-  let raw = await storage.getString(key, '');
-  if (raw.length === 0) return null;
-  try {
-    let data = JSON.parse(raw) as SessionCacheData;
-    if (data.schemaVersion !== CACHE_SCHEMA_VERSION) return null;
-    if (isCacheExpired(data.timestamp)) return null;
-    return data;
-  } catch {
-    return null;
-  }
+  let hostId: string = ChatStore.currentDeviceId || AppStorage.get<string>('serverUrl') || '';
+  return loadWorkspaceSessionCache(hostId, cwd);
 }

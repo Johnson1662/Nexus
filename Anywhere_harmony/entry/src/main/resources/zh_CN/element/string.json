@@ -53,40 +53,8 @@
       "value": "扫描失败"
     },
     {
-      "name": "onboarding_subtitle",
-      "value": "无缝连接的 AI 工作区。"
-    },
-    {
-      "name": "onboarding_saved_servers",
-      "value": "已保存的服务器"
-    },
-    {
-      "name": "onboarding_no_saved_servers",
-      "value": "暂无已保存的服务器"
-    },
-    {
-      "name": "onboarding_discovering_agents",
-      "value": "正在发现 Agent\u2026"
-    },
-    {
-      "name": "onboarding_available_agents",
-      "value": "可用 Agent"
-    },
-    {
-      "name": "onboarding_no_agents",
-      "value": "未发现 ACP Agent。"
-    },
-    {
-      "name": "onboarding_ip_addresses",
-      "value": "%d 个地址"
-    },
-    {
-      "name": "onboarding_scan_result_empty",
-      "value": "二维码未包含可用数据"
-    },
-    {
       "name": "chat_empty_prompt",
-      "value": "选择工作区并开始输入。"
+      "value": "选择 Agent 后开始输入。"
     },
     {
       "name": "chat_loading_session",
@@ -123,6 +91,10 @@
     {
       "name": "chat_input_placeholder",
       "value": "输入消息\u2026"
+    },
+    {
+      "name": "chat_input_agent_required_placeholder",
+      "value": "先选择 Agent\u2026"
     },
     {
       "name": "chat_input_file_placeholder",
@@ -225,6 +197,14 @@
       "value": "添加项目路径以开始使用"
     },
     {
+      "name": "ws_host_manage",
+      "value": "服务器管理"
+    },
+    {
+      "name": "ws_settings",
+      "value": "设置"
+    },
+    {
       "name": "ws_delete_confirm_title",
       "value": "删除工作区"
     },
@@ -263,6 +243,10 @@
     {
       "name": "menu_switch_session",
       "value": "切换会话"
+    },
+    {
+      "name": "menu_rename_session",
+      "value": "重命名会话"
     },
     {
       "name": "menu_switch_model",

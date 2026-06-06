@@ -9,30 +9,18 @@ export struct PlanView {
     Column() {
       ForEach(this.entries, (entry: PlanEntry, index: number) => {
         Row() {
-          Text((index + 1).toString() + '.')
-            .fontSize(FontSize.sm)
-            .fontColor(entry.status === 'completed' ? Colors.foreground : Colors.foregroundMuted)
-            .fontWeight(FontWeight.Bold)
-            .margin({ right: Spacing.sm })
-          
+          if (entry.status === 'completed') {
+            SymbolGlyph($r('sys.symbol.checkmark')).fontSize(16).fontColor([Colors.foregroundMuted]).margin({ right: Spacing.sm })
+          } else if (entry.status === 'in_progress') {
+            SymbolGlyph($r('sys.symbol.checkmark_circle_fill')).fontSize(16).fontColor([Colors.foreground]).margin({ right: Spacing.sm })
+          } else {
+            SymbolGlyph($r('sys.symbol.circle')).fontSize(16).fontColor([Colors.foregroundMuted]).margin({ right: Spacing.sm })
+          }
           Text(entry.content)
             .fontSize(FontSize.sm)
-            .fontColor(entry.status === 'completed' ? Colors.foreground : Colors.foregroundMuted)
+            .fontColor(entry.status === 'completed' ? Colors.foregroundMuted : Colors.foreground)
             .lineHeight(22)
             .layoutWeight(1)
-            
-          if (entry.status === 'completed') {
-            SymbolGlyph($r('sys.symbol.checkmark'))
-              .fontColor([Colors.success])
-              .fontSize(16)
-              .margin({ left: Spacing.sm, top: 3 })
-          } else if (entry.status === 'in_progress') {
-            LoadingProgress()
-              .width(14)
-              .height(14)
-              .color(Colors.foregroundMuted)
-              .margin({ left: Spacing.sm, top: 4 })
-          }
         }
         .width('100%')
         .padding({ top: Spacing.xs, bottom: Spacing.xs })
@@ -40,10 +28,10 @@ export struct PlanView {
       }, (entry: PlanEntry, index: number) => entry.content + index.toString())
     }
     .width('100%')
-    .backgroundColor(Colors.surface1)
+    .backgroundColor(Colors.surface0)
     .borderRadius(12)
-    .border({ width: 1, color: Colors.borderLight })
-    .padding({ left: Spacing.lg, right: Spacing.lg, top: Spacing.md, bottom: Spacing.md })
+    .padding({ left: Spacing.md, right: Spacing.md, top: Spacing.sm, bottom: Spacing.sm })
+    .alignItems(HorizontalAlign.Start)
     .alignItems(HorizontalAlign.Start)
   }
 }

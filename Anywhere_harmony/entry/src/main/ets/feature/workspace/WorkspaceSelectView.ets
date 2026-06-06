@@ -1,4 +1,4 @@
-import { Colors, FontSize, Spacing, Radius } from '../../constants/DesignTokens';
+import { Colors, FontSize, Spacing, Radius, Layout } from '../../constants/DesignTokens';
 import { WorkspaceStore, WorkspaceInfo } from '../../common/model/WorkspaceInfo';
 
 @Component
@@ -18,8 +18,8 @@ export struct WorkspaceSelectView {
             .fontColor(Colors.foreground)
           Blank()
         }
-        .width('100%')
-        .padding({ left: Spacing.lg, right: Spacing.lg, top: Spacing.lg, bottom: Spacing.lg })
+        .width(Layout.contentWidth)
+        .padding({ top: Spacing.lg, bottom: Spacing.lg })
 
         // 空状态
         if (WorkspaceStore.workspaces.length === 0) {
@@ -30,13 +30,13 @@ export struct WorkspaceSelectView {
               .fontSize(FontSize.sm).fontColor(Colors.foregroundLight)
               .margin({ top: Spacing.xs })
           }
-          .width('100%')
+          .width(Layout.contentWidth)
           .layoutWeight(1)
           .justifyContent(FlexAlign.Center)
           .alignItems(HorizontalAlign.Center)
         } else {
           // 工作区列表
-          List() {
+          List({ space: Spacing.sm }) {
             ForEach(WorkspaceStore.workspaces, (ws: WorkspaceInfo, index: number) => {
               ListItem() {
                 Row() {
@@ -70,8 +70,9 @@ export struct WorkspaceSelectView {
                   }
                 }
                 .width('100%')
-                .padding({ left: Spacing.xl, right: Spacing.xl, top: Spacing.md, bottom: Spacing.md })
-                .backgroundColor(index === WorkspaceStore.currentIndex ? Colors.surface1 : 'transparent')
+                .padding({ left: Spacing.lg, right: Spacing.lg, top: Spacing.md, bottom: Spacing.md })
+                .backgroundColor(Colors.surface1)
+                .borderRadius(Radius.xl)
                 .onClick(() => {
                   WorkspaceStore.currentIndex = index;
                   if (this.onSelect) this.onSelect(index);
@@ -79,9 +80,8 @@ export struct WorkspaceSelectView {
               }
             }, (ws: WorkspaceInfo, index: number) => ws.id + index.toString())
           }
-          .width('100%')
+          .width(Layout.contentWidth)
           .layoutWeight(1)
-          .divider({ strokeWidth: 0.5, color: Colors.borderLight, startMargin: Spacing.xl, endMargin: Spacing.xl })
         }
 
         // 底部区域
@@ -115,7 +115,8 @@ export struct WorkspaceSelectView {
               }
               .width('100%').margin({ top: Spacing.md })
             }
-            .padding({ left: Spacing.xl, right: Spacing.xl, bottom: Spacing.xl, top: Spacing.sm })
+            .width('100%')
+            .padding({ bottom: Spacing.xl, top: Spacing.sm })
             .transition(TransitionEffect.OPACITY)
           } else {
             Row() {
@@ -128,13 +129,14 @@ export struct WorkspaceSelectView {
                 .fontColor(Colors.foregroundMuted)
             }
             .width('100%')
-            .padding({ left: Spacing.xl, right: Spacing.xl, bottom: Spacing.xxl, top: Spacing.lg })
+            .padding({ bottom: Spacing.xxl, top: Spacing.lg })
             .onClick(() => { this.showForm = true })
           }
         }
-        .width('100%')
+        .width(Layout.contentWidth)
       }
       .width('100%').height('100%')
+      .alignItems(HorizontalAlign.Center)
       .backgroundColor(Colors.surfaceElevated)
     }
     .hideTitleBar(true)

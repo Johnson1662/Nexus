@@ -66,6 +66,7 @@ export interface ServerMessage {
   sessions?: ServerSession[];
   agents?: AgentInfo[];
   stopReason?: string;
+  messageId?: string;
   resumed?: boolean;
   requestId?: string;
   toolCall?: object;
@@ -84,6 +85,7 @@ export interface SyncResponseMessage {
   type: string;
   entries?: SyncResponseEntry[];
   error?: string;
+  overflow?: boolean;
 }
 
 export interface ServerInfoMessage {

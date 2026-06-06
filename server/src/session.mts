@@ -21,12 +21,13 @@ const sessionSeqCounter = new Map<string, number>();
 const MAX_MESSAGE_BUFFER = 500;
 
 /** Buffer an agent_event for cursor sync replay (Phase 3a) */
-export function bufferAgentEvent(sessionId: string, eventPayload: object): void {
+export function bufferAgentEvent(sessionId: string, eventPayload: object): string | undefined {
   const sess = sessions.get(sessionId);
-  if (!sess) return;
+  if (!sess) return undefined;
   let seq = (sessionSeqCounter.get(sessionId) || 0) + 1;
   sessionSeqCounter.set(sessionId, seq);
   const messageId = `${sessionId}:${seq}`;
+  (eventPayload as { messageId?: string }).messageId = messageId;
   sess.messageBuffer.push({
     messageId,
     payload: JSON.stringify(eventPayload),
@@ -38,25 +39,33 @@ export function bufferAgentEvent(sessionId: string, eventPayload: object): void 
       sess.messageBuffer.length - MAX_MESSAGE_BUFFER,
     );
   }
+  return messageId;
 }
 
 /** Get buffered messages after a given messageId (cursor sync) */
 export function getBufferedAfter(
   sessionId: string,
   lastMessageId: string,
-): Array<{ messageId: string; payload: string; timestamp: number }> {
+): { entries: Array<{ messageId: string; payload: string; timestamp: number }>; overflow: boolean } {
   const sess = sessions.get(sessionId);
-  if (!sess) return [];
+  if (!sess) return { entries: [], overflow: false };
   let lastSeq = 0;
   if (lastMessageId) {
     const parts = lastMessageId.split(':');
     lastSeq = parseInt(parts[parts.length - 1]) || 0;
   }
-  return sess.messageBuffer.filter((m) => {
+  let firstBufferedSeq = 0;
+  if (sess.messageBuffer.length > 0) {
+    const firstParts = sess.messageBuffer[0].messageId.split(':');
+    firstBufferedSeq = parseInt(firstParts[firstParts.length - 1]) || 0;
+  }
+  const overflow = lastSeq > 0 && firstBufferedSeq > 0 && lastSeq < firstBufferedSeq - 1;
+  const entries = sess.messageBuffer.filter((m) => {
     const mParts = m.messageId.split(':');
     const mSeq = parseInt(mParts[mParts.length - 1]) || 0;
     return mSeq > lastSeq;
   });
+  return { entries, overflow };
 }
 
 export function enqueueWsOp(ws: import("ws").WebSocket, fn: () => Promise<void>): void {
@@ -177,6 +186,7 @@ function startOrphanCleanup(): void {
         killTerminalProcesses(sess);
         killSessionProcess(sess);
         sessions.delete(id);
+        sessionSeqCounter.delete(id);
         console.log(`[session] cleaned up orphaned session ${id.slice(0, 20)}`);
       }
     }
@@ -201,6 +211,7 @@ function enforceOrphanLimit(): void {
         killTerminalProcesses(sess);
         killSessionProcess(sess);
         sessions.delete(id);
+        sessionSeqCounter.delete(id);
         console.log(`[session] evicted oldest orphan session ${id.slice(0, 20)}`);
       }
     }

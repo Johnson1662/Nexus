@@ -1,1 +1,4 @@
-<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M16 1 H4 c-1.1 0-2 .9-2 2 v14 h2 V3 h12 V1 z M15 5 H8 c-1.1 0-2 .9-2 2 v14 c0 1.1 .9 2 2 2 h7 c1.1 0 2-.9 2-2 V7 c0-1.1-.9-2-2-2 z m0 16 H8 V7 h7 v14 z" fill="currentColor"/></svg>
+<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect x="9" y="9" width="12" height="12" rx="2" stroke="currentColor" stroke-width="2"/>
+  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

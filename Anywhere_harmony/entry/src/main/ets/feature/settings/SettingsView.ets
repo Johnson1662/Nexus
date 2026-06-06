@@ -1,4 +1,4 @@
-import { Colors, FontSize, Spacing, Radius } from '../../constants/DesignTokens';
+import { Colors, FontSize, Spacing, Radius, Layout } from '../../constants/DesignTokens';
 import { StorageService } from '../../services/StorageService';
 
 @Component
@@ -13,10 +13,10 @@ export struct SettingsPage {
           Text('设置')
             .fontSize(FontSize.xl).fontColor(Colors.foreground).fontWeight(FontWeight.Bold)
         }
-        .width('100%')
-        .padding({ left: Spacing.lg, right: Spacing.lg, top: Spacing.lg, bottom: Spacing.lg })
+        .width(Layout.contentWidth)
+        .padding({ top: Spacing.lg, bottom: Spacing.lg })
 
-        List() {
+        List({ space: Spacing.sm }) {
           ListItem() {
             Row() {
               Column() {
@@ -37,6 +37,8 @@ export struct SettingsPage {
             }
             .width('100%')
             .padding({ left: Spacing.lg, right: Spacing.lg, top: Spacing.md, bottom: Spacing.md })
+            .backgroundColor(Colors.surface1)
+            .borderRadius(Radius.xl)
           }
 
           ListItem() {
@@ -59,12 +61,15 @@ export struct SettingsPage {
             }
             .width('100%')
             .padding({ left: Spacing.lg, right: Spacing.lg, top: Spacing.md, bottom: Spacing.md })
+            .backgroundColor(Colors.surface1)
+            .borderRadius(Radius.xl)
           }
         }
-        .width('100%')
+        .width(Layout.contentWidth)
         .layoutWeight(1)
       }
       .width('100%').height('100%')
+      .alignItems(HorizontalAlign.Center)
       .backgroundColor(Colors.surface0)
     }
     .hideTitleBar(true)

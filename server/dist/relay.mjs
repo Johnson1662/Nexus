@@ -4,6 +4,8 @@ export class RelayHost {
     onMessage;
     ws = null;
     onDisconnectCallback = null;
+    reconnectDelayMs = 5_000;
+    reconnectTimer = null;
     deviceId;
     constructor(relayUrl, hostId, onMessage) {
         this.relayUrl = relayUrl;
@@ -14,21 +16,32 @@ export class RelayHost {
         this.onDisconnectCallback = cb;
     }
     connect() {
+        if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
+            return;
+        }
+        if (this.reconnectTimer) {
+            clearTimeout(this.reconnectTimer);
+            this.reconnectTimer = null;
+        }
         const url = `${this.relayUrl}?role=host&deviceId=${this.deviceId}`;
         console.log(`[Relay] Connecting to ${url}`);
         this.ws = new WebSocket(url);
         this.ws.on('open', () => {
             console.log(`[Relay] Connected! HostId: ${this.deviceId}`);
+            this.reconnectDelayMs = 5_000;
         });
         this.ws.on('message', (data) => {
             this.onMessage(data.toString());
         });
         this.ws.on('close', () => {
-            console.log('[Relay] Disconnected, reconnecting in 5s...');
+            const delay = this.reconnectDelayMs;
+            console.log(`[Relay] Disconnected, reconnecting in ${Math.floor(delay / 1000)}s...`);
             if (this.onDisconnectCallback) {
                 this.onDisconnectCallback();
             }
-            setTimeout(() => this.connect(), 5000);
+            this.ws = null;
+            this.reconnectTimer = setTimeout(() => this.connect(), delay);
+            this.reconnectDelayMs = Math.min(this.reconnectDelayMs * 2, 30_000);
         });
         this.ws.on('error', (err) => {
             console.log(`[Relay] WebSocket error: ${err.message}`);

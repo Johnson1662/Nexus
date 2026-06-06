@@ -48,9 +48,9 @@ export function createAcpCallbacks(config) {
                 },
             };
             const wss = getSessionWs();
+            bufferAgentEvent(sessionId, eventPayload);
             if (wss)
                 wss.send(JSON.stringify(eventPayload));
-            bufferAgentEvent(sessionId, eventPayload);
         }
         catch { }
     }

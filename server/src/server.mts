@@ -21,12 +21,11 @@ import { handleAuth } from "./handlers/auth.mjs";
 import { cleanupWsSessions, enqueueWsOp, getSession, getBufferedAfter, reclaimOrphanedSession } from "./session.mjs";
 
 const PORT = 12138;
-const HOST = "0.0.0.0";
 const RELAY_URL = process.env.ANYWHERE_RELAY_URL || "ws://relay.anywhere12138.lat:12138";
 const PHONE_RELAY_URL = process.env.ANYWHERE_PHONE_RELAY_URL || "ws://relay.anywhere12138.lat:12138";
 
-const wss = new WebSocketServer({ host: HOST, port: PORT });
-console.log(`[server] listening on ws://${HOST}:${PORT}`);
+const wss = new WebSocketServer({ port: PORT });
+console.log(`[server] listening on ws://0.0.0.0:${PORT} and IPv6 if available`);
 
 // WebSocket keep-alive: ping all connected clients every 15s
 const pingInterval = setInterval(() => {
@@ -372,14 +371,18 @@ function handleIncomingConnection(transport: any, isRelay: boolean = false) {
         console.log(`[server] sync_request session="${syncSessionId?.slice(0, 20)}" lastMessageId="${lastMessageId?.slice(0, 20)}"`);
         const sess = getSession(syncSessionId);
         if (sess) {
-          const entries = getBufferedAfter(syncSessionId, lastMessageId);
-          const safeEntries = entries
+          const syncResult = getBufferedAfter(syncSessionId, lastMessageId);
+          const safeEntries = syncResult.entries
             .map(e => {
               try {
                 const parsed = JSON.parse(e.payload);
                 // payload is stored as {type:"agent_event", sessionId, event: {...}}
                 // client expects just the inner event object; fallback to parsed for non-event payloads
-                return { messageId: e.messageId, payload: parsed.event || parsed, timestamp: e.timestamp };
+                const payload = parsed.event || parsed;
+                if (payload && typeof payload === "object") {
+                  payload.messageId = e.messageId;
+                }
+                return { messageId: e.messageId, payload, timestamp: e.timestamp };
               } catch {
                 return null;
               }
@@ -389,8 +392,9 @@ function handleIncomingConnection(transport: any, isRelay: boolean = false) {
             type: "sync_response",
             sessionId: syncSessionId,
             entries: safeEntries,
+            overflow: syncResult.overflow,
           }));
-          console.log(`[server] sync_response ${safeEntries.length} entries for ${syncSessionId?.slice(0, 20)}`);
+          console.log(`[server] sync_response ${safeEntries.length} entries for ${syncSessionId?.slice(0, 20)} overflow=${syncResult.overflow}`);
         } else {
           transport.send(JSON.stringify({
             type: "sync_response",

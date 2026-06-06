@@ -1,4 +1,4 @@
-import { Colors, FontSize, Spacing, Radius, Duration } from '../../constants/DesignTokens';
+import { Colors, FontSize, Spacing, Radius, Duration, Layout } from '../../constants/DesignTokens';
 import { ChatStore } from '../../common/model/ChatState';
 import { CustomIcon } from '../../common/ui/CustomIcon';
 import { MessageData } from '../../common/model/MessageData';
@@ -13,13 +13,13 @@ struct PulsingDots {
   @State opacities: number[] = [0.3, 0.3, 0.3];
 
   aboutToAppear(): void {
-    this.getUIContext()?.animateTo({ duration: 600, curve: Curve.EaseInOut, delay: 0, iterations: -1, playMode: PlayMode.Alternate }, () => {
+    (this.getUIContext() as UIContext)?.animateTo({ duration: 600, curve: Curve.EaseInOut, delay: 0, iterations: -1, playMode: PlayMode.Alternate }, () => {
       this.opacities[0] = 1.0;
     });
-    this.getUIContext()?.animateTo({ duration: 600, curve: Curve.EaseInOut, delay: 200, iterations: -1, playMode: PlayMode.Alternate }, () => {
+    (this.getUIContext() as UIContext)?.animateTo({ duration: 600, curve: Curve.EaseInOut, delay: 200, iterations: -1, playMode: PlayMode.Alternate }, () => {
       this.opacities[1] = 1.0;
     });
-    this.getUIContext()?.animateTo({ duration: 600, curve: Curve.EaseInOut, delay: 400, iterations: -1, playMode: PlayMode.Alternate }, () => {
+    (this.getUIContext() as UIContext)?.animateTo({ duration: 600, curve: Curve.EaseInOut, delay: 400, iterations: -1, playMode: PlayMode.Alternate }, () => {
       this.opacities[2] = 1.0;
     });
   }
@@ -76,31 +76,34 @@ export struct ChatPage {
   getReconnectBannerText(): string {
     let phase: string = ChatStore.reconnectPhase;
     if (phase === 'disconnected') {
-      return getContext().resourceManager.getStringSync($r('app.string.chat_reconnect_disconnected'));
+      return getContext(this).resourceManager.getStringSync($r('app.string.chat_reconnect_disconnected').id);
     } else if (phase === 'reconnecting') {
-      return getContext().resourceManager.getStringSync($r('app.string.chat_reconnect_reconnecting'), ChatStore.reconnectAttempt);
+      return getContext(this).resourceManager.getStringSync($r('app.string.chat_reconnect_reconnecting').id, ChatStore.reconnectAttempt);
     } else if (phase === 'syncing') {
-      return getContext().resourceManager.getStringSync($r('app.string.chat_reconnect_syncing'));
+      return getContext(this).resourceManager.getStringSync($r('app.string.chat_reconnect_syncing').id);
     }
     return '';
+  }
+
+  hasSelectedAgent(): boolean {
+    return (ChatStore.selectedAgentName || ChatStore.agentType).length > 0;
   }
 
   build() {
     Column() {
       if (ChatStore.reconnectPhase.length > 0) {
         Row() {
-          CustomIcon({
-            name: 'warning',
-            iconSize: 14,
-            color: Colors.warning
-          }).margin({ right: Spacing.sm })
+          CustomIcon({ name: 'warning', iconSize: 14, color: Colors.warning })
+            .margin({ right: Spacing.sm })
           Text(this.getReconnectBannerText())
             .fontSize(FontSize.sm).fontColor(Colors.warningFgDark).fontWeight(FontWeight.Medium)
             .layoutWeight(1)
         }
-        .width('100%')
+        .width(Layout.contentWidth)
         .padding({ left: Spacing.lg, right: Spacing.lg, top: Spacing.sm, bottom: Spacing.sm })
         .backgroundColor(Colors.warningLight)
+        .borderRadius(Radius.md)
+        .margin({ top: Spacing.sm, bottom: Spacing.xs })
       }
 
       if (ChatStore.loadingSession) {
@@ -110,8 +113,11 @@ export struct ChatPage {
             .fontSize(FontSize.sm).fontColor(Colors.foregroundLight)
             .margin({ left: Spacing.sm })
         }
-        .width('100%')
+        .width(Layout.contentWidth)
         .padding({ left: Spacing.lg, right: Spacing.lg, top: Spacing.sm, bottom: Spacing.sm })
+        .backgroundColor(Colors.surface1)
+        .borderRadius(Radius.md)
+        .margin({ top: Spacing.xs, bottom: Spacing.xs })
         .transition(TransitionEffect.OPACITY)
         .accessibilityText('Loading session')
       }
@@ -207,6 +213,21 @@ export struct ChatPage {
             }
             .transition(TransitionEffect.OPACITY)
           }
+
+          if (!ChatStore.turnActive && ChatStore.lastUsage !== null && this.messages.length > 0) {
+            ListItem() {
+              Row() {
+                SymbolGlyph($r('sys.symbol.checkmark')).fontSize(14).fontColor([Colors.foregroundMuted]).margin({ right: Spacing.sm })
+                Text('Tokens: ' + ChatStore.lastUsage!.totalTokens.toString())
+                  .fontSize(FontSize.xs).fontColor(Colors.foregroundMuted)
+                Blank()
+                Text('Done').fontSize(FontSize.xs).fontColor(Colors.foregroundMuted)
+              }
+              .width('100%')
+              .padding({ left: Spacing.lg, right: Spacing.lg, top: Spacing.sm, bottom: Spacing.md })
+            }
+            .transition(TransitionEffect.OPACITY)
+          }
         }
         .layoutWeight(1)
         .width('100%')
@@ -228,13 +249,14 @@ export struct ChatPage {
       }
 
       ChatInputBar({
-        disabled: ChatStore.turnActive || ChatStore.loadingSession,
+        disabled: ChatStore.turnActive || ChatStore.loadingSession || !this.hasSelectedAgent(),
         showCancel: ChatStore.turnActive,
         onSend: (text) => { if (this.onSendMessage) this.onSendMessage(text); },
         onCancel: () => { if (this.onSendMessage) this.onSendMessage('__cancel__'); }
       })
     }
     .width('100%').height('100%')
+    .alignItems(HorizontalAlign.Center)
     .backgroundColor(Colors.surface0)
   }
 

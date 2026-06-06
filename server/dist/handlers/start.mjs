@@ -87,11 +87,11 @@ export async function handleStart(ws, params) {
                 event: update.update,
             };
             try {
-                sess.ws?.send(JSON.stringify(eventPayload));
+                bufferAgentEvent(sessionId, eventPayload);
             }
             catch { }
             try {
-                bufferAgentEvent(sessionId, eventPayload);
+                sess.ws?.send(JSON.stringify(eventPayload));
             }
             catch { }
         },

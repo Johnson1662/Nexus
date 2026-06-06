@@ -1,8 +1,9 @@
-import { Colors, FontSize, Spacing, Radius, Duration } from '../../constants/DesignTokens';
+import { Colors, FontSize, Spacing, Radius, Duration, Layout } from '../../constants/DesignTokens';
 import { ChatStore, PendingPermission, PermissionOption } from '../../common/model/ChatState';
 import { CustomIcon } from '../../common/ui/CustomIcon';
 import { WorkspaceStore } from '../../common/model/WorkspaceInfo';
 import { WorkspaceInfo } from '../../common/model/WorkspaceInfo';
+import { DeviceAgentStore } from '../../common/model/DeviceAgentStore';
 import { StorageService, saveWorkspaces } from '../../services/StorageService';
 import { ChatPage } from './ChatPage';
 import { WorkspaceDrawer } from '../workspace/WorkspaceDrawer';
@@ -18,19 +19,27 @@ export struct ChatView {
   @State titleBarOpacity: number = 0;
   @State showRename: boolean = false;
   @State renameText: string = '';
+  @State showMoreMenu: boolean = false;
   onSendMessage?: (text: string) => void;
   onRetry?: (id: string, content: string) => void;
+  onSelectAgent?: (index: number) => void;
   onSwitchModel?: (index: number) => void;
   onSwitchMode?: (index: number) => void;
   onNewSession?: () => void;
   onSelectSession?: (i: number) => void;
   onWorkspaceSelect?: (index: number) => void;
+  onRefreshAgents?: () => void;
+  onRefreshModels?: () => void;
+  onRefreshSessions?: () => void;
   onPermissionResponse?: (optionId: string) => void;
-  onNavigateToOnboarding?: () => void;
+  onBack?: () => void;
   onNavigateToSettings?: () => void;
   onNavigateToHostManage?: () => void;
 
   aboutToAppear(): void {
+    if (WorkspaceStore.currentIndex < 0 && WorkspaceStore.workspaces.length > 0) {
+      WorkspaceStore.currentIndex = 0;
+    }
     if (WorkspaceStore.currentIndex < 0) {
       setTimeout(() => { this.showDrawer = true; }, 200);
     }
@@ -99,11 +108,13 @@ export struct ChatView {
   }
   openPicker(mode: number): void {
     if (mode === 0) {
-      this.pickerTitle = getContext().resourceManager.getStringSync($r('app.string.picker_sessions'));
+      this.pickerTitle = getContext(this).resourceManager.getStringSync($r('app.string.picker_sessions').id);
+    } else if (mode === 3) {
+      this.pickerTitle = 'Agents';
     } else if (mode === 1) {
-      this.pickerTitle = getContext().resourceManager.getStringSync($r('app.string.picker_models'));
+      this.pickerTitle = getContext(this).resourceManager.getStringSync($r('app.string.picker_models').id);
     } else if (mode === 2) {
-      this.pickerTitle = getContext().resourceManager.getStringSync($r('app.string.picker_modes'));
+      this.pickerTitle = getContext(this).resourceManager.getStringSync($r('app.string.picker_modes').id);
     }
     this.pickerMode = mode;
     this.showPicker = true;
@@ -113,6 +124,8 @@ export struct ChatView {
     this.showPicker = false;
     if (this.pickerMode === 0 && this.onSelectSession) {
       this.onSelectSession(index + 1);
+    } else if (this.pickerMode === 3 && this.onSelectAgent) {
+      this.onSelectAgent(index + 1);
     } else if (this.pickerMode === 1 && this.onSwitchModel) {
       this.onSwitchModel(index + 1);
     } else if (this.pickerMode === 2 && this.onSwitchMode) {
@@ -122,15 +135,15 @@ export struct ChatView {
 
   showDeleteConfirmDialog(index: number) {
     let wsName = WorkspaceStore.workspaces[index]?.name || '';
-    this.getUIContext().showAlertDialog({
-      title: getContext().resourceManager.getStringSync($r('app.string.ws_delete_confirm_title')),
+    (this.getUIContext() as UIContext).showAlertDialog({
+      title: getContext(this).resourceManager.getStringSync($r('app.string.ws_delete_confirm_title').id),
       message: wsName,
       primaryButton: {
-        value: getContext().resourceManager.getStringSync($r('app.string.ws_cancel')),
+        value: getContext(this).resourceManager.getStringSync($r('app.string.ws_cancel').id),
         action: () => {}
       },
       secondaryButton: {
-        value: getContext().resourceManager.getStringSync($r('app.string.ws_delete_confirm_ok')),
+        value: getContext(this).resourceManager.getStringSync($r('app.string.ws_delete_confirm_ok').id),
         fontColor: Colors.error,
         action: () => {
           WorkspaceStore.workspaces.splice(index, 1);
@@ -169,24 +182,21 @@ export struct ChatView {
           WorkspaceDrawer({
             workspaces: WorkspaceStore.workspaces,
             currentIndex: WorkspaceStore.currentIndex,
-            hostName: 'host',
-            hostUrl: 'ws://...',
-            agentType: ChatStore.agentType,
             onSelect: (i: number) => {
               WorkspaceStore.currentIndex = i;
-              this.getUIContext()?.animateTo({ duration: Duration.normal }, () => { this.showDrawer = false });
+              (this.getUIContext() as UIContext)?.animateTo({ duration: Duration.normal }, () => { this.showDrawer = false });
               if (this.onWorkspaceSelect) this.onWorkspaceSelect(i);
             },
             onDelete: (i: number) => {
               this.showDeleteConfirmDialog(i);
             },
-            onClose: () => { this.getUIContext()?.animateTo({ duration: Duration.normal }, () => { this.showDrawer = false }) },
+            onClose: () => { (this.getUIContext() as UIContext)?.animateTo({ duration: Duration.normal }, () => { this.showDrawer = false }) },
             onAddWorkspace: (p: string) => {
               ChatView.addWorkspace(p);
-              this.getUIContext()?.animateTo({ duration: Duration.normal }, () => { this.showDrawer = false });
+              (this.getUIContext() as UIContext)?.animateTo({ duration: Duration.normal }, () => { this.showDrawer = false });
               if (this.onWorkspaceSelect) this.onWorkspaceSelect(WorkspaceStore.workspaces.length - 1);
             },
-            onSwitchHost: () => { if (this.onNavigateToOnboarding) this.onNavigateToOnboarding() },
+            onSwitchHost: () => { if (this.onNavigateToHostManage) this.onNavigateToHostManage() },
             onSettings: () => { if (this.onNavigateToSettings) this.onNavigateToSettings() },
             onHostManage: () => { if (this.onNavigateToHostManage) this.onNavigateToHostManage() }
           })
@@ -194,6 +204,7 @@ export struct ChatView {
           Column() {
             Column() {
               this.TitleBar()
+              this.ControlBar()
             }
             .opacity(this.titleBarOpacity)
             .animation({ duration: Duration.slow, curve: Curve.EaseOut })
@@ -218,8 +229,10 @@ export struct ChatView {
                     }
                   })
               }
-              .width('100%').padding({ left: Spacing.md, right: Spacing.md, top: Spacing.xs, bottom: Spacing.xs })
+              .width(Layout.contentWidth)
+              .padding({ top: Spacing.xs, bottom: Spacing.xs })
               .backgroundColor(Colors.surfaceElevated)
+              .borderRadius(Radius.md)
               .transition(TransitionEffect.OPACITY)
             }
 
@@ -231,6 +244,7 @@ export struct ChatView {
             }).layoutWeight(1)
           }
           .width('100%').height('100%')
+          .alignItems(HorizontalAlign.Center)
         }
           .bindSheet($$this.showPicker, this.PickerSheetBuilder(), {
             height: SheetSize.MEDIUM,
@@ -244,7 +258,9 @@ export struct ChatView {
         .maxSideBarWidth('100%')
         .width('100%').height('100%')
 
-        // Overlay elements are now handled natively via system dialogs and bindSheet.
+        if (this.showMoreMenu) {
+          this.MoreOverlay()
+        }
       }
       .width('100%').height('100%')
     }
@@ -267,92 +283,185 @@ export struct ChatView {
   @Builder
   TitleBar() {
     Row() {
-      SymbolGlyph(this.showDrawer ? $r('sys.symbol.close_sidebar') : $r('sys.symbol.open_sidebar'))
-        .fontSize(24)
-        .fontColor([Colors.foreground])
-        .accessibilityText(this.showDrawer ? 'Close workspace drawer' : 'Open workspace drawer')
-        .onClick(() => { this.getUIContext()?.animateTo({ duration: Duration.normal }, () => { this.showDrawer = !this.showDrawer }) })
+      Button() {
+        SymbolGlyph($r('sys.symbol.chevron_left'))
+          .fontSize(20)
+          .fontColor([Colors.foreground])
+      }
+      .width(36)
+      .height(36)
+      .backgroundColor(Color.Transparent)
+      .onClick(() => { this.onBack?.(); })
 
-      Column() {
-        if (this.showRename) {
-          Row() {
-            TextInput({ text: this.renameText, placeholder: 'Session name' })
-              .layoutWeight(1).height(36)
-              .backgroundColor(Colors.surface1).borderRadius(Radius.sm)
-              .padding({ left: Spacing.md, right: Spacing.md })
-              .fontSize(FontSize.base).fontColor(Colors.foreground).fontWeight(FontWeight.Medium)
-              .onChange((v: string) => { this.renameText = v })
-              .onSubmit(() => { this.doRename() })
+      Blank()
 
-            SymbolGlyph($r('sys.symbol.xmark'))
-              .fontSize(16).fontColor([Colors.foregroundMuted])
-              .margin({ left: Spacing.xs })
-              .onClick(() => { this.showRename = false })
-          }
-          .width('100%')
-        } else {
-          Row() {
-            Text(this.getSessionTitle())
-              .fontSize(FontSize.base).fontColor(Colors.foreground).fontWeight(FontWeight.Medium)
-              .lineHeight(20).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-
-
-          }
-          .width('100%')
-          .onClick(() => {
-            if (ChatStore.bridgeSessionId || ChatStore.acpSessionId) {
-              this.renameText = this.getSessionTitle();
-              this.showRename = true;
-            }
-          })
-        }
-
-        if (!ChatStore.bridgeSessionId && !ChatStore.acpSessionId) {
-          Text($r('app.string.chat_no_session'))
-            .fontSize(FontSize.xs).fontColor(Colors.foregroundLight)
-            .lineHeight(16).maxLines(1)
-            .width('100%')
-            .accessibilityText('No active session')
-        } else if (ChatStore.models.length > 0) {
-          Text(this.getModelName())
-            .fontSize(FontSize.xs).fontColor(Colors.foregroundMuted)
-            .lineHeight(16).maxLines(1)
-            .width('100%')
-            .accessibilityText('Current model: ' + this.getModelName())
+      Button() {
+        Row({ space: Spacing.sm }) {
+          CustomIcon({ name: 'model', iconSize: 14, color: Colors.foreground })
+          Text(WorkspaceStore.currentIndex >= 0 && WorkspaceStore.currentIndex < WorkspaceStore.workspaces.length
+            ? WorkspaceStore.workspaces[WorkspaceStore.currentIndex].name : 'New chat')
+            .fontSize(FontSize.xs)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(Colors.foreground)
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+          SymbolGlyph($r('sys.symbol.chevron_down'))
+            .fontSize(11)
+            .fontColor([Colors.foregroundMuted])
         }
       }
-      .alignItems(HorizontalAlign.Start)
-      .layoutWeight(1)
-      .margin({ left: Spacing.sm })
+      .height(34)
+      .padding({ left: Spacing.md, right: Spacing.sm })
+      .constraintSize({ maxWidth: 178 })
+      .backgroundColor(Colors.surface0)
+      .border({ width: 1, color: Colors.borderLight })
+      .borderRadius(Radius.full)
+      .onClick(() => {
+        (this.getUIContext() as UIContext)?.animateTo({ duration: Duration.normal }, () => { this.showDrawer = true })
+      })
 
-      CustomIcon({
-        name: 'new_chat',
-        iconSize: 24,
-        color: Colors.foreground
-      }).margin({ right: Spacing.md })
-        .accessibilityText('New chat')
-        .onClick(() => { if (this.onNewSession) this.onNewSession() })
+      Blank()
 
-      SymbolGlyph($r('sys.symbol.dot_grid_2x2'))
-        .fontColor([Colors.foreground]).fontSize(24)
-        .accessibilityText('More options')
-        .bindMenu([
-          { value: $r('app.string.menu_switch_session'), action: () => { this.openPicker(0) } },
-          { value: 'Rename Session', action: () => {
-              if (ChatStore.bridgeSessionId || ChatStore.acpSessionId) {
-                this.renameText = this.getSessionTitle();
-                this.showRename = true;
-              }
-            }
-          },
-          { value: $r('app.string.menu_switch_model'), action: () => { this.openPicker(1) } },
-          { value: $r('app.string.menu_switch_mode'), action: () => { this.openPicker(2) } },
-        ])
+      Button() {
+        CustomIcon({ name: 'more', iconSize: 15, color: Colors.foreground })
+      }
+      .width(36)
+      .height(36)
+      .backgroundColor(Color.Transparent)
+        .onClick(() => {
+          this.showMoreMenu = true
+        })
     }
     .width('100%').height(56)
-    .padding({ left: Spacing.lg, right: Spacing.lg })
-    .backgroundColor(Colors.surfaceElevated)
-    .shadow({ radius: 2, color: '#0000000A', offsetY: 1 })
+    .padding({ left: Spacing.xl, right: Spacing.xl })
+    .backgroundColor(Colors.surface0)
+  }
+
+  @Builder
+  ControlBar() {
+    Column() {
+      Row({ space: Spacing.xs }) {
+        this.ControlChip('Agent', ChatStore.selectedAgentName || '选择 Agent', () => {
+          this.openPicker(3);
+        })
+        this.ControlChip('Model', this.getModelName().length > 0 ? this.getModelName() : '选择 Model', () => {
+          if ((ChatStore.selectedAgentName || ChatStore.agentType).length > 0) {
+            this.openPicker(1);
+          }
+        }, (ChatStore.selectedAgentName || ChatStore.agentType).length > 0)
+        this.ControlChip('Mode', ChatStore.modeIndex >= 0 && ChatStore.modeIndex < ChatStore.modes.length
+          ? ChatStore.modes[ChatStore.modeIndex].name : '选择', () => {
+            if (ChatStore.modes.length > 0) {
+              this.openPicker(2);
+            }
+          }, ChatStore.modes.length > 0)
+      }
+      .width(Layout.contentWidth)
+      .padding({ top: Spacing.xs, bottom: Spacing.sm })
+    }
+    .width('100%')
+    .alignItems(HorizontalAlign.Center)
+    .backgroundColor(Colors.surface0)
+  }
+
+  @Builder
+  ControlChip(label: string, value: string, action: () => void, enabled: boolean = true) {
+    Button() {
+      Column() {
+        Text(label)
+          .fontSize(FontSize.xxs)
+          .fontColor(Colors.foregroundMuted)
+        Text(value)
+          .fontSize(FontSize.xs)
+          .fontColor(enabled ? Colors.foreground : Colors.foregroundMuted)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .margin({ top: 2 })
+      }
+      .alignItems(HorizontalAlign.Start)
+    }
+    .enabled(enabled)
+    .layoutWeight(1)
+    .height(44)
+    .padding({ left: Spacing.sm, right: Spacing.sm, top: Spacing.xs, bottom: Spacing.xs })
+    .backgroundColor(Colors.surface1)
+    .borderRadius(Radius.md)
+    .onClick(action)
+  }
+
+  @Builder
+  IconChip(icon: Resource, action: () => void) {
+    Button() {
+      SymbolGlyph(icon).fontSize(18).fontColor([Colors.foreground])
+    }
+    .width(40)
+    .height(40)
+    .backgroundColor(Colors.surface1)
+    .borderRadius(Radius.md)
+    .onClick(action)
+  }
+
+  @Builder
+  MoreSheetBuilder() {
+    Column() {
+      this.MenuAction('Refresh sessions', () => {
+        this.showMoreMenu = false;
+        this.onRefreshSessions?.();
+      })
+      this.MenuAction('Refresh agents', () => {
+        this.showMoreMenu = false;
+        this.onRefreshAgents?.();
+      })
+      this.MenuAction('Refresh models', () => {
+        this.showMoreMenu = false;
+        this.onRefreshModels?.();
+      })
+      this.MenuAction('Add host', () => {
+        this.showMoreMenu = false;
+        this.onNavigateToHostManage?.();
+      })
+      this.MenuAction('Settings', () => {
+        this.showMoreMenu = false;
+        this.onNavigateToSettings?.();
+      })
+    }
+    .width('100%')
+    .alignItems(HorizontalAlign.Center)
+    .padding(Spacing.xs)
+    .backgroundColor(Colors.surface0)
+    .borderRadius(Radius.xl)
+    .shadow({ radius: 14, color: '#1A1D2314', offsetY: 8 })
+  }
+
+  @Builder
+  MoreOverlay() {
+    Stack({ alignContent: Alignment.TopEnd }) {
+      Column()
+        .width('100%')
+        .height('100%')
+        .backgroundColor(Colors.transparent)
+        .onClick(() => { this.showMoreMenu = false; })
+      Column() {
+        this.MoreSheetBuilder()
+      }
+      .width(168)
+      .margin({ top: 54, right: Spacing.xl })
+      .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: -8 })))
+    }
+    .width('100%')
+    .height('100%')
+  }
+
+  @Builder
+  MenuAction(label: string, action: () => void) {
+    Button(label)
+      .width('100%')
+      .height(34)
+      .fontSize(FontSize.xs)
+      .fontColor(Colors.foreground)
+      .backgroundColor(Colors.transparent)
+      .borderRadius(Radius.sm)
+      .onClick(action)
   }
 }
 
@@ -368,14 +477,14 @@ struct PermissionSheet {
           .fontSize(FontSize.xl).fontWeight(FontWeight.Bold).fontColor(Colors.foreground)
           .accessibilityText('Permission request')
       }
-      .width('100%')
-      .padding({ left: Spacing.xl, right: Spacing.xl, top: Spacing.xl, bottom: Spacing.md })
+      .width(Layout.contentWidth)
+      .padding({ top: Spacing.xl, bottom: Spacing.md })
 
       if (this.permission) {
         Text(this.permission.toolCall.title)
           .fontSize(FontSize.base).fontColor(Colors.foregroundMuted)
-          .width('100%')
-          .padding({ left: Spacing.xl, right: Spacing.xl, bottom: Spacing.lg })
+          .width(Layout.contentWidth)
+          .padding({ bottom: Spacing.lg })
 
         List() {
           ForEach(this.permission.options, (opt: PermissionOption) => {
@@ -389,16 +498,17 @@ struct PermissionSheet {
             }
             .width('100%').borderRadius(Radius.md)
             .backgroundColor(Colors.surface1)
-            .margin({ bottom: Spacing.xs, left: Spacing.md, right: Spacing.md })
+            .margin({ bottom: Spacing.xs })
             .onClick(() => {
               if (this.onSelect) this.onSelect(opt.optionId);
             })
           }, (opt: PermissionOption) => opt.optionId)
         }
-        .width('100%')
+        .width(Layout.contentWidth)
       }
     }
     .width('100%')
+    .alignItems(HorizontalAlign.Center)
     .padding({ bottom: Spacing.xxxl })
     .backgroundColor(Colors.surface0)
     .borderRadius({ topLeft: Radius.xl, topRight: Radius.xl })
@@ -418,15 +528,15 @@ struct PickerSheet {
         Text(this.pickerTitle)
           .fontSize(FontSize.xl).fontWeight(FontWeight.Bold).fontColor(Colors.foreground)
       }
-      .width('100%')
-      .padding({ left: Spacing.xl, right: Spacing.xl, top: Spacing.xl, bottom: Spacing.lg })
+      .width(Layout.contentWidth)
+      .padding({ top: Spacing.xl, bottom: Spacing.lg })
 
       if (this.getItems().length === 0) {
         Row() {
           Text('暂无数据')
             .fontSize(FontSize.sm).fontColor(Colors.foregroundLight)
         }
-        .width('100%').height(80).justifyContent(FlexAlign.Center)
+        .width(Layout.contentWidth).height(80).justifyContent(FlexAlign.Center)
       } else {
         List() {
           ForEach(this.getItems(), (item: string, index: number) => {
@@ -456,10 +566,11 @@ struct PickerSheet {
             })
           }, (item: string) => item)
         }
-        .width('100%')
+        .width(Layout.contentWidth)
       }
     }
     .width('100%')
+    .alignItems(HorizontalAlign.Center)
     .padding({ bottom: Spacing.xxxl })
     .backgroundColor(Colors.surface0)
     .borderRadius({ topLeft: Radius.xl, topRight: Radius.xl })
@@ -476,6 +587,18 @@ struct PickerSheet {
       }
       return result;
     }
+    if (this.pickerMode === 3) {
+      let hostId: string = ChatStore.currentDeviceId;
+      if (hostId.length === 0) {
+        return [];
+      }
+      let agents = DeviceAgentStore.getAgents(hostId);
+      let result: string[] = [];
+      for (let i: number = 0; i < agents.length; i++) {
+        result.push(agents[i].title || agents[i].name);
+      }
+      return result;
+    }
     if (this.pickerMode === 1) return ChatStore.models.map(m => m.name);
     if (this.pickerMode === 2) return ChatStore.modes.map(m => m.name);
     return [];
@@ -486,6 +609,14 @@ struct PickerSheet {
       let targetId = ChatStore.acpSessionId || ChatStore.bridgeSessionId;
       for (let j = 0; j < ChatStore.sessions.length; j++) {
         if (ChatStore.sessions[j].sessionId === targetId) return j;
+      }
+      return -1;
+    }
+    if (this.pickerMode === 3) {
+      let hostId: string = ChatStore.currentDeviceId;
+      let agents = DeviceAgentStore.getAgents(hostId);
+      for (let j = 0; j < agents.length; j++) {
+        if (agents[j].name === (ChatStore.selectedAgentName || ChatStore.agentType)) return j;
       }
       return -1;
     }

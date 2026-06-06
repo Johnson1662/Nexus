@@ -1,13 +1,11 @@
-import { Colors, FontSize, Spacing, Radius, Duration } from '../../constants/DesignTokens';
+import { Colors, FontSize, Spacing, Radius, Duration, Layout } from '../../constants/DesignTokens';
 import { WorkspaceInfo } from '../../common/model/WorkspaceInfo';
+import { CustomIcon } from '../../common/ui/CustomIcon';
 
 @Component
 export struct WorkspaceDrawer {
   @Prop workspaces: WorkspaceInfo[] = [];
   @Prop currentIndex: number = -1;
-  @Prop hostName: string = '';
-  @Prop hostUrl: string = '';
-  @Prop agentType: string = '';
   @State showForm: boolean = false;
   @State newPath: string = '';
   onSelect?: (index: number) => void;
@@ -22,9 +20,7 @@ export struct WorkspaceDrawer {
     Column() {
       // Header
       Row() {
-        SymbolGlyph($r('sys.symbol.close_sidebar'))
-          .fontSize(24)
-          .fontColor([Colors.foreground])
+        CustomIcon({ name: 'close', iconSize: 24, color: Colors.foreground })
           .onClick(() => { if (this.onClose) this.onClose() })
 
         Text($r('app.string.ws_title'))
@@ -34,19 +30,19 @@ export struct WorkspaceDrawer {
           .margin({ left: Spacing.sm })
         Blank()
       }
-      .width('100%')
-      .padding({ left: Spacing.lg, right: Spacing.lg, top: Spacing.lg, bottom: Spacing.lg })
+      .width(Layout.contentWidth)
+      .padding({ top: Spacing.lg, bottom: Spacing.lg })
       .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: -10 })))
       // Workspace list
       if (this.workspaces.length === 0) {
         Column() {
-          Text('No Workspaces')
+          Text($r('app.string.ws_empty_prompt'))
             .fontSize(FontSize.lg).fontWeight(FontWeight.Bold).fontColor(Colors.foregroundMuted)
-          Text('Add a path to get started')
+          Text($r('app.string.ws_empty_subtitle'))
             .fontSize(FontSize.sm).fontColor(Colors.foregroundLight)
             .margin({ top: Spacing.xs })
         }
-        .width('100%').layoutWeight(1)
+        .width(Layout.contentWidth).layoutWeight(1)
         .justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center)
       } else {
         List({ space: Spacing.sm }) {
@@ -76,7 +72,7 @@ export struct WorkspaceDrawer {
               .alignItems(HorizontalAlign.Start)
               .layoutWeight(1)
               Row() {
-                SymbolGlyph($r('sys.symbol.trash'))
+                SymbolGlyph($r('sys.symbol.ohos_trash'))
                   .fontSize(20)
                   .fontColor([Colors.foregroundMuted])
                   .padding({ left: Spacing.sm, right: Spacing.xs, top: Spacing.sm, bottom: Spacing.sm })
@@ -95,22 +91,21 @@ export struct WorkspaceDrawer {
           }
         }, (ws: WorkspaceInfo, index: number) => ws.id + index.toString())
       }
-      .width('100%')
+      .width(Layout.contentWidth)
       .layoutWeight(1)
-      .padding({ left: Spacing.sm, right: Spacing.sm })
       }
 
       // Bottom area
       Column() {
-        Divider().color(Colors.borderLight).strokeWidth(0.5).margin({ left: Spacing.xl, right: Spacing.xl })
+        Divider().color(Colors.borderLight).strokeWidth(0.5)
         // Navigation entries
         if (this.onHostManage) {
           Row() {
-            SymbolGlyph($r('sys.symbol.ohos_wifi'))
-              .fontSize(22)
-              .fontColor([Colors.foreground])
+            Image($r('app.media.ic_terminal_window'))
+              .width(22).height(22)
+              .fillColor(Colors.foreground)
               .margin({ right: Spacing.md })
-            Text('Host 管理')
+            Text($r('app.string.ws_host_manage'))
               .fontSize(FontSize.base)
               .fontColor(Colors.foreground)
               .fontWeight(FontWeight.Medium)
@@ -122,11 +117,9 @@ export struct WorkspaceDrawer {
 
         if (this.onSettings) {
           Row() {
-            SymbolGlyph($r('sys.symbol.gearshape'))
-              .fontSize(22)
-              .fontColor([Colors.foreground])
+            CustomIcon({ name: 'tool', iconSize: 22, color: Colors.foreground })
               .margin({ right: Spacing.md })
-            Text('设置')
+            Text($r('app.string.ws_settings'))
               .fontSize(FontSize.base)
               .fontColor(Colors.foreground)
               .fontWeight(FontWeight.Medium)
@@ -146,12 +139,12 @@ export struct WorkspaceDrawer {
               .onChange((v: string) => { this.newPath = v })
 
             Row() {
-              Button('Cancel')
+              Button($r('app.string.ws_cancel'))
                 .layoutWeight(1).height(44)
                 .backgroundColor('transparent').fontColor(Colors.foregroundMuted)
                 .fontSize(FontSize.base)
                 .onClick(() => { this.showForm = false; this.newPath = '' })
-              Button('Add')
+              Button($r('app.string.ws_add'))
                 .layoutWeight(1).height(44)
                 .backgroundColor(Colors.accent).fontColor(Color.White)
                 .borderRadius(Radius.md).fontSize(FontSize.base)
@@ -169,11 +162,11 @@ export struct WorkspaceDrawer {
           .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: 10 })))
         } else {
           Row() {
-            SymbolGlyph($r('sys.symbol.plus'))
+            SymbolGlyph($r('sys.symbol.ohos_folder_badge_plus'))
               .fontSize(22)
               .fontColor([Colors.foreground])
               .margin({ right: Spacing.md })
-            Text('Add Workspace')
+            Text($r('app.string.ws_add_button'))
               .fontSize(FontSize.base)
               .fontColor(Colors.foreground)
               .fontWeight(FontWeight.Medium)
@@ -184,11 +177,12 @@ export struct WorkspaceDrawer {
           .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: 10 })))
         }
       }
-      .width('100%')
+      .width(Layout.contentWidth)
       .animation({ duration: Duration.normal, curve: Curve.EaseOut })
     }
     .width('100%')
     .height('100%')
+    .alignItems(HorizontalAlign.Center)
     .backgroundColor(Colors.surfaceElevated)
   }
 }

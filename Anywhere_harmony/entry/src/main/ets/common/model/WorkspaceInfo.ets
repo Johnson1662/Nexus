@@ -8,6 +8,8 @@ export class ServerSession {
   /** ACP Session ID — AI Agent 的真实会话 ID，用于 load/resume，非 bridge session */
   sessionId: string = '';
   title: string = '';
+  /** 会话创建时间 (epoch ms) — server 返回或客户端接收时补 */
+  createdAt: number = 0;
   currentModel?: string;
   model?: string;
   cwd?: string;

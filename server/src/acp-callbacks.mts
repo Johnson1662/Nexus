@@ -82,8 +82,8 @@ export function createAcpCallbacks(config: AcpCallbacksConfig): {
         },
       };
       const wss = getSessionWs();
-      if (wss) wss.send(JSON.stringify(eventPayload));
       bufferAgentEvent(sessionId, eventPayload);
+      if (wss) wss.send(JSON.stringify(eventPayload));
     } catch {}
   }
 

@@ -83,6 +83,8 @@ export class ChatStoreModel {
   /** AI Agent 的真实 ACP 会话 ID，用于 load/switch session */
   @Trace acpSessionId: string = '';
   @Trace connected: boolean = false;
+  /** 当前连接设备的 hostId 或 hostname — server_info 设置，断开清空 */
+  @Trace currentDeviceId: string = '';
   @Trace sessions: ServerSession[] = [];
   @Trace models: ModelItem[] = [];
   @Trace modes: ModeItem[] = [];

@@ -18,15 +18,11 @@
     },
     {
       "name": "surface2",
-      "value": "#E5E5EA"
+      "value": "#E8E8E8"
     },
     {
       "name": "surface_elevated",
       "value": "#FFFFFF"
-    },
-    {
-      "name": "user_bubble",
-      "value": "#F4F4F4"
     },
     {
       "name": "foreground",
@@ -46,7 +42,7 @@
     },
     {
       "name": "accent_dark",
-      "value": "#000000"
+      "value": "#0D0E10"
     },
     {
       "name": "accent_light",
@@ -119,10 +115,6 @@
     {
       "name": "terminal_fg",
       "value": "#E5E7EB"
-    },
-    {
-      "name": "onboarding_bg",
-      "value": "#FAFAFA"
     },
     {
       "name": "inline_code_bg",
