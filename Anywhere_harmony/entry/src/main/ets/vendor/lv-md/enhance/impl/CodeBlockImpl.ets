@@ -1,14 +1,15 @@
+import { Colors } from '../../../../constants/DesignTokens';
 import { CodeTheme, markdownCodeThemeChangeEventName } from '../constant/CodeTheme';
 import { MDBaseController } from '../controller/BaseController';
 import { CodeHighlight } from '../model/CodeHighlight';
 import { Logger } from '../utils/Logger';
 
 export namespace CodeBlockImpl {
-  export function handleBackgroundColor(them: CodeTheme) {
+  export function handleBackgroundColor(them: CodeTheme): ResourceColor {
     if (them == "dark") {
       return "#181A1F"
     } else {
-      return "#F9FAFB"
+      return Colors.surface1
     }
   }
 

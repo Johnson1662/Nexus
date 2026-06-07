@@ -1,4 +1,4 @@
-import { Colors, FontSize, Spacing, Radius, Shadow, Layout } from '../../constants/DesignTokens';
+import { Colors, FontSize, Spacing, Radius, Shadow, Layout, Duration } from '../../constants/DesignTokens';
 import { ChatStore } from '../../common/model/ChatState';
 import { HostStore, DeviceEntry, WorkspaceStore, WorkspaceInfo, ServerSession } from '../../common/model/WorkspaceInfo';
 import { DeviceAgentStore } from '../../common/model/DeviceAgentStore';
@@ -14,15 +14,12 @@ export struct HomeView {
   onConnectHost?: (url: string) => void;
   onRefreshHostsAgents?: () => void;
 
-  @State showMenu: boolean = false;
-  @State showAddHostMenu: boolean = false;
-  @State showManualHostForm: boolean = false;
+  @StorageLink('homeShowManualHost') showManualHostForm: boolean = false;
   @State manualHostUrl: string = '';
   @State pressedWorkspaceId: string = '';
-  @State pressedHostKey: string = '';
+  @State pressedSessionId: string = '';
   @State pressedAction: string = '';
   @State entered: boolean = false;
-  @State selectedHostFilter: string = 'all';
 
   aboutToAppear(): void {
     DeviceAgentStore.loadFromDisk();
@@ -30,7 +27,7 @@ export struct HomeView {
       WorkspaceStore.currentIndex = 0;
     }
     setTimeout(() => {
-      (this.getUIContext() as UIContext)?.animateTo({ duration: 240, curve: Curve.Friction }, () => {
+      (this.getUIContext() as UIContext)?.animateTo({ duration: Duration.fast, curve: Curve.EaseOut }, () => {
         this.entered = true;
       });
     }, 30);
@@ -71,7 +68,7 @@ export struct HomeView {
   }
 
   formatRelativeTime(epoch: number): string {
-    if (epoch <= 0) return '刚刚';
+    if (!epoch || epoch <= 0) return '刚刚';
     let diff: number = Date.now() - epoch;
     let mins: number = Math.floor(diff / 60000);
     if (mins < 1) return '刚刚';
@@ -153,12 +150,10 @@ export struct HomeView {
     Stack({ alignContent: Alignment.TopStart }) {
       Scroll() {
         Column() {
-          this.Header()
-          this.BrandHeader()
-          this.HostFilterChips()
           this.WorkspaceSection()
           this.RecentSection()
-          Column().height(104)
+          this.BottomActionBar()
+          Column().height(32)
         }
         .width('100%')
         .constraintSize({ minHeight: '100%' })
@@ -168,21 +163,6 @@ export struct HomeView {
       .height('100%')
       .backgroundColor(Colors.surface0)
       .scrollBar(BarState.Off)
-
-      Stack({ alignContent: Alignment.Bottom }) {
-        this.BottomActionBar()
-      }
-      .width('100%')
-      .height('100%')
-      .hitTestBehavior(HitTestMode.Transparent)
-
-      if (this.showMenu) {
-        this.MenuOverlay()
-      }
-
-      if (this.showAddHostMenu) {
-        this.AddHostOverlay()
-      }
 
       if (this.showManualHostForm) {
         this.ManualHostOverlay()
@@ -194,201 +174,21 @@ export struct HomeView {
   }
 
   @Builder
-  Header() {
-    Row() {
-      Button() {
-        CustomIcon({ name: 'menu', iconSize: 20, color: Colors.foreground })
-      }
-      .width(36)
-      .height(36)
-      .backgroundColor(Colors.transparent)
-      .borderRadius(Radius.full)
-      .scale({ x: this.pressedAction === 'menu' ? 0.94 : 1, y: this.pressedAction === 'menu' ? 0.94 : 1 })
-      .animation({ duration: 120, curve: Curve.EaseOut })
-      .onTouch((event: TouchEvent) => {
-        this.pressedAction = event.type === TouchType.Down ? 'menu' : '';
-      })
-      .onClick(() => { this.showMenu = true; })
-      Blank()
-      Button() {
-        CustomIcon({ name: 'more', iconSize: 15, color: Colors.foreground })
-      }
-      .width(36)
-      .height(36)
-      .backgroundColor(Colors.surface0)
-      .border({ width: 1, color: Colors.borderLight })
-      .borderRadius(Radius.full)
-      .scale({ x: this.pressedAction === 'more' ? 0.94 : 1, y: this.pressedAction === 'more' ? 0.94 : 1 })
-      .animation({ duration: 120, curve: Curve.EaseOut })
-      .onTouch((event: TouchEvent) => {
-        this.pressedAction = event.type === TouchType.Down ? 'more' : '';
-      })
-      .onClick(() => { this.showMenu = true; })
-    }
-    .width(Layout.contentWidth)
-    .padding({ top: Spacing.sm, bottom: Spacing.xs })
-    .opacity(this.entered ? 1 : 0)
-    .translate({ y: this.entered ? 0 : -8 })
-  }
-
-  @Builder
-  BrandHeader() {
-    Column() {
-      Text('Anywhere')
-        .fontSize(34)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(Colors.foreground)
-        .width('100%')
-    }
-    .width(Layout.contentWidth)
-    .padding({ bottom: Spacing.lg })
-    .opacity(this.entered ? 1 : 0)
-    .translate({ y: this.entered ? 0 : 8 })
-  }
-
-  @Builder
-  HostFilterChips() {
-    Scroll() {
-      Row({ space: Spacing.sm }) {
-        this.HostChip('All', 'all', true)
-        ForEach(HostStore.devices, (device: DeviceEntry) => {
-          this.HostChip(this.getHostLabel(device), this.getHostKey(device), this.isHostOnline(device))
-        }, (device: DeviceEntry) => this.getHostKey(device))
-      }
-      .width('100%')
-      .justifyContent(FlexAlign.Start)
-    }
-    .width(Layout.contentWidth)
-    .height(42)
-    .scrollable(ScrollDirection.Horizontal)
-    .scrollBar(BarState.Off)
-    .padding({ top: Spacing.xs, bottom: Spacing.xxl })
-    .opacity(this.entered ? 1 : 0)
-    .translate({ y: this.entered ? 0 : 10 })
-  }
-
-  @Builder
-  HostChip(label: string, key: string, online: boolean) {
-    Button() {
-      Row() {
-        if (key !== 'all') {
-          Circle({ width: 6, height: 6 })
-            .fill(online ? Colors.success : Colors.foregroundMuted)
-            .margin({ right: Spacing.xs })
-          CustomIcon({
-            name: 'model',
-            iconSize: 12,
-            color: this.selectedHostFilter === key ? Colors.surface0 : Colors.foreground
-          })
-            .margin({ right: Spacing.xs })
-        }
-        Text(label)
-          .fontSize(FontSize.xs)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(this.selectedHostFilter === key ? Colors.surface0 : Colors.foreground)
-          .maxLines(1)
-      }
-    }
-    .height(32)
-    .padding({ left: key === 'all' ? Spacing.lg : Spacing.md, right: key === 'all' ? Spacing.lg : Spacing.md })
-    .backgroundColor(this.selectedHostFilter === key ? Colors.foreground : Colors.surface0)
-    .border({ width: this.selectedHostFilter === key ? 0 : 1, color: Colors.borderLight })
-    .borderRadius(Radius.full)
-    .scale({
-      x: this.pressedHostKey === key ? 0.96 : 1,
-      y: this.pressedHostKey === key ? 0.96 : 1
-    })
-    .animation({ duration: 120, curve: Curve.EaseOut })
-    .onTouch((event: TouchEvent) => {
-      this.pressedHostKey = event.type === TouchType.Down ? key : '';
-    })
-    .onClick(() => { this.selectedHostFilter = key; })
-  }
-
-  @Builder
-  StatusHero() {
-    Column() {
-      Column() {
-        Row() {
-          Circle({ width: 8, height: 8 })
-            .fill(this.isConnectedToHost() ? Colors.success : Colors.foregroundMuted)
-            .margin({ right: Spacing.sm })
-          Text(this.isConnectedToHost() ? this.getCurrentDeviceName() : '还没有连接主机')
-            .fontSize(FontSize.lg)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(Colors.foreground)
-        }
-        .width('100%')
-        .margin({ bottom: Spacing.md })
-
-        Text(this.getCurrentWorkspaceName())
-          .fontSize(FontSize.sm)
-          .fontColor(Colors.foregroundMuted)
-          .width('100%')
-          .margin({ bottom: Spacing.lg })
-
-        Row() {
-          this.MetricCard('Hosts', HostStore.devices.length.toString())
-          this.MetricCard('Agents', this.getWorkspaceAgentCount().toString())
-          this.MetricCard('Sessions', ChatStore.sessions.length.toString())
-        }
-        .width('100%')
-      }
-      .width('100%')
-      .padding(Spacing.lg)
-      .backgroundColor(Colors.surface1)
-      .borderRadius(Radius.lg)
-    }
-    .width(Layout.contentWidth)
-    .padding({ bottom: Spacing.xl })
-    .alignItems(HorizontalAlign.Center)
-  }
-
-  @Builder
-  MetricCard(label: string, value: string) {
-    Column() {
-      Text(value)
-        .fontSize(FontSize.xxl)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(Colors.foreground)
-      Text(label)
-        .fontSize(FontSize.xs)
-        .fontColor(Colors.foregroundMuted)
-        .margin({ top: Spacing.xxs })
-    }
-    .layoutWeight(1)
-    .alignItems(HorizontalAlign.Start)
-  }
-
-  @Builder
   WorkspaceSection() {
     Column() {
       Text('Projects')
-        .fontSize(FontSize.md)
+        .fontSize(FontSize.xl)
         .fontColor(Colors.foreground)
         .fontWeight(FontWeight.Bold)
         .width('100%')
-        .margin({ bottom: Spacing.md })
+        .margin({ bottom: Spacing.lg })
 
       if (WorkspaceStore.workspaces.length === 0) {
-        Column() {
-          SymbolGlyph($r('sys.symbol.folder'))
-            .fontSize(36)
-            .fontColor([Colors.foregroundMuted])
-            .opacity(0.55)
-            .margin({ bottom: Spacing.md })
-          Text('还没有项目')
-            .fontSize(FontSize.md)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(Colors.foreground)
-            .margin({ bottom: Spacing.xs })
-          Text('从菜单添加主机或进入聊天后添加工作区。')
-            .fontSize(FontSize.sm)
-            .fontColor(Colors.foregroundMuted)
-        }
-        .width('100%')
-        .padding({ top: Spacing.xl, bottom: Spacing.xl })
-        .alignItems(HorizontalAlign.Center)
+        Text('还没有项目。从菜单添加主机或进入聊天后添加工作区。')
+          .fontSize(FontSize.sm)
+          .fontColor(Colors.foregroundMuted)
+          .width('100%')
+          .margin({ bottom: Spacing.md })
       } else {
         ForEach(WorkspaceStore.workspaces, (workspace: WorkspaceInfo, index: number) => {
           this.WorkspaceCard(workspace, index)
@@ -396,10 +196,10 @@ export struct HomeView {
       }
     }
     .width(Layout.contentWidth)
-    .padding({ bottom: Spacing.xl })
+    .padding({ top: Spacing.xxl, bottom: Spacing.xxl })
     .opacity(this.entered ? 1 : 0)
     .translate({ y: this.entered ? 0 : 12 })
-    .animation({ duration: 220, curve: Curve.Friction })
+    .animation({ duration: Duration.fast, curve: Curve.EaseOut })
   }
 
   @Builder
@@ -407,9 +207,9 @@ export struct HomeView {
     Button() {
       Row() {
         SymbolGlyph($r('sys.symbol.folder'))
-          .fontSize(20)
+          .fontSize(24)
           .fontColor([Colors.foreground])
-          .margin({ right: Spacing.lg })
+          .margin({ right: Spacing.lg, left: Spacing.xs })
 
         Column() {
           Text(workspace.name)
@@ -419,16 +219,9 @@ export struct HomeView {
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
           Row() {
-            Text(this.getWorkspaceBranch(workspace))
+            Text('main · Updated ' + this.getWorkspaceTime(workspace))
               .fontSize(FontSize.xs)
               .fontColor(Colors.foregroundMuted)
-            if (this.getWorkspaceLatestTitle(workspace).length > 0) {
-              Text(' · ' + this.getWorkspaceLatestTitle(workspace))
-                .fontSize(FontSize.xs)
-                .fontColor(Colors.foregroundMuted)
-                .maxLines(1)
-                .textOverflow({ overflow: TextOverflow.Ellipsis })
-            }
           }
           .width('100%')
           .margin({ top: Spacing.xxs })
@@ -436,33 +229,31 @@ export struct HomeView {
         .alignItems(HorizontalAlign.Start)
         .layoutWeight(1)
 
-        Text(this.getWorkspaceTime(workspace))
-          .fontSize(FontSize.xs)
-          .fontColor(Colors.foregroundMuted)
-          .margin({ right: Spacing.sm })
-        Circle({ width: 5, height: 5 })
-          .fill(this.isWorkspaceRunning(workspace) ? Colors.success : Colors.foregroundMuted)
-          .margin({ right: Spacing.sm })
-        SymbolGlyph($r('sys.symbol.chevron_right'))
-          .fontSize(13)
-          .fontColor([Colors.foregroundMuted])
+        Row() {
+          Circle({ width: 6, height: 6 })
+            .fill(this.isWorkspaceRunning(workspace) ? Colors.success : Colors.foregroundMuted)
+            .margin({ right: Spacing.xs })
+          Text(this.isWorkspaceRunning(workspace) ? 'Running' : 'Idle')
+            .fontSize(FontSize.xs)
+            .fontColor(Colors.foregroundMuted)
+            .margin({ right: Spacing.sm })
+          SymbolGlyph($r('sys.symbol.chevron_right'))
+            .fontSize(16)
+            .fontColor([Colors.foregroundMuted])
+        }
       }
       .width('100%')
     }
     .width('100%')
-    .padding({ top: Spacing.md, bottom: Spacing.md })
-    .backgroundColor(Colors.transparent)
-    .border({ width: { bottom: 1 }, color: Colors.borderLight })
-    .borderRadius(0)
-    .scale({
-      x: this.pressedWorkspaceId === workspace.id ? 0.98 : 1.0,
-      y: this.pressedWorkspaceId === workspace.id ? 0.98 : 1.0
-    })
-    .animation({ duration: 100, curve: Curve.EaseOut })
+    .padding({ left: Spacing.sm, right: Spacing.sm, top: Spacing.lg, bottom: Spacing.lg })
+    .backgroundColor(this.pressedWorkspaceId === workspace.id ? Colors.surface1 : Colors.transparent)
+    .border({ width: 0 })
+    .borderRadius(Radius.md)
+    .animation({ duration: Duration.fast, curve: Curve.EaseOut })
     .onTouch((event: TouchEvent) => {
       if (event.type === TouchType.Down) {
         this.pressedWorkspaceId = workspace.id;
-      } else {
+      } else if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
         this.pressedWorkspaceId = '';
       }
     })
@@ -473,72 +264,38 @@ export struct HomeView {
   RecentSection() {
     Column() {
       Text('Recent chats')
-        .fontSize(FontSize.md)
+        .fontSize(FontSize.xl)
         .fontWeight(FontWeight.Bold)
         .fontColor(Colors.foreground)
         .width('100%')
-        .margin({ bottom: Spacing.md })
+        .margin({ bottom: Spacing.lg })
 
-      if (this.getRecentSessions().length === 0) {
-        Row() {
-          Row() {
-            SymbolGlyph($r('sys.symbol.ellipsis_message'))
-              .fontSize(18)
-              .fontColor([Colors.foregroundMuted])
-          }
-          .width(42)
-          .height(42)
-          .borderRadius(Radius.lg)
-          .backgroundColor(Colors.surface0)
-          .border({ width: 1, color: Colors.borderLight })
-          .justifyContent(FlexAlign.Center)
-          .margin({ right: Spacing.md })
-          Column() {
-            Text('新会话会直接出现在这里')
-              .fontSize(FontSize.xs)
-              .fontWeight(FontWeight.Medium)
-              .fontColor(Colors.foreground)
-            Text('选择 Agent 后开始第一条消息')
-              .fontSize(FontSize.xs)
-              .fontColor(Colors.foregroundMuted)
-              .margin({ top: Spacing.xxs })
-          }
-          .alignItems(HorizontalAlign.Start)
-          .layoutWeight(1)
-        }
-        .width('100%')
-        .padding({ top: Spacing.md, bottom: Spacing.md })
-      } else {
+      if (this.getRecentSessions().length > 0) {
         ForEach(this.getRecentSessions(), (session: ServerSession) => {
           this.RecentChatRow(session)
         }, (session: ServerSession) => session.sessionId)
       }
     }
     .width(Layout.contentWidth)
+    .padding({ bottom: Spacing.xxl })
     .opacity(this.entered ? 1 : 0)
     .translate({ y: this.entered ? 0 : 14 })
-    .animation({ duration: 240, curve: Curve.Friction, delay: 40 })
+    .animation({ duration: Duration.fast, curve: Curve.EaseOut })
   }
 
   @Builder
   RecentChatRow(session: ServerSession) {
     Button() {
       Row() {
-        Row() {
-          CustomIcon({ name: 'model', iconSize: 15, color: Colors.foreground })
-        }
-        .width(42)
-        .height(42)
-        .backgroundColor(Colors.surface0)
-        .border({ width: 1, color: Colors.borderLight })
-        .borderRadius(Radius.lg)
-        .justifyContent(FlexAlign.Center)
-        .margin({ right: Spacing.md })
+        SymbolGlyph($r('sys.symbol.message'))
+          .fontSize(24)
+          .fontColor([Colors.foreground])
+          .margin({ right: Spacing.lg, left: Spacing.xs })
 
         Column() {
           Text(session.title || 'Untitled')
-            .fontSize(FontSize.xs)
-            .fontWeight(FontWeight.Medium)
+            .fontSize(FontSize.md)
+            .fontWeight(FontWeight.Bold)
             .fontColor(Colors.foreground)
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -557,75 +314,79 @@ export struct HomeView {
           .fontColor(Colors.foregroundMuted)
           .margin({ right: Spacing.sm })
         SymbolGlyph($r('sys.symbol.chevron_right'))
-          .fontSize(13)
+          .fontSize(16)
           .fontColor([Colors.foregroundMuted])
       }
       .width('100%')
     }
     .width('100%')
-    .padding({ top: Spacing.md, bottom: Spacing.md })
-    .backgroundColor(Colors.transparent)
-    .border({ width: { bottom: 1 }, color: Colors.borderLight })
-    .borderRadius(0)
+    .padding({ left: Spacing.sm, right: Spacing.sm, top: Spacing.lg, bottom: Spacing.lg })
+    .backgroundColor(this.pressedSessionId === session.sessionId ? Colors.surface1 : Colors.transparent)
+    .border({ width: 0 })
+    .borderRadius(Radius.md)
+    .animation({ duration: Duration.fast, curve: Curve.EaseOut })
+    .onTouch((event: TouchEvent) => {
+      if (event.type === TouchType.Down) {
+        this.pressedSessionId = session.sessionId;
+      } else if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
+        this.pressedSessionId = '';
+      }
+    })
+    .onClick(() => {})
   }
 
   @Builder
   BottomActionBar() {
-    Row({ space: Spacing.md }) {
+    Row({ space: Spacing.sm }) {
       Button() {
         Row() {
-          SymbolGlyph($r('sys.symbol.magnifyingglass'))
-            .fontSize(20)
+          SymbolGlyph($r('sys.symbol.clock'))
+            .fontSize(18)
             .fontColor([Colors.foregroundMuted])
             .margin({ right: Spacing.sm })
-          Text('Search projects or chats')
+          Text('Search chats')
             .fontSize(FontSize.sm)
             .fontColor(Colors.foregroundMuted)
         }
         .width('100%')
+        .justifyContent(FlexAlign.Start)
+        .padding({ left: Spacing.md })
       }
       .layoutWeight(1)
-      .height(52)
-      .backgroundColor(Colors.surface0)
-      .border({ width: 1, color: Colors.borderLight })
+      .height(48)
+      .backgroundColor(Colors.surface1)
+      .border({ width: 0 })
       .borderRadius(Radius.full)
-      .scale({ x: this.pressedAction === 'search' ? 0.98 : 1, y: this.pressedAction === 'search' ? 0.98 : 1 })
-      .animation({ duration: 120, curve: Curve.EaseOut })
-      .onTouch((event: TouchEvent) => {
-        this.pressedAction = event.type === TouchType.Down ? 'search' : '';
-      })
+      .animation({ duration: Duration.fast, curve: Curve.EaseOut })
       .onClick(() => {
         this.onOpenChat?.(WorkspaceStore.currentIndex);
       })
 
       Button() {
         Row() {
-          CustomIcon({ name: 'new_chat', iconSize: 18, color: Colors.surface0 })
+          SymbolGlyph($r('sys.symbol.plus'))
+            .fontSize(16)
+            .fontColor([Colors.surface0])
             .margin({ right: Spacing.sm })
-          Text('New chat')
+          Text('Chat')
             .fontSize(FontSize.sm)
             .fontWeight(FontWeight.Medium)
             .fontColor(Colors.surface0)
         }
       }
-      .height(52)
-      .padding({ left: Spacing.lg, right: Spacing.lg })
+      .height(48)
+      .padding({ left: Spacing.xl, right: Spacing.xl })
       .backgroundColor(Colors.foreground)
       .borderRadius(Radius.full)
-      .scale({ x: this.pressedAction === 'new-chat' ? 0.98 : 1, y: this.pressedAction === 'new-chat' ? 0.98 : 1 })
-      .animation({ duration: 120, curve: Curve.EaseOut })
-      .onTouch((event: TouchEvent) => {
-        this.pressedAction = event.type === TouchType.Down ? 'new-chat' : '';
-      })
+      .animation({ duration: Duration.fast, curve: Curve.EaseOut })
       .onClick(() => {
         this.onOpenChat?.(WorkspaceStore.currentIndex);
       })
     }
     .width(Layout.contentWidth)
-    .margin({ left: Spacing.xl, right: Spacing.xl, bottom: Spacing.xl })
-    .opacity(this.entered ? 1 : 0)
-    .translate({ y: this.entered ? 0 : 16 })
-    .animation({ duration: 240, curve: Curve.Friction, delay: 80 })
+    .margin({ left: Spacing.lg, right: Spacing.lg, bottom: Spacing.xl })
+    .opacity(1)
+    .translate({ y: 0 })
   }
 
   /*
@@ -727,7 +488,7 @@ export struct HomeView {
       x: this.pressedWorkspaceId === workspace.id ? 0.97 : 1.0,
       y: this.pressedWorkspaceId === workspace.id ? 0.97 : 1.0
     })
-    .animation({ duration: 100, curve: Curve.EaseOut })
+    .animation({ duration: Duration.fast, curve: Curve.EaseOut })
     .onTouch((event: TouchEvent) => {
       if (event.type === TouchType.Down) {
         this.pressedWorkspaceId = workspace.id;
@@ -791,128 +552,6 @@ export struct HomeView {
   }
 
   @Builder
-  MenuSheet() {
-    Column() {
-      this.MenuRow('Add host', 'plus', () => {
-        this.showMenu = false;
-        this.showAddHostMenu = true;
-      })
-      this.MenuRow('Refresh agents', 'refresh', () => {
-        this.showMenu = false;
-        this.onRefreshHostsAgents?.();
-      })
-      this.MenuRow('Settings', 'settings', () => {
-        this.showMenu = false;
-        this.onOpenSettings?.();
-      })
-    }
-    .width('100%')
-    .alignItems(HorizontalAlign.Center)
-    .padding(Spacing.xs)
-    .backgroundColor(Colors.surface0)
-    .borderRadius(Radius.xl)
-    .shadow(Shadow.md)
-  }
-
-  @Builder
-  MenuRow(label: string, icon: string, action: () => void) {
-    Button() {
-      Row() {
-        if (icon === 'plus') {
-          SymbolGlyph($r('sys.symbol.plus')).fontSize(14).fontColor([Colors.foreground]).margin({ right: Spacing.sm })
-        } else if (icon === 'refresh') {
-          SymbolGlyph($r('sys.symbol.clock')).fontSize(14).fontColor([Colors.foreground]).margin({ right: Spacing.sm })
-        } else if (icon === 'settings') {
-          SymbolGlyph($r('sys.symbol.gearshape')).fontSize(14).fontColor([Colors.foreground]).margin({ right: Spacing.sm })
-        } else if (icon === 'scan') {
-          SymbolGlyph($r('sys.symbol.square_grid_2x2')).fontSize(14).fontColor([Colors.foreground]).margin({ right: Spacing.sm })
-        } else {
-          SymbolGlyph($r('sys.symbol.vpn_key')).fontSize(14).fontColor([Colors.foreground]).margin({ right: Spacing.sm })
-        }
-        Text(label)
-          .fontSize(FontSize.xs)
-          .fontColor(Colors.foreground)
-          .fontWeight(FontWeight.Medium)
-        Blank()
-        if (icon === 'plus') {
-          SymbolGlyph($r('sys.symbol.chevron_right')).fontSize(11).fontColor([Colors.foregroundMuted])
-        }
-      }
-      .width('100%')
-    }
-    .width('100%')
-    .height(34)
-    .backgroundColor(Colors.transparent)
-    .borderRadius(Radius.sm)
-    .padding({ left: Spacing.xs, right: Spacing.xs })
-    .onClick(action)
-  }
-
-  @Builder
-  MenuOverlay() {
-    Stack({ alignContent: Alignment.TopEnd }) {
-      Column()
-        .width('100%')
-        .height('100%')
-        .backgroundColor(Colors.transparent)
-        .onClick(() => { this.showMenu = false; })
-      Column() {
-        this.MenuSheet()
-      }
-      .width(148)
-      .margin({ top: 56, right: Spacing.xl })
-      .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: -8 })))
-    }
-    .width('100%')
-    .height('100%')
-  }
-
-  @Builder
-  AddHostOverlay() {
-    Stack({ alignContent: Alignment.TopEnd }) {
-      Column()
-        .width('100%')
-        .height('100%')
-        .backgroundColor(Colors.transparent)
-        .onClick(() => { this.showAddHostMenu = false; })
-      Column() {
-        this.AddHostSheet()
-      }
-      .width(148)
-      .margin({ top: 56, right: Spacing.xl })
-      .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: -8 })))
-    }
-    .width('100%')
-    .height('100%')
-  }
-
-  @Builder
-  AddHostSheet() {
-    Column() {
-      Text('Add host')
-        .fontSize(FontSize.xs)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(Colors.foreground)
-        .width('100%')
-        .margin({ bottom: Spacing.xs })
-      this.MenuRow('Scan QR', 'scan', () => {
-        this.showAddHostMenu = false;
-        this.onOpenAddHostScan?.();
-      })
-      this.MenuRow('Link manually', 'manual', () => {
-        this.showAddHostMenu = false;
-        this.showManualHostForm = true;
-      })
-    }
-    .width('100%')
-    .alignItems(HorizontalAlign.Center)
-    .padding(Spacing.sm)
-    .backgroundColor(Colors.surface0)
-    .borderRadius(Radius.xl)
-    .shadow(Shadow.md)
-  }
-
-  @Builder
   ManualHostOverlay() {
     Stack({ alignContent: Alignment.TopEnd }) {
       Column()
@@ -959,8 +598,8 @@ export struct HomeView {
       .backgroundColor(Colors.surface0)
       .borderRadius(Radius.xl)
       .shadow(Shadow.md)
-      .margin({ top: 56, right: Spacing.xl })
-      .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: -8 })))
+      .margin({ top: 4, right: Spacing.xl })
+      .transition(TransitionEffect.OPACITY)
     }
     .width('100%')
     .height('100%')

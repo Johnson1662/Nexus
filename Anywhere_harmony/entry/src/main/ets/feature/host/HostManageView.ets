@@ -38,13 +38,14 @@ export struct HostManagePage {
         if (HostStore.devices.length === 0) {
           Column() {
             Text('暂无已保存的服务器')
-              .fontSize(FontSize.base).fontColor(Colors.foregroundMuted)
+              .fontSize(FontSize.sm).fontColor(Colors.foregroundMuted)
             Text('点击下方添加')
-              .fontSize(FontSize.sm).fontColor(Colors.foregroundLight)
+              .fontSize(FontSize.sm).fontColor(Colors.foregroundMuted)
               .margin({ top: Spacing.xs })
           }
           .width(Layout.contentWidth).layoutWeight(1)
-          .justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center)
+          .justifyContent(FlexAlign.Start).alignItems(HorizontalAlign.Start)
+          .padding({ left: Spacing.lg, right: Spacing.lg, top: Spacing.md })
         } else {
           List({ space: Spacing.sm }) {
             ForEach(HostStore.devices, (device: DeviceEntry, index: number) => {
@@ -57,10 +58,10 @@ export struct HostManagePage {
 
                   Column() {
                     Text(device.name)
-                      .fontSize(FontSize.base).fontColor(Colors.foreground)
+                      .fontSize(FontSize.base).fontColor(Colors.foreground).fontWeight(FontWeight.Medium)
                       .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
                     Text(device.urls.length > 0 ? device.urls[0] : '')
-                      .fontSize(FontSize.xs).fontColor(Colors.foregroundLight)
+                      .fontSize(FontSize.xs).fontColor(Colors.foregroundMuted)
                       .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
                       .margin({ top: Spacing.xxs })
                   }
@@ -81,11 +82,18 @@ export struct HostManagePage {
                 }
                 .width('100%')
                 .padding({ left: Spacing.lg, right: Spacing.lg, top: Spacing.md, bottom: Spacing.md })
-                .backgroundColor(Colors.surface1)
-                .borderRadius(Radius.xl)
+                .borderRadius(Radius.md)
                 .onClick(() => {
                   if (!this.isCurrentHost(device.urls) && this.onConnect && device.urls.length > 0) {
                     this.onConnect(device.urls[0]);
+                  }
+                })
+                .stateStyles({
+                  pressed: {
+                    .backgroundColor(Colors.surface1)
+                  },
+                  normal: {
+                    .backgroundColor(Colors.transparent)
                   }
                 })
               }
@@ -105,9 +113,10 @@ export struct HostManagePage {
             Row() {
               TextInput({ placeholder: 'ws://IP:PORT', text: this.newUrl })
                 .layoutWeight(1).height(44)
-                .backgroundColor(Colors.surface1).borderRadius(Radius.sm)
+                .borderRadius(Radius.sm)
                 .padding({ left: Spacing.md, right: Spacing.md })
                 .fontSize(FontSize.sm)
+                .backgroundColor(Colors.transparent)
                 .onChange((v: string) => { this.newUrl = v })
                 .onSubmit(() => {
                   if (this.newUrl.length > 0 && this.onConnect) {
@@ -117,7 +126,8 @@ export struct HostManagePage {
                   }
                 })
               Button('连接')
-                .height(44).backgroundColor(Colors.accent).fontColor(Color.White)
+                .height(44).backgroundColor(Colors.transparent).fontColor(Colors.accent)
+                .fontWeight(FontWeight.Medium)
                 .borderRadius(Radius.sm).fontSize(FontSize.sm)
                 .margin({ left: Spacing.sm })
                 .onClick(() => {
@@ -127,16 +137,33 @@ export struct HostManagePage {
                     this.showForm = false;
                   }
                 })
+                .stateStyles({
+                  pressed: {
+                    .backgroundColor(Colors.surface1)
+                  },
+                  normal: {
+                    .backgroundColor(Colors.transparent)
+                  }
+                })
             }
             .width('100%')
             .padding({ bottom: Spacing.md })
           } else {
             Button('添加服务器')
               .width('100%').height(44)
-              .backgroundColor(Colors.accent).fontColor(Color.White)
+              .backgroundColor(Colors.transparent).fontColor(Colors.accent)
+              .fontWeight(FontWeight.Medium)
               .borderRadius(Radius.sm).fontSize(FontSize.base)
               .margin({ bottom: Spacing.xxxl })
               .onClick(() => { this.showForm = true })
+              .stateStyles({
+                pressed: {
+                  .backgroundColor(Colors.surface1)
+                },
+                normal: {
+                  .backgroundColor(Colors.transparent)
+                }
+              })
           }
         }
         .width(Layout.contentWidth)

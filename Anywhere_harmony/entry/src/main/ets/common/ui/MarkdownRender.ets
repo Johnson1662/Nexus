@@ -40,7 +40,7 @@ export struct MarkdownRender {
     this.controller.setTextSize(16);
     this.controller.setTextLineHeight(26);
     this.controller.setTitleColor(Colors.foreground);
-    this.controller.setCodeBlockTheme('dark');
+    this.controller.setCodeBlockTheme('light');
     this.controller.setCodeBlockIdxState(false);
     this.controller.setCodeBlockBorderRadius(8);
     this.controller.setInlineCodeBackgroundColor('rgba(110, 118, 129, 0.2)');

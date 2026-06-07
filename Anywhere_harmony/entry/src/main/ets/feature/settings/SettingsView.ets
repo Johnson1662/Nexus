@@ -21,15 +21,16 @@ export struct SettingsPage {
             Row() {
               Column() {
                 Text('Thinking 默认展开')
-                  .fontSize(FontSize.base).fontColor(Colors.foreground)
+                  .fontSize(FontSize.base).fontColor(Colors.foreground).fontWeight(FontWeight.Medium)
                 Text('流式结束后自动展开思考内容')
-                  .fontSize(FontSize.sm).fontColor(Colors.foregroundLight)
+                  .fontSize(FontSize.sm).fontColor(Colors.foregroundMuted)
                   .margin({ top: Spacing.xxs })
               }
               .alignItems(HorizontalAlign.Start)
               .layoutWeight(1)
               Blank()
               Toggle({ type: ToggleType.Switch, isOn: this.thinkingExpanded })
+                .selectedColor(Colors.foreground)
                 .onChange((isOn: boolean) => {
                   this.thinkingExpanded = isOn;
                   StorageService.getInstance().putString('pref_thinking_expanded', isOn ? '1' : '0');
@@ -37,23 +38,32 @@ export struct SettingsPage {
             }
             .width('100%')
             .padding({ left: Spacing.lg, right: Spacing.lg, top: Spacing.md, bottom: Spacing.md })
-            .backgroundColor(Colors.surface1)
-            .borderRadius(Radius.xl)
+            .backgroundColor(Colors.transparent)
+            .borderRadius(Radius.lg)
+            .stateStyles({
+              pressed: {
+                .backgroundColor(Colors.surface1)
+              },
+              normal: {
+                .backgroundColor(Colors.transparent)
+              }
+            })
           }
 
           ListItem() {
             Row() {
               Column() {
                 Text('工具调用 默认展开')
-                  .fontSize(FontSize.base).fontColor(Colors.foreground)
+                  .fontSize(FontSize.base).fontColor(Colors.foreground).fontWeight(FontWeight.Medium)
                 Text('完成后自动展开工具调用详情')
-                  .fontSize(FontSize.sm).fontColor(Colors.foregroundLight)
+                  .fontSize(FontSize.sm).fontColor(Colors.foregroundMuted)
                   .margin({ top: Spacing.xxs })
               }
               .alignItems(HorizontalAlign.Start)
               .layoutWeight(1)
               Blank()
               Toggle({ type: ToggleType.Switch, isOn: this.toolcallExpanded })
+                .selectedColor(Colors.foreground)
                 .onChange((isOn: boolean) => {
                   this.toolcallExpanded = isOn;
                   StorageService.getInstance().putString('pref_toolcall_expanded', isOn ? '1' : '0');
@@ -61,8 +71,16 @@ export struct SettingsPage {
             }
             .width('100%')
             .padding({ left: Spacing.lg, right: Spacing.lg, top: Spacing.md, bottom: Spacing.md })
-            .backgroundColor(Colors.surface1)
-            .borderRadius(Radius.xl)
+            .backgroundColor(Colors.transparent)
+            .borderRadius(Radius.lg)
+            .stateStyles({
+              pressed: {
+                .backgroundColor(Colors.surface1)
+              },
+              normal: {
+                .backgroundColor(Colors.transparent)
+              }
+            })
           }
         }
         .width(Layout.contentWidth)

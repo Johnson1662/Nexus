@@ -4,6 +4,7 @@ import { CodeBlockImpl } from '../impl/CodeBlockImpl';
 import { HighlightCode, HighlightNode } from '../model/highlightNode';
 import { CodeBlockNode } from '../model/TreeNode';
 import { highlightCodeToJSON } from '../utils/highlightCode';
+import { Colors } from '../../../../constants/DesignTokens';
 
 @Component
 export struct CodeRender {
@@ -48,7 +49,7 @@ export struct CodeRender {
         Text(this.base?.lang || "code")
           .fontSize(15)
           .fontColor(MDBaseController.getMarkdownController(this.markdownUnion).getCodeBlockTheme() == "dark" ?
-            "#F9FAFB" : "#cd000000")
+            "#F9FAFB" : Colors.foregroundMuted)
           .fontWeight(FontWeight.Medium)
 
         Button() {
@@ -77,7 +78,7 @@ export struct CodeRender {
       .margin({ bottom: 10 })
       .justifyContent(FlexAlign.SpaceBetween)
       .backgroundColor(MDBaseController.getMarkdownController(this.markdownUnion).getCodeBlockTheme() == "dark" ?
-        "#24262B" : "#F3F4F6")
+        "#24262B" : Colors.surface2)
 
       Row() {
         if (MDBaseController.getMarkdownController(this.markdownUnion).getCodeBlockIdxState()) {

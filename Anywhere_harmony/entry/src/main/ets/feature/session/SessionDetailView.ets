@@ -32,13 +32,13 @@ export struct SessionDetailView {
   }
 
   formatTime(epoch: number): string {
-    if (epoch <= 0) return '--:--';
+    if (!epoch || epoch <= 0) return '--:--';
     let date: Date = new Date(epoch);
     return date.getHours().toString().padStart(2, '0') + ':' + date.getMinutes().toString().padStart(2, '0');
   }
 
   formatRelativeTime(epoch: number): string {
-    if (epoch <= 0) return '刚刚';
+    if (!epoch || epoch <= 0) return '刚刚';
     let diff: number = Date.now() - epoch;
     let minutes: number = Math.floor(diff / 60000);
     if (minutes < 1) return '刚刚';
@@ -158,12 +158,22 @@ export struct SessionDetailView {
   @Builder
   TabButton(label: string, idx: number) {
     Button(label)
-      .fontSize(FontSize.xs)
-      .fontColor(this.detailTabIndex === idx ? Colors.surface0 : Colors.foreground)
-      .backgroundColor(this.detailTabIndex === idx ? Colors.foreground : Colors.surface1)
-      .borderRadius(Radius.full)
-      .padding({ left: Spacing.lg, right: Spacing.lg, top: Spacing.sm, bottom: Spacing.sm })
+      .type(ButtonType.Normal)
+      .fontSize(FontSize.sm)
+      .fontWeight(this.detailTabIndex === idx ? FontWeight.Medium : FontWeight.Normal)
+      .fontColor(this.detailTabIndex === idx ? Colors.foreground : Colors.foregroundMuted)
+      .backgroundColor(Colors.transparent)
+      .borderRadius(Radius.md)
+      .padding({ left: Spacing.md, right: Spacing.md, top: Spacing.sm, bottom: Spacing.sm })
       .onClick(() => { this.detailTabIndex = idx; })
+      .stateStyles({
+        pressed: {
+          .backgroundColor(Colors.surface1)
+        },
+        normal: {
+          .backgroundColor(Colors.transparent)
+        }
+      })
   }
 
   @Builder
@@ -183,34 +193,30 @@ export struct SessionDetailView {
                 .fontColor(Colors.foregroundMuted)
             }
             .width(Layout.contentWidth)
-            .padding(Spacing.lg)
-            .backgroundColor(Colors.surface1)
-            .borderRadius(Radius.lg)
+            .padding({ top: Spacing.md, bottom: Spacing.md })
             .margin({ bottom: Spacing.lg })
           }
 
           Column() {
             Text('用户任务')
               .fontSize(FontSize.xs)
+              .fontWeight(FontWeight.Medium)
               .fontColor(Colors.foregroundMuted)
-              .margin({ bottom: Spacing.xs })
+              .margin({ bottom: Spacing.sm })
             Text(this.getUserRequest())
               .fontSize(FontSize.md)
               .fontColor(Colors.foreground)
-              .lineHeight(22)
+              .lineHeight(24)
           }
           .width(Layout.contentWidth)
           .alignItems(HorizontalAlign.Start)
-          .padding(Spacing.lg)
-          .backgroundColor(Colors.surface1)
-          .borderRadius(Radius.xl)
-          .margin({ bottom: Spacing.lg })
+          .padding({ top: Spacing.md, bottom: Spacing.xl })
 
           Column() {
             Row() {
               Text('执行进度')
-                .fontSize(FontSize.lg)
-                .fontWeight(FontWeight.Bold)
+                .fontSize(FontSize.md)
+                .fontWeight(FontWeight.Medium)
                 .fontColor(Colors.foreground)
               Blank()
               Text(this.getProgressPercent().toString() + '%')
@@ -222,10 +228,10 @@ export struct SessionDetailView {
 
             Progress({ value: this.getProgressPercent(), total: 100, type: ProgressType.Linear })
               .width('100%')
-              .height(6)
+              .height(4)
               .color(Colors.foreground)
               .backgroundColor(Colors.surface1)
-              .margin({ bottom: Spacing.md })
+              .margin({ bottom: Spacing.lg })
 
             if (ChatStore.planEntries.length > 0) {
               ForEach(ChatStore.planEntries, (entry: PlanEntry) => {
@@ -237,29 +243,24 @@ export struct SessionDetailView {
           }
           .width(Layout.contentWidth)
           .alignItems(HorizontalAlign.Start)
-          .padding(Spacing.lg)
-          .backgroundColor(Colors.surface1)
-          .borderRadius(Radius.xl)
-          .margin({ bottom: Spacing.lg })
+          .padding({ top: Spacing.md, bottom: Spacing.xl })
 
           Column() {
             Text('最新输出')
-              .fontSize(FontSize.lg)
-              .fontWeight(FontWeight.Bold)
+              .fontSize(FontSize.md)
+              .fontWeight(FontWeight.Medium)
               .fontColor(Colors.foreground)
               .margin({ bottom: Spacing.md })
             Text(this.getConversationPreview())
               .fontSize(FontSize.sm)
-              .fontColor(Colors.foreground)
-              .lineHeight(22)
+              .fontColor(Colors.foregroundMuted)
+              .lineHeight(24)
               .maxLines(10)
               .textOverflow({ overflow: TextOverflow.Ellipsis })
           }
           .width(Layout.contentWidth)
           .alignItems(HorizontalAlign.Start)
-          .padding(Spacing.lg)
-          .backgroundColor(Colors.surface1)
-          .borderRadius(Radius.xl)
+          .padding({ top: Spacing.md, bottom: Spacing.xl })
         }
         .width('100%')
         .alignItems(HorizontalAlign.Center)
@@ -303,7 +304,7 @@ export struct SessionDetailView {
       if (status === 'completed') {
         SymbolGlyph($r('sys.symbol.checkmark'))
           .fontSize(16)
-          .fontColor([Colors.success])
+          .fontColor([Colors.foregroundMuted])
           .margin({ right: Spacing.md })
       } else if (status === 'in_progress') {
         SymbolGlyph($r('sys.symbol.circle'))
@@ -313,7 +314,7 @@ export struct SessionDetailView {
       } else {
         SymbolGlyph($r('sys.symbol.circle'))
           .fontSize(16)
-          .fontColor([Colors.foregroundMuted])
+          .fontColor([Colors.surface1])
           .margin({ right: Spacing.md })
       }
 
@@ -323,7 +324,7 @@ export struct SessionDetailView {
         .layoutWeight(1)
     }
     .width('100%')
-    .padding({ top: Spacing.xs, bottom: Spacing.xs })
+    .padding({ top: Spacing.sm, bottom: Spacing.sm })
   }
 
   @Builder
@@ -344,9 +345,9 @@ export struct SessionDetailView {
           this.TimelineEvent(this.formatTime(Date.now()), 'Turn finished', '当前轮次已经结束')
         }
       }
-      .width('100%')
+      .width(Layout.contentWidth)
       .alignItems(HorizontalAlign.Center)
-      .padding({ bottom: Spacing.xxxl })
+      .padding({ top: Spacing.md, bottom: Spacing.xxxl })
     }
     .layoutWeight(1)
     .width('100%')
@@ -362,19 +363,19 @@ export struct SessionDetailView {
 
       Column() {
         Circle({ width: 8, height: 8 })
-          .fill(Colors.foreground)
+          .fill(Colors.foregroundMuted)
           .margin({ top: 4 })
         Column()
           .width(1)
           .height(44)
-          .backgroundColor(Colors.borderLight)
+          .backgroundColor(Colors.surface1)
       }
       .alignItems(HorizontalAlign.Center)
       .margin({ right: Spacing.md })
 
       Column() {
         Text(type)
-          .fontSize(FontSize.md)
+          .fontSize(FontSize.sm)
           .fontWeight(FontWeight.Medium)
           .fontColor(Colors.foreground)
         Text(content)
@@ -387,8 +388,18 @@ export struct SessionDetailView {
       .alignItems(HorizontalAlign.Start)
       .layoutWeight(1)
     }
-    .width(Layout.contentWidth)
-    .padding({ top: Spacing.sm, bottom: Spacing.sm })
+    .width('100%')
+    .padding({ top: Spacing.sm, bottom: Spacing.sm, left: Spacing.sm, right: Spacing.sm })
+    .backgroundColor(Colors.transparent)
+    .borderRadius(Radius.md)
+    .stateStyles({
+      normal: {
+        .backgroundColor(Colors.transparent)
+      },
+      pressed: {
+        .backgroundColor(Colors.surface1)
+      }
+    })
   }
 
   @Builder
@@ -396,8 +407,8 @@ export struct SessionDetailView {
     Scroll() {
       Column() {
         Text('文件变更')
-          .fontSize(FontSize.lg)
-          .fontWeight(FontWeight.Bold)
+          .fontSize(FontSize.md)
+          .fontWeight(FontWeight.Medium)
           .fontColor(Colors.foreground)
           .width('100%')
           .margin({ bottom: Spacing.md })
@@ -414,9 +425,9 @@ export struct SessionDetailView {
           }, (message: MessageData) => message.toolCallId + message.toolPath)
         }
       }
-      .width('100%')
+      .width(Layout.contentWidth)
       .alignItems(HorizontalAlign.Center)
-      .padding({ bottom: Spacing.xxxl })
+      .padding({ top: Spacing.md, bottom: Spacing.xxxl })
     }
     .layoutWeight(1)
     .width('100%')
@@ -431,23 +442,32 @@ export struct SessionDetailView {
         .margin({ right: Spacing.md })
       Text(name)
         .fontSize(FontSize.sm)
+        .fontWeight(FontWeight.Medium)
         .fontColor(Colors.foreground)
         .layoutWeight(1)
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
       Text(add)
         .fontSize(FontSize.xs)
-        .fontColor(Colors.success)
+        .fontColor(Colors.foregroundMuted)
         .margin({ right: Spacing.sm })
       Text(remove)
         .fontSize(FontSize.xs)
-        .fontColor(Colors.error)
+        .fontColor(Colors.foregroundMuted)
     }
-    .width(Layout.contentWidth)
-    .padding(Spacing.md)
-    .backgroundColor(Colors.surface1)
-    .borderRadius(Radius.lg)
-    .margin({ bottom: Spacing.sm })
+    .width('100%')
+    .padding({ top: Spacing.md, bottom: Spacing.md, left: Spacing.sm, right: Spacing.sm })
+    .backgroundColor(Colors.transparent)
+    .borderRadius(Radius.md)
+    .stateStyles({
+      normal: {
+        .backgroundColor(Colors.transparent)
+      },
+      pressed: {
+        .backgroundColor(Colors.surface1)
+      }
+    })
+    .margin({ bottom: Spacing.xs })
   }
 
   @Builder
@@ -460,9 +480,9 @@ export struct SessionDetailView {
         this.LogRow('Token Usage', ChatStore.lastUsage ? ChatStore.lastUsage.totalTokens.toString() : '—')
         this.LogRow('Workspace', this.session.cwd || '—')
       }
-      .width('100%')
+      .width(Layout.contentWidth)
       .alignItems(HorizontalAlign.Center)
-      .padding({ bottom: Spacing.xxxl })
+      .padding({ top: Spacing.md, bottom: Spacing.xxxl })
     }
     .layoutWeight(1)
     .width('100%')
@@ -473,6 +493,7 @@ export struct SessionDetailView {
     Column() {
       Text(label)
         .fontSize(FontSize.xs)
+        .fontWeight(FontWeight.Medium)
         .fontColor(Colors.foregroundMuted)
         .width('100%')
         .margin({ bottom: Spacing.xs })
@@ -482,10 +503,18 @@ export struct SessionDetailView {
         .width('100%')
         .fontFamily('monospace')
     }
-    .width(Layout.contentWidth)
-    .padding(Spacing.lg)
-    .backgroundColor(Colors.surface1)
-    .borderRadius(Radius.xl)
-    .margin({ bottom: Spacing.sm })
+    .width('100%')
+    .padding({ top: Spacing.md, bottom: Spacing.md, left: Spacing.sm, right: Spacing.sm })
+    .backgroundColor(Colors.transparent)
+    .borderRadius(Radius.md)
+    .stateStyles({
+      normal: {
+        .backgroundColor(Colors.transparent)
+      },
+      pressed: {
+        .backgroundColor(Colors.surface1)
+      }
+    })
+    .margin({ bottom: Spacing.xs })
   }
 }

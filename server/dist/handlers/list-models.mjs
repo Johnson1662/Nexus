@@ -35,14 +35,18 @@ export async function handleListModels(ws, agent) {
 async function doListModels(ws, client, cwd) {
     const acpResult = await client.createSession(cwd);
     const acpSessionId = acpResult.sessionId;
-    const models = acpResult.models?.availableModels || [];
-    const modes = acpResult.modes?.availableModes || [];
-    const mappedModels = models.map((m) => ({
-        modelId: m.modelId,
+    // OpenCode returns models/modes as configOptions rather than models.availableModels
+    const configOptions = acpResult.configOptions || [];
+    const modelConfig = configOptions.find((o) => o.category === "model" || o.id === "model");
+    const modeConfig = configOptions.find((o) => o.category === "mode" || o.id === "mode");
+    const rawModels = modelConfig?.options || [];
+    const rawModes = modeConfig?.options || [];
+    const mappedModels = rawModels.map((m) => ({
+        modelId: m.value || m.modelId,
         name: m.name,
     }));
-    const mappedModes = modes.map((m) => ({
-        value: m.id,
+    const mappedModes = rawModes.map((m) => ({
+        value: m.value || m.id,
         name: m.name,
     }));
     console.log(`[server] list_models: ${mappedModels.length} models, ${mappedModes.length} modes`);
@@ -58,4 +62,3 @@ async function doListModels(ws, client, cwd) {
         modes: mappedModes,
     }));
 }
-//# sourceMappingURL=list-models.mjs.map

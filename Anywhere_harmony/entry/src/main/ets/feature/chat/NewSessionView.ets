@@ -98,7 +98,7 @@ export struct NewSessionView {
 
   getStepTitle(index: number): string {
     if (index === 0) return '选择工作区';
-    if (index === 1) return '选择 Agent';
+    if (index === 1) return '选择';
     return '任务配置';
   }
 
@@ -216,23 +216,13 @@ export struct NewSessionView {
 
       if (WorkspaceStore.workspaces.length === 0) {
         Column() {
-          SymbolGlyph($r('sys.symbol.folder'))
-            .fontSize(42)
-            .fontColor([Colors.foregroundMuted])
-            .opacity(0.45)
-            .margin({ bottom: Spacing.lg })
-          Text('还没有工作区')
-            .fontSize(FontSize.lg)
-            .fontWeight(FontWeight.Bold)
-            .fontColor(Colors.foreground)
-            .margin({ bottom: Spacing.xs })
-          Text('先在 Chat 或 Workspace 侧边栏里添加项目路径，再回来创建会话。')
+          Text('还没有工作区。先在 Chat 或 Workspace 侧边栏里添加项目路径，再回来创建会话。')
             .fontSize(FontSize.sm)
             .fontColor(Colors.foregroundMuted)
-            .textAlign(TextAlign.Center)
         }
         .width('100%')
-        .padding({ top: 80, left: Spacing.xl, right: Spacing.xl })
+        .alignItems(HorizontalAlign.Start)
+        .padding({ top: Spacing.md })
       } else {
         List({ space: Spacing.md }) {
           ForEach(WorkspaceStore.workspaces, (workspace: WorkspaceInfo, index: number) => {
@@ -293,15 +283,22 @@ export struct NewSessionView {
     }
     .width('100%')
     .padding(Spacing.lg)
-    .backgroundColor(this.selectedWorkspaceIndex === index ? Colors.surface1 : Colors.surface0)
-    .borderRadius(Radius.xl)
+    .backgroundColor(Colors.transparent)
     .onClick(() => { this.selectedWorkspaceIndex = index; })
+    .stateStyles({
+      pressed: {
+        .backgroundColor(Colors.surface1)
+      },
+      normal: {
+        .backgroundColor(Colors.transparent)
+      }
+    })
   }
 
   @Builder
   AgentStep() {
     Column() {
-      Text('选择 Agent')
+      Text('选择')
         .fontSize(FontSize.xxxl)
         .fontWeight(FontWeight.Bold)
         .fontColor(Colors.foreground)
@@ -315,21 +312,13 @@ export struct NewSessionView {
 
       if (this.getAvailableAgents().length === 0) {
         Column() {
-          CustomIcon({ name: 'model', iconSize: 42, color: Colors.foregroundMuted })
-            .opacity(0.45)
-            .margin({ bottom: Spacing.lg })
-          Text('暂无可用 Agent')
-            .fontSize(FontSize.lg)
-            .fontWeight(FontWeight.Bold)
-            .fontColor(Colors.foreground)
-            .margin({ bottom: Spacing.xs })
-          Text('先连接设备并在引导页发现 Agent，或至少选中过一次 Agent。')
+          Text('暂无可用 Agent。先连接设备并在引导页发现 Agent，或至少选中过一次 Agent。')
             .fontSize(FontSize.sm)
             .fontColor(Colors.foregroundMuted)
-            .textAlign(TextAlign.Center)
         }
         .width('100%')
-        .padding({ top: 80, left: Spacing.xl, right: Spacing.xl })
+        .alignItems(HorizontalAlign.Start)
+        .padding({ top: Spacing.md })
       } else {
         List({ space: Spacing.md }) {
           ForEach(this.getAvailableAgents(), (agent: AgentOption) => {
@@ -385,9 +374,16 @@ export struct NewSessionView {
     }
     .width('100%')
     .padding(Spacing.lg)
-    .backgroundColor(this.selectedAgentName === agent.name ? Colors.surface1 : Colors.surface0)
-    .borderRadius(Radius.xl)
+    .backgroundColor(Colors.transparent)
     .onClick(() => { this.selectedAgentName = agent.name; })
+    .stateStyles({
+      pressed: {
+        .backgroundColor(Colors.surface1)
+      },
+      normal: {
+        .backgroundColor(Colors.transparent)
+      }
+    })
   }
 
   @Builder
@@ -411,9 +407,6 @@ export struct NewSessionView {
         this.SummaryRow('连接状态', ChatStore.connected ? '已连接' : '未连接')
       }
       .width('100%')
-      .padding(Spacing.lg)
-      .backgroundColor(Colors.surface1)
-      .borderRadius(Radius.xl)
       .margin({ bottom: Spacing.xl })
 
       Column() {

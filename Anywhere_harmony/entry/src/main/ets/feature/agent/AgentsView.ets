@@ -140,6 +140,6 @@ export struct AgentsView {
       else { this.itemPressScale = 1.0; }
     })
     .scale({ x: this.itemPressScale, y: this.itemPressScale })
-    .animation({ duration: 100, curve: Curve.EaseOut })
+    .animation({ duration: Duration.fast, curve: Curve.EaseOut })
   }
 }

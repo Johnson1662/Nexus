@@ -186,7 +186,7 @@ export struct MessageCard {
               if (this.msgContent.length > 0) {
                 Text(this.msgContent)
                   .fontSize(FontSize.base)
-                  .fontColor(Colors.surface0)
+                  .fontColor(Colors.foreground)
                   .lineHeight(22)
               }
             }
@@ -197,7 +197,7 @@ export struct MessageCard {
             left: Spacing.lg,
             right: Spacing.lg
           })
-          .backgroundColor(Colors.foreground)
+          .backgroundColor(Colors.surface1)
           .borderRadius({ topLeft: Radius.xl, topRight: Radius.xl, bottomLeft: Radius.xl, bottomRight: Radius.xs })
           .alignItems(HorizontalAlign.Start)
           .gesture(LongPressGesture().onAction(() => { this.copyContent() }))

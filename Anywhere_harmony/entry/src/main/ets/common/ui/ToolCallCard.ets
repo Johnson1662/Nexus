@@ -330,7 +330,7 @@ export struct ToolCallCard {
         }
         .width('100%')
         .padding({ bottom: Spacing.xs })
-        .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: -5 })))
+        .transition(TransitionEffect.OPACITY)
       }
     }
     .width('100%')

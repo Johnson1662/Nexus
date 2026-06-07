@@ -2,7 +2,9 @@
 
 ## 永远用中文回答；需要解释时，用中文给出简要思路与结论，不输出隐藏思考链
 
-## 使用 hmdev-cli skill 查鸿蒙官方文档、构建部署项目
+## 产品设计原型图在prototype_picture文件夹 实机测试截图在app_test_picture文件夹 没有视觉能力的模型请调用vision_analyze工具分析截图
+
+## 使用 hmdev-cli skill 查鸿蒙官方文档、构建部署项目 遇到不确定的问题一定要查文档！！查文档！！查文档！！
 
 ## 项目概述
 
@@ -48,12 +50,14 @@ Anywhere 是一个 HarmonyOS App，通过 Relay 中继连接到 PC 端 Bridge Se
 ## 关键设计决策
 
 ### 视觉设计
-- **风格：** ChatGPT / Linear 混合 — 黑白灰单色调，大留白，卡片阴影无边框
-- **消息气泡：** 用户消息黑底白字 (`Colors.foreground` 背景)，Agent 消息全宽无背景
+- **风格：** ChatGPT / Linear 混合 — 黑白灰单色调，大留白，**极致无边框**（移除卡片边框/背景，完全靠留白区分区块）
+- **消息气泡：** 用户消息灰底黑字 (`Colors.surface1` 背景，`Colors.foreground` 文本)，Agent 消息全宽无背景
 - **字体：** 正文 HarmonyOS Sans，品牌标题衬线体 (`fontFamily('serif')`)
-- **空状态：** 图标 + 粗标题 + 引导副标题 + 黑底白字按钮 CTA
-- **按压反馈：** 所有可点击卡片 `scale(0.97)` + `animation(duration:100)` on TouchDown
-- **交错入场：** Agent/Session 列表项 `index * 50~60ms` delay + `TransitionEffect.OPACITY + translateY`
+- **空状态：** 左对齐纯文本（`FontSize.sm` + `Colors.foregroundMuted`），无图标/无按钮
+- **按压反馈：** 背景色浮现 — `stateStyles({ pressed: { .backgroundColor(Colors.surface1) }, normal: { .backgroundColor(Colors.transparent) } })`，不再用 `scale(0.97)`
+- **动画：** 极简淡入淡出 — 纯 `TransitionEffect.OPACITY`，150ms，`Curve.EaseOut`。无 translation/spring/staggered delay
+- **输入框/底部操作栏：** 悬浮胶囊（Floating Pills）— 带圆角和阴影，不贴屏幕底部边缘
+- **代码块：** 柔和表面（浅灰 `surface1`/`surface2` 背景 + 深色代码文字，无边框）
 
 ### 图标 — SymbolGlyph
 
@@ -72,19 +76,20 @@ Anywhere 是一个 HarmonyOS App，通过 Relay 中继连接到 PC 端 Bridge Se
 2. 用 `Image($r('app.media.ic_xxx')).fillColor(color)` 加载 — ArkUI `Image` 组件原生支持 SVG viewBox 缩放
 3. 通过 `CustomIcon` 组件统一调用：`CustomIcon({ name: 'stop', iconSize: 28, color: Colors.error })`
 
-现有的自定义 SVG 图标：`ic_stop`、`ic_warning`、`ic_edit`、`ic_wrench`、`ic_progress`、`ic_new_chat`、`ic_thinking`、`ic_check`。
+现有的自定义 SVG 图标：`ic_stop`、`ic_warning`、`ic_edit`、`ic_wrench`、`ic_progress`、`ic_new_chat`、`ic_thinking`、`ic_check`、`ic_computer`、`ic_cube`。
 
 
 ### 导航与路由
 - `Navigation(NavPathStack)` + `.navDestination(this.PagesMap)` — `PagesMap` 是 `@Builder` 引用。
+- 首页使用 `HdsNavDestination`（来自 `@kit.UIDesignKit`）替代 `NavDestination`，通过 `titleBar()` 配置标题、菜单项和安全区。
 - 当前移动端壳层不再使用底部 5 Tab。首页为主入口，底部只保留 Search / New chat 操作条。
 - `New chat` 必须直接进入聊天页，不再展示 “What should we work on” 中间页。
 - 添加主机入口已并入首页右上三点菜单：`Add host` → `Scan QR` / `Link manually`，配对成功后立即拉取并缓存 agent 列表。
 - `OnboardingView.ets` 已删除，不要恢复该页面；主机管理和设置通过首页菜单/聊天页菜单进入。
-- 聊天页顶部结构：左返回、中间 workspace 胶囊、右三点；下方 `Agent` / `Model` / `Mode` 三选择器。先选 Agent，才能选 Model；Model 默认上一次使用项。
+- 聊天页顶部结构：左返回、中间 workspace 胶囊、右三点；下方 `Agent` / `Model` / `Mode` 三选择器。Agent/Model/Mode 选择器已移至输入框上方。先选 Agent，才能选 Model；Model 默认上一次使用项。
 - **子页面路由**（`navStack.pushPath`）: `agentDetail` / `sessionDetail` / `workspaceDetail` / `settings` / `host-manage`。
 - **跨页面参数传递**：通过 `AppStorage`（如 `selectedDeviceIndex`）— 不用 param 对象（ArkTS `@Builder` 限制）。
-- 每个目的地必须是根节点为 `NavDestination()` 的 `@Component`。
+- 每个目的地必须是根节点为 `NavDestination()` 或 `HdsNavDestination()` 的 `@Component`。
 - 启用 `NavigationMode.Stack`。
 
 ### 状态管理
@@ -129,10 +134,10 @@ Anywhere 是一个 HarmonyOS App，通过 Relay 中继连接到 PC 端 Bridge Se
 指数退避 (1s → 2s → 4s → ... → 30s 上限)。不要宣称普通 UIAbility 能长期后台保活；后台恢复应依赖快速重连 + `sync_request`/消息游标补齐。
 
 ### 动画
-- 页面切换：`TransitionEffect.OPACITY + translate({ y: 20 })`
-- 消息卡片：`TransitionEffect.OPACITY + translate({ y: 12 })`
-- 按钮反馈：`@State scale` + `TouchType.Down/Up`
-- Agent 列表：交错入场 `delay: index * 50`
+- 页面切换：`TransitionEffect.OPACITY`
+- 消息卡片：`TransitionEffect.OPACITY`
+- 按钮反馈：背景色浮现 — `stateStyles({ pressed: { .backgroundColor(Colors.surface1) }, normal: { .backgroundColor(Colors.transparent) } })`
+- 无 staggered delay，无 translate 入场动画
 
 ---
 
@@ -193,19 +198,29 @@ cd Anywhere_harmony
 node "D:\DevEco Studio\tools\hvigor\bin\hvigorw.js" --mode module -p module=entry@default -p product=default assembleHap
 
 # 连接（IP:端口每次可能不同；2026-06-06 实测端口如下）
-hdc tconn 192.168.137.11:46715
+hdc tconn 192.168.137.44:46715
 
 # 部署
-hdc -t "192.168.137.11:46715" install "entry/build/default/outputs/default/entry-default-signed.hap"
+hdc -t "192.168.137.44:46715" install "entry/build/default/outputs/default/entry-default-signed.hap"
 # 启动
-hdc -t "192.168.137.11:46715" shell aa start -a EntryAbility -b com.anywhere.app
+hdc -t "192.168.137.44:46715" shell aa start -a EntryAbility -b com.anywhere.app
 
 # 诊断 WS 重连/后台任务
-hdc -t "192.168.137.11:46715" shell hilog -x | Select-String -Pattern "WSClient|Heartbeat|reconnect|bg task"
+hdc -t "192.168.137.44:46715" shell hilog -x | Select-String -Pattern "WSClient|Heartbeat|reconnect|bg task"
 
 # 必要时抓实机图
-hdc -t "192.168.137.11:46715" shell snapshot_display -f /data/local/tmp/shot.jpeg
-hdc -t "192.168.137.11:46715" file recv /data/local/tmp/shot.jpeg "D:\Development\Anywhere\shot.jpeg"
+hdc -t "192.168.137.44:46715" shell snapshot_display -f /data/local/tmp/shot.jpeg
+hdc -t "192.168.137.44:46715" file recv /data/local/tmp/shot.jpeg "D:\Development\Anywhere\app_test_picture\xxxxx.jpeg"
+
+# 屏幕坐标：1260×2844. 用 uitest 模拟操作（替代不存在的 hdc shell input）
+hdc -t "192.168.137.44:46715" shell uitest uiInput click <x> <y>            # 点击
+hdc -t "192.168.137.44:46715" shell uitest uiInput swipe <x1> <y1> <x2> <y2> [velocity]  # 滑动 (velocity 200~40000, 默认600)
+hdc -t "192.168.137.44:46715" shell uitest uiInput text <字符串>             # 在已聚焦处输入文字
+hdc -t "192.168.137.44:46715" shell uitest uiInput inputText <x> <y> <字符串> # 点击坐标并输入
+hdc -t "192.168.137.44:46715" shell uitest uiInput keyEvent Back             # 返回键
+hdc -t "192.168.137.44:46715" shell uitest screenCap -p /data/local/tmp/shot.jpeg          # 截图（同 snapshot_display）
+hdc -t "192.168.137.44:46715" shell uitest dumpLayout -p /data/local/tmp/layout.json        # 导出 UI 布局树（含精确 bounds）
+hdc -t "192.168.137.44:46715" file recv /data/local/tmp/layout.json .                       # 拉取布局 JSON 到本地
 ```
 
 设备 UDID: `2NP0224627054426`
@@ -222,7 +237,7 @@ npm start            # 启动 server/dist/server.mjs
 
 ## 文件结构速查
 
-- `Anywhere_harmony/entry/src/main/ets/pages/Index.ets` — 导航根、PagesMap、WS 生命周期、启动自动连接已配对主机。
+- `Anywhere_harmony/entry/src/main/ets/pages/Index.ets` — 导航根、PagesMap、WS 生命周期、启动自动连接已配对主机。首页使用 `HdsNavDestination`。
 - `feature/home/HomeView.ets` — 原型风格首页、host chips、Projects、Recent chats、Add host 菜单。
 - `feature/chat/ChatView.ets` / `ChatPage.ets` / `ChatInputBar.ets` — 聊天标题栏、消息流、输入区、权限浮层。
 - `feature/agent` / `feature/session` / `feature/workspace` / `feature/host` / `feature/settings` — 对应详情页与管理页。

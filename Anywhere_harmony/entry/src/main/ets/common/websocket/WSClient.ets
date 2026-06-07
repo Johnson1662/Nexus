@@ -690,8 +690,16 @@ export class WSClient {
 
 
     let msg: ServerMessage;
+    let rawSessions: Record<string, Object>[] | null = null;
     try {
       msg = JSON.parse(raw) as ServerMessage;
+      // 从原始 JSON 提取 sessions 以访问 updatedAt（ServerMessage/sessions 类型不包含此字段）
+      let rawStr: string = raw;
+      let rawParsed: Record<string, Object> = JSON.parse(rawStr) as Record<string, Object>;
+      let sessionsRaw = rawParsed['sessions'];
+      if (sessionsRaw) {
+        rawSessions = sessionsRaw as Record<string, Object>[];
+      }
     } catch {
       return;
     }
@@ -833,9 +841,25 @@ export class WSClient {
       case 'session_list':
         let sessions: ServerSession[] = msg.sessions || [];
         let now: number = Date.now();
-        for (let i = 0; i < sessions.length; i++) {
-          if (sessions[i].createdAt <= 0) {
-            sessions[i].createdAt = now;
+        if (rawSessions) {
+          for (let i = 0; i < sessions.length && i < rawSessions.length; i++) {
+            // opencode 返回 updatedAt (ISO 8601) 作为最后活跃时间
+            let updatedAtStr: string = String(rawSessions[i]['updatedAt'] || '');
+            if (updatedAtStr.length > 0) {
+              let parsed: number = Date.parse(updatedAtStr);
+              if (!isNaN(parsed)) {
+                sessions[i].createdAt = parsed;
+              }
+            }
+            if (!sessions[i].createdAt || sessions[i].createdAt <= 0) {
+              sessions[i].createdAt = now;
+            }
+          }
+        } else {
+          for (let i = 0; i < sessions.length; i++) {
+            if (!sessions[i].createdAt || sessions[i].createdAt <= 0) {
+              sessions[i].createdAt = now;
+            }
           }
         }
         ChatStore.sessions = sessions;

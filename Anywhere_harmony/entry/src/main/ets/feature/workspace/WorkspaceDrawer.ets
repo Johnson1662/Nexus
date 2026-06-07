@@ -32,18 +32,19 @@ export struct WorkspaceDrawer {
       }
       .width(Layout.contentWidth)
       .padding({ top: Spacing.lg, bottom: Spacing.lg })
-      .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: -10 })))
+      .transition(TransitionEffect.OPACITY)
       // Workspace list
       if (this.workspaces.length === 0) {
         Column() {
           Text($r('app.string.ws_empty_prompt'))
-            .fontSize(FontSize.lg).fontWeight(FontWeight.Bold).fontColor(Colors.foregroundMuted)
+            .fontSize(FontSize.sm).fontColor(Colors.foregroundMuted)
           Text($r('app.string.ws_empty_subtitle'))
-            .fontSize(FontSize.sm).fontColor(Colors.foregroundLight)
+            .fontSize(FontSize.sm).fontColor(Colors.foregroundMuted)
             .margin({ top: Spacing.xs })
         }
         .width(Layout.contentWidth).layoutWeight(1)
-        .justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center)
+        .justifyContent(FlexAlign.Start).alignItems(HorizontalAlign.Start)
+        .padding({ left: Spacing.lg, right: Spacing.lg, top: Spacing.md })
       } else {
         List({ space: Spacing.sm }) {
         ForEach(this.workspaces, (ws: WorkspaceInfo, index: number) => {
@@ -83,11 +84,16 @@ export struct WorkspaceDrawer {
             }
             .width('100%')
             .padding({ left: Spacing.lg, right: Spacing.lg, top: Spacing.lg, bottom: Spacing.lg })
-            .backgroundColor(index === this.currentIndex ? Colors.surface1 : 'transparent')
-            .borderRadius(Radius.lg)
             .onClick(() => { if (this.onSelect) this.onSelect(index) })
-            .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ x: -20 })))
-            .animation({ duration: Duration.normal, curve: Curve.EaseOut, delay: index * 40 })
+            .transition(TransitionEffect.OPACITY)
+            .stateStyles({
+              pressed: {
+                .backgroundColor(Colors.surface1)
+              },
+              normal: {
+                .backgroundColor(Colors.transparent)
+              }
+            })
           }
         }, (ws: WorkspaceInfo, index: number) => ws.id + index.toString())
       }
@@ -97,7 +103,6 @@ export struct WorkspaceDrawer {
 
       // Bottom area
       Column() {
-        Divider().color(Colors.borderLight).strokeWidth(0.5)
         // Navigation entries
         if (this.onHostManage) {
           Row() {
@@ -113,6 +118,14 @@ export struct WorkspaceDrawer {
           .width('100%')
           .padding({ left: Spacing.xl, right: Spacing.xl, top: Spacing.lg, bottom: Spacing.sm })
           .onClick(() => { if (this.onHostManage) this.onHostManage() })
+          .stateStyles({
+            pressed: {
+              .backgroundColor(Colors.surface1)
+            },
+            normal: {
+              .backgroundColor(Colors.transparent)
+            }
+          })
         }
 
         if (this.onSettings) {
@@ -127,13 +140,21 @@ export struct WorkspaceDrawer {
           .width('100%')
           .padding({ left: Spacing.xl, right: Spacing.xl, top: Spacing.sm, bottom: Spacing.sm })
           .onClick(() => { if (this.onSettings) this.onSettings() })
+          .stateStyles({
+            pressed: {
+              .backgroundColor(Colors.surface1)
+            },
+            normal: {
+              .backgroundColor(Colors.transparent)
+            }
+          })
         }
 
         if (this.showForm) {
           Column() {
             TextInput({ placeholder: '/path/to/project', text: this.newPath })
               .width('100%').height(44)
-              .backgroundColor(Colors.surface1).borderRadius(Radius.md)
+              .backgroundColor(Colors.transparent)
               .padding({ left: Spacing.md, right: Spacing.md })
               .fontSize(FontSize.base)
               .onChange((v: string) => { this.newPath = v })
@@ -159,7 +180,7 @@ export struct WorkspaceDrawer {
             .width('100%').margin({ top: Spacing.md })
           }
           .padding({ left: Spacing.xl, right: Spacing.xl, bottom: Spacing.xl, top: Spacing.sm })
-          .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: 10 })))
+          .transition(TransitionEffect.OPACITY)
         } else {
           Row() {
             SymbolGlyph($r('sys.symbol.ohos_folder_badge_plus'))
@@ -174,7 +195,15 @@ export struct WorkspaceDrawer {
           .width('100%')
           .padding({ left: Spacing.xl, right: Spacing.xl, bottom: Spacing.xxl, top: Spacing.lg })
           .onClick(() => { this.showForm = true })
-          .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: 10 })))
+          .transition(TransitionEffect.OPACITY)
+          .stateStyles({
+            pressed: {
+              .backgroundColor(Colors.surface1)
+            },
+            normal: {
+              .backgroundColor(Colors.transparent)
+            }
+          })
         }
       }
       .width(Layout.contentWidth)

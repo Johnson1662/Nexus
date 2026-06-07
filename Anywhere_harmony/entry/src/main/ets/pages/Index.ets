@@ -1,8 +1,9 @@
 import { HomeView } from '../feature/home/HomeView';
+import { HostFilterBar } from '../feature/home/HostFilterBar';
 import { AgentDetailView } from '../feature/agent/AgentDetailView';
 import { SessionDetailView } from '../feature/session/SessionDetailView';
 import { WorkspaceDetailView } from '../feature/workspace/WorkspaceDetailView';
-import { Colors } from '../constants/DesignTokens';
+import { Colors, FontSize, Spacing, Radius, Duration } from '../constants/DesignTokens';
 import { ChatStore, trimMessages } from '../common/model/ChatState';
 import { WorkspaceStore, ServerSession, HostStore, DeviceEntry } from '../common/model/WorkspaceInfo';
 import { MessageData } from '../common/model/MessageData';
@@ -37,6 +38,7 @@ struct Index {
 
   @State selectedWorkspaceIndex: number = 0;
   @State selectedSession: ServerSession = new ServerSession();
+  @State selectedHostFilter: string = '';
   @State autoConnectAttempted: boolean = false;
   @State autoConnectRetryCount: number = 0;
 
@@ -104,7 +106,34 @@ struct Index {
 
   @Builder
   HomeContent() {
-    HomeView({
+    Column() {
+      // Title row: "Anywhere" + 4-dots menu
+      Row() {
+        Text('Anywhere')
+          .fontSize(25)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(Colors.foreground)
+        Blank()
+        Button() {
+          SymbolGlyph($r('sys.symbol.dot_grid_2x2'))
+            .fontSize(22)
+            .fontColor([Colors.foreground])
+        }
+        .width(44)
+        .height(44)
+        .backgroundColor(Colors.transparent)
+        .borderRadius(22)
+        .onClick(() => {
+          this.navStack.pushPath({ name: 'settings' });
+        })
+      }
+      .width('100%')
+      .padding({ left: Spacing.xl, right: Spacing.sm, top: Spacing.sm })
+
+      // Host filter chips
+      this.HostFilterChips()
+
+      HomeView({
       onNavigateToAgentDetail: (index: number) => {
         AppStorage.setOrCreate('selectedDeviceIndex', index);
         this.navStack.pushPath({ name: 'agentDetail' });
@@ -127,6 +156,16 @@ struct Index {
       onRefreshHostsAgents: () => {
         this.refreshAgents(true);
       }
+    })
+    }
+  }
+
+  @Builder
+  HostFilterChips() {
+    HostFilterBar({
+      devices: HostStore.devices,
+      selectedKey: this.selectedHostFilter,
+      onSelect: (key: string) => { this.selectedHostFilter = key; }
     })
   }
 
@@ -474,7 +513,7 @@ struct Index {
     let workspacePath: string = this.getWorkspacePath(workspaceIndex);
     loadWorkspaceSessionCache(hostKey, workspacePath).then((cached) => {
       if (!forceNetwork && cached !== null && cached.sessions.length > 0) {
-        ChatStore.sessions = cached.sessions;
+        ChatStore.sessions = this.normalizeSessionTimes(cached.sessions);
       }
     });
     loadLastAgentSelection(hostKey, workspacePath).then((agentName: string) => {
@@ -554,7 +593,7 @@ struct Index {
     if (!forceNetwork) {
       loadWorkspaceSessionCache(hostKey, workspacePath).then((cached) => {
         if (cached !== null && cached.sessions.length > 0) {
-          ChatStore.sessions = cached.sessions;
+          ChatStore.sessions = this.normalizeSessionTimes(cached.sessions);
         } else if (ChatStore.connected && ChatStore.agentType.length > 0) {
           this.ws.send({
             type: 'list_sessions',
@@ -572,6 +611,17 @@ struct Index {
         agent: ChatStore.agentType
       } as ClientMessage);
     }
+  }
+
+  /** 确保会话时间戳有效，NaN/undefined/0→当前时间 */
+  normalizeSessionTimes(sessions: ServerSession[]): ServerSession[] {
+    let now: number = Date.now();
+    for (let i: number = 0; i < sessions.length; i++) {
+      if (!sessions[i].createdAt || sessions[i].createdAt <= 0) {
+        sessions[i].createdAt = now;
+      }
+    }
+    return sessions;
   }
 
   loadSessionDetail(session: ServerSession): void {

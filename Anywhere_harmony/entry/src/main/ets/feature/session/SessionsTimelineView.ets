@@ -5,16 +5,15 @@ import { ServerSession } from '../../common/model/WorkspaceInfo';
 @Component
 export struct SessionsTimelineView {
   onSelectSession?: (session: ServerSession) => void;
-  @State itemPressScale: number = 1.0;
 
   formatTime(epoch: number): string {
-    if (epoch <= 0) return '';
+    if (!epoch || epoch <= 0) return '';
     let d = new Date(epoch);
     return d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0');
   }
 
   formatRelativeTime(epoch: number): string {
-    if (epoch <= 0) return '';
+    if (!epoch || epoch <= 0) return '';
     let diff = Date.now() - epoch;
     let mins = Math.floor(diff / 60000);
     if (mins < 1) return 'Just now';
@@ -49,16 +48,15 @@ export struct SessionsTimelineView {
       if (ChatStore.sessions.length === 0) {
         // Empty state
         Column() {
-          SymbolGlyph($r('sys.symbol.doc')).fontSize(48).fontColor([Colors.foregroundMuted]).margin({ bottom: Spacing.lg })
-            .opacity(0.55)
-          Text("No Sessions Yet").fontSize(FontSize.lg).fontWeight(FontWeight.Bold).fontColor(Colors.foreground).margin({ bottom: Spacing.xs })
-          Text("Start a conversation to see sessions here").fontSize(FontSize.sm).fontColor(Colors.foregroundMuted)
+          Text("No Sessions Yet. Start a conversation to see sessions here.")
+            .fontSize(FontSize.sm)
+            .fontColor(Colors.foregroundMuted)
         }
         .width(Layout.contentWidth)
         .layoutWeight(1)
-        .justifyContent(FlexAlign.Center)
-        .alignItems(HorizontalAlign.Center)
-        .padding(Spacing.xxl)
+        .justifyContent(FlexAlign.Start)
+        .alignItems(HorizontalAlign.Start)
+        .padding({ left: Spacing.lg, right: Spacing.lg, top: Spacing.md })
       } else {
         Scroll() {
           Column() {
@@ -98,13 +96,15 @@ export struct SessionsTimelineView {
     }
     .width(Layout.contentWidth)
     .padding({ top: Spacing.md, bottom: Spacing.md })
-    .border({ width: { bottom: 1 }, color: Colors.borderLight })
+    .backgroundColor(Colors.transparent)
     .onClick(() => { this.onSelectSession?.(session); })
-    .onTouch((event: TouchEvent) => {
-      if (event.type === TouchType.Down) { this.itemPressScale = 0.97; }
-      else { this.itemPressScale = 1.0; }
+    .stateStyles({
+      pressed: {
+        .backgroundColor(Colors.surface1)
+      },
+      normal: {
+        .backgroundColor(Colors.transparent)
+      }
     })
-    .scale({ x: this.itemPressScale, y: this.itemPressScale })
-    .animation({ duration: 100, curve: Curve.EaseOut })
   }
 }

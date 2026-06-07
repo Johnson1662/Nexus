@@ -1,4 +1,4 @@
-import { Colors, FontSize, Spacing, Radius, Shadow, Layout } from '../../constants/DesignTokens';
+import { Colors, FontSize, Spacing, Radius, Layout } from '../../constants/DesignTokens';
 import { WorkspaceStore, WorkspaceInfo, ServerSession } from '../../common/model/WorkspaceInfo';
 import { ChatStore, PlanEntry } from '../../common/model/ChatState';
 import { DeviceAgentStore } from '../../common/model/DeviceAgentStore';
@@ -75,7 +75,7 @@ export struct WorkspaceDetailView {
   }
 
   formatRelativeTime(epoch: number): string {
-    if (epoch <= 0) return '刚刚';
+    if (!epoch || epoch <= 0) return '刚刚';
     let diff: number = Date.now() - epoch;
     let minutes: number = Math.floor(diff / 60000);
     if (minutes < 1) return '刚刚';
@@ -166,8 +166,6 @@ export struct WorkspaceDetailView {
           }
           .width(42)
           .height(42)
-          .borderRadius(Radius.lg)
-          .backgroundColor(Colors.surface1)
           .justifyContent(FlexAlign.Center)
           .margin({ right: Spacing.md })
 
@@ -243,13 +241,21 @@ export struct WorkspaceDetailView {
     }
     .layoutWeight(1)
     .height(64)
-    .backgroundColor(Colors.surface1)
+    .backgroundColor(Colors.transparent)
     .borderRadius(Radius.xl)
     .onClick(() => {
       if (symbol === 'plus') {
         this.onNewSession?.(this.workspaceIndex);
       } else if (symbol === 'clock') {
         this.detailTabIndex = 2;
+      }
+    })
+    .stateStyles({
+      pressed: {
+        .backgroundColor(Colors.surface1)
+      },
+      normal: {
+        .backgroundColor(Colors.transparent)
       }
     })
   }
@@ -295,7 +301,6 @@ export struct WorkspaceDetailView {
       }
       .width('100%')
       .padding(Spacing.lg)
-      .backgroundColor(Colors.surface1)
       .borderRadius(Radius.lg)
     }
     .width(Layout.contentWidth)
@@ -305,31 +310,37 @@ export struct WorkspaceDetailView {
   @Builder
   DetailTab(label: string, idx: number) {
     Button(label)
+      .type(ButtonType.Normal)
       .fontSize(FontSize.sm)
-      .fontColor(this.detailTabIndex === idx ? Colors.surface0 : Colors.foreground)
-      .backgroundColor(this.detailTabIndex === idx ? Colors.foreground : Colors.surface1)
-      .borderRadius(Radius.full)
-      .padding({ left: Spacing.lg, right: Spacing.lg, top: Spacing.sm, bottom: Spacing.sm })
+      .fontWeight(this.detailTabIndex === idx ? FontWeight.Medium : FontWeight.Normal)
+      .fontColor(this.detailTabIndex === idx ? Colors.foreground : Colors.foregroundMuted)
+      .backgroundColor(Colors.transparent)
+      .borderRadius(Radius.md)
+      .padding({ left: Spacing.md, right: Spacing.md, top: Spacing.sm, bottom: Spacing.sm })
       .onClick(() => { this.detailTabIndex = idx; })
+      .stateStyles({
+        pressed: {
+          .backgroundColor(Colors.surface1)
+        },
+        normal: {
+          .backgroundColor(Colors.transparent)
+        }
+      })
   }
 
   @Builder
   SessionsSection() {
     if (this.getWorkspaceSessions().length === 0) {
       Column() {
-        SymbolGlyph($r('sys.symbol.doc'))
-          .fontSize(44)
-          .fontColor([Colors.foregroundMuted])
-          .opacity(0.45)
-          .margin({ bottom: Spacing.lg })
         Text('这个工作区还没有会话')
-          .fontSize(FontSize.md)
+          .fontSize(FontSize.sm)
           .fontColor(Colors.foregroundMuted)
       }
       .layoutWeight(1)
       .width(Layout.contentWidth)
-      .justifyContent(FlexAlign.Center)
-      .alignItems(HorizontalAlign.Center)
+      .justifyContent(FlexAlign.Start)
+      .alignItems(HorizontalAlign.Start)
+      .padding({ left: Spacing.lg, right: Spacing.lg, top: Spacing.md })
     } else {
       List({ space: Spacing.sm }) {
         ForEach(this.getWorkspaceSessions(), (session: ServerSession) => {
@@ -354,8 +365,6 @@ export struct WorkspaceDetailView {
       }
       .width(40)
       .height(40)
-      .borderRadius(Radius.md)
-      .backgroundColor(Colors.surface1)
       .justifyContent(FlexAlign.Center)
       .margin({ right: Spacing.md })
 
@@ -378,9 +387,15 @@ export struct WorkspaceDetailView {
     }
     .width('100%')
     .padding(Spacing.md)
-    .backgroundColor(Colors.surface1)
-    .borderRadius(Radius.xl)
     .onClick(() => { this.onSelectSession?.(session); })
+    .stateStyles({
+      pressed: {
+        .backgroundColor(Colors.surface1)
+      },
+      normal: {
+        .backgroundColor(Colors.transparent)
+      }
+    })
   }
 
   @Builder
@@ -407,8 +422,14 @@ export struct WorkspaceDetailView {
           }
           .width('100%')
           .padding(Spacing.md)
-          .backgroundColor(Colors.surface1)
-          .borderRadius(Radius.xl)
+          .stateStyles({
+            pressed: {
+              .backgroundColor(Colors.surface1)
+            },
+            normal: {
+              .backgroundColor(Colors.transparent)
+            }
+          })
         }
       }, (agent: WorkspaceAgentEntry) => agent.name)
     }
@@ -422,13 +443,14 @@ export struct WorkspaceDetailView {
     if (this.getActivityRows().length === 0) {
       Column() {
         Text('最近还没有活动')
-          .fontSize(FontSize.md)
+          .fontSize(FontSize.sm)
           .fontColor(Colors.foregroundMuted)
       }
       .layoutWeight(1)
       .width(Layout.contentWidth)
-      .justifyContent(FlexAlign.Center)
-      .alignItems(HorizontalAlign.Center)
+      .justifyContent(FlexAlign.Start)
+      .alignItems(HorizontalAlign.Start)
+      .padding({ left: Spacing.lg, right: Spacing.lg, top: Spacing.md })
     } else {
       List({ space: Spacing.sm }) {
         ForEach(this.getActivityRows(), (row: WorkspaceActivityRow, index: number) => {
@@ -455,8 +477,14 @@ export struct WorkspaceDetailView {
           }
           .width('100%')
           .padding(Spacing.md)
-          .backgroundColor(Colors.surface1)
-          .borderRadius(Radius.xl)
+          .stateStyles({
+            pressed: {
+              .backgroundColor(Colors.surface1)
+            },
+            normal: {
+              .backgroundColor(Colors.transparent)
+            }
+          })
         }
         }, (row: WorkspaceActivityRow, index: number) => row.actor + row.content + index.toString())
       }

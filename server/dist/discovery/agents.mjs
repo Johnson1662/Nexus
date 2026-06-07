@@ -86,11 +86,13 @@ function findInPath(binaryName) {
     if (pathDirs.indexOf(localBin) === -1) {
         pathDirs.push(localBin);
     }
-    const extensions = [".cmd", ".exe", ".bat", ".ps1", ""];
-    for (const dir of pathDirs) {
-        if (!dir)
-            continue;
-        for (const ext of extensions) {
+    // Prefer .exe (native) over .cmd/.bat (need shell) over .ps1
+    // Iterate extensions first so we find .exe anywhere on PATH before .cmd
+    const extensions = [".exe", ".cmd", ".bat", ".ps1", ""];
+    for (const ext of extensions) {
+        for (const dir of pathDirs) {
+            if (!dir)
+                continue;
             const fullPath = path.join(dir.trim(), binaryName + ext);
             try {
                 if (existsSync(fullPath))

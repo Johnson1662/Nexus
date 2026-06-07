@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 import { AcpClient } from "./acp/client.mjs";
 import { getAgentLaunchArgs } from "./discovery/agents.mjs";
 /**
@@ -7,11 +8,16 @@ import { getAgentLaunchArgs } from "./discovery/agents.mjs";
  */
 export async function createTempClient(agent, cwd) {
     const args = getAgentLaunchArgs(agent);
+    // cwd must exist, otherwise spawn with shell:true throws misleading ENOENT on cmd.exe
+    const resolvedCwd = cwd && existsSync(cwd) ? cwd : process.cwd();
     const proc = spawn(agent, args, {
-        cwd: cwd || process.cwd(),
+        cwd: resolvedCwd,
         env: { ...process.env, FORCE_COLOR: "0", NO_COLOR: "1" },
         stdio: ["pipe", "pipe", "pipe"],
         shell: true,
+    });
+    proc.on("error", (err) => {
+        console.log(`[temp-client] spawn error: ${err.message}`);
     });
     proc.stderr.on("data", (chunk) => {
         console.log(`[temp-client] stderr: ${chunk.toString().slice(0, 200)}`);
@@ -37,4 +43,3 @@ export async function createTempClient(agent, cwd) {
         },
     };
 }
-//# sourceMappingURL=temp-client.mjs.map

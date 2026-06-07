@@ -6,6 +6,7 @@ import { WorkspaceInfo } from '../../common/model/WorkspaceInfo';
 import { DeviceAgentStore } from '../../common/model/DeviceAgentStore';
 import { StorageService, saveWorkspaces } from '../../services/StorageService';
 import { ChatPage } from './ChatPage';
+import { ChatInputBar } from './ChatInputBar';
 import { WorkspaceDrawer } from '../workspace/WorkspaceDrawer';
 
 @Component
@@ -204,7 +205,6 @@ export struct ChatView {
           Column() {
             Column() {
               this.TitleBar()
-              this.ControlBar()
             }
             .opacity(this.titleBarOpacity)
             .animation({ duration: Duration.slow, curve: Curve.EaseOut })
@@ -242,6 +242,18 @@ export struct ChatView {
               onSendMessage: (t: string) => { if (this.onSendMessage) this.onSendMessage(t) },
               onRetry: (id: string, content: string) => { if (this.onRetry) this.onRetry(id, content) }
             }).layoutWeight(1)
+
+            ChatInputBar({
+              disabled: ChatStore.turnActive || ChatStore.loadingSession || ((ChatStore.selectedAgentName || ChatStore.agentType).length === 0),
+              showCancel: ChatStore.turnActive,
+              onSend: (text: string) => { if (this.onSendMessage) this.onSendMessage(text); },
+              onCancel: () => { if (this.onSendMessage) this.onSendMessage('__cancel__'); },
+              onSelectAgent: (i: number) => { if (this.onSelectAgent) this.onSelectAgent(i); },
+              onSwitchModel: (i: number) => { if (this.onSwitchModel) this.onSwitchModel(i); },
+              onSwitchMode: (i: number) => { if (this.onSwitchMode) this.onSwitchMode(i); },
+              onRefreshAgents: () => { if (this.onRefreshAgents) this.onRefreshAgents(); },
+              onRefreshModels: () => { if (this.onRefreshModels) this.onRefreshModels(); }
+            })
           }
           .width('100%').height('100%')
           .alignItems(HorizontalAlign.Center)

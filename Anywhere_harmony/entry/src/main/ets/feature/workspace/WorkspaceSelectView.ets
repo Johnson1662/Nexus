@@ -25,15 +25,16 @@ export struct WorkspaceSelectView {
         if (WorkspaceStore.workspaces.length === 0) {
           Column() {
             Text('No Workspaces')
-              .fontSize(FontSize.base).fontColor(Colors.foregroundMuted)
+              .fontSize(FontSize.sm).fontColor(Colors.foregroundMuted)
             Text('Add a project path to get started')
-              .fontSize(FontSize.sm).fontColor(Colors.foregroundLight)
+              .fontSize(FontSize.sm).fontColor(Colors.foregroundMuted)
               .margin({ top: Spacing.xs })
           }
           .width(Layout.contentWidth)
           .layoutWeight(1)
-          .justifyContent(FlexAlign.Center)
-          .alignItems(HorizontalAlign.Center)
+          .justifyContent(FlexAlign.Start)
+          .alignItems(HorizontalAlign.Start)
+          .padding({ left: Spacing.lg, right: Spacing.lg, top: Spacing.md })
         } else {
           // 工作区列表
           List({ space: Spacing.sm }) {
@@ -71,11 +72,17 @@ export struct WorkspaceSelectView {
                 }
                 .width('100%')
                 .padding({ left: Spacing.lg, right: Spacing.lg, top: Spacing.md, bottom: Spacing.md })
-                .backgroundColor(Colors.surface1)
-                .borderRadius(Radius.xl)
                 .onClick(() => {
                   WorkspaceStore.currentIndex = index;
                   if (this.onSelect) this.onSelect(index);
+                })
+                .stateStyles({
+                  pressed: {
+                    .backgroundColor(Colors.surface1)
+                  },
+                  normal: {
+                    .backgroundColor(Colors.transparent)
+                  }
                 })
               }
             }, (ws: WorkspaceInfo, index: number) => ws.id + index.toString())
@@ -90,7 +97,7 @@ export struct WorkspaceSelectView {
             Column() {
               TextInput({ placeholder: '/path/to/project', text: this.newPath })
                 .width('100%').height(44)
-                .backgroundColor(Colors.surface1).borderRadius(Radius.sm)
+                .backgroundColor(Colors.transparent)
                 .padding({ left: Spacing.md, right: Spacing.md })
                 .fontSize(FontSize.sm)
                 .onChange((v: string) => { this.newPath = v })
@@ -131,6 +138,14 @@ export struct WorkspaceSelectView {
             .width('100%')
             .padding({ bottom: Spacing.xxl, top: Spacing.lg })
             .onClick(() => { this.showForm = true })
+            .stateStyles({
+              pressed: {
+                .backgroundColor(Colors.surface1)
+              },
+              normal: {
+                .backgroundColor(Colors.transparent)
+              }
+            })
           }
         }
         .width(Layout.contentWidth)

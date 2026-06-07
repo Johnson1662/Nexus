@@ -136,27 +136,19 @@ export struct ChatPage {
               .animation({ duration: Duration.fast, curve: Curve.EaseInOut })
             } else {
               Column() {
-                Image($r('app.media.anywhere_logo'))
-                  .width(44).height(44)
-                  .fillColor(Colors.accent)
-                  .margin({ bottom: Spacing.lg })
-                  .opacity(0.3)
-                  .scale({ x: this.iconScale, y: this.iconScale })
-                  .animation({ duration: Duration.slow, curve: Curve.EaseOut })
-                Text($r('app.string.app_name'))
-                  .fontSize(FontSize.xxl).fontColor(Colors.foreground).fontWeight(FontWeight.Bold).fontFamily('serif')
                 Text($r('app.string.chat_empty_prompt'))
-                  .fontSize(FontSize.sm).fontColor(Colors.foregroundMuted)
+                  .fontSize(FontSize.sm)
+                  .fontColor(Colors.foregroundMuted)
                   .margin({ top: Spacing.xs })
               }
-              .alignItems(HorizontalAlign.Center)
-              .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: 20 })))
+              .alignItems(HorizontalAlign.Start)
+              .transition(TransitionEffect.OPACITY)
               .animation({ duration: Duration.normal, curve: Curve.EaseOut })
             }
           }
         .width('100%').layoutWeight(1)
-        .justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center)
-        .padding({ left: Spacing.xxl, right: Spacing.xxl })
+        .justifyContent(FlexAlign.Start).alignItems(HorizontalAlign.Start)
+        .padding({ left: Spacing.lg, right: Spacing.lg, top: Spacing.xxl })
       } else {
         List({ scroller: this.scroller }) {
           LazyForEach(this.dataSource, (msg: MessageData) => {
@@ -188,7 +180,7 @@ export struct ChatPage {
                   streaming: ChatStore.turnActive && msg.role === 'assistant' && msg.id === ChatStore.messages[ChatStore.messages.length - 1]?.id,
                   onRetry: (id: string, content: string) => { if (this.onRetry) this.onRetry(id, content) }
                 })
-                  .margin({ bottom: Spacing.lg })
+                  .margin({ bottom: Spacing.xl })
               }
             }
             .height('auto')
@@ -248,12 +240,6 @@ export struct ChatPage {
         .onClick(() => { this.scroller.scrollEdge(Edge.Bottom); this.followsOutput = true; this.showJumpButton = false; })
       }
 
-      ChatInputBar({
-        disabled: ChatStore.turnActive || ChatStore.loadingSession || !this.hasSelectedAgent(),
-        showCancel: ChatStore.turnActive,
-        onSend: (text) => { if (this.onSendMessage) this.onSendMessage(text); },
-        onCancel: () => { if (this.onSendMessage) this.onSendMessage('__cancel__'); }
-      })
     }
     .width('100%').height('100%')
     .alignItems(HorizontalAlign.Center)

@@ -1,4 +1,4 @@
-import { Colors, FontSize, Spacing } from '../../constants/DesignTokens';
+import { Colors, FontSize, Spacing, Duration } from '../../constants/DesignTokens';
 import { CustomIcon } from './CustomIcon';
 @Component
 export struct ThinkingSection {
@@ -50,13 +50,13 @@ export struct ThinkingSection {
           .fontColor([Colors.foregroundMuted])
           .accessibilityText(this.expanded ? 'Collapse thinking' : 'Expand thinking')
           .rotate({ z: 1, angle: this.expanded ? 0 : -90 })
-          .animation({ duration: 200, curve: Curve.EaseInOut })
+          .animation({ duration: Duration.normal, curve: Curve.EaseInOut })
       }
       .width('100%')
       .height(32)
       .alignItems(VerticalAlign.Center)
       .onClick(() => {
-        this.getUIContext()?.animateTo({ duration: 200, curve: Curve.EaseInOut }, () => {
+        this.getUIContext()?.animateTo({ duration: Duration.normal, curve: Curve.EaseInOut }, () => {
           this.expanded = !this.expanded;
         });
       })

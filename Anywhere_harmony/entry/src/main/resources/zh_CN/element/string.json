@@ -54,7 +54,7 @@
     },
     {
       "name": "chat_empty_prompt",
-      "value": "选择 Agent 后开始输入。"
+      "value": "开始输入。"
     },
     {
       "name": "chat_loading_session",
@@ -94,7 +94,7 @@
     },
     {
       "name": "chat_input_agent_required_placeholder",
-      "value": "先选择 Agent\u2026"
+      "value": "输入消息…"
     },
     {
       "name": "chat_input_file_placeholder",

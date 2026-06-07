@@ -1,4 +1,4 @@
-import { Colors, FontSize, Spacing, Radius, Shadow, Layout } from '../../constants/DesignTokens';
+import { Colors, FontSize, Spacing, Radius, Layout } from '../../constants/DesignTokens';
 import { WorkspaceStore, WorkspaceInfo, ServerSession } from '../../common/model/WorkspaceInfo';
 import { ChatStore } from '../../common/model/ChatState';
 
@@ -9,7 +9,6 @@ export struct WorkspaceListView {
 
   @State searchText: string = '';
   @State filterIndex: number = 0;
-  @State pressedKey: string = '';
 
   getBranch(_: WorkspaceInfo): string {
     return 'main';
@@ -52,7 +51,7 @@ export struct WorkspaceListView {
   }
 
   formatRelativeTime(epoch: number): string {
-    if (epoch <= 0) return '刚刚';
+    if (!epoch || epoch <= 0) return '刚刚';
     let diff: number = Date.now() - epoch;
     let minutes: number = Math.floor(diff / 60000);
     if (minutes < 1) return '刚刚';
@@ -129,8 +128,6 @@ export struct WorkspaceListView {
       .width(Layout.contentWidth)
       .height(48)
       .padding({ left: Spacing.md, right: Spacing.md })
-      .backgroundColor(Colors.surface1)
-      .borderRadius(Radius.lg)
       .margin({ bottom: Spacing.md })
 
       Row({ space: Spacing.sm }) {
@@ -144,26 +141,15 @@ export struct WorkspaceListView {
 
       if (WorkspaceStore.workspaces.length === 0) {
         Column() {
-          SymbolGlyph($r('sys.symbol.folder'))
-            .fontSize(52)
-            .fontColor([Colors.foregroundMuted])
-            .opacity(0.45)
-            .margin({ bottom: Spacing.lg })
-          Text('还没有工作区')
-            .fontSize(FontSize.xl)
-            .fontWeight(FontWeight.Bold)
-            .fontColor(Colors.foreground)
-            .margin({ bottom: Spacing.xs })
-          Text('先从聊天页侧边栏添加项目路径，再从这里管理工作区和会话。')
+          Text('还没有工作区。先从聊天页侧边栏添加项目路径，再从这里管理工作区和会话。')
             .fontSize(FontSize.sm)
             .fontColor(Colors.foregroundMuted)
-            .textAlign(TextAlign.Center)
         }
         .layoutWeight(1)
         .width('100%')
-        .justifyContent(FlexAlign.Center)
-        .alignItems(HorizontalAlign.Center)
-        .padding(Spacing.xxl)
+        .justifyContent(FlexAlign.Start)
+        .alignItems(HorizontalAlign.Start)
+        .padding({ left: Spacing.xl, right: Spacing.xl, top: Spacing.md })
       } else {
         List({ space: Spacing.md }) {
           ForEach(WorkspaceStore.workspaces, (workspace: WorkspaceInfo, index: number) => {
@@ -188,13 +174,22 @@ export struct WorkspaceListView {
   @Builder
   FilterTab(label: string, idx: number) {
     Button(label)
+      .type(ButtonType.Normal)
       .fontSize(FontSize.sm)
-      .fontWeight(this.filterIndex === idx ? FontWeight.Medium : FontWeight.Regular)
-      .fontColor(this.filterIndex === idx ? Colors.surface0 : Colors.foreground)
-      .backgroundColor(this.filterIndex === idx ? Colors.foreground : Colors.surface1)
-      .borderRadius(Radius.full)
-      .padding({ left: Spacing.lg, right: Spacing.lg, top: Spacing.sm, bottom: Spacing.sm })
+      .fontWeight(this.filterIndex === idx ? FontWeight.Medium : FontWeight.Normal)
+      .fontColor(this.filterIndex === idx ? Colors.foreground : Colors.foregroundMuted)
+      .backgroundColor(Colors.transparent)
+      .borderRadius(Radius.md)
+      .padding({ left: Spacing.md, right: Spacing.md, top: Spacing.sm, bottom: Spacing.sm })
       .onClick(() => { this.filterIndex = idx; })
+      .stateStyles({
+        pressed: {
+          .backgroundColor(Colors.surface1)
+        },
+        normal: {
+          .backgroundColor(Colors.transparent)
+        }
+      })
   }
 
   @Builder
@@ -208,8 +203,6 @@ export struct WorkspaceListView {
         }
         .width(44)
         .height(44)
-        .borderRadius(Radius.lg)
-        .backgroundColor(Colors.surface1)
         .justifyContent(FlexAlign.Center)
         .margin({ right: Spacing.md })
 
@@ -263,16 +256,13 @@ export struct WorkspaceListView {
     }
     .width('100%')
     .padding(Spacing.lg)
-    .backgroundColor(Colors.surface1)
-    .borderRadius(Radius.xl)
-    .scale({ x: this.pressedKey === workspace.id ? 0.97 : 1.0, y: this.pressedKey === workspace.id ? 0.97 : 1.0 })
-    .animation({ duration: 100, curve: Curve.EaseOut })
     .onClick(() => { this.onSelectWorkspace?.(index); })
-    .onTouch((event: TouchEvent) => {
-      if (event.type === TouchType.Down) {
-        this.pressedKey = workspace.id;
-      } else {
-        this.pressedKey = '';
+    .stateStyles({
+      pressed: {
+        .backgroundColor(Colors.surface1)
+      },
+      normal: {
+        .backgroundColor(Colors.transparent)
       }
     })
   }
