@@ -100,10 +100,10 @@ export class Shadow {
 }
 
 export class Duration {
-  static readonly fast: number = 150;
-  static readonly normal: number = 200;
-  static readonly slow: number = 400;
-  static readonly slower: number = 600;
+  static readonly fast: number = 200;
+  static readonly normal: number = 300;
+  static readonly slow: number = 500;
+  static readonly spring: Curve = Curve.Friction;
 }
 
 /** Get localized string via UIContext-host context (non-deprecated path). */

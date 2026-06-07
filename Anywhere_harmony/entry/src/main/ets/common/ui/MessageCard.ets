@@ -135,7 +135,14 @@ export struct MessageCard {
                 newText: this.msgToolNewText, terminalId: this.msgToolTerminalId })
             } else {
               if (this.msgContent.length > 0) {
-                MarkdownRender({ text: this.msgContent, streaming: this.streaming })
+                if (this.streaming) {
+                  Text(this.msgContent)
+                    .fontSize(FontSize.base)
+                    .fontColor(Colors.foreground)
+                    .lineHeight(22)
+                } else {
+                  MarkdownRender({ text: this.msgContent, streaming: false })
+                }
               }
             }
           }
@@ -148,6 +155,7 @@ export struct MessageCard {
           .gesture(LongPressGesture().onAction(() => { this.copyContent() }))
 
         } else {
+          // User message bubble
           Column() {
             if (this.parsedFileType === 'image' && this.parsedDataUri.length > 0) {
               Image(this.parsedDataUri)
@@ -221,6 +229,6 @@ export struct MessageCard {
       top: (this.msgType === 'thinking' || this.msgType === 'tool_call') ? 0 : Spacing.xs,
       bottom: (this.msgType === 'thinking' || this.msgType === 'tool_call') ? 0 : Spacing.xs
     })
-
+    .transition(TransitionEffect.OPACITY)
   }
 }

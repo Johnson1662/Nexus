@@ -1,4 +1,4 @@
-import { Colors, FontSize, Spacing, Radius, Layout } from '../../constants/DesignTokens';
+import { Colors, FontSize, Spacing, Radius, Layout, Duration } from '../../constants/DesignTokens';
 import { WorkspaceStore, WorkspaceInfo, ServerSession } from '../../common/model/WorkspaceInfo';
 import { ChatStore, PlanEntry } from '../../common/model/ChatState';
 import { DeviceAgentStore } from '../../common/model/DeviceAgentStore';
@@ -19,6 +19,7 @@ class WorkspaceActivityRow {
 @Component
 export struct WorkspaceDetailView {
   @Prop workspaceIndex: number = 0;
+  onBack?: () => void;
   onSelectSession?: (session: ServerSession) => void;
   onNewSession?: (workspaceIndex: number) => void;
 
@@ -158,58 +159,41 @@ export struct WorkspaceDetailView {
   build() {
     NavDestination() {
       Column() {
-        Row() {
-          Row() {
-            SymbolGlyph($r('sys.symbol.folder'))
-              .fontSize(18)
-              .fontColor([Colors.foreground])
-          }
-          .width(42)
-          .height(42)
-          .justifyContent(FlexAlign.Center)
-          .margin({ right: Spacing.md })
-
+        this.TitleBarBuilder()
+        
+        Scroll() {
           Column() {
-            Text(this.getWorkspace().name || 'Workspace')
-              .fontSize(FontSize.xxxl)
-              .fontWeight(FontWeight.Bold)
-              .fontColor(Colors.foreground)
-              .maxLines(1)
-            Text('main')
-              .fontSize(FontSize.sm)
-              .fontColor(Colors.foregroundMuted)
-              .margin({ top: Spacing.xxs })
+            Row({ space: Spacing.sm }) {
+              this.QuickAction('新建会话', 'plus')
+              this.QuickAction('查看活动', 'clock')
+            }
+            .width(Layout.contentWidth)
+            .padding({ bottom: Spacing.lg })
+
+            this.CurrentAgentCard()
+
+            Row({ space: Spacing.sm }) {
+              this.DetailTab('Sessions', 0)
+              this.DetailTab('Agents', 1)
+              this.DetailTab('Activity', 2)
+            }
+            .width(Layout.contentWidth)
+            .padding({ top: Spacing.lg, bottom: Spacing.md })
+
+            if (this.detailTabIndex === 0) {
+              this.SessionsSection()
+            } else if (this.detailTabIndex === 1) {
+              this.AgentsSection()
+            } else {
+              this.ActivitySection()
+            }
           }
-          .alignItems(HorizontalAlign.Start)
-          .layoutWeight(1)
+          .width('100%')
+          .alignItems(HorizontalAlign.Center)
+          .padding({ bottom: Spacing.xxxl })
         }
-        .width(Layout.contentWidth)
-        .padding({ top: Spacing.xxxl, bottom: Spacing.lg })
-
-        Row({ space: Spacing.sm }) {
-          this.QuickAction('新建会话', 'plus')
-          this.QuickAction('查看活动', 'clock')
-        }
-        .width(Layout.contentWidth)
-        .padding({ bottom: Spacing.lg })
-
-        this.CurrentAgentCard()
-
-        Row({ space: Spacing.sm }) {
-          this.DetailTab('Sessions', 0)
-          this.DetailTab('Agents', 1)
-          this.DetailTab('Activity', 2)
-        }
-        .width(Layout.contentWidth)
-        .padding({ top: Spacing.lg, bottom: Spacing.md })
-
-        if (this.detailTabIndex === 0) {
-          this.SessionsSection()
-        } else if (this.detailTabIndex === 1) {
-          this.AgentsSection()
-        } else {
-          this.ActivitySection()
-        }
+        .layoutWeight(1)
+        .width('100%')
       }
       .width('100%')
       .height('100%')
@@ -219,6 +203,57 @@ export struct WorkspaceDetailView {
     .hideTitleBar(true)
     .width('100%')
     .height('100%')
+  }
+
+  @Builder
+  TitleBarBuilder() {
+    Row() {
+      Button() {
+        SymbolGlyph($r('sys.symbol.chevron_left'))
+          .fontSize(20)
+          .fontColor([Colors.foreground])
+      }
+      .width(36)
+      .height(36)
+      .backgroundColor(Color.Transparent)
+      .stateStyles({
+        pressed: { .scale({ x: 0.92, y: 0.92 }) },
+        normal: { .scale({ x: 1, y: 1 }) }
+      })
+      .animation({ duration: Duration.fast, curve: Curve.EaseOut })
+      .onClick(() => {
+        this.onBack?.();
+      })
+
+      Blank()
+
+      Text(this.getWorkspace().name || 'Workspace')
+        .fontSize(FontSize.md)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(Colors.foreground)
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+
+      Blank()
+
+      Button() {
+        SymbolGlyph($r('sys.symbol.dot_grid_2x2'))
+          .fontSize(20)
+          .fontColor([Colors.foreground])
+      }
+      .width(36)
+      .height(36)
+      .backgroundColor(Color.Transparent)
+      .stateStyles({
+        pressed: { .scale({ x: 0.92, y: 0.92 }) },
+        normal: { .scale({ x: 1, y: 1 }) }
+      })
+      .animation({ duration: Duration.fast, curve: Curve.EaseOut })
+    }
+    .width('100%')
+    .height(56)
+    .padding({ left: Spacing.xl, right: Spacing.xl })
+    .backgroundColor(Colors.surface0)
   }
 
   @Builder

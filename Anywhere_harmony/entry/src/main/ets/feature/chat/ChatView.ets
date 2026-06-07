@@ -20,7 +20,6 @@ export struct ChatView {
   @State titleBarOpacity: number = 0;
   @State showRename: boolean = false;
   @State renameText: string = '';
-  @State showMoreMenu: boolean = false;
   onSendMessage?: (text: string) => void;
   onRetry?: (id: string, content: string) => void;
   onSelectAgent?: (index: number) => void;
@@ -203,12 +202,7 @@ export struct ChatView {
           })
 
           Column() {
-            Column() {
-              this.TitleBar()
-            }
-            .opacity(this.titleBarOpacity)
-            .animation({ duration: Duration.slow, curve: Curve.EaseOut })
-
+            this.TitleBarBuilder()
             if (this.showPathInput) {
               Row() {
                 TextInput({ placeholder: '/path/to/project', text: this.newPath })
@@ -258,25 +252,22 @@ export struct ChatView {
           .width('100%').height('100%')
           .alignItems(HorizontalAlign.Center)
         }
-          .bindSheet($$this.showPicker, this.PickerSheetBuilder(), {
-            height: SheetSize.MEDIUM,
-            dragBar: true,
-            backgroundColor: Colors.surface0,
-            showClose: false
-          })
         .showSideBar(this.showDrawer)
         .showControlButton(false)
         .sideBarWidth('100%')
         .maxSideBarWidth('100%')
         .width('100%').height('100%')
 
-        if (this.showMoreMenu) {
-          this.MoreOverlay()
-        }
       }
       .width('100%').height('100%')
     }
     .hideTitleBar(true)
+    .bindSheet($$this.showPicker, this.PickerSheetBuilder(), {
+      height: SheetSize.MEDIUM,
+      dragBar: true,
+      backgroundColor: Colors.surface0,
+      showClose: false
+    })
     .bindSheet(ChatStore.pendingPermission !== null, this.PermissionSheetBuilder(), {
       height: SheetSize.MEDIUM,
       dragBar: true,
@@ -292,8 +283,9 @@ export struct ChatView {
     .width('100%').height('100%')
     .backgroundColor(Colors.surface0)
   }
+
   @Builder
-  TitleBar() {
+  TitleBarBuilder() {
     Row() {
       Button() {
         SymbolGlyph($r('sys.symbol.chevron_left'))
@@ -303,6 +295,11 @@ export struct ChatView {
       .width(36)
       .height(36)
       .backgroundColor(Color.Transparent)
+      .stateStyles({
+        pressed: { .scale({ x: 0.92, y: 0.92 }) },
+        normal: { .scale({ x: 1, y: 1 }) }
+      })
+      .animation({ duration: Duration.fast, curve: Curve.EaseOut })
       .onClick(() => { this.onBack?.(); })
 
       Blank()
@@ -328,21 +325,22 @@ export struct ChatView {
       .backgroundColor(Colors.surface0)
       .border({ width: 1, color: Colors.borderLight })
       .borderRadius(Radius.full)
+      .stateStyles({
+        pressed: {
+          .scale({ x: 0.97, y: 0.97 })
+          .backgroundColor(Colors.surface1)
+        },
+        normal: {
+          .scale({ x: 1, y: 1 })
+          .backgroundColor(Colors.surface0)
+        }
+      })
+      .animation({ duration: Duration.normal, curve: Duration.spring })
       .onClick(() => {
         (this.getUIContext() as UIContext)?.animateTo({ duration: Duration.normal }, () => { this.showDrawer = true })
       })
 
       Blank()
-
-      Button() {
-        CustomIcon({ name: 'more', iconSize: 15, color: Colors.foreground })
-      }
-      .width(36)
-      .height(36)
-      .backgroundColor(Color.Transparent)
-        .onClick(() => {
-          this.showMoreMenu = true
-        })
     }
     .width('100%').height(56)
     .padding({ left: Spacing.xl, right: Spacing.xl })
@@ -398,6 +396,17 @@ export struct ChatView {
     .padding({ left: Spacing.sm, right: Spacing.sm, top: Spacing.xs, bottom: Spacing.xs })
     .backgroundColor(Colors.surface1)
     .borderRadius(Radius.md)
+    .stateStyles({
+      pressed: {
+        .scale({ x: 0.98, y: 0.98 })
+        .backgroundColor(Colors.surface2)
+      },
+      normal: {
+        .scale({ x: 1, y: 1 })
+        .backgroundColor(Colors.surface1)
+      }
+    })
+    .animation({ duration: Duration.normal, curve: Duration.spring })
     .onClick(action)
   }
 
@@ -410,70 +419,18 @@ export struct ChatView {
     .height(40)
     .backgroundColor(Colors.surface1)
     .borderRadius(Radius.md)
-    .onClick(action)
-  }
-
-  @Builder
-  MoreSheetBuilder() {
-    Column() {
-      this.MenuAction('Refresh sessions', () => {
-        this.showMoreMenu = false;
-        this.onRefreshSessions?.();
-      })
-      this.MenuAction('Refresh agents', () => {
-        this.showMoreMenu = false;
-        this.onRefreshAgents?.();
-      })
-      this.MenuAction('Refresh models', () => {
-        this.showMoreMenu = false;
-        this.onRefreshModels?.();
-      })
-      this.MenuAction('Add host', () => {
-        this.showMoreMenu = false;
-        this.onNavigateToHostManage?.();
-      })
-      this.MenuAction('Settings', () => {
-        this.showMoreMenu = false;
-        this.onNavigateToSettings?.();
-      })
-    }
-    .width('100%')
-    .alignItems(HorizontalAlign.Center)
-    .padding(Spacing.xs)
-    .backgroundColor(Colors.surface0)
-    .borderRadius(Radius.xl)
-    .shadow({ radius: 14, color: '#1A1D2314', offsetY: 8 })
-  }
-
-  @Builder
-  MoreOverlay() {
-    Stack({ alignContent: Alignment.TopEnd }) {
-      Column()
-        .width('100%')
-        .height('100%')
-        .backgroundColor(Colors.transparent)
-        .onClick(() => { this.showMoreMenu = false; })
-      Column() {
-        this.MoreSheetBuilder()
+    .stateStyles({
+      pressed: {
+        .scale({ x: 0.95, y: 0.95 })
+        .backgroundColor(Colors.surface2)
+      },
+      normal: {
+        .scale({ x: 1, y: 1 })
+        .backgroundColor(Colors.surface1)
       }
-      .width(168)
-      .margin({ top: 54, right: Spacing.xl })
-      .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: -8 })))
-    }
-    .width('100%')
-    .height('100%')
-  }
-
-  @Builder
-  MenuAction(label: string, action: () => void) {
-    Button(label)
-      .width('100%')
-      .height(34)
-      .fontSize(FontSize.xs)
-      .fontColor(Colors.foreground)
-      .backgroundColor(Colors.transparent)
-      .borderRadius(Radius.sm)
-      .onClick(action)
+    })
+    .animation({ duration: Duration.normal, curve: Duration.spring })
+    .onClick(action)
   }
 }
 
@@ -510,6 +467,11 @@ struct PermissionSheet {
             }
             .width('100%').borderRadius(Radius.md)
             .backgroundColor(Colors.surface1)
+            .stateStyles({
+              pressed: { .backgroundColor(Colors.surface2) },
+              normal: { .backgroundColor(Colors.surface1) }
+            })
+            .animation({ duration: Duration.fast, curve: Curve.EaseOut })
             .margin({ bottom: Spacing.xs })
             .onClick(() => {
               if (this.onSelect) this.onSelect(opt.optionId);
@@ -571,6 +533,11 @@ struct PickerSheet {
             }
             .width('100%').borderRadius(Radius.md)
             .backgroundColor(index === this.getCurrentIndex() ? Colors.accentLight : Colors.surface1)
+            .stateStyles({
+              pressed: { .backgroundColor(index === this.getCurrentIndex() ? Colors.accentLight : Colors.surface2) },
+              normal: { .backgroundColor(index === this.getCurrentIndex() ? Colors.accentLight : Colors.surface1) }
+            })
+            .animation({ duration: Duration.fast, curve: Curve.EaseOut })
             .margin({ bottom: Spacing.xs })
             .accessibilityText(item + (index === this.getCurrentIndex() ? ', selected' : ''))
             .onClick(() => {

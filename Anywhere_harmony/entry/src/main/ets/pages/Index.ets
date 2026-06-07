@@ -1,3 +1,4 @@
+import { HdsNavDestination } from '@kit.UIDesignKit';
 import { HomeView } from '../feature/home/HomeView';
 import { HostFilterBar } from '../feature/home/HostFilterBar';
 import { AgentDetailView } from '../feature/agent/AgentDetailView';
@@ -55,13 +56,79 @@ struct Index {
   @Builder
   PagesMap(name: string) {
     if (name === 'home') {
-      NavDestination() {
-        this.HomeContent()
+      HdsNavDestination() {
+        Column() {
+          Column() {
+            HostFilterBar({
+              devices: HostStore.devices,
+              selectedKey: this.selectedHostFilter,
+              onSelect: (key: string) => {
+                this.selectedHostFilter = key;
+                this.refreshAgents(false);
+              }
+            })
+          }
+          .width('100%')
+          .alignItems(HorizontalAlign.Start)
+          .backgroundColor(Colors.surface0)
+          .padding({ top: 15, bottom: 18 })
+          HomeView({
+            onNavigateToAgentDetail: (index: number) => {
+              AppStorage.setOrCreate('selectedDeviceIndex', index);
+              this.navStack.pushPath({ name: 'agentDetail' });
+            },
+            onOpenWorkspace: (index: number) => {
+              this.openWorkspaceDetail(index);
+            },
+            onOpenChat: (workspaceIndex: number) => {
+              this.openChat(workspaceIndex);
+            },
+            onOpenSettings: () => {
+              this.navStack.pushPath({ name: 'settings' });
+            },
+            onOpenAddHostScan: () => {
+              this.scanAndConnectHost();
+            },
+            onConnectHost: (url: string) => {
+              this.connectToHostUrl(url);
+            },
+            onRefreshHostsAgents: () => {
+              this.refreshAgents(true);
+            }
+          }).layoutWeight(1)
+        }
+        .width('100%')
+        .height('100%')
+        .padding({ top: 42 })
       }
-      .hideTitleBar(true)
+      .hideBackButton(true)
+      .titleBar({
+        content: {
+          title: { mainTitle: 'Anywhere' },
+          menu: {
+            value: [
+              {
+                content: {
+                  icon: $r('sys.symbol.plus'),
+                  action: () => { this.scanAndConnectHost(); }
+                }
+              },
+              {
+                content: {
+                  icon: $r('sys.symbol.dot_grid_2x2'),
+                  action: () => { this.navStack.pushPath({ name: 'settings' }); }
+                }
+              }
+            ]
+          }
+        }
+      })
+      .mode(NavDestinationMode.STANDARD)
+      .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: 10 })))
     } else if (name === 'workspaceDetail') {
       WorkspaceDetailView({
         workspaceIndex: this.selectedWorkspaceIndex,
+        onBack: () => { this.navStack.pop(); },
         onSelectSession: (session: ServerSession) => {
           this.loadSessionDetail(session);
         },
@@ -103,63 +170,6 @@ struct Index {
       })
     }
   }
-
-  @Builder
-  HomeContent() {
-    Column() {
-      // Title row: "Anywhere" + 4-dots menu
-      Row() {
-        Text('Anywhere')
-          .fontSize(25)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(Colors.foreground)
-        Blank()
-        Button() {
-          SymbolGlyph($r('sys.symbol.dot_grid_2x2'))
-            .fontSize(22)
-            .fontColor([Colors.foreground])
-        }
-        .width(44)
-        .height(44)
-        .backgroundColor(Colors.transparent)
-        .borderRadius(22)
-        .onClick(() => {
-          this.navStack.pushPath({ name: 'settings' });
-        })
-      }
-      .width('100%')
-      .padding({ left: Spacing.xl, right: Spacing.sm, top: Spacing.sm })
-
-      // Host filter chips
-      this.HostFilterChips()
-
-      HomeView({
-      onNavigateToAgentDetail: (index: number) => {
-        AppStorage.setOrCreate('selectedDeviceIndex', index);
-        this.navStack.pushPath({ name: 'agentDetail' });
-      },
-      onOpenWorkspace: (index: number) => {
-        this.openWorkspaceDetail(index);
-      },
-      onOpenChat: (workspaceIndex: number) => {
-        this.openChat(workspaceIndex);
-      },
-      onOpenSettings: () => {
-        this.navStack.pushPath({ name: 'settings' });
-      },
-      onOpenAddHostScan: () => {
-        this.scanAndConnectHost();
-      },
-      onConnectHost: (url: string) => {
-        this.connectToHostUrl(url);
-      },
-      onRefreshHostsAgents: () => {
-        this.refreshAgents(true);
-      }
-    })
-    }
-  }
-
   @Builder
   HostFilterChips() {
     HostFilterBar({

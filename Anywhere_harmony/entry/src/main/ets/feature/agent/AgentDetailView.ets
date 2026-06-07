@@ -29,12 +29,9 @@ struct TabItem {
     .padding(Spacing.sm)
     .backgroundColor(this.bgColor)
     .borderRadius(Radius.md)
-    .onTouch((event) => {
-      if (event.type === TouchType.Down) {
-        this.bgColor = Colors.surface1;
-      } else if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
-        this.bgColor = Colors.transparent;
-      }
+    .stateStyles({
+      pressed: { .backgroundColor(Colors.surface1) },
+      normal: { .backgroundColor(Colors.transparent) }
     })
     .onClick(() => { this.onSelect?.(); })
   }
@@ -78,24 +75,6 @@ export struct AgentDetailView {
   build() {
     NavDestination() {
       Column() {
-        // Header
-        Row() {
-          Row() {
-            SymbolGlyph($r('sys.symbol.chevron_left')).fontSize(24).fontColor([Colors.foreground])
-          }
-          .padding(Spacing.xs)
-          .backgroundColor(this.backBg)
-          .borderRadius(Radius.md)
-          .onTouch((event) => {
-            if (event.type === TouchType.Down) { this.backBg = Colors.surface1; }
-            else if (event.type === TouchType.Up || event.type === TouchType.Cancel) { this.backBg = Colors.transparent; }
-          })
-          .onClick(() => { this.onBack?.(); })
-          Blank()
-        }
-        .width(Layout.contentWidth)
-        .padding({ top: Spacing.xl, bottom: Spacing.md })
-
         // Device Info
         Column() {
           Column() {
@@ -147,7 +126,8 @@ export struct AgentDetailView {
       }
       .width('100%').height('100%').alignItems(HorizontalAlign.Center).backgroundColor(Colors.surface0)
     }
-    .hideTitleBar(true).width('100%').height('100%')
+    .hideTitleBar(true)
+
   }
 
   @Builder

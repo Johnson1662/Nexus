@@ -16,9 +16,6 @@ export struct HomeView {
 
   @StorageLink('homeShowManualHost') showManualHostForm: boolean = false;
   @State manualHostUrl: string = '';
-  @State pressedWorkspaceId: string = '';
-  @State pressedSessionId: string = '';
-  @State pressedAction: string = '';
   @State entered: boolean = false;
 
   aboutToAppear(): void {
@@ -147,13 +144,12 @@ export struct HomeView {
   }
 
   build() {
-    Stack({ alignContent: Alignment.TopStart }) {
+    Stack({ alignContent: Alignment.Bottom }) {
       Scroll() {
         Column() {
           this.WorkspaceSection()
           this.RecentSection()
-          this.BottomActionBar()
-          Column().height(32)
+          Column().height(100) // Space for floating bar
         }
         .width('100%')
         .constraintSize({ minHeight: '100%' })
@@ -163,6 +159,13 @@ export struct HomeView {
       .height('100%')
       .backgroundColor(Colors.surface0)
       .scrollBar(BarState.Off)
+
+      Column() {
+        this.BottomActionBar()
+      }
+      .width('100%')
+      .padding({ bottom: Spacing.xl })
+      .hitTestBehavior(HitTestMode.Transparent)
 
       if (this.showManualHostForm) {
         this.ManualHostOverlay()
@@ -196,9 +199,9 @@ export struct HomeView {
       }
     }
     .width(Layout.contentWidth)
-    .padding({ top: Spacing.xxl, bottom: Spacing.xxl })
+    .padding({ top: 0, bottom: Spacing.xxl })
     .opacity(this.entered ? 1 : 0)
-    .translate({ y: this.entered ? 0 : 12 })
+    .opacity(this.entered ? 1 : 0)
     .animation({ duration: Duration.fast, curve: Curve.EaseOut })
   }
 
@@ -246,17 +249,13 @@ export struct HomeView {
     }
     .width('100%')
     .padding({ left: Spacing.sm, right: Spacing.sm, top: Spacing.lg, bottom: Spacing.lg })
-    .backgroundColor(this.pressedWorkspaceId === workspace.id ? Colors.surface1 : Colors.transparent)
+    .stateStyles({
+      pressed: { .backgroundColor(Colors.surface1) },
+      normal: { .backgroundColor(Colors.transparent) }
+    })
     .border({ width: 0 })
     .borderRadius(Radius.md)
-    .animation({ duration: Duration.fast, curve: Curve.EaseOut })
-    .onTouch((event: TouchEvent) => {
-      if (event.type === TouchType.Down) {
-        this.pressedWorkspaceId = workspace.id;
-      } else if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
-        this.pressedWorkspaceId = '';
-      }
-    })
+    .animation({ duration: Duration.normal, curve: Duration.spring })
     .onClick(() => { this.onOpenWorkspace?.(index); })
   }
 
@@ -279,7 +278,7 @@ export struct HomeView {
     .width(Layout.contentWidth)
     .padding({ bottom: Spacing.xxl })
     .opacity(this.entered ? 1 : 0)
-    .translate({ y: this.entered ? 0 : 14 })
+    .opacity(this.entered ? 1 : 0)
     .animation({ duration: Duration.fast, curve: Curve.EaseOut })
   }
 
@@ -321,17 +320,13 @@ export struct HomeView {
     }
     .width('100%')
     .padding({ left: Spacing.sm, right: Spacing.sm, top: Spacing.lg, bottom: Spacing.lg })
-    .backgroundColor(this.pressedSessionId === session.sessionId ? Colors.surface1 : Colors.transparent)
+    .stateStyles({
+      pressed: { .backgroundColor(Colors.surface1) },
+      normal: { .backgroundColor(Colors.transparent) }
+    })
     .border({ width: 0 })
     .borderRadius(Radius.md)
-    .animation({ duration: Duration.fast, curve: Curve.EaseOut })
-    .onTouch((event: TouchEvent) => {
-      if (event.type === TouchType.Down) {
-        this.pressedSessionId = session.sessionId;
-      } else if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
-        this.pressedSessionId = '';
-      }
-    })
+    .animation({ duration: Duration.normal, curve: Duration.spring })
     .onClick(() => {})
   }
 
@@ -357,7 +352,11 @@ export struct HomeView {
       .backgroundColor(Colors.surface1)
       .border({ width: 0 })
       .borderRadius(Radius.full)
-      .animation({ duration: Duration.fast, curve: Curve.EaseOut })
+      .stateStyles({
+        pressed: { .backgroundColor(Colors.surface2) },
+        normal: { .backgroundColor(Colors.surface1) }
+      })
+      .animation({ duration: Duration.normal, curve: Duration.spring })
       .onClick(() => {
         this.onOpenChat?.(WorkspaceStore.currentIndex);
       })
@@ -378,179 +377,19 @@ export struct HomeView {
       .padding({ left: Spacing.xl, right: Spacing.xl })
       .backgroundColor(Colors.foreground)
       .borderRadius(Radius.full)
-      .animation({ duration: Duration.fast, curve: Curve.EaseOut })
+      .shadow(Shadow.md)
+      .stateStyles({
+        pressed: { .backgroundColor(Colors.accentDark) },
+        normal: { .backgroundColor(Colors.foreground) }
+      })
+      .animation({ duration: Duration.normal, curve: Duration.spring })
       .onClick(() => {
         this.onOpenChat?.(WorkspaceStore.currentIndex);
       })
     }
     .width(Layout.contentWidth)
-    .margin({ left: Spacing.lg, right: Spacing.lg, bottom: Spacing.xl })
-    .opacity(1)
-    .translate({ y: 0 })
+    .margin({ left: Spacing.lg, right: Spacing.lg })
   }
-
-  /*
-   * Legacy dashboard builders are intentionally kept unused for now so the
-   * ongoing prototype migration stays easy to compare and roll forward.
-   */
-  @Builder
-  LegacyWorkspaceSection() {
-    Column() {
-      Row() {
-        Text('Workspaces')
-          .fontSize(FontSize.lg)
-          .fontColor(Colors.foreground)
-          .fontWeight(FontWeight.Bold)
-        Blank()
-        Button('Open chat')
-          .fontSize(FontSize.xs)
-          .fontColor(Colors.foreground)
-          .backgroundColor(Colors.surface1)
-          .borderRadius(Radius.full)
-          .onClick(() => { this.onOpenChat?.(WorkspaceStore.currentIndex); })
-      }
-      .width('100%')
-      .margin({ bottom: Spacing.md })
-
-      if (WorkspaceStore.workspaces.length === 0) {
-        Column() {
-          Text('还没有工作区')
-            .fontSize(FontSize.md)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(Colors.foreground)
-            .margin({ bottom: Spacing.xs })
-          Text('进入聊天页后可以直接从侧边栏添加项目路径。')
-            .fontSize(FontSize.sm)
-            .fontColor(Colors.foregroundMuted)
-        }
-        .width('100%')
-        .padding(Spacing.lg)
-        .backgroundColor(Colors.surface1)
-        .borderRadius(Radius.xl)
-      } else {
-        List({ space: Spacing.sm }) {
-          ForEach(WorkspaceStore.workspaces, (workspace: WorkspaceInfo, index: number) => {
-            ListItem() {
-              this.WorkspaceCard(workspace, index)
-            }
-          }, (workspace: WorkspaceInfo) => workspace.id)
-        }
-        .width('100%')
-      }
-    }
-    .width(Layout.contentWidth)
-    .padding({ bottom: Spacing.xl })
-  }
-
-  @Builder
-  LegacyWorkspaceCard(workspace: WorkspaceInfo, index: number) {
-    Column() {
-      Row() {
-        SymbolGlyph($r('sys.symbol.folder'))
-          .fontSize(18)
-          .fontColor([Colors.foreground])
-          .margin({ right: Spacing.md })
-        Column() {
-          Text(workspace.name)
-            .fontSize(FontSize.md)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(Colors.foreground)
-          Text(workspace.path)
-            .fontSize(FontSize.xs)
-            .fontColor(Colors.foregroundMuted)
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .margin({ top: Spacing.xxs })
-        }
-        .alignItems(HorizontalAlign.Start)
-        .layoutWeight(1)
-        Text(this.getWorkspaceSessionCount(workspace).toString() + ' sessions')
-          .fontSize(FontSize.xs)
-          .fontColor(Colors.foregroundMuted)
-      }
-      .width('100%')
-
-      if (this.getWorkspaceSessionCount(workspace) > 0) {
-        Text(this.getWorkspaceLatestTitle(workspace))
-          .fontSize(FontSize.sm)
-          .fontColor(Colors.foreground)
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-          .width('100%')
-          .margin({ top: Spacing.md })
-      }
-    }
-    .width('100%')
-    .padding(Spacing.lg)
-    .backgroundColor(Colors.surface1)
-    .borderRadius(Radius.lg)
-    .scale({
-      x: this.pressedWorkspaceId === workspace.id ? 0.97 : 1.0,
-      y: this.pressedWorkspaceId === workspace.id ? 0.97 : 1.0
-    })
-    .animation({ duration: Duration.fast, curve: Curve.EaseOut })
-    .onTouch((event: TouchEvent) => {
-      if (event.type === TouchType.Down) {
-        this.pressedWorkspaceId = workspace.id;
-      } else {
-        this.pressedWorkspaceId = '';
-      }
-    })
-    .onClick(() => { this.onOpenWorkspace?.(index); })
-  }
-
-  @Builder
-  LegacyRecentSection() {
-    Column() {
-      Text('Recent chats')
-        .fontSize(FontSize.lg)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(Colors.foreground)
-        .width('100%')
-        .margin({ bottom: Spacing.md })
-
-      if (this.getRecentSessions().length === 0) {
-        Text('新会话会直接出现在这里。')
-          .fontSize(FontSize.sm)
-          .fontColor(Colors.foregroundMuted)
-          .width('100%')
-          .padding(Spacing.lg)
-          .backgroundColor(Colors.surface1)
-          .borderRadius(Radius.lg)
-      } else {
-        List({ space: Spacing.sm }) {
-          ForEach(this.getRecentSessions(), (session: ServerSession) => {
-            ListItem() {
-              Row() {
-                CustomIcon({ name: 'model', iconSize: 18, color: Colors.foregroundMuted })
-                  .margin({ right: Spacing.md })
-                Column() {
-                  Text(session.title || 'Untitled')
-                    .fontSize(FontSize.sm)
-                    .fontColor(Colors.foreground)
-                    .maxLines(1)
-                    .textOverflow({ overflow: TextOverflow.Ellipsis })
-                  Text((session.agent || 'Agent') + ' · ' + this.formatRelativeTime(session.createdAt))
-                    .fontSize(FontSize.xs)
-                    .fontColor(Colors.foregroundMuted)
-                    .margin({ top: Spacing.xxs })
-                }
-                .alignItems(HorizontalAlign.Start)
-                .layoutWeight(1)
-              }
-              .width('100%')
-              .padding(Spacing.lg)
-              .backgroundColor(Colors.surface1)
-              .borderRadius(Radius.lg)
-            }
-          }, (session: ServerSession) => session.sessionId)
-        }
-        .width('100%')
-      }
-    }
-    .width(Layout.contentWidth)
-  }
-
   @Builder
   ManualHostOverlay() {
     Stack({ alignContent: Alignment.TopEnd }) {
@@ -586,6 +425,11 @@ export struct HomeView {
           .borderRadius(Radius.md)
           .margin({ top: Spacing.sm })
           .enabled(this.manualHostUrl.trim().length > 0)
+          .stateStyles({
+            pressed: { .opacity(0.8) },
+            normal: { .opacity(1.0) }
+          })
+          .animation({ duration: Duration.normal, curve: Duration.spring })
           .onClick(() => {
             let url: string = this.manualHostUrl.trim();
             this.showManualHostForm = false;
@@ -599,7 +443,7 @@ export struct HomeView {
       .borderRadius(Radius.xl)
       .shadow(Shadow.md)
       .margin({ top: 4, right: Spacing.xl })
-      .transition(TransitionEffect.OPACITY)
+      .transition(TransitionEffect.OPACITY.combine(TransitionEffect.scale({ x: 0.9, y: 0.9 })))
     }
     .width('100%')
     .height('100%')

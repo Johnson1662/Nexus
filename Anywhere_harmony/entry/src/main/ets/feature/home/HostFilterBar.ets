@@ -21,14 +21,14 @@ export struct HostFilterBar {
           )
         }, (device: DeviceEntry) => device.hostId || device.name)
       }
-      .width('100%')
-      .justifyContent(FlexAlign.Start)
+      .padding({ left: Spacing.xl, right: Spacing.xl })
+      .height('100%')
     }
     .width('100%')
-    .height(42)
+    .height(48)
     .scrollable(ScrollDirection.Horizontal)
     .scrollBar(BarState.Off)
-    .padding({ left: Spacing.xl, right: Spacing.xl })
+    .align(Alignment.Start)
   }
 
   isOnline(device: DeviceEntry): boolean {
@@ -46,28 +46,29 @@ export struct HostFilterBar {
             .margin({ right: Spacing.xs })
         }
         Text(label)
-          .fontSize(FontSize.sm)
+          .fontSize(FontSize.md)
           .fontWeight(this.selectedKey === key ? FontWeight.Medium : FontWeight.Normal)
           .fontColor(this.selectedKey === key ? Colors.surface0 : Colors.foreground)
           .maxLines(1)
       }
     }
-    .height(32)
-    .padding({ left: Spacing.md, right: Spacing.md })
-    .backgroundColor(this.selectedKey === key ? Colors.foreground : (this.pressedKey === key ? Colors.surfaceElevated : Colors.surface1))
+    .height(34)
+    .padding({ left: Spacing.lg, right: Spacing.lg })
+    .backgroundColor(this.selectedKey === key ? Colors.foreground : Colors.surface1)
+    .stateStyles({
+      pressed: { .backgroundColor(this.selectedKey === key ? Colors.foreground : Colors.surface2) },
+      normal: { .backgroundColor(this.selectedKey === key ? Colors.foreground : Colors.surface1) }
+    })
+    .scale(this.pressedKey === key ? { x: 0.97, y: 0.97 } : { x: 1, y: 1 })
     .border({ width: 0 })
     .borderRadius(Radius.full)
-    .animation({ duration: Duration.fast, curve: Curve.EaseOut })
+    .animation({ duration: Duration.normal, curve: Duration.spring })
     .onTouch((event: TouchEvent) => {
-      if (event.type === TouchType.Down) {
-        this.pressedKey = key;
-      } else if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
-        this.pressedKey = '';
-      }
+      if (event.type === TouchType.Down) { this.pressedKey = key; }
+      if (event.type === TouchType.Up || event.type === TouchType.Cancel) { this.pressedKey = ''; }
     })
     .onClick(() => { if (this.onSelect) this.onSelect(key); })
   }
-
   getHostLabel(device: DeviceEntry): string {
     if (device.name.length > 16) {
       return device.name.substring(0, 16);

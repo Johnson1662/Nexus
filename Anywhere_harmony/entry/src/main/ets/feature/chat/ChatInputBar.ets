@@ -285,12 +285,21 @@ export struct ChatInputBar {
 
         Row() {
           Row({ space: Spacing.sm }) {
-            SymbolGlyph($r('sys.symbol.paperclip'))
-              .fontSize(22)
-              .fontColor([this.disabled ? Colors.border : Colors.foregroundMuted])
-              .enabled(!this.disabled)
-              .onClick(() => { if (!this.disabled) this.pickFile() })
-              .animation({ duration: Duration.fast, curve: Curve.EaseOut })
+            Button() {
+              SymbolGlyph($r('sys.symbol.paperclip'))
+                .fontSize(22)
+                .fontColor([this.disabled ? Colors.border : Colors.foregroundMuted])
+            }
+            .width(36)
+            .height(36)
+            .backgroundColor(Color.Transparent)
+            .enabled(!this.disabled)
+            .stateStyles({
+              pressed: { .scale({ x: 0.92, y: 0.92 }) },
+              normal: { .scale({ x: 1, y: 1 }) }
+            })
+            .animation({ duration: Duration.fast, curve: Curve.EaseOut })
+            .onClick(() => { if (!this.disabled) this.pickFile() })
 
             // Model name chip → opens config bindsheet
             Button() {
@@ -307,9 +316,20 @@ export struct ChatInputBar {
               }
             }
             .height(28)
-            .padding({ left: Spacing.sm, right: Spacing.sm })
+            .padding({ left: Spacing.md, right: Spacing.md })
             .backgroundColor(Colors.surface1)
             .borderRadius(Radius.full)
+            .stateStyles({
+              pressed: {
+                .scale({ x: 0.97, y: 0.97 })
+                .backgroundColor(Colors.surface2)
+              },
+              normal: {
+                .scale({ x: 1, y: 1 })
+                .backgroundColor(Colors.surface1)
+              }
+            })
+            .animation({ duration: Duration.normal, curve: Duration.spring })
             .onClick(() => { this.sheetView = 'summary'; this.showSheet = true; })
           }
           .alignItems(VerticalAlign.Center)
@@ -317,28 +337,45 @@ export struct ChatInputBar {
           Blank()
 
           if (this.showCancel) {
-            SymbolGlyph($r('sys.symbol.xmark_circle'))
-              .fontSize(28)
-              .fontColor([Colors.error])
-              .accessibilityText('Cancel generation')
-              .onClick(() => { if (this.onCancel) this.onCancel() })
-              .transition(TransitionEffect.OPACITY.combine(TransitionEffect.scale({ x: 0.5, y: 0.5 })))
-              .animation({ duration: Duration.fast, curve: Curve.EaseOut })
+            Button() {
+              SymbolGlyph($r('sys.symbol.xmark_circle'))
+                .fontSize(28)
+                .fontColor([Colors.error])
+            }
+            .backgroundColor(Color.Transparent)
+            .stateStyles({
+              pressed: { .scale({ x: 0.92, y: 0.92 }) },
+              normal: { .scale({ x: 1, y: 1 }) }
+            })
+            .animation({ duration: Duration.fast, curve: Curve.EaseOut })
+            .accessibilityText('Cancel generation')
+            .onClick(() => { if (this.onCancel) this.onCancel() })
+            .transition(TransitionEffect.OPACITY.combine(TransitionEffect.scale({ x: 0.5, y: 0.5 })))
           } else if (this.text.length > 0 || this.pendingFileName.length > 0) {
-            SymbolGlyph($r('sys.symbol.arrow_up_circle_fill'))
-              .fontColor([Colors.foreground])
-              .fontSize(28)
-              .accessibilityText('Send message')
-              .onClick(() => { this.doSend() })
-              .transition(TransitionEffect.OPACITY.combine(TransitionEffect.scale({ x: 0.5, y: 0.5 })))
-              .animation({ duration: Duration.fast, curve: Curve.EaseOut })
+            Button() {
+              SymbolGlyph($r('sys.symbol.arrow_up_circle_fill'))
+                .fontColor([Colors.foreground])
+                .fontSize(28)
+            }
+            .backgroundColor(Color.Transparent)
+            .stateStyles({
+              pressed: { .scale({ x: 0.92, y: 0.92 }) },
+              normal: { .scale({ x: 1, y: 1 }) }
+            })
+            .animation({ duration: Duration.fast, curve: Curve.EaseOut })
+            .accessibilityText('Send message')
+            .onClick(() => { this.doSend() })
+            .transition(TransitionEffect.OPACITY.combine(TransitionEffect.scale({ x: 0.5, y: 0.5 })))
           } else {
-            SymbolGlyph($r('sys.symbol.arrow_up_circle_fill'))
-              .fontColor([Colors.borderLight])
-              .fontSize(28)
-              .accessibilityText('Send message')
-              .transition(TransitionEffect.OPACITY.combine(TransitionEffect.scale({ x: 0.5, y: 0.5 })))
-              .animation({ duration: Duration.fast, curve: Curve.EaseOut })
+            Button() {
+              SymbolGlyph($r('sys.symbol.arrow_up_circle_fill'))
+                .fontColor([Colors.borderLight])
+                .fontSize(28)
+            }
+            .backgroundColor(Color.Transparent)
+            .enabled(false)
+            .accessibilityText('Send message')
+            .transition(TransitionEffect.OPACITY.combine(TransitionEffect.scale({ x: 0.5, y: 0.5 })))
           }
         }
         .width('100%')
@@ -347,7 +384,7 @@ export struct ChatInputBar {
       }
       .backgroundColor(Colors.surfaceElevated)
       .borderRadius(Radius.xxl)
-      .border({ width: 1, color: Colors.borderLight })
+      .border({ width: 0 })
       .shadow(Shadow.md)
       .width(Layout.contentWidth)
     }

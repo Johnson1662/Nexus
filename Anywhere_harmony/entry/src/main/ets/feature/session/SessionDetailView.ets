@@ -151,6 +151,7 @@ export struct SessionDetailView {
       .backgroundColor(Colors.surface0)
     }
     .hideTitleBar(true)
+
     .width('100%')
     .height('100%')
   }

@@ -1,4 +1,4 @@
-import { Colors, FontSize, Spacing, Radius, Duration, Layout } from '../../constants/DesignTokens';
+import { Colors, FontSize, Spacing, Radius, Duration, Shadow, Layout } from '../../constants/DesignTokens';
 import { ChatStore } from '../../common/model/ChatState';
 import { CustomIcon } from '../../common/ui/CustomIcon';
 import { MessageData } from '../../common/model/MessageData';
@@ -225,21 +225,44 @@ export struct ChatPage {
         .width('100%')
         .edgeEffect(EdgeEffect.Spring)
         .onScrollStart(() => { this.followsOutput = false; this.showJumpButton = true; })
+        .onScrollStop(() => {
+          if (ChatStore.turnActive) {
+            this.showJumpButton = true;
+          }
+        })
       }
 
-      // Stage 2: jump-to-bottom button when user has scrolled up during turn
+      // Jump-to-bottom button when user has scrolled up during turn
       if (this.showJumpButton && ChatStore.turnActive) {
-        Row() {
-          Text($r('app.string.chat_jump_latest'))
-            .fontSize(FontSize.xs).fontColor(Colors.accent)
-            .fontWeight(FontWeight.Medium)
+        Button() {
+          Row({ space: Spacing.xs }) {
+            SymbolGlyph($r('sys.symbol.chevron_down'))
+              .fontSize(12)
+              .fontColor([Colors.foreground])
+            Text('跳至最新')
+              .fontSize(FontSize.xs)
+              .fontColor(Colors.foreground)
+              .fontWeight(FontWeight.Medium)
+          }
         }
-        .width('100%').justifyContent(FlexAlign.Center)
-        .padding({ bottom: Spacing.xs })
-        .transition(TransitionEffect.OPACITY)
-        .onClick(() => { this.scroller.scrollEdge(Edge.Bottom); this.followsOutput = true; this.showJumpButton = false; })
+        .height(32)
+        .padding({ left: Spacing.lg, right: Spacing.lg })
+        .backgroundColor(Colors.surfaceElevated)
+        .border({ width: 1, color: Colors.borderLight })
+        .borderRadius(Radius.full)
+        .shadow(Shadow.md)
+        .stateStyles({
+          pressed: { .scale({ x: 0.97, y: 0.97 }) },
+          normal: { .scale({ x: 1, y: 1 }) }
+        })
+        .animation({ duration: Duration.fast, curve: Curve.EaseOut })
+        .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: 8 })))
+        .onClick(() => {
+          this.scroller.scrollEdge(Edge.Bottom);
+          this.followsOutput = true;
+          this.showJumpButton = false;
+        })
       }
-
     }
     .width('100%').height('100%')
     .alignItems(HorizontalAlign.Center)
