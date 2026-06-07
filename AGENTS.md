@@ -86,7 +86,7 @@ Anywhere 是一个 HarmonyOS App，通过 Relay 中继连接到 PC 端 Bridge Se
 - `New chat` 必须直接进入聊天页，不再展示 “What should we work on” 中间页。
 - 添加主机入口已并入首页右上三点菜单：`Add host` → `Scan QR` / `Link manually`，配对成功后立即拉取并缓存 agent 列表。
 - `OnboardingView.ets` 已删除，不要恢复该页面；主机管理和设置通过首页菜单/聊天页菜单进入。
-- 聊天页顶部结构：左返回、中间 workspace 胶囊、右三点；下方 `Agent` / `Model` / `Mode` 三选择器。Agent/Model/Mode 选择器已移至输入框上方。先选 Agent，才能选 Model；Model 默认上一次使用项。
+- 聊天页顶部结构：左返回、中间 workspace 胶囊、右三点。Agent / Model / Mode 选择器已整合到输入栏的 Model 名称 chip 中，点击弹出 `ConfigPanel` bindSheet（摘要卡片 → 选择列表）。先选 Agent，才能选 Model；Model 默认上一次使用项。
 - **子页面路由**（`navStack.pushPath`）: `agentDetail` / `sessionDetail` / `workspaceDetail` / `settings` / `host-manage`。
 - **跨页面参数传递**：通过 `AppStorage`（如 `selectedDeviceIndex`）— 不用 param 对象（ArkTS `@Builder` 限制）。
 - 每个目的地必须是根节点为 `NavDestination()` 或 `HdsNavDestination()` 的 `@Component`。
@@ -114,6 +114,16 @@ Anywhere 是一个 HarmonyOS App，通过 Relay 中继连接到 PC 端 Bridge Se
 
 **LazyForEach key 必须用 `msg.id + msg.content.length`**，不能只用 `msg.id`。流式传输时 content 在变化，只用 id 不会触发 UI 更新。
 
+### 配置面板 (ConfigPanel)
+ChatInputBar 的 Model 名称 chip 点击后弹出单 bindSheet（`ConfigPanel`），分两种视图：
+- **summary 视图**：显示当前 Agent / Model / Mode 摘要卡片，每行可点击
+- **selection 视图**：根据选中项展示对应列表（Agent 列表 / Provider 列表 / Model 列表 / Mode 列表），支持右上角刷新
+
+由于 bindSheet 内容不可响应式更新，视图切换通过 `switchView()` 关闭 sheet → 更新 `sheetView` → 重开 sheet 实现。Provider→Model 钻取同样使用此模式。
+
+### 会话时间戳
+opencode ACP 返回 session 时使用 `updatedAt`（ISO 8601 字符串）而非 `createdAt`。`WSClient` 在 `session_list` 处理时从原始 JSON 提取 `updatedAt` 并转为 epoch ms。所有 `formatRelativeTime` 函数添加 `!epoch` 防御检查。
+
 ### Markdown 渲染
 使用 `@luvi/lv-markdown-in` (v3.4.1)。`turnActive` 期间用纯 `Text()`，`turn_ended` 后切换 `MarkdownRender`。
 
@@ -122,6 +132,9 @@ Anywhere 是一个 HarmonyOS App，通过 Relay 中继连接到 PC 端 Bridge Se
 
 ### 设备分组 (HostStore)
 `server_info` 消息按 hostname 合并 IP 为 `DeviceEntry[]`。`connectBest(urls[])` 并行探测选最低延迟。兼容旧 `HostInfo[]` 格式自动迁移。
+
+### 主机在线状态 (HostFilterBar)
+`HostFilterBar` 是一个独立的 `@Component`，在 `build()` 中直接读取 `ChatStore.connected` 和 `ChatStore.currentDeviceId`（均为 `@ObservedV2 @Trace`），确保连接/断开时 host chip 的绿灯/灰灯状态实时响应。不再通过 Index 的 `@Builder` 链传递，避免 `navDestination` 内 `@Builder` 不重新求值的问题。
 
 ### 缓存结构与刷新策略
 - 缓存层级按 `host -> workspace -> agent -> provider -> model/mode/session` 思考和命名，避免把跨主机、跨工作区的数据混在一起。
@@ -238,8 +251,9 @@ npm start            # 启动 server/dist/server.mjs
 ## 文件结构速查
 
 - `Anywhere_harmony/entry/src/main/ets/pages/Index.ets` — 导航根、PagesMap、WS 生命周期、启动自动连接已配对主机。首页使用 `HdsNavDestination`。
-- `feature/home/HomeView.ets` — 原型风格首页、host chips、Projects、Recent chats、Add host 菜单。
-- `feature/chat/ChatView.ets` / `ChatPage.ets` / `ChatInputBar.ets` — 聊天标题栏、消息流、输入区、权限浮层。
+- `feature/home/HomeView.ets` — 原型风格首页、host chips、Projects、Recent chats、Add host 菜单、底部操作栏。
+- `feature/home/HostFilterBar.ets` — 独立组件，读取 `ChatStore` 实现 host chip 在线状态响应式更新。
+- `feature/chat/ChatView.ets` / `ChatPage.ets` / `ChatInputBar.ets` — 聊天标题栏、消息流、输入区（Model chip 弹出 ConfigPanel 配置面板）、权限浮层。
 - `feature/agent` / `feature/session` / `feature/workspace` / `feature/host` / `feature/settings` — 对应详情页与管理页。
 - `common/model/ChatState.ets`、`WorkspaceInfo.ets`、`DeviceAgentStore.ets`、`MessageHandler.ets`、`NavParams.ets` — 全局状态、缓存、消息路由、导航参数。
 - `common/websocket/WSClient.ets` / `WSProtocol.ets` — WS 客户端、自动重连、协议类型。
@@ -256,3 +270,9 @@ npm start            # 启动 server/dist/server.mjs
 服务端 → 客户端：`server_info`、`session_started`、`agent_event`、`turn_ended`、`agent_list`、`model_list`、`session_list`、`permission_request`、`session_closed`。
 
 `AcpUpdate.sessionUpdate` 渲染类型：`agent_message_chunk`、`agent_thought_chunk`、`tool_call`、`tool_call_update`、`plan`、`user_message_chunk`。
+
+### 服务端 temp-client 注意
+`temp-client.mts` 创建临时 ACP 进程时，如果 `cwd` 目录不存在，`spawn` 加 `shell: true` 会抛出误导性的 `cmd.exe ENOENT`（实际是 cwd 不存在）。代码中先 `existsSync(cwd)` 检查，不存在则回退 `process.cwd()`。
+
+### list_models 数据来源
+opencode ACP 的 `createSession` 返回模型列表在 `configOptions` 而非 `models.availableModels`。`list-models.mts` 从 `configOptions` 中提取 `category === "model"` 的 option 作为可用模型列表。
