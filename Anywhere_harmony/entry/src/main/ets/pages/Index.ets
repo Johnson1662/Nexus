@@ -1,4 +1,4 @@
-import { HdsNavDestination } from '@kit.UIDesignKit';
+import { HdsNavDestination, hdsMaterial } from '@kit.UIDesignKit';
 import { HomeView } from '../feature/home/HomeView';
 import { HostFilterBar } from '../feature/home/HostFilterBar';
 import { AgentDetailView } from '../feature/agent/AgentDetailView';
@@ -120,6 +120,12 @@ struct Index {
                 }
               }
             ]
+          }
+        },
+        style: {
+          systemMaterialEffect: {
+            materialType: hdsMaterial.MaterialType.ADAPTIVE,
+            materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
           }
         }
       })
