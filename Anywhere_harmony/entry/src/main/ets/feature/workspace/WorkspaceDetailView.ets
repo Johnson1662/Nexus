@@ -146,13 +146,13 @@ export struct WorkspaceDetailView {
   }
 
   getStatusDotColor(status: string): Resource {
-    if (status === 'Running') {
+    if (status === 'Running' || status === 'Ready' || status === 'Idle') {
       return Colors.success;
     }
     if (status === 'Offline') {
       return Colors.foregroundMuted;
     }
-    if (status === 'Completed' || status === 'Idle') {
+    if (status === 'Completed') {
       return Colors.foreground;
     }
     return Colors.warning;

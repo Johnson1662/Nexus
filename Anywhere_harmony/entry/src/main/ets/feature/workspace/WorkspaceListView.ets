@@ -85,7 +85,7 @@ export struct WorkspaceListView {
   }
 
   getStatusDotColor(status: string): Resource {
-    if (status === 'Running' || status === 'Active') {
+    if (status === 'Running' || status === 'Active' || status === 'Ready' || status === 'Idle') {
       return Colors.success;
     }
     if (status === 'Offline') {
