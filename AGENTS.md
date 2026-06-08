@@ -87,7 +87,7 @@ Anywhere 是一个 HarmonyOS App，通过 Relay 中继连接到 PC 端 Bridge Se
 - 添加主机入口已并入首页右上三点菜单：`Add host` → `Scan QR` / `Link manually`，配对成功后立即拉取并缓存 agent 列表。
 - `OnboardingView.ets` 已删除，不要恢复该页面；主机管理和设置通过首页菜单/聊天页菜单进入。
 - 聊天页顶部结构：左返回、中间 workspace 胶囊、右三点。Agent / Model / Mode 选择器已整合到输入栏的 Model 名称 chip 中，点击弹出 `ConfigPanel` bindSheet（摘要卡片 → 选择列表）。先选 Agent，才能选 Model；Model 默认上一次使用项。
-- **子页面路由**（`navStack.pushPath`）: `agentDetail` / `sessionDetail` / `workspaceDetail` / `settings` / `host-manage`。
+- **子页面路由**（`navStack.pushPath`）: `agentDetail` / `sessionDetail` / `workspaceDetail` / `settings`。
 - **跨页面参数传递**：通过 `AppStorage`（如 `selectedDeviceIndex`）— 不用 param 对象（ArkTS `@Builder` 限制）。
 - 每个目的地必须是根节点为 `NavDestination()` 或 `HdsNavDestination()` 的 `@Component`。
 - 启用 `NavigationMode.Stack`。
@@ -254,7 +254,7 @@ npm start            # 启动 server/dist/server.mjs
 - `feature/home/HomeView.ets` — 原型风格首页、host chips、Projects、Recent chats、Add host 菜单、底部操作栏。
 - `feature/home/HostFilterBar.ets` — 独立组件，读取 `ChatStore` 实现 host chip 在线状态响应式更新。
 - `feature/chat/ChatView.ets` / `ChatPage.ets` / `ChatInputBar.ets` — 聊天标题栏、消息流、输入区（Model chip 弹出 ConfigPanel 配置面板）、权限浮层。
-- `feature/agent` / `feature/session` / `feature/workspace` / `feature/host` / `feature/settings` — 对应详情页与管理页。
+- `feature/agent` / `feature/session` / `feature/workspace` / `feature/settings` — 对应详情页与管理页。
 - `common/model/ChatState.ets`、`WorkspaceInfo.ets`、`DeviceAgentStore.ets`、`MessageHandler.ets`、`NavParams.ets` — 全局状态、缓存、消息路由、导航参数。
 - `common/websocket/WSClient.ets` / `WSProtocol.ets` — WS 客户端、自动重连、协议类型。
 - `services/StorageService.ets`、`constants/DesignTokens.ets`、`common/ui/*` — preferences 持久化、设计 token、通用 UI 组件。
