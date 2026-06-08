@@ -32,7 +32,7 @@ export struct HostFilterBar {
   }
 
   getPhase(device: DeviceEntry): string {
-    return HostRuntimeStore.getPhase(device.hostId || device.name);
+    return HostRuntimeStore.getDevicePhase(device);
   }
 
   getPhaseColor(phase: string): Resource {

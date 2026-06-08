@@ -124,7 +124,7 @@ export struct HomeView {
   }
 
   isHostOnline(device: DeviceEntry): boolean {
-    return HostRuntimeStore.isOnline(this.getHostKey(device));
+    return HostRuntimeStore.isDeviceOnline(device);
   }
 
   getHostLabel(device: DeviceEntry): string {

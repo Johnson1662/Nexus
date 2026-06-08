@@ -138,6 +138,46 @@ export class HostRuntimeStoreModel {
     return phase === HostPhase.ONLINE || phase === HostPhase.SYNCING;
   }
 
+  getDevicePhase(device: DeviceEntry): string {
+    let hostId: string = device.hostId || '';
+    let name: string = device.name;
+    if (hostId.length > 0 && this.isOnline(hostId)) {
+      return this.getPhase(hostId);
+    }
+    if (name.length > 0 && this.isOnline(name)) {
+      return this.getPhase(name);
+    }
+    if (this.isOnline(this.activeHostKey) && this.matchesDevice(device, this.activeHostKey)) {
+      return this.getPhase(this.activeHostKey);
+    }
+    if (hostId.length > 0) {
+      let hostPhase: string = this.getPhase(hostId);
+      if (hostPhase !== HostPhase.UNKNOWN) return hostPhase;
+    }
+    if (name.length > 0) {
+      return this.getPhase(name);
+    }
+    return HostPhase.UNKNOWN;
+  }
+
+  isDeviceOnline(device: DeviceEntry): boolean {
+    let phase: string = this.getDevicePhase(device);
+    return phase === HostPhase.ONLINE || phase === HostPhase.SYNCING;
+  }
+
+  matchesDevice(device: DeviceEntry, hostKey: string): boolean {
+    if (hostKey.length === 0) return false;
+    if (device.hostId === hostKey || device.name === hostKey) return true;
+    let activeUrl: string = this.getStatus(hostKey).activeUrl;
+    if (activeUrl.length === 0) return false;
+    for (let i: number = 0; i < device.urls.length; i++) {
+      if (device.urls[i] === activeUrl || activeUrl.indexOf(device.urls[i]) >= 0 || device.urls[i].indexOf(activeUrl) >= 0) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   isCurrentHost(hostKey: string): boolean {
     return hostKey.length > 0 && this.activeHostKey === hostKey;
   }

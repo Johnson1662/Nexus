@@ -61,13 +61,13 @@ export struct AgentDetailView {
   isOnline(): boolean {
     let d = this.getDevice();
     if (!d) return false;
-    return HostRuntimeStore.isOnline(d.hostId || d.name);
+    return HostRuntimeStore.isDeviceOnline(d);
   }
 
   getHostPhase(): string {
     let d = this.getDevice();
     if (!d) return HostPhase.UNKNOWN;
-    return HostRuntimeStore.getPhase(d.hostId || d.name);
+    return HostRuntimeStore.getDevicePhase(d);
   }
 
   getStatusText(): string {

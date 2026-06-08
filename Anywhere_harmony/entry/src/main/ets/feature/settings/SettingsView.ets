@@ -19,11 +19,11 @@ export struct SettingsPage {
   }
 
   getHostPhase(device: DeviceEntry): string {
-    return HostRuntimeStore.getPhase(this.getHostKey(device));
+    return HostRuntimeStore.getDevicePhase(device);
   }
 
   isCurrentHost(device: DeviceEntry): boolean {
-    return HostRuntimeStore.isCurrentHostOnline(this.getHostKey(device));
+    return HostRuntimeStore.isDeviceOnline(device) && HostRuntimeStore.matchesDevice(device, HostRuntimeStore.activeHostKey);
   }
 
   getActionText(device: DeviceEntry): string {

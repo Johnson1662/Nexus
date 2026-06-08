@@ -15,11 +15,11 @@ export struct AgentsView {
   }
 
   getDevicePhase(device: DeviceEntry): string {
-    return HostRuntimeStore.getPhase(this.getHostKey(device));
+    return HostRuntimeStore.getDevicePhase(device);
   }
 
   isDeviceOnline(device: DeviceEntry): boolean {
-    return HostRuntimeStore.isOnline(this.getHostKey(device));
+    return HostRuntimeStore.isDeviceOnline(device);
   }
 
   getDeviceStatusText(device: DeviceEntry): string {
