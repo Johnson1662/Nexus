@@ -42,6 +42,7 @@ struct Index {
   @State selectedHostFilter: string = '';
   @State autoConnectAttempted: boolean = false;
   @State autoConnectRetryCount: number = 0;
+  @State hostStatusRevision: number = 0;
 
   aboutToAppear(): void {
     AppStorage.setOrCreate('pref_thinking_expanded', true);
@@ -62,6 +63,7 @@ struct Index {
             HostFilterBar({
               devices: HostStore.devices,
               selectedKey: this.selectedHostFilter,
+              statusRevision: this.hostStatusRevision,
               onSelect: (key: string) => {
                 this.selectedHostFilter = key;
                 this.refreshAgents(false);
@@ -186,6 +188,7 @@ struct Index {
     HostFilterBar({
       devices: HostStore.devices,
       selectedKey: this.selectedHostFilter,
+      statusRevision: this.hostStatusRevision,
       onSelect: (key: string) => { this.selectedHostFilter = key; }
     })
   }
@@ -208,6 +211,7 @@ struct Index {
     }
     this.ws.onStateChange((connected: boolean, detail: string) => {
       ChatStore.connected = connected;
+      this.bumpHostStatusRevision();
       if (connected) {
         if (detail.length > 0) {
           AppStorage.setOrCreate<string>('serverUrl', detail);
@@ -216,6 +220,7 @@ struct Index {
       }
     });
     this.ws.onServerInfo(() => {
+      this.bumpHostStatusRevision();
       this.refreshAgents(false);
       if (WorkspaceStore.currentIndex >= 0) {
         this.prepareWorkspace(WorkspaceStore.currentIndex, false);
@@ -237,6 +242,10 @@ struct Index {
       ChatStore.messages = [...ChatStore.messages, m];
     });
     this.wsCallbacksBound = true;
+  }
+
+  bumpHostStatusRevision(): void {
+    this.hostStatusRevision += 1;
   }
 
   scheduleAutoConnect(): void {

@@ -7,6 +7,7 @@ import { ChatStore } from '../../common/model/ChatState';
 export struct HostFilterBar {
   @Prop devices: DeviceEntry[] = [];
   @Prop selectedKey: string = '';
+  @Prop statusRevision: number = 0;
   onSelect?: (key: string) => void;
   @State pressedKey: string = '';
 
@@ -20,7 +21,7 @@ export struct HostFilterBar {
             device.hostId || device.name,
             this.getPhase(device)
           )
-        }, (device: DeviceEntry) => device.hostId || device.name)
+        }, (device: DeviceEntry) => (device.hostId || device.name) + ':' + this.statusRevision.toString())
       }
       .padding({ left: Spacing.xl, right: Spacing.xl })
       .height('100%')
