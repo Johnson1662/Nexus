@@ -321,6 +321,13 @@ export class WSClient {
       if (typeof data === 'string') {
         this.handleMessage(data);
       } else if (data instanceof ArrayBuffer) {
+        let bytes: Uint8Array = new Uint8Array(data);
+        if (bytes.length > 0 && (bytes[0] === 0x7B || bytes[0] === 0x22)) {
+          let decoder: util.TextDecoder = new util.TextDecoder('utf-8', { ignoreBOM: true });
+          let raw: string = decoder.decodeToString(bytes);
+          this.handleMessage(raw);
+          return;
+        }
         if (this._e2eeReady) {
           this.channel.decrypt(data).then((plainStr) => {
             this.handleMessage(plainStr);
@@ -330,7 +337,6 @@ export class WSClient {
         } else {
           // Before E2EE handshake, relay sends all frames as binary (opcode 0x02)
           // Convert ArrayBuffer to string for plaintext JSON handling
-          let bytes: Uint8Array = new Uint8Array(data);
           let decoder: util.TextDecoder = new util.TextDecoder('utf-8', { ignoreBOM: true });
           let raw: string = decoder.decodeToString(bytes);
           this.handleMessage(raw);
@@ -782,15 +788,20 @@ export class WSClient {
 
   private handleHeartbeat(payload: Record<string, Object>): void {
     this.lastHeartbeatReceived = Date.now();
-    // Reply with same timestamp, avoiding duplicate type field
-    let hbPayload: Record<string, Object> = {};
-    hbPayload['ts'] = payload['ts'];
-    this.sendControl('heartbeat', hbPayload);
+    let channelId: string = String(payload['channelId'] || '');
+    if (channelId.length > 0) {
+      // E2EE channel heartbeat: server expects a pong to keep the channel alive.
+      let hbPayload: Record<string, Object> = {};
+      hbPayload['ts'] = payload['ts'];
+      hbPayload['channelId'] = channelId;
+      this.sendControl('heartbeat', hbPayload);
+    }
   }
 
 
   private handleMessage(raw: string): void {
     raw = repairRelayJson(raw);
+    this.lastHeartbeatReceived = Date.now();
 
     // Intercept heartbeat control messages before E2EE handling
     let isHeartbeat = (raw.indexOf('"heartbeat"') >= 0 && raw.indexOf('"ts"') >= 0) ||

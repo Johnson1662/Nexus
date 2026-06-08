@@ -413,6 +413,14 @@ function handleIncomingConnection(transport: any, isRelay: boolean = false) {
         break;
 
       case "heartbeat":
+        if (typeof msg.channelId === "string" && msg.channelId.length > 0) {
+          const channel = channels.get(msg.channelId);
+          if (channel) {
+            channel['handleControl'](rawStr);
+          }
+        } else {
+          originalSend(JSON.stringify({ type: "heartbeat", ts: msg.ts || Date.now() }));
+        }
         break;
 
       default:
