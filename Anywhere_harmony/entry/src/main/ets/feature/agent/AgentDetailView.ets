@@ -1,6 +1,7 @@
 import { Colors, FontSize, Spacing, Radius, Layout } from '../../constants/DesignTokens';
 import { HostStore, DeviceEntry, ServerSession } from '../../common/model/WorkspaceInfo';
 import { ChatStore } from '../../common/model/ChatState';
+import { HostPhase, HostRuntimeStore } from '../../common/model/HostState';
 import { DeviceAgentStore } from '../../common/model/DeviceAgentStore';
 import { AgentInfo } from '../../common/websocket/WSProtocol';
 import { CustomIcon } from '../../common/ui/CustomIcon';
@@ -58,11 +59,35 @@ export struct AgentDetailView {
   }
 
   isOnline(): boolean {
-    if (!ChatStore.connected) return false;
     let d = this.getDevice();
     if (!d) return false;
-    let did = ChatStore.currentDeviceId;
-    return (!!d.hostId && d.hostId === did) || d.name === did;
+    return HostRuntimeStore.isOnline(d.hostId || d.name);
+  }
+
+  getHostPhase(): string {
+    let d = this.getDevice();
+    if (!d) return HostPhase.UNKNOWN;
+    return HostRuntimeStore.getPhase(d.hostId || d.name);
+  }
+
+  getStatusText(): string {
+    let phase: string = this.getHostPhase();
+    if (phase === HostPhase.ONLINE || phase === HostPhase.SYNCING) return 'Online';
+    if (phase === HostPhase.CONNECTING) return 'Connecting';
+    if (phase === HostPhase.WAITING_HOST) return 'Waiting for host';
+    if (phase === HostPhase.RECONNECTING) return 'Reconnecting';
+    if (phase === HostPhase.ERROR) return 'Error';
+    return 'Offline';
+  }
+
+  getStatusColor(): Resource {
+    let phase: string = this.getHostPhase();
+    if (phase === HostPhase.ONLINE || phase === HostPhase.SYNCING) return Colors.success;
+    if (phase === HostPhase.CONNECTING || phase === HostPhase.WAITING_HOST || phase === HostPhase.RECONNECTING) {
+      return Colors.warning;
+    }
+    if (phase === HostPhase.ERROR) return Colors.error;
+    return Colors.foregroundMuted;
   }
 
   /** 清理 URL 显示：去掉 ws:// 协议前缀 */
@@ -89,11 +114,11 @@ export struct AgentDetailView {
 
           Row() {
             Circle({ width: 6, height: 6 })
-              .fill(this.isOnline() ? Colors.success : Colors.foregroundMuted)
+              .fill(this.getStatusColor())
               .margin({ right: Spacing.xs })
-            Text(this.isOnline() ? 'Online' : 'Offline')
+            Text(this.getStatusText())
               .fontSize(FontSize.sm).fontWeight(FontWeight.Medium)
-              .fontColor(this.isOnline() ? Colors.success : Colors.foregroundMuted)
+              .fontColor(this.getStatusColor())
           }
         }
         .width(Layout.contentWidth).alignItems(HorizontalAlign.Center).margin({ bottom: Spacing.xl })

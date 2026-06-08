@@ -11,10 +11,7 @@ export struct WorkspaceDrawer {
   onSelect?: (index: number) => void;
   onDelete?: (index: number) => void;
   onClose?: () => void;
-  onSwitchHost?: () => void;
   onAddWorkspace?: (path: string) => void;
-  onSettings?: () => void;
-  onHostManage?: () => void;
 
   build() {
     Column() {
@@ -103,53 +100,6 @@ export struct WorkspaceDrawer {
 
       // Bottom area
       Column() {
-        // Navigation entries
-        if (this.onHostManage) {
-          Row() {
-            Image($r('app.media.ic_terminal_window'))
-              .width(22).height(22)
-              .fillColor(Colors.foreground)
-              .margin({ right: Spacing.md })
-            Text($r('app.string.ws_host_manage'))
-              .fontSize(FontSize.base)
-              .fontColor(Colors.foreground)
-              .fontWeight(FontWeight.Medium)
-          }
-          .width('100%')
-          .padding({ left: Spacing.xl, right: Spacing.xl, top: Spacing.lg, bottom: Spacing.sm })
-          .onClick(() => { if (this.onHostManage) this.onHostManage() })
-          .stateStyles({
-            pressed: {
-              .backgroundColor(Colors.surface1)
-            },
-            normal: {
-              .backgroundColor(Colors.transparent)
-            }
-          })
-        }
-
-        if (this.onSettings) {
-          Row() {
-            CustomIcon({ name: 'tool', iconSize: 22, color: Colors.foreground })
-              .margin({ right: Spacing.md })
-            Text($r('app.string.ws_settings'))
-              .fontSize(FontSize.base)
-              .fontColor(Colors.foreground)
-              .fontWeight(FontWeight.Medium)
-          }
-          .width('100%')
-          .padding({ left: Spacing.xl, right: Spacing.xl, top: Spacing.sm, bottom: Spacing.sm })
-          .onClick(() => { if (this.onSettings) this.onSettings() })
-          .stateStyles({
-            pressed: {
-              .backgroundColor(Colors.surface1)
-            },
-            normal: {
-              .backgroundColor(Colors.transparent)
-            }
-          })
-        }
-
         if (this.showForm) {
           Column() {
             TextInput({ placeholder: '/path/to/project', text: this.newPath })

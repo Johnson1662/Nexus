@@ -134,7 +134,16 @@ export class HostRuntimeStoreModel {
   }
 
   isOnline(hostKey: string): boolean {
-    return this.getPhase(hostKey) === HostPhase.ONLINE;
+    let phase: string = this.getPhase(hostKey);
+    return phase === HostPhase.ONLINE || phase === HostPhase.SYNCING;
+  }
+
+  isCurrentHost(hostKey: string): boolean {
+    return hostKey.length > 0 && this.activeHostKey === hostKey;
+  }
+
+  isCurrentHostOnline(hostKey: string): boolean {
+    return this.isCurrentHost(hostKey) && this.isOnline(hostKey);
   }
 
   hasEverOnline(hostKey: string): boolean {

@@ -1,6 +1,7 @@
-import { Colors, FontSize, Spacing, Radius, Layout, Duration } from '../../constants/DesignTokens';
+import { Colors, FontSize, Spacing, Radius, Layout } from '../../constants/DesignTokens';
 import { WorkspaceStore, WorkspaceInfo, ServerSession } from '../../common/model/WorkspaceInfo';
 import { ChatStore, PlanEntry } from '../../common/model/ChatState';
+import { HostRuntimeStore } from '../../common/model/HostState';
 import { DeviceAgentStore } from '../../common/model/DeviceAgentStore';
 import { AgentInfo } from '../../common/websocket/WSProtocol';
 import { CustomIcon } from '../../common/ui/CustomIcon';
@@ -90,7 +91,7 @@ export struct WorkspaceDetailView {
     if (this.getCurrentAgentName() === agentName && ChatStore.turnActive) {
       return 'Running';
     }
-    if (!ChatStore.connected) {
+    if (!HostRuntimeStore.isOnline(HostRuntimeStore.activeHostKey)) {
       return 'Offline';
     }
     if (this.getCurrentAgentName() === agentName) {
@@ -100,8 +101,9 @@ export struct WorkspaceDetailView {
   }
 
   getAgentsForCurrentDevice(): WorkspaceAgentEntry[] {
-    if (ChatStore.currentDeviceId.length > 0) {
-      let agents: AgentInfo[] = DeviceAgentStore.getAgents(ChatStore.currentDeviceId);
+    let currentHostKey: string = HostRuntimeStore.activeHostKey;
+    if (currentHostKey.length > 0) {
+      let agents: AgentInfo[] = DeviceAgentStore.getAgents(currentHostKey);
       if (agents.length > 0) {
         let mapped: WorkspaceAgentEntry[] = [];
         for (let i: number = 0; i < agents.length; i++) {
@@ -200,7 +202,7 @@ export struct WorkspaceDetailView {
       .alignItems(HorizontalAlign.Center)
       .backgroundColor(Colors.surface0)
     }
-    .hideTitleBar(true)
+    .hideTitleBar(false)
     .width('100%')
     .height('100%')
   }
@@ -208,47 +210,12 @@ export struct WorkspaceDetailView {
   @Builder
   TitleBarBuilder() {
     Row() {
-      Button() {
-        SymbolGlyph($r('sys.symbol.chevron_left'))
-          .fontSize(20)
-          .fontColor([Colors.foreground])
-      }
-      .width(36)
-      .height(36)
-      .backgroundColor(Color.Transparent)
-      .stateStyles({
-        pressed: { .scale({ x: 0.92, y: 0.92 }) },
-        normal: { .scale({ x: 1, y: 1 }) }
-      })
-      .animation({ duration: Duration.fast, curve: Curve.EaseOut })
-      .onClick(() => {
-        this.onBack?.();
-      })
-
-      Blank()
-
       Text(this.getWorkspace().name || 'Workspace')
         .fontSize(FontSize.md)
         .fontWeight(FontWeight.Medium)
         .fontColor(Colors.foreground)
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
-
-      Blank()
-
-      Button() {
-        SymbolGlyph($r('sys.symbol.dot_grid_2x2'))
-          .fontSize(20)
-          .fontColor([Colors.foreground])
-      }
-      .width(36)
-      .height(36)
-      .backgroundColor(Color.Transparent)
-      .stateStyles({
-        pressed: { .scale({ x: 0.92, y: 0.92 }) },
-        normal: { .scale({ x: 1, y: 1 }) }
-      })
-      .animation({ duration: Duration.fast, curve: Curve.EaseOut })
     }
     .width('100%')
     .height(56)
@@ -305,7 +272,7 @@ export struct WorkspaceDetailView {
             .fontWeight(FontWeight.Bold)
             .fontColor(Colors.foreground)
           Blank()
-          this.StatusPill(ChatStore.turnActive ? 'Running' : (this.getLatestSession() ? 'Idle' : 'Ready'))
+          this.StatusPill(this.getAgentStatus(this.getCurrentAgentName()))
         }
         .width('100%')
         .margin({ bottom: Spacing.sm })

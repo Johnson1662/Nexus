@@ -1,19 +1,45 @@
 import { Colors, FontSize, Spacing, Radius, Layout } from '../../constants/DesignTokens';
 import { HostStore, DeviceEntry } from '../../common/model/WorkspaceInfo';
-import { ChatStore } from '../../common/model/ChatState';
+import { HostPhase, HostRuntimeStore } from '../../common/model/HostState';
 import { CustomIcon } from '../../common/ui/CustomIcon';
 
 @Component
 export struct AgentsView {
   onNavigateToDetail?: (index: number) => void;
-  onNavigateToHostManage?: () => void;
+  onNavigateToSettings?: () => void;
   @State filterIndex: number = 0;
   @State itemPressScale: number = 1.0;
 
+  getHostKey(device: DeviceEntry): string {
+    return device.hostId || device.name;
+  }
+
+  getDevicePhase(device: DeviceEntry): string {
+    return HostRuntimeStore.getPhase(this.getHostKey(device));
+  }
+
   isDeviceOnline(device: DeviceEntry): boolean {
-    if (!ChatStore.connected) return false;
-    let did = ChatStore.currentDeviceId;
-    return (!!device.hostId && device.hostId === did) || device.name === did;
+    return HostRuntimeStore.isOnline(this.getHostKey(device));
+  }
+
+  getDeviceStatusText(device: DeviceEntry): string {
+    let phase: string = this.getDevicePhase(device);
+    if (phase === HostPhase.ONLINE || phase === HostPhase.SYNCING) return 'Online';
+    if (phase === HostPhase.CONNECTING) return 'Connecting';
+    if (phase === HostPhase.WAITING_HOST) return 'Waiting';
+    if (phase === HostPhase.RECONNECTING) return 'Reconnecting';
+    if (phase === HostPhase.ERROR) return 'Error';
+    return 'Offline';
+  }
+
+  getDeviceStatusColor(device: DeviceEntry): Resource {
+    let phase: string = this.getDevicePhase(device);
+    if (phase === HostPhase.ONLINE || phase === HostPhase.SYNCING) return Colors.success;
+    if (phase === HostPhase.CONNECTING || phase === HostPhase.WAITING_HOST || phase === HostPhase.RECONNECTING) {
+      return Colors.warning;
+    }
+    if (phase === HostPhase.ERROR) return Colors.error;
+    return Colors.foregroundMuted;
   }
 
   matchesFilter(device: DeviceEntry): boolean {
@@ -25,7 +51,7 @@ export struct AgentsView {
   }
 
   getDeviceName(device: DeviceEntry): string {
-    return device.name + this.filterIndex.toString();
+    return device.name + this.filterIndex.toString() + this.getDevicePhase(device);
   }
 
   build() {
@@ -35,7 +61,7 @@ export struct AgentsView {
         Text("Agents").fontSize(FontSize.xxxxl).fontWeight(FontWeight.Bold).fontColor(Colors.foreground)
         Blank()
         SymbolGlyph($r('sys.symbol.person_badge_plus')).fontSize(24).fontColor([Colors.foreground])
-          .onClick(() => { this.onNavigateToHostManage?.(); })
+          .onClick(() => { this.onNavigateToSettings?.(); })
       }
       .width(Layout.contentWidth)
       .padding({ top: Spacing.xxxl, bottom: Spacing.lg })
@@ -74,7 +100,7 @@ export struct AgentsView {
             .fontSize(FontSize.sm).fontWeight(FontWeight.Medium)
             .fontColor(Colors.surface0).backgroundColor(Colors.foreground)
             .borderRadius(Radius.lg).padding({ left: Spacing.xxl, right: Spacing.xxl, top: Spacing.md, bottom: Spacing.md })
-            .onClick(() => { this.onNavigateToHostManage?.(); })
+            .onClick(() => { this.onNavigateToSettings?.(); })
         }
         .width(Layout.contentWidth)
         .layoutWeight(1)
@@ -123,11 +149,11 @@ export struct AgentsView {
 
       Row() {
         Circle({ width: 6, height: 6 })
-          .fill(this.isDeviceOnline(device) ? Colors.success : Colors.foregroundMuted)
+          .fill(this.getDeviceStatusColor(device))
           .margin({ right: Spacing.xs })
-        Text(this.isDeviceOnline(device) ? 'Online' : 'Offline').fontSize(FontSize.xs).fontColor(Colors.foregroundMuted)
+        Text(this.getDeviceStatusText(device)).fontSize(FontSize.xs).fontColor(Colors.foregroundMuted)
         SymbolGlyph($r('sys.symbol.ellipsis_message')).fontSize(16).fontColor([Colors.foregroundMuted]).margin({ left: Spacing.md })
-          .onClick(() => { this.onNavigateToHostManage?.(); })
+          .onClick(() => { this.onNavigateToSettings?.(); })
       }
     }
     .width('100%')

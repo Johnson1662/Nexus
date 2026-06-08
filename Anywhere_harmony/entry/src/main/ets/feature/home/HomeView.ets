@@ -2,6 +2,7 @@ import { Colors, FontSize, Spacing, Radius, Shadow, Layout, Duration } from '../
 import { ChatStore } from '../../common/model/ChatState';
 import { HostStore, DeviceEntry, WorkspaceStore, WorkspaceInfo, ServerSession } from '../../common/model/WorkspaceInfo';
 import { DeviceAgentStore } from '../../common/model/DeviceAgentStore';
+import { HostRuntimeStore } from '../../common/model/HostState';
 import { CustomIcon } from '../../common/ui/CustomIcon';
 
 @Component
@@ -9,10 +10,9 @@ export struct HomeView {
   onNavigateToAgentDetail?: (index: number) => void;
   onOpenWorkspace?: (index: number) => void;
   onOpenChat?: (workspaceIndex: number) => void;
-  onOpenSettings?: () => void;
-  onOpenAddHostScan?: () => void;
   onConnectHost?: (url: string) => void;
   onRefreshHostsAgents?: () => void;
+  onNavigateToWorkspaceList?: () => void;
 
   @StorageLink('homeShowManualHost') showManualHostForm: boolean = false;
   @State manualHostUrl: string = '';
@@ -31,18 +31,19 @@ export struct HomeView {
   }
 
   isConnectedToHost(): boolean {
-    return ChatStore.connected && ChatStore.currentDeviceId.length > 0;
+    return HostRuntimeStore.isOnline(HostRuntimeStore.activeHostKey);
   }
 
   getCurrentDeviceName(): string {
     if (!this.isConnectedToHost()) return '未连接主机';
+    let currentHostKey: string = HostRuntimeStore.activeHostKey;
     for (let i: number = 0; i < HostStore.devices.length; i++) {
       let device: DeviceEntry = HostStore.devices[i];
-      if (device.hostId === ChatStore.currentDeviceId || device.name === ChatStore.currentDeviceId) {
+      if (device.hostId === currentHostKey || device.name === currentHostKey) {
         return device.name;
       }
     }
-    return ChatStore.currentDeviceId;
+    return currentHostKey;
   }
 
   getCurrentWorkspaceName(): string {
@@ -123,10 +124,7 @@ export struct HomeView {
   }
 
   isHostOnline(device: DeviceEntry): boolean {
-    if (!this.isConnectedToHost()) {
-      return false;
-    }
-    return device.hostId === ChatStore.currentDeviceId || device.name === ChatStore.currentDeviceId;
+    return HostRuntimeStore.isOnline(this.getHostKey(device));
   }
 
   getHostLabel(device: DeviceEntry): string {
@@ -137,10 +135,11 @@ export struct HomeView {
   }
 
   getWorkspaceAgentCount(): number {
-    if (ChatStore.currentDeviceId.length === 0) {
+    let currentHostKey: string = HostRuntimeStore.activeHostKey;
+    if (!HostRuntimeStore.isOnline(currentHostKey)) {
       return 0;
     }
-    return DeviceAgentStore.getAgents(ChatStore.currentDeviceId).length;
+    return DeviceAgentStore.getAgents(currentHostKey).length;
   }
 
   build() {
@@ -179,12 +178,23 @@ export struct HomeView {
   @Builder
   WorkspaceSection() {
     Column() {
-      Text('Projects')
-        .fontSize(FontSize.xl)
-        .fontColor(Colors.foreground)
-        .fontWeight(FontWeight.Bold)
-        .width('100%')
-        .margin({ bottom: Spacing.lg })
+      Row() {
+        Text('Projects')
+          .fontSize(FontSize.xl)
+          .fontColor(Colors.foreground)
+          .fontWeight(FontWeight.Bold)
+        Blank()
+        Button('View All')
+          .fontSize(FontSize.sm)
+          .fontColor(Colors.accent)
+          .fontWeight(FontWeight.Medium)
+          .backgroundColor(Color.Transparent)
+          .borderRadius(Radius.md)
+          .padding({ left: Spacing.sm, right: Spacing.sm, top: Spacing.xs, bottom: Spacing.xs })
+          .onClick(() => { this.onNavigateToWorkspaceList?.(); })
+      }
+      .width('100%')
+      .margin({ bottom: Spacing.lg })
 
       if (WorkspaceStore.workspaces.length === 0) {
         Text('还没有项目。从菜单添加主机或进入聊天后添加工作区。')

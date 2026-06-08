@@ -1,14 +1,9 @@
 # Anywhere — HarmonyOS 远程 AI 编程助手客户端
 
-## 永远用中文回答；需要解释时，用中文给出简要思路与结论，不输出隐藏思考链
-
-## 产品设计原型图在prototype_picture文件夹 实机测试截图在app_test_picture文件夹 没有视觉能力的模型请调用vision_analyze工具分析截图
-
-## 使用 hmdev-cli skill 查鸿蒙官方文档、构建部署项目 遇到不确定的问题一定要查文档！！查文档！！查文档！！
-
 ## 项目概述
 
 Anywhere 是一个 HarmonyOS App，通过 Relay 中继连接到 PC 端 Bridge Server，Bridge Server 再通过 ACP (Agent Client Protocol) 协议与 AI 编程 Agent 通信。
+
 ```
 手机 (HarmonyOS)                  Relay Server (GCloud)         PC (Node.js Bridge)
 ┌──────────────┐    WS (client)   ┌──────────────┐  WS (host)  ┌─────────────────────┐
@@ -25,138 +20,149 @@ Anywhere 是一个 HarmonyOS App，通过 Relay 中继连接到 PC 端 Bridge Se
                                                                 │ ...            │
                                                                 └───────────────┘
 ```
-手机 App 与 PC Bridge 通过 **Relay Server**（Node.js `relay.mjs`，运行在 GCloud VM）进行 hostId 配对双向转发。不再经过 Cloudflare。
+
+手机 App 与 PC Bridge 通过 **Relay Server**（Node.js `relay.mjs`，运行在 GCloud VM）进行 hostId 配对双向转发，不再经过 Cloudflare。
 
 ---
 
-## ⚠️ 网络连接问题排查
+## 工作流规则
 
-**Server 监听:** `server/dist/server.mjs` 使用 `new WebSocketServer({ port: 12138 })`，不指定 host 自动 IPv4+IPv6 双栈。**不要**设 `host: "::"` 或 `"0.0.0.0"`，否则单栈。
+| 规则 | 说明 |
+|------|------|
+| **Git 提交** | 每次成功改动后执行 `git commit`，只 stage 本次改动的文件 |
+| **Codegraph 索引** | 使用 codegraph mcp，每次提交后执行 `node D:/Development/codegraph-arkts/dist/bin/codegraph.js index .` |
+| **语言** | 永远用中文回答；需要解释时给出简要思路与结论，不输出隐藏思考链 |
+| **设计参考** | 原型图在 `prototype_picture/`，实机截图在 `app_test_picture/`。无视觉能力的模型用 `vision_analyze` 分析截图 |
+| **查文档** | 用 `hmdev-cli` skill 查鸿蒙官方文档、构建部署项目。不确定就查文档！ |
 
-**IPv6 URL:** 添加主机入口已并入首页右上三点菜单，手动链接时必须继续保留 IPv6 自动包 `[ ]` 的 URL 归一化能力。**防火墙:** nvmw4 管理 Node (`D:\nvm4w\nodejs\node.exe`)，不是 DevEco Studio 的 Node。**Clash:** 全局模式 → 关掉或在 clash 中 bypass `192.168.0.0/16`、`10.0.0.0/8`。
+---
 
-**Tailscale:** 手机热点 WiFi → IPv4/IPv6 均通；移动数据 → 仅 IPv4。始终用 Tailscale IPv4 地址。
+## 架构与设计决策
 
-**排查:** `netstat -an | findstr "12138"` → 确认监听 `0.0.0.0:[::]` → 本机 WS 测试 → `hdc shell ping` → 防火墙 → 关 clash。
+### 导航与路由
 
-**心跳/重连:** 手机端 `WSClient` 的 watchdog 不能只依赖业务期间 heartbeat。Bridge 收到 `{ type: "heartbeat" }` 必须回包；手机端收到任意服务端消息也应刷新连接活跃时间，避免空闲 45s 被误判断线。用 `hdc -t <device> shell hilog -x | Select-String -Pattern "WSClient|Heartbeat|reconnect|bg task"` 查实机证据。
+- `Navigation(NavPathStack)` + `.navDestination(this.PagesMap)` — `PagesMap` 是 `@Builder` 引用
+- 启用 `NavigationMode.Stack`（`Navigation` 根节点设置 `.mode(NavigationMode.Stack)`）
+- 每个目的地必须是根节点为 `NavDestination()` 或 `HdsNavDestination()` 的 `@Component`
+- 首页使用 `HdsNavDestination`（来自 `@kit.UIDesignKit`），通过 `titleBar()` 配置标题、菜单项和安全区
+- 聊天页使用 `NavDestination` 原生标题栏（`.title(string)`），返回键由 Stack 自动处理
+- 聊天页顶部结构：左返回（原生）、中间 session 标题、右三点。Agent / Model / Mode 选择器已整合到输入栏的 Model 名称 chip 中，点击弹出 `ConfigPanel` bindSheet（摘要卡片 → 选择列表）。先选 Agent，才能选 Model；Model 默认上一次使用项
+- **子页面路由**：`agentDetail` / `sessionDetail` / `workspaceDetail` / `workspaceList` / `settings`
+- **跨页面参数传递**：通过 `AppStorage`（如 `selectedDeviceIndex`），不用 param 对象（ArkTS `@Builder` 限制）
+- 移动端无底部 Tab，首页为主入口，底部只保留 Search / New chat 操作条
+- `New chat` 直接进入聊天页，不展示中间页
+- 添加主机入口在首页右上三点菜单：`Add host` → `Scan QR` / `Link manually`，配对成功后立即拉取并缓存 agent 列表
+- `OnboardingView.ets` 已删除，不要恢复。主机管理和设置通过首页菜单/聊天页菜单进入
 
-**后台限制:** `backgroundTaskManager.requestSuspendDelay()` 是短时任务，不是长期后台保活；实机出现 `bg task failed: {"code":"9900002"}` 表示短时任务校验失败。若要后台持续连接，只能尝试用户可感知的长时任务（通知栏），类型需符合官方校验（如 `DATA_TRANSFER`/`MULTI_DEVICE_CONNECTION`），不能按音乐软件的 `AUDIO_PLAYBACK` 思路无感保活。
+### 状态管理
 
-## ⚠️ Golden Rule: 优先使用原生 ArkUI 组件
+| 层级 | 方案 |
+|------|------|
+| Model 类 | `@ObservedV2` / `@Trace`（V2） |
+| UI 组件 | `@Component` / `@State` / `@Prop`（V1） |
+| 全局单例 | `ChatStore`、`WorkspaceStore`、`HostStore` |
+| 持久化 | `StorageService`（基于 `@kit.ArkData` preferences） |
+| 跨组件 | `AppStorage`（如 `serverUrl`、`lastAgent`） |
 
-优先使用 ArkUI 内置组件（SideBarContainer、bindSheet、Navigation 等），而非手写浮层/弹窗。原生组件自带系统级行为：动画、无障碍、多渲染器生命周期和系统升级兼容。在 `animateTo()` 中包裹状态变更以确保平滑过渡。
+### ChatStore 关键字段
 
-## 关键设计决策
+```
+messages: MessageData[]              — 完整消息列表
+streamingThinking / streamingText    — 流式 thinking（独立字段，不在 LazyForEach 中）
+turnActive / bridgeSessionId / acpSessionId
+connected / currentDeviceId          — 连接状态（server_info 设置，断开清空）
+sessions / models / modes / planEntries
+selectedAgentName / agentType        — 当前选中的 ACP Agent
+lastUsage: UsageInfo | null          — turn_ended Token 用量
+reconnectPhase / reconnectAttempt    — 断线重连状态
+pendingPermission                   — 当前权限请求
+availableCommands                   — 斜杠命令补全
+configOptions                       — Agent 配置项
+```
+
+**LazyForEach key** 必须包含消息内容或工具调用相关的长度变化字段，不能只用 `msg.id`。流式传输时 content/toolContent 在变化，只用 id 不会触发 UI 更新。
+
+当前 ChatPage 实际 key 模式：
+```ets
+(msg: MessageData) => msg.id + ':' + msg.content.length + ':' + msg.toolContent.length + ':' +
+  msg.toolContentType + ':' + msg.toolOldText.length + ':' + msg.toolNewText.length + ':' + msg.toolStatus
+```
 
 ### 视觉设计
-- **风格：** ChatGPT / Linear 混合 — 黑白灰单色调，大留白，**极致无边框**（移除卡片边框/背景，完全靠留白区分区块）
-- **消息气泡：** 用户消息灰底黑字 (`Colors.surface1` 背景，`Colors.foreground` 文本)，Agent 消息全宽无背景
-- **字体：** 正文 HarmonyOS Sans，品牌标题衬线体 (`fontFamily('serif')`)
-- **空状态：** 左对齐纯文本（`FontSize.sm` + `Colors.foregroundMuted`），无图标/无按钮
-- **按压反馈：** 背景色浮现 — `stateStyles({ pressed: { .backgroundColor(Colors.surface1) }, normal: { .backgroundColor(Colors.transparent) } })`，不再用 `scale(0.97)`
-- **动画：** 极简淡入淡出 — 纯 `TransitionEffect.OPACITY`，150ms，`Curve.EaseOut`。无 translation/spring/staggered delay
-- **输入框/底部操作栏：** 悬浮胶囊（Floating Pills）— 带圆角和阴影，不贴屏幕底部边缘
-- **代码块：** 柔和表面（浅灰 `surface1`/`surface2` 背景 + 深色代码文字，无边框）
 
-### 图标 — SymbolGlyph
+- **风格**：ChatGPT / Linear 混合 — 黑白灰单色调，大留白，**极致无边框**（移除卡片边框/背景，靠留白区分区块）
+- **消息气泡**：用户消息灰底黑字（`Colors.surface1` + `Colors.foreground`），Agent 消息全宽无背景
+- **字体**：正文 HarmonyOS Sans，品牌标题衬线体（`fontFamily('serif')`）
+- **空状态**：左对齐纯文本（`FontSize.sm` + `Colors.foregroundMuted`），无图标/无按钮
+- **动画**：极简淡入淡出 — `TransitionEffect.OPACITY`，150ms，`Curve.EaseOut`。无 translation/spring/staggered delay
+  - 页面切换：`TransitionEffect.OPACITY`
+  - 消息卡片：`TransitionEffect.OPACITY`
+- **按压反馈**：背景色浮现 — `stateStyles({ pressed: { .backgroundColor(Colors.surface1) }, normal: { .backgroundColor(Color.Transparent) } })`，不再用 `scale(0.97)`
+- **输入框**：悬浮胶囊（Floating Pills）— 圆角 + 阴影，不贴底部边缘
+- **代码块**：柔和表面（浅灰 `surface1`/`surface2` 背景 + 深色文字，无边框）
 
-使用 `SymbolGlyph($r('sys.symbol.xxx'))`。`fontColor` 必须是数组格式：`fontColor([...])`。
+### 图标
 
-常用：`house`/`house_fill`、`person_2`/`person_2_fill`、`clock`、`gearshape`、`chevron_left`、`ellipsis_message`、`person_badge_plus`、`vpn_key`、`wifi`、`externaldrive`、`square_grid_2x2`。完整列表见 `docs/harmonyos-symbol-reference.md`。`fontColor` 必须是数组：`fontColor([Colors.accent])`，不是 `fontColor(Colors.accent)`。
+**系统符号库（优先）**：`SymbolGlyph($r('sys.symbol.xxx'))`，`fontColor` 必须是数组格式：`fontColor([Colors.accent])`，**不是 `fontColor(Colors.accent)`**。
+
+常用：`house`/`house_fill`、`person_2`/`person_2_fill`、`clock`、`gearshape`、`chevron_left`、`ellipsis_message`、`person_badge_plus`、`vpn_key`、`wifi`、`externaldrive`、`square_grid_2x2`。完整列表见 `docs/harmonyos-symbol-reference.md`。
 
 参考：https://developer.huawei.com/consumer/cn/design/harmonyos-symbol/
 
-### 自定义图标 — SVG 文件 + Image.fillColor
+**自定义 SVG 图标**：当系统符号库无匹配时，用 SVG 文件代替。**严禁用 `Path().commands()` 绘制**（坐标是绝对 px，无 viewBox 缩放）。
 
-当系统符号库没有语义匹配的图标时，用 SVG 文件代替。**严禁使用 `Path().commands()` 绘制自定义图标** — ArkUI `Path` 的坐标是绝对 px，无 `viewBox` 缩放机制，任何尺寸的坐标都会在高分屏上变成极小像素点。
-
-**正确做法**：
-1. 创建 `<svg viewBox="0 0 24 24">` 文件，放到 `entry/src/main/resources/base/media/` 目录（例如 `ic_stop.svg`）
-2. 用 `Image($r('app.media.ic_xxx')).fillColor(color)` 加载 — ArkUI `Image` 组件原生支持 SVG viewBox 缩放
+正确做法：
+1. 创建 `<svg viewBox="0 0 24 24">` 放到 `entry/src/main/resources/base/media/`
+2. 用 `Image($r('app.media.ic_xxx')).fillColor(color)` 加载
 3. 通过 `CustomIcon` 组件统一调用：`CustomIcon({ name: 'stop', iconSize: 28, color: Colors.error })`
 
-现有的自定义 SVG 图标：`ic_stop`、`ic_warning`、`ic_edit`、`ic_wrench`、`ic_progress`、`ic_new_chat`、`ic_thinking`、`ic_check`、`ic_computer`、`ic_cube`。
-
-
-### 导航与路由
-- `Navigation(NavPathStack)` + `.navDestination(this.PagesMap)` — `PagesMap` 是 `@Builder` 引用。
-- 首页使用 `HdsNavDestination`（来自 `@kit.UIDesignKit`）替代 `NavDestination`，通过 `titleBar()` 配置标题、菜单项和安全区。
-- 当前移动端壳层不再使用底部 5 Tab。首页为主入口，底部只保留 Search / New chat 操作条。
-- `New chat` 必须直接进入聊天页，不再展示 “What should we work on” 中间页。
-- 添加主机入口已并入首页右上三点菜单：`Add host` → `Scan QR` / `Link manually`，配对成功后立即拉取并缓存 agent 列表。
-- `OnboardingView.ets` 已删除，不要恢复该页面；主机管理和设置通过首页菜单/聊天页菜单进入。
-- 聊天页顶部结构：左返回、中间 workspace 胶囊、右三点。Agent / Model / Mode 选择器已整合到输入栏的 Model 名称 chip 中，点击弹出 `ConfigPanel` bindSheet（摘要卡片 → 选择列表）。先选 Agent，才能选 Model；Model 默认上一次使用项。
-- **子页面路由**（`navStack.pushPath`）: `agentDetail` / `sessionDetail` / `workspaceDetail` / `settings`。
-- **跨页面参数传递**：通过 `AppStorage`（如 `selectedDeviceIndex`）— 不用 param 对象（ArkTS `@Builder` 限制）。
-- 每个目的地必须是根节点为 `NavDestination()` 或 `HdsNavDestination()` 的 `@Component`。
-- 启用 `NavigationMode.Stack`。
-
-### 状态管理
-- Model 类用 `@ObservedV2`/`@Trace`（V2）
-- UI 组件用 `@Component`/`@State`/`@Prop`（V1）
-- 全局单例：`ChatStore`、`WorkspaceStore`、`HostStore`
-- 持久化：`StorageService`（基于 `@kit.ArkData` preferences）
-- 跨组件状态：`AppStorage`（如 `serverUrl`、`lastAgent`）
-
-### ChatStore 关键字段
-- `messages: MessageData[]` — 完整消息列表
-- `streamingThinking: string` / `streamingText: string` — 流式 thinking 独立字段（不在 LazyForEach 中，避免重渲染闪烁）
-- `turnActive: boolean` / `bridgeSessionId: string` / `acpSessionId: string`
-- `connected: boolean` / `currentDeviceId: string` — 当前连接设备标识（server_info 设置，断开清空）
-- `sessions: ServerSession[]` / `models: ModelItem[]` / `modes: ModeItem[]` / `planEntries: PlanEntry[]`
-- `selectedAgentName: string` / `agentType: string` — 当前选中的 ACP Agent
-- `lastUsage: UsageInfo | null` — turn_ended 时的 Token 用量统计
-- `reconnectPhase: string` / `reconnectAttempt: number` — 断线重连状态
-- `pendingPermission: PendingPermission | null` — 当前权限请求
-- `availableCommands: AvailableCommand[]` — 斜杠命令补全
-- `configOptions: ConfigOption[]` — Agent 配置项
-
-**LazyForEach key 必须用 `msg.id + msg.content.length`**，不能只用 `msg.id`。流式传输时 content 在变化，只用 id 不会触发 UI 更新。
+注册在 `CustomIcon` 组件中的 SVG 名称：`thinking`、`thinking_done`/`check`、`knot`/`logo`、`stop`/`cancel`、`warning`/`alert`、`edit`/`pencil`、`tool`/`wrench`、`progress`/`spinner`、`new_chat`/`compose`、`waveform`、`panel`/`grid`、`menu`、`dots`/`more`、`copy`、`paste`、`link`、`close`/`xmark`、`scan`、`model`、`clear`/`trash`、`error`。各名称对应的 SVG 文件在 `entry/src/main/resources/base/media/` 下以 `ic_<name>.svg` 命名。
 
 ### 配置面板 (ConfigPanel)
+
 ChatInputBar 的 Model 名称 chip 点击后弹出单 bindSheet（`ConfigPanel`），分两种视图：
 - **summary 视图**：显示当前 Agent / Model / Mode 摘要卡片，每行可点击
 - **selection 视图**：根据选中项展示对应列表（Agent 列表 / Provider 列表 / Model 列表 / Mode 列表），支持右上角刷新
 
-由于 bindSheet 内容不可响应式更新，视图切换通过 `switchView()` 关闭 sheet → 更新 `sheetView` → 重开 sheet 实现。Provider→Model 钻取同样使用此模式。
+视图切换通过 `switchView()` 关闭 sheet → 更新 `sheetView` → 重开 sheet 实现。Provider→Model 钻取同样使用此模式。
 
 ### 会话时间戳
+
 opencode ACP 返回 session 时使用 `updatedAt`（ISO 8601 字符串）而非 `createdAt`。`WSClient` 在 `session_list` 处理时从原始 JSON 提取 `updatedAt` 并转为 epoch ms。所有 `formatRelativeTime` 函数添加 `!epoch` 防御检查。
 
-### Markdown 渲染
-使用 `@luvi/lv-markdown-in` (v3.4.1)。`turnActive` 期间用纯 `Text()`，`turn_ended` 后切换 `MarkdownRender`。
-
 ### 工作区管理
+
 `SideBarContainer` 侧边栏 + `WorkspaceStore` 全局单例。工作区按设备名持久化（同 PC 的所有 IP 共享），`getWorkspaceScopes()` 提供回退链。
 
-### 设备分组 (HostStore)
-`server_info` 消息按 hostname 合并 IP 为 `DeviceEntry[]`。`connectBest(urls[])` 并行探测选最低延迟。兼容旧 `HostInfo[]` 格式自动迁移。
+### 设备与连接
 
-### 主机在线状态 (HostFilterBar)
-`HostFilterBar` 是一个独立的 `@Component`，在 `build()` 中直接读取 `ChatStore.connected` 和 `ChatStore.currentDeviceId`（均为 `@ObservedV2 @Trace`），确保连接/断开时 host chip 的绿灯/灰灯状态实时响应。不再通过 Index 的 `@Builder` 链传递，避免 `navDestination` 内 `@Builder` 不重新求值的问题。
+**HostStore（设备分组）**：`server_info` 消息按 hostname 合并 IP 为 `DeviceEntry[]`。WSClient 的 `connectBest(urls[])` 并行探测选最低延迟。兼容旧 `HostInfo[]` 格式自动迁移。
+
+**HostFilterBar**：独立 `@Component`，在 `build()` 中直接读取 `ChatStore.connected` 和 `ChatStore.currentDeviceId`（均为 `@ObservedV2 @Trace`），确保 host chip 在线状态实时响应。不再通过 Index 的 `@Builder` 链传递，避免 `navDestination` 内 `@Builder` 不重新求值的问题。
+
+**自动重连**：指数退避（1s → 2s → 4s → ... → 30s 上限）。后台恢复依赖快速重连 + `sync_request`/消息游标补齐，不宣称普通 UIAbility 能长期后台保活。
 
 ### 缓存结构与刷新策略
-- 缓存层级按 `host -> workspace -> agent -> provider -> model/mode/session` 思考和命名，避免把跨主机、跨工作区的数据混在一起。
-- Agent 列表：每天打开 app 时对已配对主机请求一次，之后读 `DeviceAgentStore` / preferences 缓存；用户可在 Agent 列表或菜单手动刷新。
-- Model / Mode 列表：与 workspace + agent 绑定，第一次进入某工作区并选定 agent 时请求，后续优先读缓存；切换 agent 后才能切换 model。
-- Session 列表：与 workspace 绑定，第一次打开工作区请求并缓存；除非新建/加载会话、手动刷新或后端推送变化，不要每次进入页面都重新加载。
-- 启动时自动向已配对主机发起连接请求，但失败只进入重连/可手动刷新状态，不阻塞首页渲染。
 
-### 自动重连
-指数退避 (1s → 2s → 4s → ... → 30s 上限)。不要宣称普通 UIAbility 能长期后台保活；后台恢复应依赖快速重连 + `sync_request`/消息游标补齐。
+```
+层级: host → workspace → agent → provider → model/mode/session
+```
 
-### 动画
-- 页面切换：`TransitionEffect.OPACITY`
-- 消息卡片：`TransitionEffect.OPACITY`
-- 按钮反馈：背景色浮现 — `stateStyles({ pressed: { .backgroundColor(Colors.surface1) }, normal: { .backgroundColor(Colors.transparent) } })`
-- 无 staggered delay，无 translate 入场动画
+- **Agent 列表**：每天启动时对已配对主机请求一次，之后读 `DeviceAgentStore` / preferences 缓存；支持手动刷新
+- **Model / Mode 列表**：与 workspace + agent 绑定，首次进入工作区并选定 agent 时请求；切换 agent 后才能切换 model
+- **Session 列表**：与 workspace 绑定，首次打开工作区请求并缓存；除非新建/加载会话、手动刷新或后端推送变化，不重复加载
+- 启动时自动向已配对主机发起连接，失败只进入重连/手动刷新状态，不阻塞首页渲染
 
 ---
 
-## ⚠️ ArkTS 语法陷阱
+## ArkTS 开发指南
+
+### Golden Rule: 优先使用原生组件
+
+优先使用 ArkUI 内置组件（`SideBarContainer`、`bindSheet`、`Navigation` 等），而非手写浮层/弹窗。原生组件自带系统级行为：动画、无障碍、多渲染器生命周期和系统升级兼容。在 `animateTo()` 中包裹状态变更以确保平滑过渡。
 
 ### 类型系统
+
 | 规则 | 错误 | 正确 |
 |------|------|------|
 | 禁 `any`/`unknown` | `x as unknown as string` | `String(x)` |
@@ -164,29 +170,44 @@ opencode ACP 返回 session 时使用 `updatedAt`（ISO 8601 字符串）而非 
 | 对象转基本类型 | `params.isUser as boolean` | `Boolean(params['isUser'])` |
 | 箭头函数无返回类型 | `(x: number) => x` | `(x: number): number => x` |
 
-### Navigation
+### 组件陷阱
+
+#### Navigation
 - `.navDestination((name, param) => {})` ❌ — 必须用 `@Builder PagesMap(name: string)`
 - 内联 `Column()` ❌ — 必须抽取 `@Component` struct
 
-### bindSheet
-- `bindSheet` 内部内容**不是响应式的** — 打开时渲染一次，不随状态变化更新
-- 需要响应式浮层请用 `Stack` + 条件渲染
+#### bindSheet
+- 内部内容**不是响应式的** — 打开时渲染一次，不随状态变化更新
+- 需要响应式浮层用 `Stack` + 条件渲染
 - `$$` 绑定位仅支持 `@State`，不支持 `@Prop`
 
-### SideBarContainer
+#### SideBarContainer
 - 直接子节点不能用 `if/else`
 - 程序化切换用 `.showSideBar(this.showDrawer)` + `animateTo()`，不用 `$$`
 - 推荐替代：`Stack` + 条件渲染
 
-### 其他常用规则
+#### NavDestination
+- `.hideTitleBar(true)` 会隐藏原生标题栏；不设置则显示原生标题栏+返回键
+- 条件渲染改用 `.visibility()` 属性而非 `if/else`
+- `.title(string)` 的标题会随组件重渲染更新
+
+#### HdsNavDestination
+- 内容区需要手动 `.padding({ top: 42 })` 避免与标题栏重叠（高度约 42-56vp，无自动避让）
+- 菜单项是配置对象，不能附加 `.bindMenu()`
+- 多菜单选项方案：用 `NavDestination` + `.title(CustomBuilder)` 放真实 Button + `.bindMenu()`，但丢失 HDS 沉浸光感
+
+### 其他规则
+
 - `LongPressGesture` 通过 `.gesture()` 附加，不与 `onClick` 混用
 - `@Reusable` + `aboutToReuse(params)` — 用 `String()`/`Boolean()` 转换参数，禁 `as` 转型
-- `NavDestination` 内条件渲染改用 `.visibility()` 属性
 - 可点击元素始终用 `Button()`，不用 `Text().onClick()`
 - import 必须在文件最顶部，设计 token 统一从 `DesignTokens.ets` 引入
 - `@StorageLink('key')` 需提前 `AppStorage.setOrCreate()` 初始化
+- `wrapBuilder()` 参数必须是文件级 `@Builder function`，不能是 struct 内的 `@Builder` 方法。这在用 `openMenu` + `ComponentContent` 时是个硬限制
+- `.bindSheet()` 的 `height` 不支持 `SheetSize.AUTO`，只能用 `MEDIUM` / `LARGE` 等枚举值
 
 ### Border 语法
+
 ```ets
 // 错误
 .border({ left: { width: 3 } })
@@ -196,83 +217,251 @@ opencode ACP 返回 session 时使用 `updatedAt`（ISO 8601 字符串）而非 
 ```
 
 ### LazyForEach
-- 必须实现 `IDataSource` 的 `registerDataChangeListener`/`unregisterDataChangeListener`
-## 构建与部署
 
----
-
-
-
-### 无线调试（当前设备）
-
-```powershell
-# 构建
-cd Anywhere_harmony
-node "D:\DevEco Studio\tools\hvigor\bin\hvigorw.js" --mode module -p module=entry@default -p product=default assembleHap
-
-# 连接（IP:端口每次可能不同；2026-06-06 实测端口如下）
-hdc tconn 192.168.137.44:46715
-
-# 部署
-hdc -t "192.168.137.44:46715" install "entry/build/default/outputs/default/entry-default-signed.hap"
-# 启动
-hdc -t "192.168.137.44:46715" shell aa start -a EntryAbility -b com.anywhere.app
-
-# 诊断 WS 重连/后台任务
-hdc -t "192.168.137.44:46715" shell hilog -x | Select-String -Pattern "WSClient|Heartbeat|reconnect|bg task"
-
-# 必要时抓实机图
-hdc -t "192.168.137.44:46715" shell snapshot_display -f /data/local/tmp/shot.jpeg
-hdc -t "192.168.137.44:46715" file recv /data/local/tmp/shot.jpeg "D:\Development\Anywhere\app_test_picture\xxxxx.jpeg"
-
-# 屏幕坐标：1260×2844. 用 uitest 模拟操作（替代不存在的 hdc shell input）
-hdc -t "192.168.137.44:46715" shell uitest uiInput click <x> <y>            # 点击
-hdc -t "192.168.137.44:46715" shell uitest uiInput swipe <x1> <y1> <x2> <y2> [velocity]  # 滑动 (velocity 200~40000, 默认600)
-hdc -t "192.168.137.44:46715" shell uitest uiInput text <字符串>             # 在已聚焦处输入文字
-hdc -t "192.168.137.44:46715" shell uitest uiInput inputText <x> <y> <字符串> # 点击坐标并输入
-hdc -t "192.168.137.44:46715" shell uitest uiInput keyEvent Back             # 返回键
-hdc -t "192.168.137.44:46715" shell uitest screenCap -p /data/local/tmp/shot.jpeg          # 截图（同 snapshot_display）
-hdc -t "192.168.137.44:46715" shell uitest dumpLayout -p /data/local/tmp/layout.json        # 导出 UI 布局树（含精确 bounds）
-hdc -t "192.168.137.44:46715" file recv /data/local/tmp/layout.json .                       # 拉取布局 JSON 到本地
-```
-
-设备 UDID: `2NP0224627054426`
-
-### Bridge Server
-
-```powershell
-cd Anywhere
-npm run build        # 编译 TypeScript → server/dist/
-npm start            # 启动 server/dist/server.mjs
-```
-
----
-
-## 文件结构速查
-
-- `Anywhere_harmony/entry/src/main/ets/pages/Index.ets` — 导航根、PagesMap、WS 生命周期、启动自动连接已配对主机。首页使用 `HdsNavDestination`。
-- `feature/home/HomeView.ets` — 原型风格首页、host chips、Projects、Recent chats、Add host 菜单、底部操作栏。
-- `feature/home/HostFilterBar.ets` — 独立组件，读取 `ChatStore` 实现 host chip 在线状态响应式更新。
-- `feature/chat/ChatView.ets` / `ChatPage.ets` / `ChatInputBar.ets` — 聊天标题栏、消息流、输入区（Model chip 弹出 ConfigPanel 配置面板）、权限浮层。
-- `feature/agent` / `feature/session` / `feature/workspace` / `feature/settings` — 对应详情页与管理页。
-- `common/model/ChatState.ets`、`WorkspaceInfo.ets`、`DeviceAgentStore.ets`、`MessageHandler.ets`、`NavParams.ets` — 全局状态、缓存、消息路由、导航参数。
-- `common/websocket/WSClient.ets` / `WSProtocol.ets` — WS 客户端、自动重连、协议类型。
-- `services/StorageService.ets`、`constants/DesignTokens.ets`、`common/ui/*` — preferences 持久化、设计 token、通用 UI 组件。
+必须实现 `IDataSource` 的 `registerDataChangeListener` / `unregisterDataChangeListener`。
 
 ---
 
 ## API 协议参考
 
-### 消息类型速查
+### 消息类型
 
-客户端 → 服务端：`list_agents`、`start`、`input`、`list_models`、`list_sessions`、`switch_model`、`set_mode`、`load_session`、`cancel`、`permission_response`。
-
-服务端 → 客户端：`server_info`、`session_started`、`agent_event`、`turn_ended`、`agent_list`、`model_list`、`session_list`、`permission_request`、`session_closed`。
+| 方向 | 消息 |
+|------|------|
+| 客户端 → 服务端 | `list_agents`、`start`、`input`、`list_models`、`list_sessions`、`switch_model`、`set_mode`、`load_session`、`cancel`、`permission_response` |
+| 服务端 → 客户端 | `server_info`、`session_started`、`agent_event`、`turn_ended`、`agent_list`、`model_list`、`session_list`、`permission_request`、`session_closed` |
 
 `AcpUpdate.sessionUpdate` 渲染类型：`agent_message_chunk`、`agent_thought_chunk`、`tool_call`、`tool_call_update`、`plan`、`user_message_chunk`。
 
 ### 服务端 temp-client 注意
-`temp-client.mts` 创建临时 ACP 进程时，如果 `cwd` 目录不存在，`spawn` 加 `shell: true` 会抛出误导性的 `cmd.exe ENOENT`（实际是 cwd 不存在）。代码中先 `existsSync(cwd)` 检查，不存在则回退 `process.cwd()`。
+
+创建临时 ACP 进程时，如果 `cwd` 目录不存在，`spawn` 加 `shell: true` 会抛出误导性的 `cmd.exe ENOENT`（实际是 cwd 不存在）。先 `existsSync(cwd)` 检查，不存在则回退 `process.cwd()`。
 
 ### list_models 数据来源
-opencode ACP 的 `createSession` 返回模型列表在 `configOptions` 而非 `models.availableModels`。`list-models.mts` 从 `configOptions` 中提取 `category === "model"` 的 option 作为可用模型列表。
+
+opencode ACP 的 `createSession` 返回模型列表在 `configOptions` 而非 `models.availableModels`。从 `configOptions` 中提取 `category === "model"` 的 option 作为可用模型列表。
+
+### 心跳
+
+Bridge 收到 `{ type: "heartbeat" }` 必须回包；手机端收到任意服务端消息也应刷新连接活跃时间，避免空闲 45s 被误判断线。
+
+---
+
+## 构建与部署
+
+### 无线调试
+
+```powershell
+# 构建 HAP
+cd Anywhere_harmony
+node "D:\DevEco Studio\tools\hvigor\bin\hvigorw.js" --mode module -p module=entry@default -p product=default assembleHap
+
+# 连接设备（IP:端口每次不同）
+hdc tconn <IP>:<PORT>
+
+# 部署
+hdc -t "<IP>:<PORT>" install "entry/build/default/outputs/default/entry-default-signed.hap"
+
+# 启动
+hdc -t "<IP>:<PORT>" shell aa start -a EntryAbility -b com.anywhere.app
+```
+
+**诊断命令**：
+
+```powershell
+# WS 重连/后台任务日志
+hdc -t "<IP>:<PORT>" shell hilog -x | Select-String -Pattern "WSClient|Heartbeat|reconnect|bg task"
+
+# 截图
+hdc -t "<IP>:<PORT>" shell snapshot_display -f /data/local/tmp/shot.jpeg
+hdc -t "<IP>:<PORT>" file recv /data/local/tmp/shot.jpeg "D:\Development\Anywhere\app_test_picture\<name>.jpeg"
+
+# UI 布局树（含 bounds）
+hdc -t "<IP>:<PORT>" shell uitest dumpLayout -p /data/local/tmp/layout.json
+hdc -t "<IP>:<PORT>" file recv /data/local/tmp/layout.json "D:\Development\Anywhere\app_test_picture"
+
+# UI 交互（替代不存在的 hdc shell input）
+hdc -t "<IP>:<PORT>" shell uitest uiInput click <x> <y>            # 点击
+hdc -t "<IP>:<PORT>" shell uitest uiInput swipe <x1> <y1> <x2> <y2> [vel]  # 滑动
+hdc -t "<IP>:<PORT>" shell uitest uiInput text <字符串>             # 在聚焦处输入
+hdc -t "<IP>:<PORT>" shell uitest uiInput inputText <x> <y> <字符串> # 点击并输入
+hdc -t "<IP>:<PORT>" shell uitest uiInput keyEvent Back             # 返回键
+hdc -t "<IP>:<PORT>" shell uitest screenCap -p /data/local/tmp/shot.jpeg  # 截图
+```
+
+屏幕分辨率：1260×2844。设备 UDID：`2NP0224627054426`
+
+### Bridge Server
+
+```powershell
+cd Anywhere
+npm run build   # 编译 TypeScript → server/dist/
+npm start       # 启动 server/dist/server.mjs
+```
+
+Bridge Server 监听 `:12138`，不指定 host（自动 IPv4+IPv6 双栈）。**不要**设 `host: "::"` 或 `"0.0.0.0"`，否则单栈。
+
+---
+
+## 文件结构
+
+```
+Anywhere/                             # 项目根（PC 端 + 手机端合一）
+├── AGENTS.md                         # 开发指南
+├── README.md
+├── package.json                      # PC 端 Node.js 项目（Bridge Server）
+├── tsconfig.json
+├── server/                           # Bridge Server (Node.js + ACP)
+│   ├── src/
+│   │   ├── server.mts                # WS 服务主入口，监听 :12138
+│   │   ├── relay.mts                 # Relay 客户端（连接 GCloud Relay Server）
+│   │   ├── encrypted-channel.mts     # E2EE 加密通道
+│   │   ├── host-identity.mts         # 主机身份 / 密钥
+│   │   ├── prefs.mts                 # 持久化偏好
+│   │   ├── session.mts               # 桥接会话管理
+│   │   ├── temp-client.mts           # 临时 ACP 子进程
+│   │   ├── acp-callbacks.mts         # ACP 事件回调 → WS 转发
+│   │   ├── acp/
+│   │   │   ├── client.mts            # ACP JSON-RPC 客户端
+│   │   │   └── types.mts             # ACP 协议类型
+│   │   ├── discovery/
+│   │   │   ├── agents.mts            # Agent 发现
+│   │   │   └── mcp-config.mts        # MCP 配置发现
+│   │   └── handlers/                 # ACP 消息处理器
+│   │       ├── auth.mts
+│   │       ├── start.mts
+│   │       ├── input.mts
+│   │       ├── cancel.mts
+│   │       ├── list-models.mts
+│   │       ├── list-sessions.mts
+│   │       ├── load-session.mts
+│   │       ├── resume-session.mts
+│   │       ├── close-session.mts
+│   │       ├── set-mode.mts
+│   │       ├── switch-model.mts
+│   │       ├── set-config.mts
+│   │       ├── permission.mts
+│   │       └── close-session.mts
+│   └── dist/                         # 编译产物（*.mjs）
+│
+├── relay/                            # GCloud Relay Server
+│   ├── relay.mjs                     # Node.js 中继（当前使用）
+│   ├── relay.py                      # Python 中继（备用）
+│   ├── server.ts                     # TypeScript 源
+│   ├── go.mod
+│   ├── anywhere-relay                # Go 编译中继（Linux）
+│   └── anywhere-relay.exe            # Go 编译中继（Windows）
+├── wstest/                           # WebSocket 测试工具
+│   ├── test-relay.cjs
+│   └── package.json
+├── prototype_picture/                # 产品设计原型
+│   ├── Home.png
+│   ├── Chat.png
+│   ├── Project Detail.png
+│   └── ...
+├── app_test_picture/                 # 实机测试截图
+│   ├── shot_home.jpeg
+│   ├── chat_title_bar_native.jpeg
+│   └── ...
+├── docs/                             # 文档
+│   ├── harmonyos-symbol-reference.md
+│   └── ...
+└── Anywhere_harmony/                 # HarmonyOS App（手机端）
+    ├── entry/
+    │   ├── src/main/ets/
+    │   │   ├── pages/
+    │   │   │   └── Index.ets         # 导航根、PagesMap、WS 生命周期、自动连接
+    │   │   ├── feature/
+    │   │   │   ├── home/
+    │   │   │   │   ├── HomeView.ets      # 首页：host chips、Projects、Recent chats
+    │   │   │   │   └── HostFilterBar.ets # 独立 host 在线状态组件
+    │   │   │   ├── chat/
+    │   │   │   │   ├── ChatView.ets      # 聊天壳层（NavDestination）
+    │   │   │   │   ├── ChatPage.ets      # 消息流列表（LazyForEach）
+    │   │   │   │   ├── ChatInputBar.ets  # 输入区 + Model chip → ConfigPanel
+    │   │   │   │   └── NewSessionView.ets# 新建会话页
+    │   │   │   ├── agent/
+    │   │   │   │   └── AgentDetailView.ets
+    │   │   │   ├── session/
+    │   │   │   │   └── SessionDetailView.ets
+    │   │   │   ├── workspace/
+    │   │   │   │   ├── WorkspaceDetailView.ets
+    │   │   │   │   ├── WorkspaceListView.ets
+    │   │   │   │   └── WorkspaceDrawer.ets
+    │   │   │   └── settings/
+    │   │   │       └── SettingsView.ets
+    │   │   │
+    │   │   ├── common/
+    │   │   │   ├── model/
+    │   │   │   │   ├── ChatState.ets         # ChatStore 全局状态
+    │   │   │   │   ├── WorkspaceInfo.ets     # WorkspaceStore / HostStore /...
+    │   │   │   │   ├── DeviceAgentStore.ets  # Agent 缓存
+    │   │   │   │   ├── MessageHandler.ets    # 消息路由
+    │   │   │   │   ├── MessageData.ets       # 消息数据模型
+    │   │   │   │   ├── NavParams.ets         # 导航参数
+    │   │   │   │   └── AgentConfig.ets       # Agent 配置模型
+    │   │   │   ├── websocket/
+    │   │   │   │   ├── WSClient.ets          # WS 客户端 + 自动重连
+    │   │   │   │   └── WSProtocol.ets        # 协议类型定义
+    │   │   │   └── ui/
+    │   │   │       ├── CustomIcon.ets        # SVG 图标组件
+    │   │   │       ├── MessageCard.ets       # 消息气泡
+    │   │   │       ├── ToolCallCard.ets      # 工具调用卡片
+    │   │   │       ├── MarkdownRender.ets    # Markdown 渲染
+    │   │   │       ├── ThinkingSection.ets   # Thinking 折叠区
+    │   │   │       └── PlanView.ets          # Plan 进度视图
+    │   │   │
+    │   │   ├── services/
+    │   │   │   └── StorageService.ets        # Preferences 持久化
+    │   │   │
+    │   │   ├── constants/
+    │   │   │   └── DesignTokens.ets          # 设计 token
+    │   │   │
+    │   │   └── vendor/                       # 第三方组件
+    │   │       └── lv-md/                    # Markdown 解析引擎
+    │   │
+    │   └── src/main/resources/
+    │       ├── base/media/                   # SVG 图标文件（33 个 ic_*.svg）
+    │       ├── base/profile/                 # 配置文件
+    │       └── base/element/                 # 主题元素
+    │
+    ├── build/                                # 构建产物
+    └── oh_modules/                           # 鸿蒙依赖
+```
+
+---
+
+## 踩坑记录
+
+### HDS titleBar 菜单项不支持 bindMenu
+
+`HdsNavDestination` 的 menu 项是配置对象，不是真实 ArkUI 组件。无法附加 `.bindMenu()`。
+
+**方案**：
+- 简单场景：直接用 `action` 回调
+- 多选项：用 `NavDestination` + `.title(CustomBuilder)` 放真实 Button + `.bindMenu()`，但丢失 HDS 沉浸光感
+
+### NavDestination + CustomBuilder 局限
+
+`.title(builder: CustomBuilder)` 可自定义标题栏内容，放入带 `.bindMenu()` 的 Button，但无法使用 HDS 的 `systemMaterialEffect`（沉浸光感）。两者不可兼得。
+
+### SheetSize.AUTO 不存在
+
+`.bindSheet()` 的 `height` 不支持 `SheetSize.AUTO`。只能用 `SheetSize.MEDIUM` / `LARGE` 等枚举值。
+
+### SymbolGlyph 图标名必须准确
+
+`$r('sys.symbol.xxx')` 中 `xxx` 必须是系统符号库中存在的名称，否则编译报错。安全常用名：`plus`、`gearshape`、`folder`、`message`、`clock`、`chevron_right`、`ohos_trash`、`ohos_folder_badge_plus`。
+
+### 后台限制
+
+`backgroundTaskManager.requestSuspendDelay()` 是短时任务，不是长期后台保活。实机会出现 `bg task failed: {"code":"9900002"}` 表示短时任务校验失败。若要后台连接，只能用用户可感知的长时任务（通知栏），类型需符合官方校验（`DATA_TRANSFER`/`MULTI_DEVICE_CONNECTION`），不能按音乐软件的 `AUDIO_PLAYBACK` 思路无感保活。
+
+### 网络排查
+
+- Server 监听：`netstat -an | findstr "12138"` → 确认 `0.0.0.0:[::]` 双栈
+- 防火墙：nvmw4 管理 Node（`D:\nvm4w\nodejs\node.exe`），不是 DevEco Studio 的 Node
+- Clash：全局模式 → 关掉，或 bypass `192.168.0.0/16`、`10.0.0.0/8`
+- Tailscale：手机热点 WiFi → IPv4/IPv6 均通；移动数据 → 仅 IPv4。始终用 IPv4 地址
+- 排查链路：本机 WS 测试 → `hdc shell ping` → 防火墙 → 关 Clash
+- 添加主机时 IPv6 URL 必须保留 `[ ]` 自动包能力

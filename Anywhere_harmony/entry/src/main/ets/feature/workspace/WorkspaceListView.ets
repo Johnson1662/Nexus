@@ -1,6 +1,9 @@
 import { Colors, FontSize, Spacing, Radius, Layout } from '../../constants/DesignTokens';
 import { WorkspaceStore, WorkspaceInfo, ServerSession } from '../../common/model/WorkspaceInfo';
 import { ChatStore } from '../../common/model/ChatState';
+import { HostRuntimeStore } from '../../common/model/HostState';
+import { HdsNavDestination } from '@kit.UIDesignKit';
+import { saveWorkspaces } from '../../services/StorageService';
 
 @Component
 export struct WorkspaceListView {
@@ -9,6 +12,8 @@ export struct WorkspaceListView {
 
   @State searchText: string = '';
   @State filterIndex: number = 0;
+  @State showAddWorkspace: boolean = false;
+  @State newWorkspacePath: string = '';
 
   getBranch(_: WorkspaceInfo): string {
     return 'main';
@@ -32,7 +37,7 @@ export struct WorkspaceListView {
   }
 
   getWorkspaceStatus(workspace: WorkspaceInfo): string {
-    if (!ChatStore.connected) return 'Offline';
+    if (!HostRuntimeStore.isOnline(HostRuntimeStore.activeHostKey)) return 'Offline';
     let latest: ServerSession | null = this.getLatestSession(workspace);
     if (ChatStore.turnActive && latest && latest.sessionId === ChatStore.acpSessionId) {
       return 'Running';
@@ -89,86 +94,122 @@ export struct WorkspaceListView {
     return Colors.warning;
   }
 
+  addWorkspace(): void {
+    let path = this.newWorkspacePath.trim();
+    if (path.length === 0) return;
+    let ws = new WorkspaceInfo();
+    ws.id = Date.now().toString();
+    ws.name = path.split('\\').pop() || path.split('/').pop() || 'Project';
+    ws.path = path;
+    WorkspaceStore.workspaces.push(ws);
+    WorkspaceStore.currentIndex = WorkspaceStore.workspaces.length - 1;
+    this.newWorkspacePath = '';
+    this.showAddWorkspace = false;
+    saveWorkspaces('');
+  }
+
   build() {
-    Column() {
-      Row() {
-        Text('Workspaces')
-          .fontSize(FontSize.xxxxl)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(Colors.foreground)
-        Blank()
-        Button() {
-          SymbolGlyph($r('sys.symbol.plus'))
-            .fontSize(20)
-            .fontColor([Colors.surface0])
+    HdsNavDestination() {
+      Column() {
+        Row() {
+          SymbolGlyph($r('sys.symbol.magnifyingglass'))
+            .fontSize(18)
+            .fontColor([Colors.foregroundMuted])
+            .margin({ right: Spacing.sm })
+          TextInput({ placeholder: '搜索工作区、任务或路径...', text: this.searchText })
+            .layoutWeight(1)
+            .height(44)
+            .backgroundColor(Colors.transparent)
+            .fontSize(FontSize.base)
+            .fontColor(Colors.foreground)
+            .placeholderColor(Colors.foregroundMuted)
+            .onChange((value: string) => { this.searchText = value; })
         }
-        .width(40)
-        .height(40)
-        .borderRadius(Radius.full)
-        .backgroundColor(Colors.foreground)
-        .onClick(() => { this.onNewSession?.(WorkspaceStore.currentIndex); })
+        .width(Layout.contentWidth)
+        .height(48)
+        .padding({ left: Spacing.md, right: Spacing.md })
+        .margin({ bottom: Spacing.md })
+
+        Row({ space: Spacing.sm }) {
+          this.FilterTab('全部', 0)
+          this.FilterTab('活跃', 1)
+          this.FilterTab('空闲', 2)
+          this.FilterTab('离线', 3)
+        }
+        .width(Layout.contentWidth)
+        .padding({ bottom: Spacing.lg })
+
+        if (WorkspaceStore.workspaces.length === 0) {
+          Column() {
+            Text('还没有工作区。先从聊天页侧边栏添加项目路径，再从这里管理工作区和会话。')
+              .fontSize(FontSize.sm)
+              .fontColor(Colors.foregroundMuted)
+          }
+          .layoutWeight(1)
+          .width('100%')
+          .justifyContent(FlexAlign.Start)
+          .alignItems(HorizontalAlign.Start)
+          .padding({ left: Spacing.xl, right: Spacing.xl, top: Spacing.md })
+        } else {
+          List({ space: Spacing.md }) {
+            ForEach(WorkspaceStore.workspaces, (workspace: WorkspaceInfo, index: number) => {
+              if (this.matchesSearch(workspace) && this.matchesFilter(workspace)) {
+                ListItem() {
+                  this.WorkspaceCard(workspace, index)
+                }
+              }
+            }, (workspace: WorkspaceInfo) => workspace.id + ':' + this.filterIndex.toString() + ':' + this.searchText + ':' +
+              HostRuntimeStore.getPhase(HostRuntimeStore.activeHostKey))
+          }
+          .layoutWeight(1)
+          .width(Layout.contentWidth)
+          .padding({ bottom: Spacing.xxxl })
+        }
+
+        if (this.showAddWorkspace) {
+          Row() {
+            TextInput({ placeholder: '/path/to/project', text: this.newWorkspacePath })
+              .layoutWeight(1).height(44)
+              .borderRadius(Radius.sm)
+              .padding({ left: Spacing.md, right: Spacing.md })
+              .fontSize(FontSize.sm)
+              .backgroundColor(Colors.transparent)
+              .onChange((v: string) => { this.newWorkspacePath = v })
+              .onSubmit(() => { this.addWorkspace(); })
+            Button('添加')
+              .height(44).backgroundColor(Colors.transparent).fontColor(Colors.accent)
+              .fontWeight(FontWeight.Medium).borderRadius(Radius.sm).fontSize(FontSize.sm)
+              .margin({ left: Spacing.sm })
+              .onClick(() => { this.addWorkspace(); })
+              .stateStyles({
+                pressed: { .backgroundColor(Colors.surface1) },
+                normal: { .backgroundColor(Colors.transparent) }
+              })
+          }
+          .width(Layout.contentWidth)
+          .padding({ bottom: Spacing.md })
+        }
       }
       .width('100%')
-      .padding({ top: Spacing.xxxl, bottom: Spacing.lg, left: Spacing.xl, right: Spacing.xl })
-
-      Row() {
-        SymbolGlyph($r('sys.symbol.magnifyingglass'))
-          .fontSize(18)
-          .fontColor([Colors.foregroundMuted])
-          .margin({ right: Spacing.sm })
-        TextInput({ placeholder: '搜索工作区、任务或路径...', text: this.searchText })
-          .layoutWeight(1)
-          .height(44)
-          .backgroundColor(Colors.transparent)
-          .fontSize(FontSize.base)
-          .fontColor(Colors.foreground)
-          .placeholderColor(Colors.foregroundMuted)
-          .onChange((value: string) => { this.searchText = value; })
-      }
-      .width(Layout.contentWidth)
-      .height(48)
-      .padding({ left: Spacing.md, right: Spacing.md })
-      .margin({ bottom: Spacing.md })
-
-      Row({ space: Spacing.sm }) {
-        this.FilterTab('全部', 0)
-        this.FilterTab('活跃', 1)
-        this.FilterTab('空闲', 2)
-        this.FilterTab('离线', 3)
-      }
-      .width(Layout.contentWidth)
-      .padding({ bottom: Spacing.lg })
-
-      if (WorkspaceStore.workspaces.length === 0) {
-        Column() {
-          Text('还没有工作区。先从聊天页侧边栏添加项目路径，再从这里管理工作区和会话。')
-            .fontSize(FontSize.sm)
-            .fontColor(Colors.foregroundMuted)
-        }
-        .layoutWeight(1)
-        .width('100%')
-        .justifyContent(FlexAlign.Start)
-        .alignItems(HorizontalAlign.Start)
-        .padding({ left: Spacing.xl, right: Spacing.xl, top: Spacing.md })
-      } else {
-        List({ space: Spacing.md }) {
-          ForEach(WorkspaceStore.workspaces, (workspace: WorkspaceInfo, index: number) => {
-            if (this.matchesSearch(workspace) && this.matchesFilter(workspace)) {
-              ListItem() {
-                this.WorkspaceCard(workspace, index)
-              }
-            }
-          }, (workspace: WorkspaceInfo) => workspace.id + ':' + this.filterIndex.toString() + ':' + this.searchText)
-        }
-        .layoutWeight(1)
-        .width(Layout.contentWidth)
-        .padding({ bottom: Spacing.xxxl })
-      }
+      .height('100%')
+      .alignItems(HorizontalAlign.Center)
+      .backgroundColor(Colors.surface0)
+      .padding({ top: 56 })
     }
-    .width('100%')
-    .height('100%')
-    .alignItems(HorizontalAlign.Center)
-    .backgroundColor(Colors.surface0)
+    .titleBar({
+      content: {
+        title: { mainTitle: 'Workspaces' },
+        menu: {
+          value: [{
+            content: {
+              icon: $r('sys.symbol.plus'),
+              action: () => { this.showAddWorkspace = !this.showAddWorkspace; }
+            }
+          }]
+        }
+      }
+    })
+    .width('100%').height('100%')
   }
 
   @Builder
