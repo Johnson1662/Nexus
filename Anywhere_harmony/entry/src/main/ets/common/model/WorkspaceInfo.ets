@@ -76,10 +76,12 @@ export class HostStoreModel {
     } else {
       this.devices.push(device);
     }
+    this.devices = [...this.devices];
   }
 
   removeDevice(index: number): void {
     this.devices.splice(index, 1);
+    this.devices = [...this.devices];
   }
 
   getDeviceIndexByName(name: string): number {

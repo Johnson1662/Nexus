@@ -1,6 +1,7 @@
 import { Colors, FontSize, Spacing, Radius, Duration } from '../../constants/DesignTokens';
 import { DeviceEntry } from '../../common/model/WorkspaceInfo';
 import { HostPhase, HostRuntimeStore } from '../../common/model/HostState';
+import { ChatStore } from '../../common/model/ChatState';
 
 @Component
 export struct HostFilterBar {
@@ -32,7 +33,18 @@ export struct HostFilterBar {
   }
 
   getPhase(device: DeviceEntry): string {
+    if (ChatStore.connected && this.isCurrentConnectedDevice(device)) {
+      return HostPhase.ONLINE;
+    }
     return HostRuntimeStore.getDevicePhase(device);
+  }
+
+  isCurrentConnectedDevice(device: DeviceEntry): boolean {
+    let currentHostKey: string = ChatStore.currentDeviceId;
+    if (currentHostKey.length === 0) return false;
+    if (device.hostId === currentHostKey || device.name === currentHostKey) return true;
+    if (HostRuntimeStore.matchesDevice(device, currentHostKey)) return true;
+    return this.devices.length === 1 && HostRuntimeStore.isOnline(currentHostKey);
   }
 
   getPhaseColor(phase: string): Resource {
