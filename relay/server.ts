@@ -126,6 +126,11 @@ server.on('upgrade', (req, socket) => {
     const old = hosts.get(hostId);
     if (old) old.close(1008, 'New host connected');
     hosts.set(hostId, ws);
+    const waitingClients = clients.get(hostId);
+    if (waitingClients && waitingClients.size > 0) {
+      ws.send(JSON.stringify({ type: 'relay_client_connected' }));
+      console.log(`[NOTIFY] host ${hostId} about ${waitingClients.size} waiting client(s)`);
+    }
   } else {
     let set = clients.get(hostId);
     if (!set) { set = new Set(); clients.set(hostId, set); }
@@ -135,6 +140,9 @@ server.on('upgrade', (req, socket) => {
     if (hostWs) {
       hostWs.send(JSON.stringify({ type: 'relay_client_connected' }));
       console.log(`[NOTIFY] host ${hostId} about new client`);
+    } else {
+      ws.send(JSON.stringify({ type: 'target_offline', hostId }));
+      console.log(`[NOTIFY] client ${hostId} target offline`);
     }
   }
 
@@ -145,7 +153,10 @@ server.on('upgrade', (req, socket) => {
     if (r === 'client') {
       const hw = hosts.get(h);
       if (hw) hw.send(msg);
-      else console.log(`[WARN] No host found for hostId: ${h}`);
+      else {
+        ws.send(JSON.stringify({ type: 'target_offline', hostId: h }));
+        console.log(`[WARN] No host found for hostId: ${h}`);
+      }
     } else if (r === 'host') {
       const set = clients.get(h);
       if (set) for (const cw of set) cw.send(msg);

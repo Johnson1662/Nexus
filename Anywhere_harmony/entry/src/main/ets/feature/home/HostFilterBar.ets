@@ -1,6 +1,6 @@
 import { Colors, FontSize, Spacing, Radius, Duration } from '../../constants/DesignTokens';
-import { ChatStore } from '../../common/model/ChatState';
 import { DeviceEntry } from '../../common/model/WorkspaceInfo';
+import { HostPhase, HostRuntimeStore } from '../../common/model/HostState';
 
 @Component
 export struct HostFilterBar {
@@ -12,12 +12,12 @@ export struct HostFilterBar {
   build() {
     Scroll() {
       Row({ space: Spacing.sm }) {
-        this.Chip('All', 'all', true)
+        this.Chip('All', 'all', HostPhase.UNKNOWN)
         ForEach(this.devices, (device: DeviceEntry) => {
           this.Chip(
             this.getHostLabel(device),
             device.hostId || device.name,
-            this.isOnline(device)
+            this.getPhase(device)
           )
         }, (device: DeviceEntry) => device.hostId || device.name)
       }
@@ -31,18 +31,26 @@ export struct HostFilterBar {
     .align(Alignment.Start)
   }
 
-  isOnline(device: DeviceEntry): boolean {
-    return ChatStore.connected && ChatStore.currentDeviceId.length > 0 &&
-      (device.hostId === ChatStore.currentDeviceId || device.name === ChatStore.currentDeviceId);
+  getPhase(device: DeviceEntry): string {
+    return HostRuntimeStore.getPhase(device.hostId || device.name);
+  }
+
+  getPhaseColor(phase: string): Resource {
+    if (phase === HostPhase.ONLINE || phase === HostPhase.SYNCING) return Colors.success;
+    if (phase === HostPhase.WAITING_HOST || phase === HostPhase.RECONNECTING || phase === HostPhase.CONNECTING) {
+      return Colors.warning;
+    }
+    if (phase === HostPhase.ERROR) return Colors.error;
+    return Colors.foregroundMuted;
   }
 
   @Builder
-  Chip(label: string, key: string, online: boolean) {
+  Chip(label: string, key: string, phase: string) {
     Button() {
       Row() {
         if (key !== 'all') {
           Circle({ width: 6, height: 6 })
-            .fill(online ? Colors.success : Colors.foregroundMuted)
+            .fill(this.getPhaseColor(phase))
             .margin({ right: Spacing.xs })
         }
         Text(label)

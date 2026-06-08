@@ -5,6 +5,7 @@ import { util } from '@kit.ArkTS';
 import { backgroundTaskManager } from '@kit.BackgroundTasksKit';
 import { ChatStore } from '../model/ChatState';
 import { ServerSession, HostStore, DeviceEntry } from '../model/WorkspaceInfo';
+import { HostRuntimeStore } from '../model/HostState';
 import {
   StorageService,
   PrefsKeys,
@@ -69,6 +70,20 @@ function getUrlPort(url: string): string {
     return rest.substring(portSep + 1);
   }
   return '12138';
+}
+
+function getUrlQueryValue(url: string, key: string): string {
+  let marker: string = key + '=';
+  let start: number = url.indexOf(marker);
+  if (start < 0) return '';
+  start += marker.length;
+  let end: number = url.indexOf('&', start);
+  if (end < 0) end = url.length;
+  return url.substring(start, end);
+}
+
+function isRelayClientUrl(url: string): boolean {
+  return url.indexOf('targetHostId=') >= 0;
 }
 
 function buildWsUrlFromIp(ip: string, port: string, scheme: string): string {
@@ -153,6 +168,9 @@ export class WSClient {
   private suspendRequestId: number | null = null;
   private wsGen: number = 0;
   private everConnected: boolean = false;
+  private hostEverOnline: boolean = false;
+  private targetHostKey: string = '';
+  private waitingHostTimer: number | null = null;
   private _e2eeReady: boolean = false;
   private _e2eeClientId: string = '';
   private channel: PhoneEncryptedChannel = new PhoneEncryptedChannel();
@@ -162,13 +180,26 @@ export class WSClient {
   private heartbeatSender: number | null = null;
   private readonly HEARTBEAT_WATCHDOG_MS: number = 45_000;  // 45s no heartbeat → disconnect
 
-  connect(url: string): void {
+  connect(url: string, hostKey: string = ''): void {
     this.cancelReconnect();
+    this.cancelWaitingHostTimer();
     this.lastUrl = url;
+    this.targetHostKey = this.resolveHostKey(url, hostKey);
+    this.hostEverOnline = HostRuntimeStore.hasEverOnline(this.targetHostKey);
     this.intentionalClose = false;
     this.reconnectAttempts = 0;
     this.everConnected = false;
+    HostRuntimeStore.markConnecting(this.targetHostKey, url);
+    ChatStore.connected = false;
+    ChatStore.currentDeviceId = '';
     this.doConnect(url);
+  }
+
+  private resolveHostKey(url: string, hostKey: string): string {
+    if (hostKey.length > 0) return hostKey;
+    let targetHostId: string = getUrlQueryValue(url, 'targetHostId');
+    if (targetHostId.length > 0) return targetHostId;
+    return stripQuery(url);
   }
 
   // Try connecting to a single URL, returns latency in ms on success, -1 on failure
@@ -206,11 +237,14 @@ export class WSClient {
   }
 
   // Connect to the fastest reachable URL from a device, then use that URL
-  async connectBest(urls: string[]): Promise<void> {
+  async connectBest(urls: string[], hostKey: string = ''): Promise<void> {
+    let resolvedHostKey: string = urls.length > 0 ? this.resolveHostKey(urls[0], hostKey) : hostKey;
     if (urls.length === 0) {
       hilog.error(DOMAIN, TAG, 'connectBest: empty urls, abort');
+      HostRuntimeStore.markOffline(resolvedHostKey, 'no candidate urls');
       return;
     }
+    HostRuntimeStore.markConnecting(resolvedHostKey, urls[0]);
     let bestUrl: string = urls[0];
     let bestLatency: number = -1;
     let results: Promise<number>[] = [];
@@ -224,8 +258,17 @@ export class WSClient {
         bestUrl = urls[i];
       }
     }
+    if (bestLatency < 0) {
+      hilog.error(DOMAIN, TAG, 'connectBest: all candidates failed');
+      ChatStore.connected = false;
+      ChatStore.currentDeviceId = '';
+      ChatStore.reconnectPhase = '';
+      HostRuntimeStore.markOffline(resolvedHostKey, 'all candidate urls failed');
+      this.notifyState(false, 'all candidate urls failed');
+      return;
+    }
     hilog.info(DOMAIN, TAG, `connectBest: selected ${bestUrl} (${bestLatency}ms)`);
-    this.connect(bestUrl);
+    this.connect(bestUrl, resolvedHostKey);
   }
 
   private doConnect(url: string): void {
@@ -243,11 +286,16 @@ export class WSClient {
       if (connectNotified) return;
       connectNotified = true;
       clearTimeout(connectTimeout);
+      this.cancelWaitingHostTimer();
       hilog.error(DOMAIN, TAG, detail);
       ChatStore.connected = false;
+      ChatStore.currentDeviceId = '';
       this.notifyState(false, detail);
-      if (!this.intentionalClose) {
-        this.scheduleReconnect();
+      if (!this.intentionalClose && this.hostEverOnline) {
+        this.scheduleReconnect(detail);
+      } else {
+        ChatStore.reconnectPhase = '';
+        HostRuntimeStore.markOffline(this.targetHostKey, detail);
       }
     };
 
@@ -255,32 +303,17 @@ export class WSClient {
       if (gen !== this.wsGen) return;
       clearTimeout(connectTimeout);
       connectNotified = true;
-      this.everConnected = true;
-      hilog.info(DOMAIN, TAG, 'connected: ' + url);
-      ChatStore.connected = true;
-      ChatStore.reconnectAttempt = 0;
-      this.reconnectAttempts = 0;
-      this.notifyState(true, url);
-      this.requestBgTask();
-      // Start heartbeat watchdog
-      this.startHeartbeatWatchdog();
-      // Phase 3b: Clear ghost permission overlay on reconnect
-      ChatStore.pendingPermission = null;
-      // Auto-initiate E2EE for relay connections (URL contains targetHostId)
-      if (url.indexOf('targetHostId=') >= 0) {
-        this.initiateE2EE(url, gen);
-      }
-      // Phase 3b + grill: Request cursor sync if we have a session (reconnect recovery)
-      if (ChatStore.bridgeSessionId.length > 0 && ChatStore.lastMessageId.length > 0) {
-        ChatStore.reconnectPhase = 'syncing';
-        this.send({
-          type: 'sync_request',
-          sessionId: ChatStore.bridgeSessionId,
-          lastMessageId: ChatStore.lastMessageId,
-        } as ClientMessage);
+      hilog.info(DOMAIN, TAG, 'websocket open: ' + url);
+      ChatStore.connected = false;
+      if (isRelayClientUrl(url)) {
+        HostRuntimeStore.markWaitingHost(this.targetHostKey, url);
       } else {
-        // No session to sync — clear reconnect phase immediately
-        ChatStore.reconnectPhase = '';
+        HostRuntimeStore.markConnecting(this.targetHostKey, url);
+      }
+      this.startWaitingHostTimer();
+      // Auto-initiate E2EE for relay connections (URL contains targetHostId)
+      if (isRelayClientUrl(url)) {
+        this.initiateE2EE(url, gen);
       }
     });
 
@@ -309,18 +342,35 @@ export class WSClient {
     this.ws.on('close', () => {
       if (gen !== this.wsGen) return;
       if (!this.everConnected) {
-        onConnectFailure('Connection closed before WebSocket handshake completed');
+        this.cancelWaitingHostTimer();
+        ChatStore.connected = false;
+        ChatStore.currentDeviceId = '';
+        this.notifyState(false, 'Connection closed before host confirmation');
+        if (!this.intentionalClose && this.hostEverOnline) {
+          this.scheduleReconnect('Connection closed before host confirmation');
+        } else {
+          ChatStore.reconnectPhase = '';
+          HostRuntimeStore.markOffline(this.targetHostKey, 'Connection closed before host confirmation');
+        }
         return;
       }
       this.everConnected = false;
       hilog.info(DOMAIN, TAG, 'disconnected: ' + url);
       ChatStore.connected = false;
       ChatStore.currentDeviceId = '';
+      this.cancelWaitingHostTimer();
       this.cancelBgTask();
       this.notifyState(false, '');
       if (!this.intentionalClose) {
-        ChatStore.reconnectPhase = 'disconnected';
-        this.scheduleReconnect();
+        if (this.hostEverOnline) {
+          if (ChatStore.bridgeSessionId.length > 0) {
+            ChatStore.reconnectPhase = 'disconnected';
+          }
+          this.scheduleReconnect('WebSocket closed');
+        } else {
+          ChatStore.reconnectPhase = '';
+          HostRuntimeStore.markOffline(this.targetHostKey, 'WebSocket closed before host confirmation');
+        }
       }
     });
 
@@ -328,6 +378,20 @@ export class WSClient {
       if (gen !== this.wsGen) return;
       if (this.everConnected) {
         hilog.error(DOMAIN, TAG, 'post-connect error: ' + JSON.stringify(err));
+        return;
+      }
+      if (connectNotified) {
+        let detail: string = 'Connection error before host confirmation: ' + JSON.stringify(err);
+        this.cancelWaitingHostTimer();
+        ChatStore.connected = false;
+        ChatStore.currentDeviceId = '';
+        this.notifyState(false, detail);
+        if (!this.intentionalClose && this.hostEverOnline) {
+          this.scheduleReconnect(detail);
+        } else {
+          ChatStore.reconnectPhase = '';
+          HostRuntimeStore.markOffline(this.targetHostKey, detail);
+        }
         return;
       }
       onConnectFailure('Connection error: ' + JSON.stringify(err));
@@ -341,15 +405,17 @@ export class WSClient {
     });
   }
 
-  private scheduleReconnect(): void {
+  private scheduleReconnect(reason: string = ''): void {
     if (this.intentionalClose || !this.lastUrl) return;
     this.cancelReconnect();
-    this.everConnected = false;
     this.reconnectAttempts++;
     const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts - 1), 30000);
     hilog.info(DOMAIN, TAG, `reconnect in ${delay}ms (attempt ${this.reconnectAttempts})`);
-    ChatStore.reconnectPhase = 'reconnecting';
+    if (ChatStore.bridgeSessionId.length > 0) {
+      ChatStore.reconnectPhase = 'reconnecting';
+    }
     ChatStore.reconnectAttempt = this.reconnectAttempts;
+    HostRuntimeStore.markReconnecting(this.targetHostKey, this.reconnectAttempts, reason);
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       this.doConnect(this.lastUrl);
@@ -360,6 +426,26 @@ export class WSClient {
     if (this.reconnectTimer !== null) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
+    }
+  }
+
+  private startWaitingHostTimer(): void {
+    this.cancelWaitingHostTimer();
+    this.waitingHostTimer = setTimeout(() => {
+      this.waitingHostTimer = null;
+      if (!this.everConnected && !ChatStore.connected) {
+        hilog.info(DOMAIN, TAG, 'target host did not respond');
+        ChatStore.reconnectPhase = '';
+        HostRuntimeStore.markOffline(this.targetHostKey, 'target host did not respond');
+        this.notifyState(false, 'target host did not respond');
+      }
+    }, 10000);
+  }
+
+  private cancelWaitingHostTimer(): void {
+    if (this.waitingHostTimer !== null) {
+      clearTimeout(this.waitingHostTimer);
+      this.waitingHostTimer = null;
     }
   }
 
@@ -451,8 +537,12 @@ export class WSClient {
   disconnect(): void {
     this.intentionalClose = true;
     this.everConnected = false;
+    this.hostEverOnline = false;
     this.cancelReconnect();
+    this.cancelWaitingHostTimer();
     this.cancelBgTask();
+    HostRuntimeStore.markOffline(this.targetHostKey, 'manual disconnect');
+    ChatStore.reconnectPhase = '';
     this.disconnectInternal();
   }
 
@@ -465,6 +555,7 @@ export class WSClient {
     }
     ChatStore.connected = false;
     ChatStore.currentDeviceId = '';
+    this.cancelWaitingHostTimer();
     this.stopHeartbeatWatchdog();
   }
 
@@ -577,7 +668,36 @@ export class WSClient {
       relayPin: info.relayPin,
     } as DeviceEntry);
 
-    ChatStore.currentDeviceId = info.hostId || hostname;
+    let actualHostKey: string = info.hostId || hostname;
+    if (this.targetHostKey.length > 0 && this.targetHostKey !== actualHostKey) {
+      HostRuntimeStore.mergeHostKey(this.targetHostKey, actualHostKey);
+    }
+    this.targetHostKey = actualHostKey;
+    this.everConnected = true;
+    this.hostEverOnline = true;
+    this.cancelWaitingHostTimer();
+    HostRuntimeStore.markOnline(actualHostKey, primaryUrl);
+
+    ChatStore.connected = true;
+    ChatStore.currentDeviceId = actualHostKey;
+    ChatStore.reconnectAttempt = 0;
+    this.reconnectAttempts = 0;
+    this.notifyState(true, connectedUrl);
+    this.cancelBgTask();
+    this.requestBgTask();
+    this.startHeartbeatWatchdog();
+    ChatStore.pendingPermission = null;
+    if (ChatStore.bridgeSessionId.length > 0 && ChatStore.lastMessageId.length > 0) {
+      ChatStore.reconnectPhase = 'syncing';
+      HostRuntimeStore.markSyncing(actualHostKey);
+      this.send({
+        type: 'sync_request',
+        sessionId: ChatStore.bridgeSessionId,
+        lastMessageId: ChatStore.lastMessageId,
+      } as ClientMessage);
+    } else {
+      ChatStore.reconnectPhase = '';
+    }
     saveHosts();
     loadWorkspaces(connectedUrl);
     for (let cb of this.serverInfoListeners) {
@@ -610,6 +730,8 @@ export class WSClient {
         let error: string = String(parsed['error'] || 'unknown');
         hilog.error(DOMAIN, TAG, 'E2EE handshake rejected: ' + error);
         // Q6 grill: propagate specific failure reason to UI
+        HostRuntimeStore.markError(this.targetHostKey, 'E2EE握手拒绝: ' + error);
+        ChatStore.connected = false;
         this.notifyState(false, 'E2EE握手拒绝: ' + error);
       }
     }
@@ -630,7 +752,10 @@ export class WSClient {
         hilog.error(DOMAIN, TAG, 'Heartbeat timeout (45s), disconnecting');
         this.intentionalClose = false;
         this.disconnectInternal();
-        this.scheduleReconnect();
+        if (ChatStore.bridgeSessionId.length > 0) {
+          ChatStore.reconnectPhase = 'disconnected';
+        }
+        this.scheduleReconnect('Heartbeat timeout');
       }
     }, 15_000);
 
@@ -707,6 +832,17 @@ export class WSClient {
       case 'server_info':
         this.handleServerInfo(msg as ServerInfoMessage);
         break;
+      case 'target_offline': {
+        let offlineHostKey: string = msg.hostId || this.targetHostKey;
+        hilog.info(DOMAIN, TAG, 'target_offline: ' + offlineHostKey);
+        this.cancelWaitingHostTimer();
+        ChatStore.connected = false;
+        ChatStore.currentDeviceId = '';
+        ChatStore.reconnectPhase = '';
+        HostRuntimeStore.markOffline(offlineHostKey, 'target host offline');
+        this.notifyState(false, 'target host offline');
+        break;
+      }
       case 'session_started':
         if (msg.sessionId !== undefined && msg.sessionId !== ChatStore.bridgeSessionId) {
           clearMessageId();
@@ -948,6 +1084,9 @@ export class WSClient {
           hilog.info(DOMAIN, TAG, 'sync_response: processed ' + String(entries.length) + ' entries');
         }
         ChatStore.reconnectPhase = '';
+        if (this.targetHostKey.length > 0) {
+          HostRuntimeStore.markOnline(this.targetHostKey, this.lastUrl);
+        }
         break;
       }
       default:

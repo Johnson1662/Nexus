@@ -74,6 +74,7 @@ export interface ServerMessage {
   configOptions?: ConfigOption[];
   hostname?: string;
   ips?: string[];
+  hostId?: string;
 }
 
 export interface SyncResponseEntry {

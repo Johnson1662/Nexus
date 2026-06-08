@@ -275,10 +275,11 @@ struct Index {
       return;
     }
     let candidates: string[] = this.getConnectCandidates(targetDevice, serverUrl);
+    let hostKey: string = targetDevice.hostId || targetDevice.name;
     if (candidates.length > 1) {
-      this.ws.connectBest(candidates);
+      this.ws.connectBest(candidates, hostKey);
     } else if (candidates.length === 1) {
-      this.ws.connect(candidates[0]);
+      this.ws.connect(candidates[0], hostKey);
     }
   }
 
@@ -298,6 +299,30 @@ struct Index {
     if (url.length > 0 && urls.indexOf(url) < 0) {
       urls.push(url);
     }
+  }
+
+  getTargetHostIdFromUrl(url: string): string {
+    let marker: string = 'targetHostId=';
+    let start: number = url.indexOf(marker);
+    if (start < 0) return '';
+    start += marker.length;
+    let end: number = url.indexOf('&', start);
+    if (end < 0) end = url.length;
+    return url.substring(start, end);
+  }
+
+  getHostKeyForUrl(url: string): string {
+    let targetHostId: string = this.getTargetHostIdFromUrl(url);
+    if (targetHostId.length > 0) return targetHostId;
+    for (let i: number = 0; i < HostStore.devices.length; i++) {
+      let device: DeviceEntry = HostStore.devices[i];
+      for (let j: number = 0; j < device.urls.length; j++) {
+        if (device.urls[j] === url || url.indexOf(device.urls[j]) >= 0 || device.urls[j].indexOf(url) >= 0) {
+          return device.hostId || device.name;
+        }
+      }
+    }
+    return url;
   }
 
   repairSavedRelayUrl(url: string, hostId: string): string {
@@ -463,7 +488,7 @@ struct Index {
     ChatStore.models = [];
     ChatStore.modes = [];
     ChatStore.sessions = [];
-    this.ws.connect(url);
+    this.ws.connect(url, this.getHostKeyForUrl(url));
   }
 
   async scanAndConnectHost(): Promise<void> {
