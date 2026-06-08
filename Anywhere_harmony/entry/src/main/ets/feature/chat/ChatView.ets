@@ -17,7 +17,6 @@ export struct ChatView {
   @State showPicker: boolean = false;
   @State pickerTitle: string = '';
   @State pickerMode: number = -1;
-  @State titleBarOpacity: number = 0;
   @State showRename: boolean = false;
   @State renameText: string = '';
   onSendMessage?: (text: string) => void;
@@ -32,9 +31,7 @@ export struct ChatView {
   onRefreshModels?: () => void;
   onRefreshSessions?: () => void;
   onPermissionResponse?: (optionId: string) => void;
-  onBack?: () => void;
   onNavigateToSettings?: () => void;
-  onNavigateToHostManage?: () => void;
 
   aboutToAppear(): void {
     if (WorkspaceStore.currentIndex < 0 && WorkspaceStore.workspaces.length > 0) {
@@ -46,9 +43,6 @@ export struct ChatView {
     if (WorkspaceStore.currentIndex >= 0 && this.onWorkspaceSelect) {
       this.onWorkspaceSelect(WorkspaceStore.currentIndex);
     }
-    setTimeout(() => {
-      this.titleBarOpacity = 1;
-    }, 50);
   }
 
   getSessionTitle(): string {
@@ -196,13 +190,10 @@ export struct ChatView {
               (this.getUIContext() as UIContext)?.animateTo({ duration: Duration.normal }, () => { this.showDrawer = false });
               if (this.onWorkspaceSelect) this.onWorkspaceSelect(WorkspaceStore.workspaces.length - 1);
             },
-            onSwitchHost: () => { if (this.onNavigateToHostManage) this.onNavigateToHostManage() },
-            onSettings: () => { if (this.onNavigateToSettings) this.onNavigateToSettings() },
-            onHostManage: () => { if (this.onNavigateToHostManage) this.onNavigateToHostManage() }
+
           })
 
           Column() {
-            this.TitleBarBuilder()
             if (this.showPathInput) {
               Row() {
                 TextInput({ placeholder: '/path/to/project', text: this.newPath })
@@ -261,7 +252,7 @@ export struct ChatView {
       }
       .width('100%').height('100%')
     }
-    .hideTitleBar(true)
+    .title(this.getSessionTitle())
     .bindSheet($$this.showPicker, this.PickerSheetBuilder(), {
       height: SheetSize.MEDIUM,
       dragBar: true,
@@ -281,69 +272,6 @@ export struct ChatView {
     })
     .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: 20 })))
     .width('100%').height('100%')
-    .backgroundColor(Colors.surface0)
-  }
-
-  @Builder
-  TitleBarBuilder() {
-    Row() {
-      Button() {
-        SymbolGlyph($r('sys.symbol.chevron_left'))
-          .fontSize(20)
-          .fontColor([Colors.foreground])
-      }
-      .width(36)
-      .height(36)
-      .backgroundColor(Color.Transparent)
-      .stateStyles({
-        pressed: { .scale({ x: 0.92, y: 0.92 }) },
-        normal: { .scale({ x: 1, y: 1 }) }
-      })
-      .animation({ duration: Duration.fast, curve: Curve.EaseOut })
-      .onClick(() => { this.onBack?.(); })
-
-      Blank()
-
-      Button() {
-        Row({ space: Spacing.sm }) {
-          CustomIcon({ name: 'model', iconSize: 14, color: Colors.foreground })
-          Text(WorkspaceStore.currentIndex >= 0 && WorkspaceStore.currentIndex < WorkspaceStore.workspaces.length
-            ? WorkspaceStore.workspaces[WorkspaceStore.currentIndex].name : 'New chat')
-            .fontSize(FontSize.xs)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(Colors.foreground)
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-          SymbolGlyph($r('sys.symbol.chevron_down'))
-            .fontSize(11)
-            .fontColor([Colors.foregroundMuted])
-        }
-      }
-      .height(34)
-      .padding({ left: Spacing.md, right: Spacing.sm })
-      .constraintSize({ maxWidth: 178 })
-      .backgroundColor(Colors.surface0)
-      .border({ width: 1, color: Colors.borderLight })
-      .borderRadius(Radius.full)
-      .stateStyles({
-        pressed: {
-          .scale({ x: 0.97, y: 0.97 })
-          .backgroundColor(Colors.surface1)
-        },
-        normal: {
-          .scale({ x: 1, y: 1 })
-          .backgroundColor(Colors.surface0)
-        }
-      })
-      .animation({ duration: Duration.normal, curve: Duration.spring })
-      .onClick(() => {
-        (this.getUIContext() as UIContext)?.animateTo({ duration: Duration.normal }, () => { this.showDrawer = true })
-      })
-
-      Blank()
-    }
-    .width('100%').height(56)
-    .padding({ left: Spacing.xl, right: Spacing.xl })
     .backgroundColor(Colors.surface0)
   }
 

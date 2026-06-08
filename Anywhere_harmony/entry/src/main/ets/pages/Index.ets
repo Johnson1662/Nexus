@@ -4,9 +4,10 @@ import { HostFilterBar } from '../feature/home/HostFilterBar';
 import { AgentDetailView } from '../feature/agent/AgentDetailView';
 import { SessionDetailView } from '../feature/session/SessionDetailView';
 import { WorkspaceDetailView } from '../feature/workspace/WorkspaceDetailView';
+import { WorkspaceListView } from '../feature/workspace/WorkspaceListView';
 import { Colors, FontSize, Spacing, Radius, Duration } from '../constants/DesignTokens';
 import { ChatStore, trimMessages } from '../common/model/ChatState';
-import { WorkspaceStore, ServerSession, HostStore, DeviceEntry } from '../common/model/WorkspaceInfo';
+import { WorkspaceStore, ServerSession, HostStore, DeviceEntry, WorkspaceInfo } from '../common/model/WorkspaceInfo';
 import { MessageData } from '../common/model/MessageData';
 import { WSClient } from '../common/websocket/WSClient';
 import { ClientMessage, AcpUpdate } from '../common/websocket/WSProtocol';
@@ -24,7 +25,6 @@ import {
 } from '../services/StorageService';
 import { ChatView } from '../feature/chat/ChatView';
 import { SettingsPage } from '../feature/settings/SettingsView';
-import { HostManagePage } from '../feature/host/HostManageView';
 import { handleAcpUpdate } from '../common/model/MessageHandler';
 import { DeviceAgentStore } from '../common/model/DeviceAgentStore';
 import { getOrCreateClientKeyPair } from '../common/websocket/CryptoHelper';
@@ -83,23 +83,20 @@ struct Index {
             onOpenChat: (workspaceIndex: number) => {
               this.openChat(workspaceIndex);
             },
-            onOpenSettings: () => {
-              this.navStack.pushPath({ name: 'settings' });
-            },
-            onOpenAddHostScan: () => {
-              this.scanAndConnectHost();
-            },
             onConnectHost: (url: string) => {
               this.connectToHostUrl(url);
             },
             onRefreshHostsAgents: () => {
               this.refreshAgents(true);
+            },
+            onNavigateToWorkspaceList: () => {
+              this.navStack.pushPath({ name: 'workspaceList' });
             }
           }).layoutWeight(1)
         }
-        .width('100%')
-        .height('100%')
-        .padding({ top: 42 })
+          .width('100%')
+          .height('100%')
+          .padding({ top: 42 })
       }
       .hideBackButton(true)
       .titleBar({
@@ -115,7 +112,7 @@ struct Index {
               },
               {
                 content: {
-                  icon: $r('sys.symbol.dot_grid_2x2'),
+                  icon: $r('sys.symbol.gearshape'),
                   action: () => { this.navStack.pushPath({ name: 'settings' }); }
                 }
               }
@@ -142,6 +139,17 @@ struct Index {
           this.openChat(workspaceIndex);
         }
       })
+    } else if (name === 'workspaceList') {
+      WorkspaceListView({
+        onSelectWorkspace: (index: number) => {
+          WorkspaceStore.currentIndex = index;
+          this.selectedWorkspaceIndex = index;
+          this.navStack.pushPath({ name: 'workspaceDetail' });
+        },
+        onNewSession: (workspaceIndex: number) => {
+          this.openChat(workspaceIndex);
+        }
+      })
     } else if (name === 'agentDetail') {
       AgentDetailView({ deviceIndex: this.getSelectedDeviceIndex(), onBack: () => { this.navStack.pop(); } })
     } else if (name === 'sessionDetail') {
@@ -160,19 +168,16 @@ struct Index {
         onRefreshModels: () => { this.refreshModels(true); },
         onRefreshSessions: () => { this.refreshSessionsForWorkspace(WorkspaceStore.currentIndex, true); },
         onPermissionResponse: (optionId: string) => { this.ws.sendPermissionResponse(optionId); },
-        onBack: () => { this.navStack.pop(); },
-        onNavigateToSettings: () => { this.navStack.pushPath({ name: 'settings' }); },
-        onNavigateToHostManage: () => { this.navStack.pushPath({ name: 'host-manage' }); }
+        onNavigateToSettings: () => { this.navStack.pushPath({ name: 'settings' }); }
       })
     } else if (name === 'settings') {
-      SettingsPage()
-    } else if (name === 'host-manage') {
-      HostManagePage({
+      SettingsPage({
         onConnect: (url: string) => { this.connectToHostUrl(url); },
         onDeleteHost: (index: number) => {
           HostStore.removeDevice(index);
           saveHosts();
-        }
+        },
+        onScan: () => { this.scanAndConnectHost(); }
       })
     }
   }
