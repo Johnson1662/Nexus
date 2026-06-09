@@ -276,6 +276,14 @@ export struct SettingsPage {
   }
 
   @Builder
+  SettingsDivider(insetLeft: number = Spacing.md) {
+    Divider()
+      .height(1)
+      .color(Colors.borderLight)
+      .margin({ left: insetLeft, right: Spacing.md })
+  }
+
+  @Builder
   DeleteSwipeAction(index: number) {
     Row() {
       Button('删除')
@@ -358,8 +366,6 @@ export struct SettingsPage {
     }
     .width('100%')
     .padding({ left: Spacing.md, right: Spacing.md, top: Spacing.md, bottom: Spacing.md })
-    .borderRadius(Radius.sm)
-    .border({ width: { bottom: 1 }, color: { bottom: Colors.borderLight } })
     .stateStyles({
       pressed: { .backgroundColor(Colors.surface2) },
       normal: { .backgroundColor(Colors.transparent) }
@@ -428,7 +434,6 @@ export struct SettingsPage {
     .width('100%')
     .height(38)
     .padding({ top: Spacing.xs, bottom: Spacing.xs })
-    .border({ width: { bottom: 1 }, color: { bottom: Colors.borderLight } })
     .stateStyles({
       pressed: { .backgroundColor(Colors.surface1) },
       normal: { .backgroundColor(Colors.transparent) }
@@ -476,8 +481,6 @@ export struct SettingsPage {
     .height(38)
     .padding({ left: 0, right: 0 })
     .backgroundColor(Colors.transparent)
-    .borderRadius(Radius.sm)
-    .border({ width: { bottom: 1 }, color: { bottom: Colors.borderLight } })
     .stateStyles({
       pressed: { .backgroundColor(Colors.surface1) },
       normal: { .backgroundColor(Colors.transparent) }
@@ -531,7 +534,6 @@ export struct SettingsPage {
     }
     .width('100%')
     .padding({ left: Spacing.md, right: Spacing.md })
-    .border({ width: { bottom: 1 }, color: { bottom: Colors.borderLight } })
   }
 
   @Builder
@@ -558,8 +560,6 @@ export struct SettingsPage {
     .height(62)
     .padding({ left: Spacing.md, right: Spacing.md, top: Spacing.sm, bottom: Spacing.sm })
     .backgroundColor(Colors.transparent)
-    .borderRadius(Radius.sm)
-    .border({ width: { bottom: 1 }, color: { bottom: Colors.borderLight } })
     .stateStyles({
       pressed: { .backgroundColor(Colors.surface1) },
       normal: { .backgroundColor(Colors.transparent) }
@@ -576,6 +576,12 @@ export struct SettingsPage {
             if (this.showManualConnect) {
               ListItem() {
                 this.ManualConnectForm()
+              }
+
+              if (HostStore.devices.length > 0) {
+                ListItem() {
+                  this.SettingsDivider()
+                }
               }
             }
 
@@ -608,13 +614,19 @@ export struct SettingsPage {
                       this.HostDetail(device, index)
                     }
                   }
+
+                  if (index < HostStore.devices.length - 1) {
+                    ListItem() {
+                      this.SettingsDivider()
+                    }
+                  }
                 }
               }, (device: DeviceEntry, index: number) => (device.hostId || device.name) + ':' + index.toString() + ':' + this.expandedHostKey)
             }
           }
           .width(Layout.contentWidth)
           .backgroundColor(Colors.surfaceElevated)
-          .borderRadius(Radius.md)
+          .borderRadius(Radius.xxl)
           .clip(true)
 
           this.SectionTitle('偏好设置')
@@ -628,6 +640,10 @@ export struct SettingsPage {
             }
 
             ListItem() {
+              this.SettingsDivider()
+            }
+
+            ListItem() {
               this.PreferenceRow('工具调用默认展开', '完成后自动展开工具调用详情', this.toolcallExpanded, (isOn: boolean) => {
                 this.toolcallExpanded = isOn;
                 StorageService.getInstance().putString('pref_toolcall_expanded', isOn ? '1' : '0');
@@ -636,7 +652,7 @@ export struct SettingsPage {
           }
           .width(Layout.contentWidth)
           .backgroundColor(Colors.surfaceElevated)
-          .borderRadius(Radius.md)
+          .borderRadius(Radius.xxl)
           .clip(true)
         }
         .width('100%')
