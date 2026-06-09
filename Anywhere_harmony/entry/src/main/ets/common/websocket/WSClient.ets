@@ -94,8 +94,20 @@ function getUrlQueryValue(url: string, key: string): string {
   return url.substring(start, end);
 }
 
+function isKnownRelayUrl(url: string): boolean {
+  return url.indexOf('relay.anywhere12138.lat') >= 0 || url.indexOf('35.212.155.17') >= 0;
+}
+
 function isRelayClientUrl(url: string): boolean {
-  return url.indexOf('targetHostId=') >= 0;
+  return isKnownRelayUrl(url) && url.indexOf('targetHostId=') >= 0;
+}
+
+function isDirtyRelayPairUrl(url: string): boolean {
+  return url.indexOf('targetHostId=') >= 0 && !isKnownRelayUrl(url);
+}
+
+function isDirectIpv6Url(url: string): boolean {
+  return url.startsWith('ws://[') || url.startsWith('wss://[');
 }
 
 function buildProbeUrl(url: string): string {
@@ -254,6 +266,9 @@ export class WSClient {
     let result: string[] = [];
     for (let i: number = 0; i < urls.length; i++) {
       let url: string = urls[i];
+      if (isDirectIpv6Url(url) || isDirtyRelayPairUrl(url)) {
+        continue;
+      }
       if (url.length > 0 && result.indexOf(url) < 0) {
         result.push(url);
       }

@@ -360,8 +360,11 @@ struct Index {
   }
 
   repairSavedRelayUrl(url: string, hostId: string): string {
-    if (url.length === 0 || hostId.length === 0 || url.indexOf('targetHostId=') >= 0) {
+    if (url.length === 0 || hostId.length === 0) {
       return url;
+    }
+    if (url.indexOf('targetHostId=') >= 0) {
+      return this.isKnownRelayUrl(url) ? url : '';
     }
     if (!this.isKnownRelayUrl(url)) {
       return url;
