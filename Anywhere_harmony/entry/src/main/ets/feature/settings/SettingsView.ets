@@ -11,6 +11,7 @@ export struct SettingsPage {
   @State showManualConnect: boolean = false;
   @State newUrl: string = '';
   @State expandedHostKey: string = '';
+  @State showAllAddresses: boolean = false;
   onConnect?: (url: string) => void;
   onConnectHost?: (index: number) => void;
   onDeleteHost?: (index: number) => void;
@@ -161,7 +162,13 @@ export struct SettingsPage {
 
   toggleHost(device: DeviceEntry): void {
     let hostKey: string = this.getHostKey(device);
-    this.expandedHostKey = this.expandedHostKey === hostKey ? '' : hostKey;
+    if (this.expandedHostKey === hostKey) {
+      this.expandedHostKey = '';
+      this.showAllAddresses = false;
+      return;
+    }
+    this.expandedHostKey = hostKey;
+    this.showAllAddresses = false;
   }
 
   connectHost(index: number, device: DeviceEntry): void {
@@ -215,25 +222,55 @@ export struct SettingsPage {
   }
 
   @Builder
-  IconButton(icon: Resource, label: string, action: () => void) {
-    Button() {
-      Row({ space: Spacing.xs }) {
-        Image(icon)
-          .width(18)
-          .height(18)
-          .fillColor(Colors.foreground)
-        Text(label)
-          .fontSize(FontSize.sm)
-          .fontColor(Colors.foreground)
-      }
+  HostSectionTitle() {
+    Row() {
+      Text('连接与主机')
+        .fontSize(FontSize.lg)
+        .fontColor(Colors.foreground)
+        .fontWeight(FontWeight.Bold)
+        .layoutWeight(1)
+      this.ScanIconButton()
+      this.SymbolIconButton($r('sys.symbol.plus'), () => {
+        this.showManualConnect = !this.showManualConnect;
+      })
     }
-    .height(40)
-    .padding({ left: Spacing.md, right: Spacing.md })
-    .borderRadius(Radius.sm)
-    .backgroundColor(Colors.surface1)
+    .width(Layout.contentWidth)
+    .padding({ top: Spacing.xl, bottom: Spacing.sm })
+  }
+
+  @Builder
+  ScanIconButton() {
+    Button() {
+      Image($r('app.media.ic_scan'))
+        .width(18)
+        .height(18)
+        .fillColor(Colors.foreground)
+    }
+    .width(36)
+    .height(36)
+    .borderRadius(Radius.full)
+    .backgroundColor(Colors.transparent)
     .stateStyles({
       pressed: { .backgroundColor(Colors.surface2) },
-      normal: { .backgroundColor(Colors.surface1) }
+      normal: { .backgroundColor(Colors.transparent) }
+    })
+    .onClick(() => { if (this.onScan) this.onScan(); })
+  }
+
+  @Builder
+  SymbolIconButton(symbol: Resource, action: () => void) {
+    Button() {
+      SymbolGlyph(symbol)
+        .fontSize(20)
+        .fontColor([Colors.foreground])
+    }
+    .width(36)
+    .height(36)
+    .borderRadius(Radius.full)
+    .backgroundColor(Colors.transparent)
+    .stateStyles({
+      pressed: { .backgroundColor(Colors.surface2) },
+      normal: { .backgroundColor(Colors.transparent) }
     })
     .onClick(action)
   }
@@ -293,19 +330,25 @@ export struct SettingsPage {
       .alignItems(HorizontalAlign.Start)
       .layoutWeight(1)
 
-      Button(this.getActionText(device))
-        .height(32)
-        .padding({ left: Spacing.md, right: Spacing.md })
-        .fontSize(FontSize.xs)
-        .fontColor(this.isBusy(device) ? Colors.foregroundMuted : Colors.accent)
-        .backgroundColor(Colors.transparent)
-        .borderRadius(Radius.sm)
-        .enabled(!this.isCurrentHost(device) && !this.isBusy(device))
-        .stateStyles({
-          pressed: { .backgroundColor(Colors.surface1) },
-          normal: { .backgroundColor(Colors.transparent) }
-        })
-        .onClick(() => { this.connectHost(index, device); })
+      if (this.isCurrentHost(device) || this.isBusy(device)) {
+        Text(this.getActionText(device))
+          .fontSize(FontSize.sm)
+          .fontColor(Colors.foregroundMuted)
+          .margin({ left: Spacing.sm })
+      } else {
+        Button(this.getActionText(device))
+          .height(30)
+          .padding({ left: Spacing.sm, right: Spacing.sm })
+          .fontSize(FontSize.sm)
+          .fontColor(Colors.accent)
+          .backgroundColor(Colors.transparent)
+          .borderRadius(Radius.sm)
+          .stateStyles({
+            pressed: { .backgroundColor(Colors.surface1) },
+            normal: { .backgroundColor(Colors.transparent) }
+          })
+          .onClick(() => { this.connectHost(index, device); })
+      }
 
       SymbolGlyph($r('sys.symbol.chevron_right'))
         .fontSize(16)
@@ -316,10 +359,12 @@ export struct SettingsPage {
     .width('100%')
     .padding({ left: Spacing.md, right: Spacing.md, top: Spacing.md, bottom: Spacing.md })
     .borderRadius(Radius.sm)
+    .border({ width: { bottom: 1 }, color: { bottom: Colors.borderLight } })
     .stateStyles({
-      pressed: { .backgroundColor(Colors.surface1) },
+      pressed: { .backgroundColor(Colors.surface2) },
       normal: { .backgroundColor(Colors.transparent) }
     })
+    .onClick(() => { this.toggleHost(device); })
   }
 
   @Builder
@@ -328,111 +373,165 @@ export struct SettingsPage {
       Text(label)
         .fontSize(FontSize.sm)
         .fontColor(Colors.foregroundMuted)
-        .width(84)
+        .width(92)
       Text(value)
         .fontSize(FontSize.sm)
         .fontColor(Colors.foreground)
         .layoutWeight(1)
-        .maxLines(2)
+        .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
     }
     .width('100%')
-    .padding({ top: Spacing.xxs, bottom: Spacing.xxs })
+    .height(38)
+    .padding({ top: Spacing.xs, bottom: Spacing.xs })
   }
 
   @Builder
   HostDetail(device: DeviceEntry, index: number) {
     Column() {
-      this.DetailRow('Host ID', this.shortText(device.hostId || '', 12, 6))
       this.DetailRow('连接方式', this.getConnectionType(device))
       this.DetailRow('Relay', this.getRelayStatus(device))
-      this.DetailRow('配对密钥', this.getPairingStatus(device))
+      this.DetailRow('Host ID', this.shortText(device.hostId || '', 12, 6))
       this.DetailRow('当前地址', this.getCurrentAddress(device).length > 0 ? this.getCurrentAddress(device) : '未连接')
 
-      Column() {
-        Text('IPv4 地址')
-          .fontSize(FontSize.sm)
-          .fontColor(Colors.foregroundMuted)
-          .width('100%')
-          .margin({ top: Spacing.sm, bottom: Spacing.xxs })
-        if (this.getDirectUrls(device).length === 0) {
-          Text('暂无可自动连接的 IPv4 地址')
-            .fontSize(FontSize.sm)
-            .fontColor(Colors.foregroundMuted)
-            .width('100%')
-        } else {
-          ForEach(this.getDirectUrls(device), (url: string) => {
-            Text(url)
-              .fontSize(FontSize.sm)
-              .fontColor(Colors.foreground)
-              .maxLines(1)
-              .textOverflow({ overflow: TextOverflow.Ellipsis })
-              .width('100%')
-              .padding({ top: Spacing.xxs, bottom: Spacing.xxs })
-          }, (url: string) => url)
-        }
-      }
-      .width('100%')
-      .alignItems(HorizontalAlign.Start)
+      this.AddressToggleRow(device)
 
-      Row({ space: Spacing.sm }) {
-        Button('重新连接')
-          .height(36)
-          .padding({ left: Spacing.md, right: Spacing.md })
-          .fontSize(FontSize.sm)
-          .fontColor(Colors.accent)
-          .backgroundColor(Colors.surface1)
-          .borderRadius(Radius.sm)
-          .onClick(() => { this.connectHost(index, device); })
-        Button('重新扫码')
-          .height(36)
-          .padding({ left: Spacing.md, right: Spacing.md })
-          .fontSize(FontSize.sm)
-          .fontColor(Colors.foreground)
-          .backgroundColor(Colors.surface1)
-          .borderRadius(Radius.sm)
-          .onClick(() => { if (this.onScan) this.onScan(); })
-        Button('删除主机')
-          .height(36)
-          .padding({ left: Spacing.md, right: Spacing.md })
-          .fontSize(FontSize.sm)
-          .fontColor(Colors.error)
-          .backgroundColor(Colors.transparent)
-          .borderRadius(Radius.sm)
-          .onClick(() => { this.showDeleteConfirmDialog(index); })
+      if (this.showAllAddresses) {
+        this.AddressList(device)
       }
-      .width('100%')
-      .margin({ top: Spacing.md })
+
+      this.HostDetailActionRow('重新连接', Colors.accent, () => { this.connectHost(index, device); })
+      this.HostDetailActionRow('重新扫码', Colors.foreground, () => { if (this.onScan) this.onScan(); })
+      this.HostDetailActionRow('删除主机', Colors.error, () => { this.showDeleteConfirmDialog(index); })
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
-    .padding({ left: Spacing.xxl, right: Spacing.md, bottom: Spacing.md })
+    .padding({ left: Spacing.xxl, right: Spacing.md, bottom: Spacing.sm })
+  }
+
+  @Builder
+  AddressToggleRow(device: DeviceEntry) {
+    Row() {
+      Text('IPv4 地址')
+        .fontSize(FontSize.sm)
+        .fontColor(Colors.foregroundMuted)
+        .width(92)
+      Text(this.getDirectUrls(device).length.toString() + ' 个')
+        .fontSize(FontSize.sm)
+        .fontColor(Colors.foreground)
+        .layoutWeight(1)
+      SymbolGlyph($r('sys.symbol.chevron_right'))
+        .fontSize(14)
+        .fontColor([Colors.foregroundMuted])
+        .rotate({ angle: this.showAllAddresses ? 90 : 0 })
+    }
+    .width('100%')
+    .height(38)
+    .padding({ top: Spacing.xs, bottom: Spacing.xs })
+    .border({ width: { bottom: 1 }, color: { bottom: Colors.borderLight } })
+    .stateStyles({
+      pressed: { .backgroundColor(Colors.surface1) },
+      normal: { .backgroundColor(Colors.transparent) }
+    })
+    .onClick(() => { this.showAllAddresses = !this.showAllAddresses; })
+  }
+
+  @Builder
+  AddressList(device: DeviceEntry) {
+    Column() {
+      if (this.getDirectUrls(device).length === 0) {
+        Text('暂无可自动连接的 IPv4 地址')
+          .fontSize(FontSize.sm)
+          .fontColor(Colors.foregroundMuted)
+          .width('100%')
+          .padding({ top: Spacing.xs, bottom: Spacing.xs })
+      } else {
+        ForEach(this.getDirectUrls(device), (url: string) => {
+          Text(url)
+            .fontSize(FontSize.sm)
+            .fontColor(Colors.foregroundMuted)
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .width('100%')
+            .padding({ left: 92, top: Spacing.xs, bottom: Spacing.xs })
+        }, (url: string) => url)
+      }
+    }
+    .width('100%')
+    .alignItems(HorizontalAlign.Start)
+  }
+
+  @Builder
+  HostDetailActionRow(label: string, color: Resource, action: () => void) {
+    Button() {
+      Row() {
+        Text(label)
+          .fontSize(FontSize.sm)
+          .fontColor(color)
+          .layoutWeight(1)
+      }
+      .width('100%')
+    }
+    .width('100%')
+    .height(38)
+    .padding({ left: 0, right: 0 })
+    .backgroundColor(Colors.transparent)
+    .borderRadius(Radius.sm)
+    .border({ width: { bottom: 1 }, color: { bottom: Colors.borderLight } })
+    .stateStyles({
+      pressed: { .backgroundColor(Colors.surface1) },
+      normal: { .backgroundColor(Colors.transparent) }
+    })
+    .onClick(action)
   }
 
   @Builder
   ManualConnectForm() {
-    Row({ space: Spacing.sm }) {
-      TextInput({ placeholder: 'ws://IP:PORT', text: this.newUrl })
-        .layoutWeight(1)
-        .height(42)
-        .borderRadius(Radius.sm)
-        .padding({ left: Spacing.md, right: Spacing.md })
-        .fontSize(FontSize.sm)
-        .backgroundColor(Colors.surface1)
-        .onChange((v: string) => { this.newUrl = v; })
-        .onSubmit(() => { this.submitManualConnect(); })
-      Button('连接')
-        .height(42)
-        .padding({ left: Spacing.md, right: Spacing.md })
-        .fontWeight(FontWeight.Medium)
-        .borderRadius(Radius.sm)
-        .fontSize(FontSize.sm)
-        .fontColor(Colors.accent)
-        .backgroundColor(Colors.transparent)
-        .onClick(() => { this.submitManualConnect(); })
+    Column() {
+      Row() {
+        Text('地址')
+          .fontSize(FontSize.sm)
+          .fontColor(Colors.foregroundMuted)
+          .width(52)
+        TextInput({ placeholder: 'ws://IP:PORT', text: this.newUrl })
+          .layoutWeight(1)
+          .height(40)
+          .padding({ left: 0, right: Spacing.sm })
+          .fontSize(FontSize.sm)
+          .fontColor(Colors.foreground)
+          .placeholderColor(Colors.foregroundLight)
+          .backgroundColor(Colors.transparent)
+          .onChange((v: string) => { this.newUrl = v; })
+          .onSubmit(() => { this.submitManualConnect(); })
+        Button('连接')
+          .height(32)
+          .padding({ left: Spacing.sm, right: Spacing.sm })
+          .fontWeight(FontWeight.Medium)
+          .borderRadius(Radius.sm)
+          .fontSize(FontSize.sm)
+          .fontColor(Colors.accent)
+          .backgroundColor(Colors.transparent)
+          .stateStyles({
+            pressed: { .backgroundColor(Colors.surface1) },
+            normal: { .backgroundColor(Colors.transparent) }
+          })
+          .onClick(() => { this.submitManualConnect(); })
+      }
+      .width('100%')
+      .height(48)
+
+      Row() {
+        Text('输入电脑端 Bridge Server 地址')
+          .fontSize(FontSize.xs)
+          .fontColor(Colors.foregroundMuted)
+          .layoutWeight(1)
+      }
+      .width('100%')
+      .padding({ left: 52, bottom: Spacing.sm })
     }
     .width('100%')
-    .padding({ left: Spacing.md, right: Spacing.md, bottom: Spacing.md })
+    .padding({ left: Spacing.md, right: Spacing.md })
+    .border({ width: { bottom: 1 }, color: { bottom: Colors.borderLight } })
   }
 
   @Builder
@@ -456,9 +555,11 @@ export struct SettingsPage {
         .onChange(onChange)
     }
     .width('100%')
-    .padding({ left: Spacing.md, right: Spacing.md, top: Spacing.md, bottom: Spacing.md })
+    .height(62)
+    .padding({ left: Spacing.md, right: Spacing.md, top: Spacing.sm, bottom: Spacing.sm })
     .backgroundColor(Colors.transparent)
     .borderRadius(Radius.sm)
+    .border({ width: { bottom: 1 }, color: { bottom: Colors.borderLight } })
     .stateStyles({
       pressed: { .backgroundColor(Colors.surface1) },
       normal: { .backgroundColor(Colors.transparent) }
@@ -469,18 +570,9 @@ export struct SettingsPage {
     NavDestination() {
       Scroll() {
         Column() {
-          this.SectionTitle('连接与主机')
+          this.HostSectionTitle()
 
-          Row({ space: Spacing.sm }) {
-            this.IconButton($r('app.media.ic_scan'), '扫码添加', () => { if (this.onScan) this.onScan(); })
-            this.IconButton($r('app.media.ic_link'), '手动连接', () => {
-              this.showManualConnect = !this.showManualConnect;
-            })
-          }
-          .width(Layout.contentWidth)
-          .padding({ bottom: this.showManualConnect ? Spacing.sm : Spacing.md })
-
-          List({ space: Spacing.xs }) {
+          List({ space: 0 }) {
             if (this.showManualConnect) {
               ListItem() {
                 this.ManualConnectForm()
@@ -501,7 +593,6 @@ export struct SettingsPage {
                   ListItem() {
                     this.HostRow(device, index)
                   }
-                  .onClick(() => { this.toggleHost(device); })
                   .swipeAction({
                     end: {
                       builder: () => {
@@ -522,10 +613,13 @@ export struct SettingsPage {
             }
           }
           .width(Layout.contentWidth)
+          .backgroundColor(Colors.surfaceElevated)
+          .borderRadius(Radius.md)
+          .clip(true)
 
           this.SectionTitle('偏好设置')
 
-          List({ space: Spacing.xs }) {
+          List({ space: 0 }) {
             ListItem() {
               this.PreferenceRow('Thinking 默认展开', '流式结束后自动展开思考内容', this.thinkingExpanded, (isOn: boolean) => {
                 this.thinkingExpanded = isOn;
@@ -541,16 +635,20 @@ export struct SettingsPage {
             }
           }
           .width(Layout.contentWidth)
+          .backgroundColor(Colors.surfaceElevated)
+          .borderRadius(Radius.md)
+          .clip(true)
         }
         .width('100%')
         .alignItems(HorizontalAlign.Center)
         .padding({ bottom: Spacing.xxxl })
       }
       .width('100%')
+      .backgroundColor(Colors.surface1)
     }
     .title('设置')
     .width('100%')
     .height('100%')
-    .backgroundColor(Colors.surface0)
+    .backgroundColor(Colors.surface1)
   }
 }
