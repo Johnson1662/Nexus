@@ -1,4 +1,4 @@
-import http from 'node:http';
+import http, { type ServerResponse } from 'node:http';
 import crypto from 'node:crypto';
 
 const WS_GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
@@ -89,10 +89,90 @@ class WSConn {
 
 const hosts = new Map<string, WSConn>();
 const clients = new Map<string, Set<WSConn>>();
+interface PendingProbe {
+  res: ServerResponse;
+  hostId: string;
+  startedAt: number;
+  timer: ReturnType<typeof setTimeout>;
+}
+const pendingProbes = new Map<string, PendingProbe>();
 
-const server = http.createServer((_req, res) => {
+const server = http.createServer((req, res) => {
+  const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
+  if (req.method === 'GET' && url.pathname === '/probe') {
+    handleProbe(url, res);
+    return;
+  }
   res.writeHead(400).end('WebSocket only');
 });
+
+function writeJson(res: ServerResponse, statusCode: number, payload: object): void {
+  const body = JSON.stringify(payload);
+  res.writeHead(statusCode, {
+    'Content-Type': 'application/json',
+    'Content-Length': Buffer.byteLength(body),
+    'Cache-Control': 'no-store',
+    'Connection': 'close',
+  });
+  res.end(body);
+}
+
+function handleProbe(url: URL, res: ServerResponse): void {
+  const targetHostId = url.searchParams.get('targetHostId') || '';
+  if (!targetHostId) {
+    writeJson(res, 400, { ok: false, kind: 'relay', error: 'missing targetHostId', ts: Date.now() });
+    return;
+  }
+  const hostWs = hosts.get(targetHostId);
+  if (!hostWs) {
+    writeJson(res, 200, { ok: true, kind: 'relay', hostOnline: false, hostId: targetHostId, ts: Date.now() });
+    return;
+  }
+  const probeId = crypto.randomUUID();
+  const startedAt = Date.now();
+  const timer = setTimeout(() => {
+    const entry = pendingProbes.get(probeId);
+    if (!entry) return;
+    pendingProbes.delete(probeId);
+    writeJson(entry.res, 200, {
+      ok: true,
+      kind: 'relay',
+      hostOnline: true,
+      pong: false,
+      hostId: entry.hostId,
+      rttMs: Date.now() - entry.startedAt,
+      ts: Date.now(),
+    });
+  }, 1000);
+  pendingProbes.set(probeId, { res, hostId: targetHostId, startedAt, timer });
+  hostWs.send(JSON.stringify({ type: 'relay_probe', probeId, sentAt: startedAt }));
+}
+
+function handleProbePong(hostId: string, msg: Buffer): boolean {
+  let parsed: any;
+  try {
+    parsed = JSON.parse(msg.toString('utf-8'));
+  } catch {
+    return false;
+  }
+  if (parsed.type !== 'relay_probe_pong') return false;
+  const probeId = String(parsed.probeId || '');
+  const entry = pendingProbes.get(probeId);
+  if (!entry) return true;
+  pendingProbes.delete(probeId);
+  clearTimeout(entry.timer);
+  if (entry.hostId !== hostId) return true;
+  writeJson(entry.res, 200, {
+    ok: true,
+    kind: 'relay',
+    hostOnline: true,
+    pong: true,
+    hostId,
+    rttMs: Date.now() - entry.startedAt,
+    ts: Date.now(),
+  });
+  return true;
+}
 
 server.on('upgrade', (req, socket) => {
   const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
@@ -148,6 +228,7 @@ server.on('upgrade', (req, socket) => {
 
   ws.onmessage = (msg) => {
     const { role: r, hostId: h } = ws.data;
+    if (r === 'host' && handleProbePong(h, msg)) return;
     console.log(`[MSG] from=${r} target=${h} bytes=${msg.length}`);
 
     if (r === 'client') {

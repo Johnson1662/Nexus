@@ -4,10 +4,14 @@
 import asyncio
 import hashlib
 import base64
+import json
 import struct
 import os
 import signal
 import sys
+import time
+import urllib.parse
+import uuid
 
 WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 PORT = int(os.environ.get("RELAY_PORT", "12138"))
@@ -15,6 +19,7 @@ PORT = int(os.environ.get("RELAY_PORT", "12138"))
 hosts = {}
 clients = {}
 pending_frames = {}
+pending_probes = {}
 
 
 
@@ -162,6 +167,8 @@ class RelayServerProtocol(asyncio.Protocol):
 
         upgrade = headers.get("upgrade", "").lower()
         if upgrade != "websocket":
+            if self._try_probe(path):
+                return
             self._http_response(400, "WebSocket only")
             return
 
@@ -230,6 +237,8 @@ class RelayServerProtocol(asyncio.Protocol):
 
         def on_msg(msg):
             h = ws.host_id
+            if ws.role == "host" and handle_probe_pong(h, msg):
+                return
             print(f"[MSG] from={ws.role} target={h} bytes={len(msg)}")
             if ws.role == "client":
                 hw = hosts.get(h)
@@ -253,6 +262,62 @@ class RelayServerProtocol(asyncio.Protocol):
         ws.on_msg = on_msg
         ws.on_close = on_close
 
+    def _try_probe(self, path):
+        parsed = urllib.parse.urlsplit(path)
+        if parsed.path != "/probe":
+            return False
+
+        params = urllib.parse.parse_qs(parsed.query)
+        target_values = params.get("targetHostId", [])
+        target_host_id = target_values[0] if target_values else ""
+        if not target_host_id:
+            self._http_json_response(400, {
+                "ok": False,
+                "kind": "relay",
+                "error": "missing targetHostId",
+                "ts": int(time.time() * 1000),
+            })
+            return True
+
+        host_ws = hosts.get(target_host_id)
+        if not host_ws:
+            self._http_json_response(200, {
+                "ok": True,
+                "kind": "relay",
+                "hostOnline": False,
+                "hostId": target_host_id,
+                "ts": int(time.time() * 1000),
+            })
+            return True
+
+        probe_id = uuid.uuid4().hex
+        started_at = time.time()
+
+        def timeout_probe():
+            entry = pending_probes.pop(probe_id, None)
+            if not entry:
+                return
+            transport, host_id, start_time, _handle = entry
+            write_json_response(transport, 200, {
+                "ok": True,
+                "kind": "relay",
+                "hostOnline": True,
+                "pong": False,
+                "hostId": host_id,
+                "rttMs": int((time.time() - start_time) * 1000),
+                "ts": int(time.time() * 1000),
+            })
+
+        loop = asyncio.get_event_loop()
+        timeout_handle = loop.call_later(1.0, timeout_probe)
+        pending_probes[probe_id] = (self.transport, target_host_id, started_at, timeout_handle)
+        host_ws.send(json.dumps({
+            "type": "relay_probe",
+            "probeId": probe_id,
+            "sentAt": int(started_at * 1000),
+        }, separators=(",", ":")))
+        return True
+
     def connection_lost(self, exc):
         if self._ws and self._ws.on_close:
             self._ws.on_close()
@@ -272,6 +337,63 @@ class RelayServerProtocol(asyncio.Protocol):
             self.transport.close()
         except Exception:
             pass
+
+    def _http_json_response(self, code, payload):
+        write_json_response(self.transport, code, payload)
+
+
+def write_json_response(transport, code, payload):
+    reasons = {200: "OK", 400: "Bad Request", 404: "Not Found", 500: "Internal Server Error"}
+    reason = reasons.get(code, "Unknown")
+    body = json.dumps(payload, separators=(",", ":")).encode()
+    resp = (
+        f"HTTP/1.1 {code} {reason}\r\n"
+        f"Content-Length: {len(body)}\r\n"
+        f"Content-Type: application/json\r\n"
+        f"Cache-Control: no-store\r\n"
+        f"Connection: close\r\n\r\n"
+    ).encode() + body
+    try:
+        transport.write(resp)
+        transport.close()
+    except Exception:
+        pass
+
+
+def handle_probe_pong(host_id, msg):
+    try:
+        text = msg.decode() if isinstance(msg, bytes) else str(msg)
+        data = json.loads(text)
+    except Exception:
+        return False
+
+    if data.get("type") != "relay_probe_pong":
+        return False
+
+    probe_id = data.get("probeId", "")
+    entry = pending_probes.pop(probe_id, None)
+    if not entry:
+        return True
+
+    transport, expected_host_id, started_at, timeout_handle = entry
+    if expected_host_id != host_id:
+        return True
+
+    try:
+        timeout_handle.cancel()
+    except Exception:
+        pass
+
+    write_json_response(transport, 200, {
+        "ok": True,
+        "kind": "relay",
+        "hostOnline": True,
+        "pong": True,
+        "hostId": host_id,
+        "rttMs": int((time.time() - started_at) * 1000),
+        "ts": int(time.time() * 1000),
+    })
+    return True
 
 
 async def main():

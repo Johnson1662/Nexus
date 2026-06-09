@@ -1,4 +1,4 @@
-import { webSocket } from '@kit.NetworkKit';
+import { webSocket, http } from '@kit.NetworkKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { util } from '@kit.ArkTS';
@@ -41,6 +41,18 @@ function repairRelayJson(raw: string): string {
 
 const DOMAIN: number = 0x0000;
 const TAG: string = 'WSClient';
+const PROBE_TIMEOUT_MS: number = 1200;
+
+interface ProbeCandidateResult {
+  url: string;
+  probeUrl: string;
+  ok: boolean;
+  latencyMs: number;
+  kind: string;
+  hostId: string;
+  hostname: string;
+  error: string;
+}
 
 function stripQuery(url: string): string {
   let qIdx: number = url.indexOf('?');
@@ -84,6 +96,43 @@ function getUrlQueryValue(url: string, key: string): string {
 
 function isRelayClientUrl(url: string): boolean {
   return url.indexOf('targetHostId=') >= 0;
+}
+
+function buildProbeUrl(url: string): string {
+  let cleanUrl: string = stripQuery(url);
+  let base: string = '';
+  if (cleanUrl.startsWith('ws://')) {
+    base = 'http://' + cleanUrl.substring(5);
+  } else if (cleanUrl.startsWith('wss://')) {
+    base = 'https://' + cleanUrl.substring(6);
+  } else {
+    return '';
+  }
+
+  if (isRelayClientUrl(url)) {
+    let targetHostId: string = getUrlQueryValue(url, 'targetHostId');
+    if (targetHostId.length === 0) return '';
+    return base + '/probe?targetHostId=' + targetHostId;
+  }
+  return base + '/probe';
+}
+
+function getStringField(data: Record<string, Object>, key: string): string {
+  let value = data[key];
+  if (value === undefined || value === null) return '';
+  return String(value);
+}
+
+function getBooleanField(data: Record<string, Object>, key: string): boolean {
+  let value = data[key];
+  if (value === undefined || value === null) return false;
+  if (typeof value === 'boolean') return Boolean(value);
+  return String(value) === 'true';
+}
+
+function matchesExpectedHost(data: Record<string, Object>, expectedHostKey: string): boolean {
+  if (expectedHostKey.length === 0) return true;
+  return getStringField(data, 'hostId') === expectedHostKey || getStringField(data, 'hostname') === expectedHostKey;
 }
 
 function buildWsUrlFromIp(ip: string, port: string, scheme: string): string {
@@ -202,38 +251,76 @@ export class WSClient {
     return stripQuery(url);
   }
 
-  // Try connecting to a single URL, returns latency in ms on success, -1 on failure
-  tryConnect(url: string): Promise<number> {
-    return new Promise<number>((resolve) => {
-      let start: number = Date.now();
-      let resolved: boolean = false;
-      let ws: webSocket.WebSocket = webSocket.createWebSocket();
-      let timer: number | null = null;
-
-      let done = (latency: number): void => {
-        if (resolved) return;
-        resolved = true;
-        if (timer !== null) {
-          clearTimeout(timer);
-          timer = null;
-        }
-        ws.off('open'); ws.off('error'); ws.off('close');
-        try { ws.close(); } catch {}
-        resolve(latency);
+  async probeCandidate(url: string, expectedHostKey: string): Promise<ProbeCandidateResult> {
+    let probeUrl: string = buildProbeUrl(url);
+    let start: number = Date.now();
+    if (probeUrl.length === 0) {
+      return {
+        url,
+        probeUrl,
+        ok: false,
+        latencyMs: -1,
+        kind: '',
+        hostId: '',
+        hostname: '',
+        error: 'invalid probe url',
       };
+    }
 
-      timer = setTimeout(() => { done(-1) }, 3000);
-
-      ws.on('open', () => { done(Date.now() - start) });
-      ws.on('error', () => { done(-1) });
-      ws.on('close', () => { done(-1) });
-
-      try {
-        ws.connect(url);
-      } catch {
-        done(-1);
+    let request = http.createHttp();
+    try {
+      let response = await request.request(probeUrl, {
+        method: http.RequestMethod.GET,
+        connectTimeout: PROBE_TIMEOUT_MS,
+        readTimeout: PROBE_TIMEOUT_MS,
+        expectDataType: http.HttpDataType.STRING,
+      });
+      let latencyMs: number = Date.now() - start;
+      if (response.responseCode < 200 || response.responseCode >= 300) {
+        return {
+          url,
+          probeUrl,
+          ok: false,
+          latencyMs: -1,
+          kind: '',
+          hostId: '',
+          hostname: '',
+          error: 'http ' + response.responseCode.toString(),
+        };
       }
-    });
+
+      let data = JSON.parse(String(response.result)) as Record<string, Object>;
+      let kind: string = getStringField(data, 'kind');
+      let hostId: string = getStringField(data, 'hostId');
+      let hostname: string = getStringField(data, 'hostname');
+      let ok: boolean = getBooleanField(data, 'ok') && matchesExpectedHost(data, expectedHostKey);
+      if (kind === 'relay') {
+        ok = ok && getBooleanField(data, 'hostOnline') && getBooleanField(data, 'pong');
+      }
+      return {
+        url,
+        probeUrl,
+        ok,
+        latencyMs: ok ? latencyMs : -1,
+        kind,
+        hostId,
+        hostname,
+        error: ok ? '' : 'probe rejected',
+      };
+    } catch {
+      return {
+        url,
+        probeUrl,
+        ok: false,
+        latencyMs: -1,
+        kind: '',
+        hostId: '',
+        hostname: '',
+        error: 'probe failed',
+      };
+    } finally {
+      try { request.destroy(); } catch {}
+    }
   }
 
   // Connect to the fastest reachable URL from a device, then use that URL
@@ -247,27 +334,23 @@ export class WSClient {
     HostRuntimeStore.markConnecting(resolvedHostKey, urls[0]);
     let bestUrl: string = urls[0];
     let bestLatency: number = -1;
-    let results: Promise<number>[] = [];
+    let results: Promise<ProbeCandidateResult>[] = [];
     for (let i: number = 0; i < urls.length; i++) {
-      results.push(this.tryConnect(urls[i]));
+      results.push(this.probeCandidate(urls[i], resolvedHostKey));
     }
     for (let i: number = 0; i < results.length; i++) {
-      let latency: number = await results[i];
-      if (latency >= 0 && (bestLatency < 0 || latency < bestLatency)) {
-        bestLatency = latency;
-        bestUrl = urls[i];
+      let result: ProbeCandidateResult = await results[i];
+      if (result.ok && result.latencyMs >= 0 && (bestLatency < 0 || result.latencyMs < bestLatency)) {
+        bestLatency = result.latencyMs;
+        bestUrl = result.url;
       }
     }
     if (bestLatency < 0) {
-      hilog.error(DOMAIN, TAG, 'connectBest: all candidates failed');
-      ChatStore.connected = false;
-      ChatStore.currentDeviceId = '';
-      ChatStore.reconnectPhase = '';
-      HostRuntimeStore.markOffline(resolvedHostKey, 'all candidate urls failed');
-      this.notifyState(false, 'all candidate urls failed');
+      hilog.error(DOMAIN, TAG, 'connectBest: all probes failed, trying first candidate');
+      this.connect(urls[0], resolvedHostKey);
       return;
     }
-    hilog.info(DOMAIN, TAG, `connectBest: selected ${bestUrl} (${bestLatency}ms)`);
+    hilog.info(DOMAIN, TAG, `connectBest: selected ${bestUrl} via probe (${bestLatency}ms)`);
     this.connect(bestUrl, resolvedHostKey);
   }
 

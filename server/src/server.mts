@@ -1,5 +1,6 @@
 import qrcode from 'qrcode-terminal';
 import { WebSocketServer, type WebSocket } from "ws";
+import http, { type IncomingMessage, type ServerResponse } from "node:http";
 import os from "os";
 import { getOrCreateHostId, getOrCreateHostIdentity } from "./host-identity.mjs";
 import { EncryptedChannel } from "./encrypted-channel.mjs";
@@ -23,9 +24,15 @@ import { cleanupWsSessions, enqueueWsOp, getSession, getBufferedAfter, reclaimOr
 const PORT = 12138;
 const RELAY_URL = process.env.ANYWHERE_RELAY_URL || "ws://relay.anywhere12138.lat:12138";
 const PHONE_RELAY_URL = process.env.ANYWHERE_PHONE_RELAY_URL || "ws://relay.anywhere12138.lat:12138";
+const HOST_ID = getOrCreateHostId();
 
-const wss = new WebSocketServer({ port: PORT });
-console.log(`[server] listening on ws://0.0.0.0:${PORT} and IPv6 if available`);
+const httpServer = http.createServer((req: IncomingMessage, res: ServerResponse) => {
+  handleHttpRequest(req, res);
+});
+const wss = new WebSocketServer({ server: httpServer });
+httpServer.listen(PORT, () => {
+  console.log(`[server] listening on ws://0.0.0.0:${PORT} and IPv6 if available`);
+});
 
 // WebSocket keep-alive: ping all connected clients every 15s
 const pingInterval = setInterval(() => {
@@ -40,14 +47,15 @@ wss.on('connection', (sock: WebSocket) => {
   sock.on('close', () => { (sock as any).isDead = true; });
 });
 
-const HOST_ID = getOrCreateHostId();
-
 // The relay message handler is wired directly into handleIncomingConnection
 // via a shared callback, bypassing the EventEmitter indirection which has
 // proven unreliable for message delivery ordering.
 let handleRelayMessage: ((raw: string) => void) | null = null;
 
 const relay = new RelayHost(RELAY_URL, HOST_ID, (raw: string) => {
+  if (handleRelayProbe(raw)) {
+    return;
+  }
   console.log(`[relay] received ${raw.slice(0, 120)}`);
   if (handleRelayMessage) {
     handleRelayMessage(raw);
@@ -117,19 +125,78 @@ if (process.env.ANYWHERE_SHOW_QR === '1') {
   printQR();
 }
 
+function collectHostIps(): string[] {
+  const nets = os.networkInterfaces();
+  const ips: string[] = [];
+  for (const name of Object.keys(nets)) {
+    for (const net of nets[name]!) {
+      if (!net.internal) {
+        ips.push(net.address);
+      }
+    }
+  }
+  ips.push(`HOST:${HOST_ID}`);
+  return ips;
+}
+
+function sendJson(res: ServerResponse, statusCode: number, payload: object): void {
+  const body = JSON.stringify(payload);
+  res.writeHead(statusCode, {
+    "Content-Type": "application/json",
+    "Content-Length": Buffer.byteLength(body),
+    "Cache-Control": "no-store",
+    "Connection": "close",
+  });
+  res.end(body);
+}
+
+function handleHttpRequest(req: IncomingMessage, res: ServerResponse): void {
+  if (req.method !== "GET") {
+    sendJson(res, 400, { ok: false, error: "bad request" });
+    return;
+  }
+  const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
+  if (url.pathname === "/probe") {
+    sendJson(res, 200, {
+      ok: true,
+      kind: "bridge",
+      hostId: HOST_ID,
+      hostname: os.hostname(),
+      ips: collectHostIps(),
+      ts: Date.now(),
+    });
+    return;
+  }
+  res.writeHead(400, {
+    "Content-Type": "text/plain",
+    "Connection": "close",
+  });
+  res.end("WebSocket only");
+}
+
+function handleRelayProbe(raw: string): boolean {
+  let msg: any;
+  try {
+    msg = JSON.parse(raw);
+  } catch {
+    return false;
+  }
+  if (msg.type !== "relay_probe") {
+    return false;
+  }
+  relay.send(JSON.stringify({
+    type: "relay_probe_pong",
+    probeId: String(msg.probeId || ""),
+    hostId: HOST_ID,
+    ts: Date.now(),
+  }));
+  return true;
+}
+
 function sendServerInfo(ws: WebSocket | any) {
   try {
     const hostname = os.hostname();
-    const nets = os.networkInterfaces();
-    const ips: string[] = [];
-    for (const name of Object.keys(nets)) {
-      for (const net of nets[name]!) {
-        if (!net.internal) {
-          ips.push(net.address);
-        }
-      }
-    }
-    ips.push(`HOST:${HOST_ID}`);
+    const ips = collectHostIps();
     ws.send(JSON.stringify({
       type: "server_info",
       hostId: HOST_ID,
