@@ -877,6 +877,50 @@
       "value": "偏好设置"
     },
     {
+      "name": "settings_display_section",
+      "value": "显示"
+    },
+    {
+      "name": "settings_language_title",
+      "value": "语言"
+    },
+    {
+      "name": "settings_language_system",
+      "value": "跟随系统"
+    },
+    {
+      "name": "settings_language_zh",
+      "value": "简体中文"
+    },
+    {
+      "name": "settings_language_en",
+      "value": "English"
+    },
+    {
+      "name": "settings_language_applied",
+      "value": "语言已更新，如部分文案未刷新请重新打开应用。"
+    },
+    {
+      "name": "settings_color_mode_title",
+      "value": "外观"
+    },
+    {
+      "name": "settings_color_system",
+      "value": "跟随系统"
+    },
+    {
+      "name": "settings_color_light",
+      "value": "浅色"
+    },
+    {
+      "name": "settings_color_dark",
+      "value": "深色"
+    },
+    {
+      "name": "settings_apply_failed",
+      "value": "设置未能应用"
+    },
+    {
       "name": "settings_delete_host_title",
       "value": "删除主机"
     },

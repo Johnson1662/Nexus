@@ -1,27 +1,41 @@
-import { AbilityConstant, ConfigurationConstant, UIAbility, Want } from '@kit.AbilityKit';
+import { AbilityConstant, UIAbility, Want } from '@kit.AbilityKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { window } from '@kit.ArkUI';
 import { StorageService, PrefsKeys, loadWorkspaces, loadHosts, loadModelCache } from '../services/StorageService';
 import { ChatStore } from '../common/model/ChatState';
+import { AppPreferenceService } from '../services/AppPreferenceService';
 
 const DOMAIN: number = 0x0000;
 const TAG: string = 'EntryAbility';
 
 export default class EntryAbility extends UIAbility {
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
-    try {
-      this.context.getApplicationContext().setColorMode(ConfigurationConstant.ColorMode.COLOR_MODE_NOT_SET);
-    } catch (err) {
-      hilog.error(DOMAIN, TAG, 'Failed to set color mode. Cause: %{public}s', JSON.stringify(err));
-    }
     hilog.info(DOMAIN, TAG, 'Ability onCreate');
 
     AppStorage.setOrCreate<string>('serverUrl', 'ws://192.168.137.1:12138');
     AppStorage.setOrCreate<string>('lastAgent', '');
     AppStorage.setOrCreate<boolean>('isConnected', false);
+    AppStorage.setOrCreate<string>('pref_app_language', AppPreferenceService.LANGUAGE_SYSTEM);
+    AppStorage.setOrCreate<string>('pref_color_mode', AppPreferenceService.COLOR_SYSTEM);
 
     StorageService.getInstance().init(this.context).then(() => {
       let storage = StorageService.getInstance();
+      storage.getString(PrefsKeys.APP_LANGUAGE, AppPreferenceService.LANGUAGE_SYSTEM).then((language) => {
+        let normalized: string = AppPreferenceService.normalizeLanguage(language);
+        if (!AppPreferenceService.applyLanguage(normalized)) {
+          hilog.error(DOMAIN, TAG, 'Failed to apply language preference');
+          return;
+        }
+        AppPreferenceService.setPreferenceState('pref_app_language', normalized);
+      });
+      storage.getString(PrefsKeys.COLOR_MODE, AppPreferenceService.COLOR_SYSTEM).then((colorMode) => {
+        let normalized: string = AppPreferenceService.normalizeColorMode(colorMode);
+        if (!AppPreferenceService.applyColorMode(this.context, normalized)) {
+          hilog.error(DOMAIN, TAG, 'Failed to apply color mode preference');
+          return;
+        }
+        AppPreferenceService.setPreferenceState('pref_color_mode', normalized);
+      });
       loadHosts().then(() => {
           storage.getString(PrefsKeys.SERVER_URL, 'ws://192.168.137.1:12138').then((url) => {
           AppStorage.setOrCreate<string>('serverUrl', url);

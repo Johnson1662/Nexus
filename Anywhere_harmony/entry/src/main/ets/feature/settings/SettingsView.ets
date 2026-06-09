@@ -1,5 +1,6 @@
 import { Colors, FontSize, Spacing, Radius, Layout, getLocalizedString } from '../../constants/DesignTokens';
-import { StorageService } from '../../services/StorageService';
+import { StorageService, PrefsKeys } from '../../services/StorageService';
+import { AppPreferenceService } from '../../services/AppPreferenceService';
 import { HostStore, DeviceEntry } from '../../common/model/WorkspaceInfo';
 import { HostPhase, HostRuntimeStore, HostRuntimeState } from '../../common/model/HostState';
 
@@ -7,11 +8,17 @@ import { HostPhase, HostRuntimeStore, HostRuntimeState } from '../../common/mode
 export struct SettingsPage {
   @StorageLink('pref_thinking_expanded') thinkingExpanded: boolean = true;
   @StorageLink('pref_toolcall_expanded') toolcallExpanded: boolean = true;
+  @StorageLink('pref_app_language') appLanguage: string = AppPreferenceService.LANGUAGE_SYSTEM;
+  @StorageLink('pref_color_mode') colorMode: string = AppPreferenceService.COLOR_SYSTEM;
   @StorageLink('serverUrl') serverUrl: string = '';
   @State showManualConnect: boolean = false;
   @State newUrl: string = '';
   @State expandedHostKey: string = '';
   @State showAllAddresses: boolean = false;
+  @State expandedSettingKey: string = '';
+  private preferenceLoadId: number = 0;
+  private languageTouched: boolean = false;
+  private colorModeTouched: boolean = false;
   onConnect?: (url: string) => void;
   onConnectHost?: (index: number) => void;
   onDeleteHost?: (index: number) => void;
@@ -21,6 +28,83 @@ export struct SettingsPage {
     let context = this.getUIContext().getHostContext();
     if (!context) return '';
     return getLocalizedString(context, res, ...args);
+  }
+
+  aboutToAppear(): void {
+    this.preferenceLoadId += 1;
+    let loadId: number = this.preferenceLoadId;
+    this.languageTouched = false;
+    this.colorModeTouched = false;
+    StorageService.getInstance().getString(PrefsKeys.APP_LANGUAGE, AppPreferenceService.LANGUAGE_SYSTEM)
+      .then((value: string) => {
+        if (loadId !== this.preferenceLoadId || this.languageTouched) return;
+        this.appLanguage = AppPreferenceService.normalizeLanguage(value);
+        AppPreferenceService.setPreferenceState('pref_app_language', this.appLanguage);
+      })
+      .catch(() => {});
+    StorageService.getInstance().getString(PrefsKeys.COLOR_MODE, AppPreferenceService.COLOR_SYSTEM)
+      .then((value: string) => {
+        if (loadId !== this.preferenceLoadId || this.colorModeTouched) return;
+        this.colorMode = AppPreferenceService.normalizeColorMode(value);
+        AppPreferenceService.setPreferenceState('pref_color_mode', this.colorMode);
+      })
+      .catch(() => {});
+  }
+
+  getLanguageLabel(value: string): string {
+    let normalized: string = AppPreferenceService.normalizeLanguage(value);
+    if (normalized === AppPreferenceService.LANGUAGE_ZH) return this.text($r('app.string.settings_language_zh'));
+    if (normalized === AppPreferenceService.LANGUAGE_EN) return this.text($r('app.string.settings_language_en'));
+    return this.text($r('app.string.settings_language_system'));
+  }
+
+  getColorModeLabel(value: string): string {
+    let normalized: string = AppPreferenceService.normalizeColorMode(value);
+    if (normalized === AppPreferenceService.COLOR_LIGHT) return this.text($r('app.string.settings_color_light'));
+    if (normalized === AppPreferenceService.COLOR_DARK) return this.text($r('app.string.settings_color_dark'));
+    return this.text($r('app.string.settings_color_system'));
+  }
+
+  toggleSetting(key: string): void {
+    this.expandedSettingKey = this.expandedSettingKey === key ? '' : key;
+  }
+
+  showToast(message: string): void {
+    try {
+      this.getUIContext().getPromptAction().showToast({ message });
+    } catch (_err) {}
+  }
+
+  selectLanguage(value: string): void {
+    let normalized: string = AppPreferenceService.normalizeLanguage(value);
+    this.languageTouched = true;
+    if (!AppPreferenceService.applyLanguage(normalized)) {
+      this.showToast(this.text($r('app.string.settings_apply_failed')));
+      return;
+    }
+    this.appLanguage = normalized;
+    AppPreferenceService.setPreferenceState('pref_app_language', normalized);
+    StorageService.getInstance().putString(PrefsKeys.APP_LANGUAGE, normalized).catch(() => {});
+    this.showToast(this.text($r('app.string.settings_language_applied')));
+  }
+
+  selectColorMode(value: string): void {
+    let normalized: string = AppPreferenceService.normalizeColorMode(value);
+    this.colorModeTouched = true;
+    let applied: boolean = false;
+    try {
+      let context = this.getUIContext().getHostContext();
+      if (context) {
+        applied = AppPreferenceService.applyColorMode(context, normalized);
+      }
+    } catch (_err) {}
+    if (!applied) {
+      this.showToast(this.text($r('app.string.settings_apply_failed')));
+      return;
+    }
+    this.colorMode = normalized;
+    AppPreferenceService.setPreferenceState('pref_color_mode', normalized);
+    StorageService.getInstance().putString(PrefsKeys.COLOR_MODE, normalized).catch(() => {});
   }
 
   getHostKey(device: DeviceEntry): string {
@@ -249,10 +333,9 @@ export struct SettingsPage {
   @Builder
   ScanIconButton() {
     Button() {
-      Image($r('app.media.ic_scan'))
-        .width(18)
-        .height(18)
-        .fillColor(Colors.foreground)
+      SymbolGlyph($r('sys.symbol.line_viewfinder'))
+        .fontSize(20)
+        .fontColor([Colors.foreground])
     }
     .width(36)
     .height(36)
@@ -577,6 +660,105 @@ export struct SettingsPage {
     })
   }
 
+  @Builder
+  SettingSummaryRow(title: string, value: string, key: string) {
+    Button() {
+      Row() {
+        Text(title)
+          .fontSize(FontSize.base)
+          .fontColor(Colors.foreground)
+          .fontWeight(FontWeight.Medium)
+          .layoutWeight(1)
+        Text(value)
+          .fontSize(FontSize.sm)
+          .fontColor(Colors.foregroundMuted)
+          .margin({ left: Spacing.sm, right: Spacing.xs })
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+        SymbolGlyph($r('sys.symbol.chevron_right'))
+          .fontSize(16)
+          .fontColor([Colors.foregroundMuted])
+          .rotate({ angle: this.expandedSettingKey === key ? 90 : 0 })
+      }
+      .width('100%')
+    }
+    .width('100%')
+    .height(52)
+    .padding({ left: Spacing.md, right: Spacing.md })
+    .backgroundColor(Colors.transparent)
+    .stateStyles({
+      pressed: { .backgroundColor(Colors.surface1) },
+      normal: { .backgroundColor(Colors.transparent) }
+    })
+    .onClick(() => { this.toggleSetting(key); })
+  }
+
+  @Builder
+  SettingOptionRow(label: string, selected: boolean, action: () => void) {
+    Button() {
+      Row() {
+        Text(label)
+          .fontSize(FontSize.md)
+          .fontColor(selected ? Colors.foreground : Colors.foregroundMuted)
+          .fontWeight(selected ? FontWeight.Medium : FontWeight.Regular)
+          .layoutWeight(1)
+        if (selected) {
+          SymbolGlyph($r('sys.symbol.checkmark'))
+            .fontSize(16)
+            .fontColor([Colors.foreground])
+        } else {
+          Blank()
+            .width(16)
+            .height(16)
+        }
+      }
+      .width('100%')
+    }
+    .width('100%')
+    .height(44)
+    .padding({ left: Spacing.xxl, right: Spacing.md })
+    .backgroundColor(Colors.transparent)
+    .stateStyles({
+      pressed: { .backgroundColor(Colors.surface1) },
+      normal: { .backgroundColor(Colors.transparent) }
+    })
+    .onClick(action)
+  }
+
+  @Builder
+  LanguageOptions() {
+    Column() {
+      this.SettingOptionRow(this.text($r('app.string.settings_language_system')),
+        this.appLanguage === AppPreferenceService.LANGUAGE_SYSTEM,
+        () => { this.selectLanguage(AppPreferenceService.LANGUAGE_SYSTEM); })
+      this.SettingOptionRow(this.text($r('app.string.settings_language_zh')),
+        this.appLanguage === AppPreferenceService.LANGUAGE_ZH,
+        () => { this.selectLanguage(AppPreferenceService.LANGUAGE_ZH); })
+      this.SettingOptionRow(this.text($r('app.string.settings_language_en')),
+        this.appLanguage === AppPreferenceService.LANGUAGE_EN,
+        () => { this.selectLanguage(AppPreferenceService.LANGUAGE_EN); })
+    }
+    .width('100%')
+    .padding({ bottom: Spacing.xs })
+  }
+
+  @Builder
+  ColorModeOptions() {
+    Column() {
+      this.SettingOptionRow(this.text($r('app.string.settings_color_system')),
+        this.colorMode === AppPreferenceService.COLOR_SYSTEM,
+        () => { this.selectColorMode(AppPreferenceService.COLOR_SYSTEM); })
+      this.SettingOptionRow(this.text($r('app.string.settings_color_light')),
+        this.colorMode === AppPreferenceService.COLOR_LIGHT,
+        () => { this.selectColorMode(AppPreferenceService.COLOR_LIGHT); })
+      this.SettingOptionRow(this.text($r('app.string.settings_color_dark')),
+        this.colorMode === AppPreferenceService.COLOR_DARK,
+        () => { this.selectColorMode(AppPreferenceService.COLOR_DARK); })
+    }
+    .width('100%')
+    .padding({ bottom: Spacing.xs })
+  }
+
   build() {
     NavDestination() {
       Scroll() {
@@ -633,6 +815,40 @@ export struct SettingsPage {
                   }
                 }
               }, (device: DeviceEntry, index: number) => (device.hostId || device.name) + ':' + index.toString() + ':' + this.expandedHostKey)
+            }
+          }
+          .width(Layout.contentWidth)
+          .backgroundColor(Colors.surfaceElevated)
+          .borderRadius(Radius.xxl)
+          .clip(true)
+
+          this.SectionTitle(this.text($r('app.string.settings_display_section')))
+
+          List({ space: 0 }) {
+            ListItem() {
+              this.SettingSummaryRow(this.text($r('app.string.settings_language_title')),
+                this.getLanguageLabel(this.appLanguage), 'language')
+            }
+
+            if (this.expandedSettingKey === 'language') {
+              ListItem() {
+                this.LanguageOptions()
+              }
+            }
+
+            ListItem() {
+              this.SettingsDivider()
+            }
+
+            ListItem() {
+              this.SettingSummaryRow(this.text($r('app.string.settings_color_mode_title')),
+                this.getColorModeLabel(this.colorMode), 'color')
+            }
+
+            if (this.expandedSettingKey === 'color') {
+              ListItem() {
+                this.ColorModeOptions()
+              }
             }
           }
           .width(Layout.contentWidth)

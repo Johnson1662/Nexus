@@ -106,6 +106,8 @@ export interface PrefsKeysType {
   HOST_ID: string;
   SERVER_HOST_PUBLIC_KEY: string;
   HOST_ED25519_PUBLIC_KEY: string;
+  APP_LANGUAGE: string;
+  COLOR_MODE: string;
 }
 
 export const PrefsKeys: PrefsKeysType = {
@@ -120,7 +122,9 @@ export const PrefsKeys: PrefsKeysType = {
   HIERARCHY_CACHE: 'hierarchy_cache_v2',
   HOST_ID: 'host_id',
   SERVER_HOST_PUBLIC_KEY: 'server_host_public_key',
-  HOST_ED25519_PUBLIC_KEY: 'host_ed25519_public_key'
+  HOST_ED25519_PUBLIC_KEY: 'host_ed25519_public_key',
+  APP_LANGUAGE: 'app_language',
+  COLOR_MODE: 'color_mode'
 };
 
 // Workspace data interface for serialization
