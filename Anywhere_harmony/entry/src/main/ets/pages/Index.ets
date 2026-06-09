@@ -177,6 +177,7 @@ struct Index {
     } else if (name === 'settings') {
       SettingsPage({
         onConnect: (url: string) => { this.connectToHostUrl(url); },
+        onConnectHost: (index: number) => { this.connectSavedHost(index); },
         onDeleteHost: (index: number) => {
           HostStore.removeDevice(index);
           saveHosts();
@@ -509,6 +510,26 @@ struct Index {
     ChatStore.modes = [];
     ChatStore.sessions = [];
     this.ws.connect(url, this.getHostKeyForUrl(url));
+  }
+
+  connectSavedHost(index: number): void {
+    if (index < 0 || index >= HostStore.devices.length) {
+      return;
+    }
+    let device: DeviceEntry = HostStore.devices[index];
+    let serverUrl: string = AppStorage.get<string>('serverUrl') || '';
+    let candidates: string[] = this.getConnectCandidates(device, serverUrl);
+    let hostKey: string = device.hostId || device.name;
+    ChatStore.selectedAgentName = '';
+    ChatStore.agentType = '';
+    ChatStore.models = [];
+    ChatStore.modes = [];
+    ChatStore.sessions = [];
+    if (candidates.length > 1) {
+      this.ws.connectBest(candidates, hostKey);
+    } else if (candidates.length === 1) {
+      this.ws.connect(candidates[0], hostKey);
+    }
   }
 
   async scanAndConnectHost(): Promise<void> {
