@@ -98,7 +98,7 @@ interface PendingProbe {
 const pendingProbes = new Map<string, PendingProbe>();
 
 const server = http.createServer((req, res) => {
-  const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
+  const url = new URL(req.url || '/', 'http://localhost');
   if (req.method === 'GET' && url.pathname === '/probe') {
     handleProbe(url, res);
     return;
@@ -175,7 +175,7 @@ function handleProbePong(hostId: string, msg: Buffer): boolean {
 }
 
 server.on('upgrade', (req, socket) => {
-  const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
+  const url = new URL(req.url || '/', 'http://localhost');
   const role = url.searchParams.get('role');
   const hostId = role === 'host'
     ? url.searchParams.get('deviceId')

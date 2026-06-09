@@ -95,6 +95,9 @@ export interface ServerInfoMessage {
   ips: string[];
   hostId?: string;
   relayPin?: string;
+  relayUrl?: string;
+  ecdhPublicKeyHex?: string;
+  ed25519PublicKeyHex?: string;
 }
 
 export interface AgentInfo {

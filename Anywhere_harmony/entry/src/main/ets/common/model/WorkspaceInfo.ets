@@ -29,6 +29,7 @@ export interface DeviceEntry {
   urls: string[];
   hostId?: string;
   relayPin?: string;
+  relayUrl?: string;
 }
 
 // Legacy HostInfo — kept for migration only
@@ -65,6 +66,9 @@ export class HostStoreModel {
       }
       if (device.relayPin && device.relayPin.length > 0) {
         current.relayPin = device.relayPin;
+      }
+      if (device.relayUrl && device.relayUrl.length > 0) {
+        current.relayUrl = device.relayUrl;
       }
       let existingUrls: string[] = current.urls;
       for (let i: number = 0; i < device.urls.length; i++) {

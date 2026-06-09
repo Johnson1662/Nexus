@@ -29,6 +29,8 @@ import { handleAcpUpdate } from '../common/model/MessageHandler';
 import { DeviceAgentStore } from '../common/model/DeviceAgentStore';
 import { getOrCreateClientKeyPair } from '../common/websocket/CryptoHelper';
 
+const DEFAULT_RELAY_URL: string = 'ws://relay.anywhere12138.lat:12138';
+
 @Entry
 @Component
 struct Index {
@@ -300,14 +302,37 @@ struct Index {
       this.addCandidateUrl(result, this.repairSavedRelayUrl(url, device.hostId || ''));
       this.addCandidateUrl(result, url);
     }
+    this.addRelayCandidate(result, device.relayUrl || DEFAULT_RELAY_URL, device.hostId || '');
     this.addCandidateUrl(result, 'ws://192.168.137.1:12138');
     return result;
   }
 
   addCandidateUrl(urls: string[], url: string): void {
+    if (this.isAutoDirectIpv6Url(url)) {
+      return;
+    }
     if (url.length > 0 && urls.indexOf(url) < 0) {
       urls.push(url);
     }
+  }
+
+  isAutoDirectIpv6Url(url: string): boolean {
+    return url.startsWith('ws://[') || url.startsWith('wss://[');
+  }
+
+  addRelayCandidate(urls: string[], relayUrl: string, hostId: string): void {
+    if (relayUrl.length === 0 || hostId.length === 0) {
+      return;
+    }
+    this.addCandidateUrl(urls, this.buildRelayClientUrl(relayUrl, hostId));
+  }
+
+  buildRelayClientUrl(relayUrl: string, hostId: string): string {
+    if (relayUrl.indexOf('targetHostId=') >= 0) {
+      return relayUrl;
+    }
+    let separator: string = relayUrl.indexOf('?') >= 0 ? '&' : '?';
+    return relayUrl + separator + 'role=client&targetHostId=' + hostId;
   }
 
   getTargetHostIdFromUrl(url: string): string {
@@ -338,35 +363,14 @@ struct Index {
     if (url.length === 0 || hostId.length === 0 || url.indexOf('targetHostId=') >= 0) {
       return url;
     }
-    if (this.isPrivateDirectUrl(url)) {
+    if (!this.isKnownRelayUrl(url)) {
       return url;
     }
-    let separator: string = url.indexOf('?') >= 0 ? '&' : '?';
-    return url + separator + 'role=client&targetHostId=' + hostId;
+    return this.buildRelayClientUrl(url, hostId);
   }
 
-  isPrivateDirectUrl(url: string): boolean {
-    return url.indexOf('192.168.') >= 0 ||
-      url.indexOf('10.') >= 0 ||
-      url.indexOf('127.0.0.1') >= 0 ||
-      url.indexOf('localhost') >= 0 ||
-      url.indexOf('[::1]') >= 0 ||
-      url.indexOf('172.16.') >= 0 ||
-      url.indexOf('172.17.') >= 0 ||
-      url.indexOf('172.18.') >= 0 ||
-      url.indexOf('172.19.') >= 0 ||
-      url.indexOf('172.20.') >= 0 ||
-      url.indexOf('172.21.') >= 0 ||
-      url.indexOf('172.22.') >= 0 ||
-      url.indexOf('172.23.') >= 0 ||
-      url.indexOf('172.24.') >= 0 ||
-      url.indexOf('172.25.') >= 0 ||
-      url.indexOf('172.26.') >= 0 ||
-      url.indexOf('172.27.') >= 0 ||
-      url.indexOf('172.28.') >= 0 ||
-      url.indexOf('172.29.') >= 0 ||
-      url.indexOf('172.30.') >= 0 ||
-      url.indexOf('172.31.') >= 0;
+  isKnownRelayUrl(url: string): boolean {
+    return url.indexOf('relay.anywhere12138.lat') >= 0 || url.indexOf('35.212.155.17') >= 0;
   }
 
   getSelectedDeviceIndex(): number {
@@ -479,6 +483,10 @@ struct Index {
         AppStorage.setOrCreate<string>('serverHostPublicKey', ecdhPublicKeyHex);
         AppStorage.setOrCreate<string>('hostEd25519PublicKey', ed25519PublicKeyHex);
         AppStorage.setOrCreate<string>('hostId', hostId);
+        let storage = StorageService.getInstance();
+        await storage.putString(PrefsKeys.HOST_ID, hostId);
+        await storage.putString(PrefsKeys.SERVER_HOST_PUBLIC_KEY, ecdhPublicKeyHex);
+        await storage.putString(PrefsKeys.HOST_ED25519_PUBLIC_KEY, ed25519PublicKeyHex);
         return relayUrl + '?role=client&targetHostId=' + hostId;
       }
     } catch {}

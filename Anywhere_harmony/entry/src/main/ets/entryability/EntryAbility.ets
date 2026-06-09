@@ -56,6 +56,15 @@ export default class EntryAbility extends UIAbility {
         // Restore cursor position for session recovery after process crash
         ChatStore.lastMessageId = mid;
       });
+      storage.getString(PrefsKeys.HOST_ID, '').then((hostId) => {
+        AppStorage.setOrCreate<string>('hostId', hostId);
+      });
+      storage.getString(PrefsKeys.SERVER_HOST_PUBLIC_KEY, '').then((key) => {
+        AppStorage.setOrCreate<string>('serverHostPublicKey', key);
+      });
+      storage.getString(PrefsKeys.HOST_ED25519_PUBLIC_KEY, '').then((key) => {
+        AppStorage.setOrCreate<string>('hostEd25519PublicKey', key);
+      });
     });
   }
 

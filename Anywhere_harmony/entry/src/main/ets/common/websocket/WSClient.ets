@@ -139,10 +139,10 @@ function buildWsUrlFromIp(ip: string, port: string, scheme: string): string {
   if (ip.length === 0 || ip.startsWith('HOST:')) {
     return '';
   }
-  let host: string = ip;
-  if (host.indexOf(':') >= 0 && !host.startsWith('[')) {
-    host = '[' + host + ']';
+  if (ip.indexOf(':') >= 0) {
+    return '';
   }
+  let host: string = ip;
   return scheme + '://' + host + ':' + port;
 }
 
@@ -219,6 +219,7 @@ export class WSClient {
   private everConnected: boolean = false;
   private hostEverOnline: boolean = false;
   private targetHostKey: string = '';
+  private reconnectCandidates: string[] = [];
   private waitingHostTimer: number | null = null;
   private _e2eeReady: boolean = false;
   private _e2eeClientId: string = '';
@@ -230,11 +231,16 @@ export class WSClient {
   private readonly HEARTBEAT_WATCHDOG_MS: number = 45_000;  // 45s no heartbeat → disconnect
 
   connect(url: string, hostKey: string = ''): void {
+    this.reconnectCandidates = this.normalizeCandidateUrls([url]);
+    this.connectSelected(url, hostKey);
+  }
+
+  private connectSelected(url: string, hostKey: string = ''): void {
     this.cancelReconnect();
     this.cancelWaitingHostTimer();
     this.lastUrl = url;
     this.targetHostKey = this.resolveHostKey(url, hostKey);
-    this.hostEverOnline = HostRuntimeStore.hasEverOnline(this.targetHostKey);
+    this.hostEverOnline = HostRuntimeStore.hasEverOnline(this.targetHostKey) || this.reconnectCandidates.length > 1;
     this.intentionalClose = false;
     this.reconnectAttempts = 0;
     this.everConnected = false;
@@ -242,6 +248,17 @@ export class WSClient {
     ChatStore.connected = false;
     ChatStore.currentDeviceId = '';
     this.doConnect(url);
+  }
+
+  private normalizeCandidateUrls(urls: string[]): string[] {
+    let result: string[] = [];
+    for (let i: number = 0; i < urls.length; i++) {
+      let url: string = urls[i];
+      if (url.length > 0 && result.indexOf(url) < 0) {
+        result.push(url);
+      }
+    }
+    return result;
   }
 
   private resolveHostKey(url: string, hostKey: string): string {
@@ -295,7 +312,7 @@ export class WSClient {
       let hostname: string = getStringField(data, 'hostname');
       let ok: boolean = getBooleanField(data, 'ok') && matchesExpectedHost(data, expectedHostKey);
       if (kind === 'relay') {
-        ok = ok && getBooleanField(data, 'hostOnline') && getBooleanField(data, 'pong');
+        ok = ok && getBooleanField(data, 'hostOnline') && getBooleanField(data, 'pong') && this.hasRelayCredentials();
       }
       return {
         url,
@@ -325,13 +342,20 @@ export class WSClient {
 
   // Connect to the fastest reachable URL from a device, then use that URL
   async connectBest(urls: string[], hostKey: string = ''): Promise<void> {
-    let resolvedHostKey: string = urls.length > 0 ? this.resolveHostKey(urls[0], hostKey) : hostKey;
-    if (urls.length === 0) {
+    let candidates: string[] = this.normalizeCandidateUrls(urls);
+    let resolvedHostKey: string = candidates.length > 0 ? this.resolveHostKey(candidates[0], hostKey) : hostKey;
+    if (candidates.length === 0) {
       hilog.error(DOMAIN, TAG, 'connectBest: empty urls, abort');
       HostRuntimeStore.markOffline(resolvedHostKey, 'no candidate urls');
       return;
     }
-    HostRuntimeStore.markConnecting(resolvedHostKey, urls[0]);
+    this.reconnectCandidates = candidates;
+    HostRuntimeStore.markConnecting(resolvedHostKey, candidates[0]);
+    let bestUrl: string = await this.pickBestCandidate(candidates, resolvedHostKey, 'connectBest');
+    this.connectSelected(bestUrl, resolvedHostKey);
+  }
+
+  private async pickBestCandidate(urls: string[], resolvedHostKey: string, source: string): Promise<string> {
     let bestUrl: string = urls[0];
     let bestLatency: number = -1;
     let results: Promise<ProbeCandidateResult>[] = [];
@@ -346,12 +370,28 @@ export class WSClient {
       }
     }
     if (bestLatency < 0) {
-      hilog.error(DOMAIN, TAG, 'connectBest: all probes failed, trying first candidate');
-      this.connect(urls[0], resolvedHostKey);
-      return;
+      hilog.error(DOMAIN, TAG, source + ': all probes failed, trying first candidate');
+      return this.pickFallbackCandidate(urls);
     }
-    hilog.info(DOMAIN, TAG, `connectBest: selected ${bestUrl} via probe (${bestLatency}ms)`);
-    this.connect(bestUrl, resolvedHostKey);
+    hilog.info(DOMAIN, TAG, source + `: selected ${bestUrl} via probe (${bestLatency}ms)`);
+    return bestUrl;
+  }
+
+  private hasRelayCredentials(): boolean {
+    let hostEd25519PubKey: string = AppStorage.get<string>('hostEd25519PublicKey') || '';
+    let hostId: string = AppStorage.get<string>('hostId') || '';
+    return hostEd25519PubKey.length > 0 && hostId.length > 0;
+  }
+
+  private pickFallbackCandidate(urls: string[]): string {
+    if (!this.hasRelayCredentials()) {
+      for (let i: number = 0; i < urls.length; i++) {
+        if (!isRelayClientUrl(urls[i])) {
+          return urls[i];
+        }
+      }
+    }
+    return urls[0];
   }
 
   private doConnect(url: string): void {
@@ -507,8 +547,17 @@ export class WSClient {
     HostRuntimeStore.markReconnecting(this.targetHostKey, this.reconnectAttempts, reason);
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
-      this.doConnect(this.lastUrl);
+      this.reconnectUsingBestCandidate();
     }, delay);
+  }
+
+  private async reconnectUsingBestCandidate(): Promise<void> {
+    if (this.intentionalClose || this.lastUrl.length === 0) return;
+    let candidates: string[] = this.reconnectCandidates.length > 0 ? this.reconnectCandidates : [this.lastUrl];
+    let bestUrl: string = await this.pickBestCandidate(candidates, this.targetHostKey, 'reconnect');
+    if (this.intentionalClose) return;
+    this.lastUrl = bestUrl;
+    this.doConnect(bestUrl);
   }
 
   private cancelReconnect(): void {
@@ -599,7 +648,10 @@ export class WSClient {
     try {
       const hostEd25519PubKey: string = AppStorage.get<string>('hostEd25519PublicKey') || '';
       const hostId: string = AppStorage.get<string>('hostId') || '';
-      if (!hostEd25519PubKey || !hostId) return;
+      if (!hostEd25519PubKey || !hostId) {
+        hilog.error(DOMAIN, TAG, 'E2EE credentials missing, scan host QR again');
+        return;
+      }
 
       let ephKeyPair = await generateEphemeralKeyPair();
       let clientKeyPair = await getOrCreateClientKeyPair();
@@ -722,6 +774,11 @@ export class WSClient {
     let hostname: string = info.hostname;
     let connectedUrl: string = this.lastUrl;
     if (connectedUrl.length === 0) return;
+    this.persistHostIdentity(
+      info.hostId || '',
+      info.ecdhPublicKeyHex || '',
+      info.ed25519PublicKeyHex || ''
+    );
     let isRelayPairUrl: boolean = connectedUrl.indexOf('targetHostId=') >= 0;
     let primaryUrl: string = isRelayPairUrl ? connectedUrl : stripQuery(connectedUrl);
     // Dedup: remove all existing devices with same hostId or same hostname
@@ -755,6 +812,7 @@ export class WSClient {
       urls: mergedUrls,
       hostId: info.hostId,
       relayPin: info.relayPin,
+      relayUrl: info.relayUrl,
     } as DeviceEntry);
 
     let actualHostKey: string = info.hostId || hostname;
@@ -791,6 +849,22 @@ export class WSClient {
     loadWorkspaces(connectedUrl);
     for (let cb of this.serverInfoListeners) {
       cb();
+    }
+  }
+
+  private persistHostIdentity(hostId: string, ecdhPublicKeyHex: string, ed25519PublicKeyHex: string): void {
+    let storage = StorageService.getInstance();
+    if (hostId.length > 0) {
+      AppStorage.setOrCreate<string>('hostId', hostId);
+      storage.putString(PrefsKeys.HOST_ID, hostId);
+    }
+    if (ecdhPublicKeyHex.length > 0) {
+      AppStorage.setOrCreate<string>('serverHostPublicKey', ecdhPublicKeyHex);
+      storage.putString(PrefsKeys.SERVER_HOST_PUBLIC_KEY, ecdhPublicKeyHex);
+    }
+    if (ed25519PublicKeyHex.length > 0) {
+      AppStorage.setOrCreate<string>('hostEd25519PublicKey', ed25519PublicKeyHex);
+      storage.putString(PrefsKeys.HOST_ED25519_PUBLIC_KEY, ed25519PublicKeyHex);
     }
   }
 

@@ -155,7 +155,7 @@ function handleHttpRequest(req: IncomingMessage, res: ServerResponse): void {
     sendJson(res, 400, { ok: false, error: "bad request" });
     return;
   }
-  const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
+  const url = new URL(req.url || "/", "http://localhost");
   if (url.pathname === "/probe") {
     sendJson(res, 200, {
       ok: true,
@@ -201,6 +201,9 @@ function sendServerInfo(ws: WebSocket | any) {
       type: "server_info",
       hostId: HOST_ID,
       relayPin: HOST_ID,
+      relayUrl: PHONE_RELAY_URL,
+      ecdhPublicKeyHex: relayHostIdentity.publicKeyHex,
+      ed25519PublicKeyHex: relayHostIdentity.ed25519PublicKeyHex,
       hostname,
       ips,
     }));

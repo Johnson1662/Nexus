@@ -103,6 +103,9 @@ export interface PrefsKeysType {
   LAST_MESSAGE_ID: string;
   DEVICE_AGENTS_CACHE: string;
   HIERARCHY_CACHE: string;
+  HOST_ID: string;
+  SERVER_HOST_PUBLIC_KEY: string;
+  HOST_ED25519_PUBLIC_KEY: string;
 }
 
 export const PrefsKeys: PrefsKeysType = {
@@ -114,7 +117,10 @@ export const PrefsKeys: PrefsKeysType = {
   HOST_LIST: 'host_list',
   LAST_MESSAGE_ID: 'last_message_id',
   DEVICE_AGENTS_CACHE: 'device_agents_cache',
-  HIERARCHY_CACHE: 'hierarchy_cache_v2'
+  HIERARCHY_CACHE: 'hierarchy_cache_v2',
+  HOST_ID: 'host_id',
+  SERVER_HOST_PUBLIC_KEY: 'server_host_public_key',
+  HOST_ED25519_PUBLIC_KEY: 'host_ed25519_public_key'
 };
 
 // Workspace data interface for serialization
