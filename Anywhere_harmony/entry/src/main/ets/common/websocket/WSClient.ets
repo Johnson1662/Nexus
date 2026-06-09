@@ -84,6 +84,55 @@ function getUrlPort(url: string): string {
   return '12138';
 }
 
+function getUrlHost(url: string): string {
+  let cleanUrl: string = stripQuery(url);
+  let schemeEnd: number = cleanUrl.indexOf('://');
+  let rest: string = schemeEnd >= 0 ? cleanUrl.substring(schemeEnd + 3) : cleanUrl;
+  if (rest.startsWith('[')) {
+    let closeBracket: number = rest.indexOf(']');
+    return closeBracket >= 0 ? rest.substring(1, closeBracket) : rest;
+  }
+  let slashIdx: number = rest.indexOf('/');
+  if (slashIdx >= 0) {
+    rest = rest.substring(0, slashIdx);
+  }
+  let portSep: number = rest.lastIndexOf(':');
+  if (portSep >= 0) {
+    return rest.substring(0, portSep);
+  }
+  return rest;
+}
+
+function getIpv4Part(ip: string, index: number): number {
+  let parts: string[] = ip.split('.');
+  if (parts.length !== 4 || index < 0 || index >= parts.length) return -1;
+  let value: number = Number(parts[index]);
+  return Number.isFinite(value) ? value : -1;
+}
+
+function isTailscaleIpv4(host: string): boolean {
+  let first: number = getIpv4Part(host, 0);
+  let second: number = getIpv4Part(host, 1);
+  return first === 100 && second >= 64 && second <= 127;
+}
+
+function isPrivate172Ipv4(host: string): boolean {
+  let first: number = getIpv4Part(host, 0);
+  let second: number = getIpv4Part(host, 1);
+  return first === 172 && second >= 16 && second <= 31;
+}
+
+function getCandidatePriority(url: string): number {
+  let host: string = getUrlHost(url);
+  if (host === '192.168.137.1') return 0;
+  if (host.startsWith('192.168.')) return 1;
+  if (host.startsWith('10.') || isPrivate172Ipv4(host)) return 2;
+  if (isTailscaleIpv4(host)) return 3;
+  if (isRelayClientUrl(url)) return 4;
+  if (isKnownRelayUrl(url)) return 5;
+  return 2;
+}
+
 function getUrlQueryValue(url: string, key: string): string {
   let marker: string = key + '=';
   let start: number = url.indexOf(marker);
@@ -108,6 +157,11 @@ function isDirtyRelayPairUrl(url: string): boolean {
 
 function isDirectIpv6Url(url: string): boolean {
   return url.startsWith('ws://[') || url.startsWith('wss://[');
+}
+
+function toPrimaryConnectionUrl(url: string): string {
+  if (url.length === 0) return '';
+  return isRelayClientUrl(url) ? url : stripQuery(url);
 }
 
 function buildProbeUrl(url: string): string {
@@ -373,13 +427,18 @@ export class WSClient {
   private async pickBestCandidate(urls: string[], resolvedHostKey: string, source: string): Promise<string> {
     let bestUrl: string = urls[0];
     let bestLatency: number = -1;
+    let bestPriority: number = 999;
     let results: Promise<ProbeCandidateResult>[] = [];
     for (let i: number = 0; i < urls.length; i++) {
       results.push(this.probeCandidate(urls[i], resolvedHostKey));
     }
     for (let i: number = 0; i < results.length; i++) {
       let result: ProbeCandidateResult = await results[i];
-      if (result.ok && result.latencyMs >= 0 && (bestLatency < 0 || result.latencyMs < bestLatency)) {
+      let priority: number = getCandidatePriority(result.url);
+      if (result.ok && result.latencyMs >= 0 &&
+        (bestLatency < 0 || priority < bestPriority ||
+          (priority === bestPriority && result.latencyMs < bestLatency))) {
+        bestPriority = priority;
         bestLatency = result.latencyMs;
         bestUrl = result.url;
       }
@@ -794,8 +853,8 @@ export class WSClient {
       info.ecdhPublicKeyHex || '',
       info.ed25519PublicKeyHex || ''
     );
-    let isRelayPairUrl: boolean = connectedUrl.indexOf('targetHostId=') >= 0;
-    let primaryUrl: string = isRelayPairUrl ? connectedUrl : stripQuery(connectedUrl);
+    let isRelayPairUrl: boolean = isRelayClientUrl(connectedUrl);
+    let primaryUrl: string = toPrimaryConnectionUrl(connectedUrl);
     // Dedup: remove all existing devices with same hostId or same hostname
     let mergedUrls: string[] = [];
     for (let i: number = HostStore.devices.length - 1; i >= 0; i--) {
@@ -1268,7 +1327,7 @@ export class WSClient {
         }
         ChatStore.reconnectPhase = '';
         if (this.targetHostKey.length > 0) {
-          HostRuntimeStore.markOnline(this.targetHostKey, this.lastUrl);
+          HostRuntimeStore.markOnline(this.targetHostKey, toPrimaryConnectionUrl(this.lastUrl));
         }
         break;
       }

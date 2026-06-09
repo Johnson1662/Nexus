@@ -35,6 +35,17 @@ export struct SettingsPage {
     return this.getRuntimeStatus(device).activeUrl;
   }
 
+  getCurrentAddress(device: DeviceEntry): string {
+    if (!HostRuntimeStore.matchesDevice(device, HostRuntimeStore.activeHostKey)) {
+      return '';
+    }
+    let phase: string = this.getHostPhase(device);
+    if (phase === HostPhase.OFFLINE || phase === HostPhase.UNKNOWN || phase === HostPhase.ERROR) {
+      return '';
+    }
+    return this.getActiveUrl(device);
+  }
+
   isCurrentHost(device: DeviceEntry): boolean {
     return HostRuntimeStore.isDeviceOnline(device) && HostRuntimeStore.matchesDevice(device, HostRuntimeStore.activeHostKey);
   }
@@ -89,7 +100,7 @@ export struct SettingsPage {
 
   getConnectionType(device: DeviceEntry): string {
     let phase: string = this.getHostPhase(device);
-    let url: string = this.getActiveUrl(device);
+    let url: string = this.getCurrentAddress(device);
     if (url.length === 0 || phase === HostPhase.OFFLINE || phase === HostPhase.UNKNOWN || phase === HostPhase.ERROR) {
       return '未连接';
     }
@@ -132,7 +143,7 @@ export struct SettingsPage {
   }
 
   getPrimaryDisplayUrl(device: DeviceEntry): string {
-    let activeUrl: string = this.getActiveUrl(device);
+    let activeUrl: string = this.getCurrentAddress(device);
     if (activeUrl.length > 0) return activeUrl;
     let directUrls: string[] = this.getDirectUrls(device);
     if (directUrls.length > 0) return directUrls[0];
@@ -336,7 +347,7 @@ export struct SettingsPage {
       this.DetailRow('连接方式', this.getConnectionType(device))
       this.DetailRow('Relay', this.getRelayStatus(device))
       this.DetailRow('配对密钥', this.getPairingStatus(device))
-      this.DetailRow('当前地址', this.getActiveUrl(device).length > 0 ? this.getActiveUrl(device) : '未连接')
+      this.DetailRow('当前地址', this.getCurrentAddress(device).length > 0 ? this.getCurrentAddress(device) : '未连接')
 
       Column() {
         Text('IPv4 地址')
