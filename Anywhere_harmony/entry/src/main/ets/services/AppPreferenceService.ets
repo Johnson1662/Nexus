@@ -30,6 +30,24 @@ export class AppPreferenceService {
     return AppPreferenceService.LANGUAGE_SYSTEM;
   }
 
+  static getRuntimeSystemLanguage(): string {
+    let language: string = '';
+    try {
+      language = i18n.System.getSystemLanguage();
+    } catch (_err) {}
+    if (language.length === 0) {
+      try {
+        language = i18n.System.getFirstPreferredLanguage();
+      } catch (_err) {}
+    }
+    if (language.length === 0) return 'default';
+
+    let lower: string = language.toLowerCase();
+    if (lower.startsWith('zh')) return AppPreferenceService.LANGUAGE_ZH;
+    if (lower.startsWith('en')) return AppPreferenceService.LANGUAGE_EN;
+    return language;
+  }
+
   static normalizeColorMode(value: string): string {
     if (value === AppPreferenceService.COLOR_LIGHT) return AppPreferenceService.COLOR_LIGHT;
     if (value === AppPreferenceService.COLOR_DARK) return AppPreferenceService.COLOR_DARK;
@@ -39,7 +57,8 @@ export class AppPreferenceService {
   static applyLanguage(value: string): boolean {
     try {
       let language: string = AppPreferenceService.normalizeLanguage(value);
-      i18n.System.setAppPreferredLanguage(language === AppPreferenceService.LANGUAGE_SYSTEM ? 'default' : language);
+      i18n.System.setAppPreferredLanguage(language === AppPreferenceService.LANGUAGE_SYSTEM ?
+        AppPreferenceService.getRuntimeSystemLanguage() : language);
       return true;
     } catch (_err) {
       return false;

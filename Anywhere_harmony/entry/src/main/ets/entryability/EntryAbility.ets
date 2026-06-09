@@ -9,6 +9,18 @@ const DOMAIN: number = 0x0000;
 const TAG: string = 'EntryAbility';
 
 export default class EntryAbility extends UIAbility {
+  private syncSystemLanguagePreference(): void {
+    StorageService.getInstance().getString(PrefsKeys.APP_LANGUAGE, AppPreferenceService.LANGUAGE_SYSTEM)
+      .then((language: string) => {
+        let normalized: string = AppPreferenceService.normalizeLanguage(language);
+        AppPreferenceService.setPreferenceState('pref_app_language', normalized);
+        if (normalized === AppPreferenceService.LANGUAGE_SYSTEM) {
+          AppPreferenceService.applyLanguage(normalized);
+        }
+      })
+      .catch(() => {});
+  }
+
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
     hilog.info(DOMAIN, TAG, 'Ability onCreate');
 
@@ -104,6 +116,7 @@ export default class EntryAbility extends UIAbility {
 
   onForeground(): void {
     hilog.info(DOMAIN, TAG, 'Ability onForeground');
+    this.syncSystemLanguagePreference();
   }
 
   onBackground(): void {

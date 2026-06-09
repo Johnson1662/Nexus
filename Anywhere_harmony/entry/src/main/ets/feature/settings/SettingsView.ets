@@ -8,15 +8,18 @@ import { HostPhase, HostRuntimeStore, HostRuntimeState } from '../../common/mode
 export struct SettingsPage {
   @StorageLink('pref_thinking_expanded') thinkingExpanded: boolean = true;
   @StorageLink('pref_toolcall_expanded') toolcallExpanded: boolean = true;
+  @StorageLink('serverUrl') serverUrl: string = '';
   @StorageLink('pref_app_language') appLanguage: string = AppPreferenceService.LANGUAGE_SYSTEM;
   @StorageLink('pref_color_mode') colorMode: string = AppPreferenceService.COLOR_SYSTEM;
-  @StorageLink('serverUrl') serverUrl: string = '';
+  @State localeRevision: number = 0;
   @State showManualConnect: boolean = false;
   @State newUrl: string = '';
   @State expandedHostKey: string = '';
   @State showAllAddresses: boolean = false;
   @State expandedSettingKey: string = '';
   private preferenceLoadId: number = 0;
+  private languageApplyId: number = 0;
+  private colorModeApplyId: number = 0;
   private languageTouched: boolean = false;
   private colorModeTouched: boolean = false;
   onConnect?: (url: string) => void;
@@ -25,6 +28,7 @@ export struct SettingsPage {
   onScan?: () => void;
 
   text(res: Resource, ...args: Array<string | number>): string {
+    if (this.localeRevision < 0) return '';
     let context = this.getUIContext().getHostContext();
     if (!context) return '';
     return getLocalizedString(context, res, ...args);
@@ -40,6 +44,7 @@ export struct SettingsPage {
         if (loadId !== this.preferenceLoadId || this.languageTouched) return;
         this.appLanguage = AppPreferenceService.normalizeLanguage(value);
         AppPreferenceService.setPreferenceState('pref_app_language', this.appLanguage);
+        this.refreshLocalizedText();
       })
       .catch(() => {});
     StorageService.getInstance().getString(PrefsKeys.COLOR_MODE, AppPreferenceService.COLOR_SYSTEM)
@@ -51,18 +56,33 @@ export struct SettingsPage {
       .catch(() => {});
   }
 
-  getLanguageLabel(value: string): string {
+  getLanguageLabelResource(value: string): Resource {
     let normalized: string = AppPreferenceService.normalizeLanguage(value);
-    if (normalized === AppPreferenceService.LANGUAGE_ZH) return this.text($r('app.string.settings_language_zh'));
-    if (normalized === AppPreferenceService.LANGUAGE_EN) return this.text($r('app.string.settings_language_en'));
-    return this.text($r('app.string.settings_language_system'));
+    if (normalized === AppPreferenceService.LANGUAGE_ZH) return $r('app.string.settings_language_zh');
+    if (normalized === AppPreferenceService.LANGUAGE_EN) return $r('app.string.settings_language_en');
+    return $r('app.string.settings_language_system');
   }
 
-  getColorModeLabel(value: string): string {
+  getColorModeLabelResource(value: string): Resource {
     let normalized: string = AppPreferenceService.normalizeColorMode(value);
-    if (normalized === AppPreferenceService.COLOR_LIGHT) return this.text($r('app.string.settings_color_light'));
-    if (normalized === AppPreferenceService.COLOR_DARK) return this.text($r('app.string.settings_color_dark'));
-    return this.text($r('app.string.settings_color_system'));
+    if (normalized === AppPreferenceService.COLOR_LIGHT) return $r('app.string.settings_color_light');
+    if (normalized === AppPreferenceService.COLOR_DARK) return $r('app.string.settings_color_dark');
+    return $r('app.string.settings_color_system');
+  }
+
+  getSettingSummaryValueResource(key: string): Resource {
+    if (key === 'language') {
+      return this.getLanguageLabelResource(this.appLanguage);
+    }
+    return this.getColorModeLabelResource(this.colorMode);
+  }
+
+  getLanguageOptionsKey(): string {
+    return 'language-options:' + this.appLanguage + ':' + this.localeRevision.toString();
+  }
+
+  getColorModeOptionsKey(): string {
+    return 'color-options:' + this.colorMode + ':' + this.localeRevision.toString();
   }
 
   toggleSetting(key: string): void {
@@ -75,36 +95,72 @@ export struct SettingsPage {
     } catch (_err) {}
   }
 
+  refreshLocalizedText(): void {
+    this.localeRevision += 1;
+    setTimeout(() => {
+      this.localeRevision += 1;
+    }, 50);
+  }
+
   selectLanguage(value: string): void {
     let normalized: string = AppPreferenceService.normalizeLanguage(value);
+    let previous: string = this.appLanguage;
     this.languageTouched = true;
-    if (!AppPreferenceService.applyLanguage(normalized)) {
-      this.showToast(this.text($r('app.string.settings_apply_failed')));
-      return;
-    }
+    this.languageApplyId += 1;
+    let applyId: number = this.languageApplyId;
     this.appLanguage = normalized;
     AppPreferenceService.setPreferenceState('pref_app_language', normalized);
-    StorageService.getInstance().putString(PrefsKeys.APP_LANGUAGE, normalized).catch(() => {});
-    this.showToast(this.text($r('app.string.settings_language_applied')));
+    this.refreshLocalizedText();
+    StorageService.getInstance().putString(PrefsKeys.APP_LANGUAGE, normalized).then(() => {
+      if (applyId !== this.languageApplyId) return;
+      if (!AppPreferenceService.applyLanguage(normalized)) {
+        this.appLanguage = previous;
+        AppPreferenceService.setPreferenceState('pref_app_language', previous);
+        StorageService.getInstance().putString(PrefsKeys.APP_LANGUAGE, previous);
+        this.refreshLocalizedText();
+        this.showToast(this.text($r('app.string.settings_apply_failed')));
+        return;
+      }
+      this.refreshLocalizedText();
+      this.showToast(this.text($r('app.string.settings_language_applied')));
+    }).catch(() => {
+      if (applyId !== this.languageApplyId) return;
+      this.appLanguage = previous;
+      AppPreferenceService.setPreferenceState('pref_app_language', previous);
+      this.refreshLocalizedText();
+      this.showToast(this.text($r('app.string.settings_apply_failed')));
+    });
   }
 
   selectColorMode(value: string): void {
     let normalized: string = AppPreferenceService.normalizeColorMode(value);
+    let previous: string = this.colorMode;
     this.colorModeTouched = true;
-    let applied: boolean = false;
-    try {
-      let context = this.getUIContext().getHostContext();
-      if (context) {
-        applied = AppPreferenceService.applyColorMode(context, normalized);
-      }
-    } catch (_err) {}
-    if (!applied) {
-      this.showToast(this.text($r('app.string.settings_apply_failed')));
-      return;
-    }
+    this.colorModeApplyId += 1;
+    let applyId: number = this.colorModeApplyId;
     this.colorMode = normalized;
     AppPreferenceService.setPreferenceState('pref_color_mode', normalized);
-    StorageService.getInstance().putString(PrefsKeys.COLOR_MODE, normalized).catch(() => {});
+    StorageService.getInstance().putString(PrefsKeys.COLOR_MODE, normalized).then(() => {
+      if (applyId !== this.colorModeApplyId) return;
+      let applied: boolean = false;
+      try {
+        let context = this.getUIContext().getHostContext();
+        if (context) {
+          applied = AppPreferenceService.applyColorMode(context, normalized);
+        }
+      } catch (_err) {}
+      if (!applied) {
+        this.colorMode = previous;
+        AppPreferenceService.setPreferenceState('pref_color_mode', previous);
+        StorageService.getInstance().putString(PrefsKeys.COLOR_MODE, previous);
+        this.showToast(this.text($r('app.string.settings_apply_failed')));
+      }
+    }).catch(() => {
+      if (applyId !== this.colorModeApplyId) return;
+      this.colorMode = previous;
+      AppPreferenceService.setPreferenceState('pref_color_mode', previous);
+      this.showToast(this.text($r('app.string.settings_apply_failed')));
+    });
   }
 
   getHostKey(device: DeviceEntry): string {
@@ -301,7 +357,7 @@ export struct SettingsPage {
   }
 
   @Builder
-  SectionTitle(title: string) {
+  SectionTitleResource(title: Resource) {
     Row() {
       Text(title)
         .fontSize(FontSize.lg)
@@ -631,7 +687,7 @@ export struct SettingsPage {
   }
 
   @Builder
-  PreferenceRow(title: string, description: string, isOn: boolean, onChange: (isOn: boolean) => void) {
+  PreferenceRow(title: Resource, description: Resource, isOn: boolean, onChange: (isOn: boolean) => void) {
     Row() {
       Column() {
         Text(title)
@@ -661,7 +717,7 @@ export struct SettingsPage {
   }
 
   @Builder
-  SettingSummaryRow(title: string, value: string, key: string) {
+  SettingSummaryRow(title: Resource, key: string) {
     Button() {
       Row() {
         Text(title)
@@ -669,7 +725,7 @@ export struct SettingsPage {
           .fontColor(Colors.foreground)
           .fontWeight(FontWeight.Medium)
           .layoutWeight(1)
-        Text(value)
+        Text(this.getSettingSummaryValueResource(key))
           .fontSize(FontSize.sm)
           .fontColor(Colors.foregroundMuted)
           .margin({ left: Spacing.sm, right: Spacing.xs })
@@ -694,7 +750,7 @@ export struct SettingsPage {
   }
 
   @Builder
-  SettingOptionRow(label: string, selected: boolean, action: () => void) {
+  SettingOptionRow(label: Resource, selected: boolean, action: () => void) {
     Button() {
       Row() {
         Text(label)
@@ -728,13 +784,13 @@ export struct SettingsPage {
   @Builder
   LanguageOptions() {
     Column() {
-      this.SettingOptionRow(this.text($r('app.string.settings_language_system')),
+      this.SettingOptionRow($r('app.string.settings_language_system'),
         this.appLanguage === AppPreferenceService.LANGUAGE_SYSTEM,
         () => { this.selectLanguage(AppPreferenceService.LANGUAGE_SYSTEM); })
-      this.SettingOptionRow(this.text($r('app.string.settings_language_zh')),
+      this.SettingOptionRow($r('app.string.settings_language_zh'),
         this.appLanguage === AppPreferenceService.LANGUAGE_ZH,
         () => { this.selectLanguage(AppPreferenceService.LANGUAGE_ZH); })
-      this.SettingOptionRow(this.text($r('app.string.settings_language_en')),
+      this.SettingOptionRow($r('app.string.settings_language_en'),
         this.appLanguage === AppPreferenceService.LANGUAGE_EN,
         () => { this.selectLanguage(AppPreferenceService.LANGUAGE_EN); })
     }
@@ -745,13 +801,13 @@ export struct SettingsPage {
   @Builder
   ColorModeOptions() {
     Column() {
-      this.SettingOptionRow(this.text($r('app.string.settings_color_system')),
+      this.SettingOptionRow($r('app.string.settings_color_system'),
         this.colorMode === AppPreferenceService.COLOR_SYSTEM,
         () => { this.selectColorMode(AppPreferenceService.COLOR_SYSTEM); })
-      this.SettingOptionRow(this.text($r('app.string.settings_color_light')),
+      this.SettingOptionRow($r('app.string.settings_color_light'),
         this.colorMode === AppPreferenceService.COLOR_LIGHT,
         () => { this.selectColorMode(AppPreferenceService.COLOR_LIGHT); })
-      this.SettingOptionRow(this.text($r('app.string.settings_color_dark')),
+      this.SettingOptionRow($r('app.string.settings_color_dark'),
         this.colorMode === AppPreferenceService.COLOR_DARK,
         () => { this.selectColorMode(AppPreferenceService.COLOR_DARK); })
     }
@@ -822,18 +878,19 @@ export struct SettingsPage {
           .borderRadius(Radius.xxl)
           .clip(true)
 
-          this.SectionTitle(this.text($r('app.string.settings_display_section')))
+          this.SectionTitleResource($r('app.string.settings_display_section'))
 
           List({ space: 0 }) {
             ListItem() {
-              this.SettingSummaryRow(this.text($r('app.string.settings_language_title')),
-                this.getLanguageLabel(this.appLanguage), 'language')
+              this.SettingSummaryRow($r('app.string.settings_language_title'), 'language')
             }
 
             if (this.expandedSettingKey === 'language') {
-              ListItem() {
-                this.LanguageOptions()
-              }
+              ForEach([this.getLanguageOptionsKey()], (key: string) => {
+                ListItem() {
+                  this.LanguageOptions()
+                }
+              }, (key: string) => key)
             }
 
             ListItem() {
@@ -841,14 +898,15 @@ export struct SettingsPage {
             }
 
             ListItem() {
-              this.SettingSummaryRow(this.text($r('app.string.settings_color_mode_title')),
-                this.getColorModeLabel(this.colorMode), 'color')
+              this.SettingSummaryRow($r('app.string.settings_color_mode_title'), 'color')
             }
 
             if (this.expandedSettingKey === 'color') {
-              ListItem() {
-                this.ColorModeOptions()
-              }
+              ForEach([this.getColorModeOptionsKey()], (key: string) => {
+                ListItem() {
+                  this.ColorModeOptions()
+                }
+              }, (key: string) => key)
             }
           }
           .width(Layout.contentWidth)
@@ -856,12 +914,12 @@ export struct SettingsPage {
           .borderRadius(Radius.xxl)
           .clip(true)
 
-          this.SectionTitle(this.text($r('app.string.settings_preferences_section')))
+          this.SectionTitleResource($r('app.string.settings_preferences_section'))
 
           List({ space: 0 }) {
             ListItem() {
-              this.PreferenceRow(this.text($r('app.string.settings_pref_thinking_title')),
-                this.text($r('app.string.settings_pref_thinking_desc')), this.thinkingExpanded, (isOn: boolean) => {
+              this.PreferenceRow($r('app.string.settings_pref_thinking_title'),
+                $r('app.string.settings_pref_thinking_desc'), this.thinkingExpanded, (isOn: boolean) => {
                 this.thinkingExpanded = isOn;
                 StorageService.getInstance().putString('pref_thinking_expanded', isOn ? '1' : '0');
               })
@@ -872,8 +930,8 @@ export struct SettingsPage {
             }
 
             ListItem() {
-              this.PreferenceRow(this.text($r('app.string.settings_pref_tool_title')),
-                this.text($r('app.string.settings_pref_tool_desc')), this.toolcallExpanded, (isOn: boolean) => {
+              this.PreferenceRow($r('app.string.settings_pref_tool_title'),
+                $r('app.string.settings_pref_tool_desc'), this.toolcallExpanded, (isOn: boolean) => {
                 this.toolcallExpanded = isOn;
                 StorageService.getInstance().putString('pref_toolcall_expanded', isOn ? '1' : '0');
               })
