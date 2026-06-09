@@ -30,10 +30,11 @@ Anywhere 是一个 HarmonyOS App，通过 Relay 中继连接到 PC 端 Bridge Se
 | 规则 | 说明 |
 |------|------|
 | **Git 提交** | 每次成功改动后执行 `git commit`，只 stage 本次改动的文件 |
-| **Codegraph 索引** | 使用 codegraph mcp，每次提交后执行 `node D:/Development/codegraph-arkts/dist/bin/codegraph.js index .` |
 | **语言** | 永远用中文回答；需要解释时给出简要思路与结论，不输出隐藏思考链 |
 | **设计参考** | 原型图在 `prototype_picture/`，实机截图在 `app_test_picture/`。无视觉能力的模型用 `vision_analyze` 分析截图 |
 | **查文档** | 用 `hmdev-cli` skill 查鸿蒙官方文档、构建部署项目。不确定就查文档！ |
+
+Codegraph MCP 用于理解代码结构。当前 MCP server 带 watcher，通常会自动 sync；若怀疑索引过期，用 `node D:/Development/codegraph-arkts/dist/bin/codegraph.js status .` 确认，必要时再手动 `sync .`，不再要求每次提交后固定执行 `index .`。
 
 ---
 
@@ -51,8 +52,9 @@ Anywhere 是一个 HarmonyOS App，通过 Relay 中继连接到 PC 端 Bridge Se
 - **跨页面参数传递**：通过 `AppStorage`（如 `selectedDeviceIndex`），不用 param 对象（ArkTS `@Builder` 限制）
 - 移动端无底部 Tab，首页为主入口，底部只保留 Search / New chat 操作条
 - `New chat` 直接进入聊天页，不展示中间页
-- 添加主机入口在首页右上三点菜单：`Add host` → `Scan QR` / `Link manually`，配对成功后立即拉取并缓存 agent 列表
-- `OnboardingView.ets` 已删除，不要恢复。主机管理和设置通过首页菜单/聊天页菜单进入
+- 首页右上 `plus` 直接扫码添加主机；`gearshape` 进入设置页
+- 设置页 `连接与主机` 行右侧提供 `line_viewfinder` 扫码按钮和 `plus` 手动 URL 入口；主机列表用 ArkUI `List`，支持左滑删除，详情在行内展开，不做单独详情页
+- `OnboardingView.ets`、`HomeManageView.ets` / `HostManageView.ets` 已删除，不要恢复。主机管理统一在 `SettingsView.ets`
 
 ### 状态管理
 
@@ -60,9 +62,9 @@ Anywhere 是一个 HarmonyOS App，通过 Relay 中继连接到 PC 端 Bridge Se
 |------|------|
 | Model 类 | `@ObservedV2` / `@Trace`（V2） |
 | UI 组件 | `@Component` / `@State` / `@Prop`（V1） |
-| 全局单例 | `ChatStore`、`WorkspaceStore`、`HostStore` |
+| 全局单例 | `ChatStore`、`WorkspaceStore`、`HostStore`、`HostRuntimeStore` |
 | 持久化 | `StorageService`（基于 `@kit.ArkData` preferences） |
-| 跨组件 | `AppStorage`（如 `serverUrl`、`lastAgent`） |
+| 跨组件 | `AppStorage`（如 `serverUrl`、`lastAgent`、`pref_app_language`、`pref_color_mode`） |
 
 ### ChatStore 关键字段
 
@@ -134,11 +136,28 @@ opencode ACP 返回 session 时使用 `updatedAt`（ISO 8601 字符串）而非 
 
 `SideBarContainer` 侧边栏 + `WorkspaceStore` 全局单例。工作区按设备名持久化（同 PC 的所有 IP 共享），`getWorkspaceScopes()` 提供回退链。
 
+### 设置页与偏好
+
+- 设置页是 HarmonyOS / iOS 系统设置风：分组标题 + 大圆角列表组；不做营销页/说明页
+- `SettingsView.ets` 包含 `连接与主机`、`显示`、`偏好设置` 三组；语言和外观选择器均为 inline 展开，不跳转单独详情页
+- 语言 / 外观偏好由 `AppPreferenceService.ets` 统一 normalize / apply，并通过 `StorageService` 持久化到 `PrefsKeys.APP_LANGUAGE`、`PrefsKeys.COLOR_MODE`
+- `pref_app_language` / `pref_color_mode` 必须用 `AppStorage.setOrCreate()` 初始化，设置页用 `@StorageLink` 读取，避免选择器状态和启动层不同步
+- `LANGUAGE_SYSTEM` 表示跟随系统。HarmonyOS 的 `setAppPreferredLanguage('default')` 需要冷启动才完全生效，当前实现会在运行时读取系统语言并立即应用，回前台时重新同步
+- 语言切换当前通过 `localeRevision` + keyed `ForEach` 保证文案和勾选刷新；视觉节奏后续 polish 已记录在 `docs/todo.md`
+
 ### 设备与连接
 
-**HostStore（设备分组）**：`server_info` 消息按 hostname 合并 IP 为 `DeviceEntry[]`。WSClient 的 `connectBest(urls[])` 并行探测选最低延迟。兼容旧 `HostInfo[]` 格式自动迁移。
+**HostStore（设备分组）**：`server_info` 消息按 hostname / hostId 合并 IP 为 `DeviceEntry[]`，只保存配对主机、URL、relayPin、relayUrl 等持久化信息。兼容旧 `HostInfo[]` 格式自动迁移。
 
-**HostFilterBar**：独立 `@Component`，在 `build()` 中直接读取 `ChatStore.connected` 和 `ChatStore.currentDeviceId`（均为 `@ObservedV2 @Trace`），确保 host chip 在线状态实时响应。不再通过 Index 的 `@Builder` 链传递，避免 `navDestination` 内 `@Builder` 不重新求值的问题。
+**HostRuntimeStore（运行态）**：独立在 `common/model/HostState.ets`，不要塞回 `WorkspaceInfo.ets`。所有 host 在线/离线/重连/等待 host 状态统一读写 `HostRuntimeStore`。
+
+`HostPhase` 当前值：`unknown`、`connecting`、`waiting_host`、`online`、`offline`、`reconnecting`、`syncing`、`error`。`unknown` 表示本次启动尚未探测或还没有运行态信息，不等于 offline。
+
+只连上 Relay 但目标 PC host 没有连上 Relay 时，不能算 online；应进入 `waiting_host` 或后续 `offline/error`。绿色点只对应 `online` / `syncing`，橙色对应 `connecting` / `waiting_host` / `reconnecting`。
+
+**HostFilterBar**：独立 `@Component`，读取 `HostRuntimeStore.getDevicePhase(device)` 和 `ChatStore.connected/currentDeviceId` 判断 chip 状态。`ForEach` key 包含 `statusRevision`，由 Index 的 WS 状态回调 bump，确保首页 host 绿点实时刷新。
+
+**WSClient 连接探测**：`connectBest(urls[])` 并行尝试候选地址，选择最快的可用连接；relay client URL 必须带 `role=client&targetHostId=<hostId>`。探测不应创建业务 session，也不应污染 host 运行态。
 
 **自动重连**：指数退避（1s → 2s → 4s → ... → 30s 上限）。后台恢复依赖快速重连 + `sync_request`/消息游标补齐，不宣称普通 UIAbility 能长期后台保活。
 
@@ -395,6 +414,7 @@ Anywhere/                             # 项目根（PC 端 + 手机端合一）
     │   │   │   ├── model/
     │   │   │   │   ├── ChatState.ets         # ChatStore 全局状态
     │   │   │   │   ├── WorkspaceInfo.ets     # WorkspaceStore / HostStore /...
+    │   │   │   │   ├── HostState.ets         # HostRuntimeStore / HostPhase
     │   │   │   │   ├── DeviceAgentStore.ets  # Agent 缓存
     │   │   │   │   ├── MessageHandler.ets    # 消息路由
     │   │   │   │   ├── MessageData.ets       # 消息数据模型
@@ -412,7 +432,8 @@ Anywhere/                             # 项目根（PC 端 + 手机端合一）
     │   │   │       └── PlanView.ets          # Plan 进度视图
     │   │   │
     │   │   ├── services/
-    │   │   │   └── StorageService.ets        # Preferences 持久化
+    │   │   │   ├── StorageService.ets        # Preferences 持久化
+    │   │   │   └── AppPreferenceService.ets  # 语言 / 深浅色模式偏好
     │   │   │
     │   │   ├── constants/
     │   │   │   └── DesignTokens.ets          # 设计 token
