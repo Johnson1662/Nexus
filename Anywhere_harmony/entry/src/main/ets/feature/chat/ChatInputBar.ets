@@ -1,4 +1,4 @@
-import { Colors, FontSize, Spacing, Radius, Shadow, Duration, Layout } from '../../constants/DesignTokens';
+import { Colors, FontSize, Spacing, Radius, Shadow, Duration, Layout, getLocalizedString } from '../../constants/DesignTokens';
 import { ChatStore, AvailableCommand, ModelItem, ModeItem } from '../../common/model/ChatState';
 import { CustomIcon } from '../../common/ui/CustomIcon';
 import { picker } from '@kit.CoreFileKit';
@@ -72,6 +72,12 @@ export struct ChatInputBar {
   onRefreshModels?: () => void;
 
   private textAreaController: TextAreaController = new TextAreaController();
+
+  localize(res: Resource, ...args: Array<string | number>): string {
+    let context = this.getUIContext().getHostContext();
+    if (!context) return '';
+    return getLocalizedString(context, res, ...args);
+  }
 
   clearPendingFile(): void {
     this.pendingFileName = '';
@@ -215,7 +221,7 @@ export struct ChatInputBar {
         .backgroundColor(Colors.surfaceElevated)
         .borderRadius(Radius.lg)
         .border({ width: 1, color: Colors.borderLight })
-        .shadow({ radius: 10, color: '#00000020', offsetY: 6 })
+        .shadow(Shadow.md)
         .margin({ bottom: Spacing.sm })
         .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: -8 })))
         .animation({ duration: 200, curve: Curve.EaseOut })
@@ -238,11 +244,13 @@ export struct ChatInputBar {
               .fontWeight(FontWeight.Medium)
               .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
               .width('100%')
-            Text(this.pendingFileType === 'image' ? 'Image' : (this.pendingFileType === 'text' ? 'Text file' : 'Binary file'))
+            Text(this.pendingFileType === 'image' ? this.localize($r('app.string.chat_file_image_label')) :
+              (this.pendingFileType === 'text' ? this.localize($r('app.string.chat_file_text_label')) :
+                this.localize($r('app.string.chat_file_binary_label'))))
               .fontSize(10).fontColor(Colors.foregroundLight)
               .width('100%')
             if (this.pendingFileType === 'image' && this.pendingFileBase64.length > 270000) {
-              Text('Large image may be slow to send')
+              Text($r('app.string.chat_file_large_warning'))
                 .fontSize(10).fontColor(Colors.error)
                 .width('100%')
             }
@@ -292,7 +300,7 @@ export struct ChatInputBar {
             }
             .width(36)
             .height(36)
-            .backgroundColor(Color.Transparent)
+            .backgroundColor(Colors.transparent)
             .enabled(!this.disabled)
             .stateStyles({
               pressed: { .scale({ x: 0.92, y: 0.92 }) },
@@ -304,7 +312,7 @@ export struct ChatInputBar {
             // Model name chip → opens config bindsheet
             Button() {
               Row() {
-                Text(this.getModelName().length > 0 ? this.getModelName() : 'Model')
+                Text(this.getModelName().length > 0 ? this.getModelName() : this.localize($r('app.string.config_model')))
                   .fontSize(FontSize.xs)
                   .fontColor(Colors.foreground)
                   .fontWeight(FontWeight.Medium)
@@ -342,13 +350,13 @@ export struct ChatInputBar {
                 .fontSize(28)
                 .fontColor([Colors.error])
             }
-            .backgroundColor(Color.Transparent)
+            .backgroundColor(Colors.transparent)
             .stateStyles({
               pressed: { .scale({ x: 0.92, y: 0.92 }) },
               normal: { .scale({ x: 1, y: 1 }) }
             })
             .animation({ duration: Duration.fast, curve: Curve.EaseOut })
-            .accessibilityText('Cancel generation')
+            .accessibilityText(this.localize($r('app.string.chat_cancel_button')))
             .onClick(() => { if (this.onCancel) this.onCancel() })
             .transition(TransitionEffect.OPACITY.combine(TransitionEffect.scale({ x: 0.5, y: 0.5 })))
           } else if (this.text.length > 0 || this.pendingFileName.length > 0) {
@@ -357,13 +365,13 @@ export struct ChatInputBar {
                 .fontColor([Colors.foreground])
                 .fontSize(28)
             }
-            .backgroundColor(Color.Transparent)
+            .backgroundColor(Colors.transparent)
             .stateStyles({
               pressed: { .scale({ x: 0.92, y: 0.92 }) },
               normal: { .scale({ x: 1, y: 1 }) }
             })
             .animation({ duration: Duration.fast, curve: Curve.EaseOut })
-            .accessibilityText('Send message')
+            .accessibilityText(this.localize($r('app.string.chat_send_button')))
             .onClick(() => { this.doSend() })
             .transition(TransitionEffect.OPACITY.combine(TransitionEffect.scale({ x: 0.5, y: 0.5 })))
           } else {
@@ -372,9 +380,9 @@ export struct ChatInputBar {
                 .fontColor([Colors.borderLight])
                 .fontSize(28)
             }
-            .backgroundColor(Color.Transparent)
+            .backgroundColor(Colors.transparent)
             .enabled(false)
-            .accessibilityText('Send message')
+            .accessibilityText(this.localize($r('app.string.chat_send_button')))
             .transition(TransitionEffect.OPACITY.combine(TransitionEffect.scale({ x: 0.5, y: 0.5 })))
           }
         }
@@ -488,20 +496,20 @@ export struct ChatInputBar {
         // ── 摘要卡片（统一用 Scroll 保持布局一致性）──
         Scroll() {
           Column() {
-            this.SummaryRow('sys.symbol.person_2', 'Agent',
+            this.SummaryRow('sys.symbol.person_2', this.localize($r('app.string.config_agent')),
               this.getAgentDisplayName(),
               () => { this.switchView('agents') })
 
             Divider().height(1).color(Colors.borderLight).margin({ left: Spacing.lg, right: Spacing.lg })
 
-            this.SummaryRow('sys.symbol.square_grid_2x2', 'Model',
-              this.getModelName().length > 0 ? this.getModelName() : '未选择',
+            this.SummaryRow('sys.symbol.square_grid_2x2', this.localize($r('app.string.config_model')),
+              this.getModelName().length > 0 ? this.getModelName() : this.localize($r('app.string.common_not_selected')),
               () => { this.switchView('providers') })
 
             Divider().height(1).color(Colors.borderLight).margin({ left: Spacing.lg, right: Spacing.lg })
 
-            this.SummaryRow('sys.symbol.ellipsis', 'Mode',
-              this.getModeName().length > 0 ? this.getModeName() : '未选择',
+            this.SummaryRow('sys.symbol.ellipsis', this.localize($r('app.string.config_mode')),
+              this.getModeName().length > 0 ? this.getModeName() : this.localize($r('app.string.common_not_selected')),
               () => { this.switchView('modes') })
 
             Column().height(Spacing.xxxl)
@@ -561,7 +569,7 @@ export struct ChatInputBar {
           Column() {
             if (this.sheetView === 'agents') {
               if (this.getAgentNames().length === 0) {
-                this.EmptyRow('暂无 Agent，点击右上角刷新')
+                this.EmptyRow(this.localize($r('app.string.config_no_agent_refresh')))
               } else {
                 ForEach(this.getAgentNames(), (name: string, idx: number) => {
                   this.SelectableRow({
@@ -576,7 +584,7 @@ export struct ChatInputBar {
               }
             } else if (this.sheetView === 'providers') {
               if (ChatStore.models.length === 0) {
-                this.EmptyRow('暂无 Model，点击右上角刷新')
+                this.EmptyRow(this.localize($r('app.string.config_no_model_refresh')))
               } else if (this.getProviders().length <= 1) {
                 ForEach(ChatStore.models, (model: ModelItem, idx: number) => {
                   this.SelectableRow({
@@ -596,7 +604,7 @@ export struct ChatInputBar {
             } else if (this.sheetView === 'models') {
               if (this.selectedProvider.length > 0) {
                 if (this.getModelsForProvider(this.selectedProvider).length === 0) {
-                  this.EmptyRow('暂无 Model')
+                  this.EmptyRow(this.localize($r('app.string.config_no_model')))
                 } else {
                   ForEach(this.getModelsForProvider(this.selectedProvider), (model: ModelItem) => {
                     this.SelectableRow({
@@ -617,7 +625,7 @@ export struct ChatInputBar {
               }
             } else if (this.sheetView === 'modes') {
               if (ChatStore.modes.length === 0) {
-                this.EmptyRow('暂无 Mode')
+                this.EmptyRow(this.localize($r('app.string.config_no_mode')))
               } else {
                 ForEach(ChatStore.modes, (mode: ModeItem, idx: number) => {
                   this.SelectableRow({
@@ -649,10 +657,10 @@ export struct ChatInputBar {
   }
 
   getPanelTitle(): string {
-    if (this.sheetView === 'agents') return '选择 Agent';
-    if (this.sheetView === 'providers') return '选择 Model';
-    if (this.sheetView === 'models') return this.selectedProvider.length > 0 ? this.selectedProvider : 'Model';
-    if (this.sheetView === 'modes') return '选择 Mode';
+    if (this.sheetView === 'agents') return this.localize($r('app.string.config_select_agent'));
+    if (this.sheetView === 'providers') return this.localize($r('app.string.config_select_model'));
+    if (this.sheetView === 'models') return this.selectedProvider.length > 0 ? this.selectedProvider : this.localize($r('app.string.config_model'));
+    if (this.sheetView === 'modes') return this.localize($r('app.string.config_select_mode'));
     return '';
   }
 
@@ -681,7 +689,7 @@ export struct ChatInputBar {
         if (agents[idx]) return agents[idx].title || agents[idx].name;
       }
     }
-    return ChatStore.selectedAgentName || ChatStore.agentType || '未选择';
+    return ChatStore.selectedAgentName || ChatStore.agentType || this.localize($r('app.string.common_not_selected'));
   }
 
   getAgentNames(): string[] {
@@ -791,7 +799,7 @@ export struct ChatInputBar {
             .fontWeight(FontWeight.Medium)
             .fontColor(Colors.foreground)
             .width('100%')
-          Text(this.getModelsForProvider(provider).length + ' 个模型')
+          Text(this.localize($r('app.string.config_models_count'), this.getModelsForProvider(provider).length))
             .fontSize(FontSize.xs)
             .fontColor(Colors.foregroundMuted)
             .width('100%')
@@ -825,7 +833,7 @@ export struct ChatInputBar {
    */
   hasMultipleProviders(): boolean {
     let providers: string[] = this.getProviders();
-    return providers.length > 1 || (providers.length === 1 && providers[0] !== 'Default');
+    return providers.length > 1 || (providers.length === 1 && providers[0] !== this.localize($r('app.string.config_default_provider')));
   }
 
   @Builder
@@ -894,7 +902,7 @@ export struct ChatInputBar {
     if (parts.length >= 2) {
       return this.capitalize(parts[0]);
     }
-    return 'Default';
+    return this.localize($r('app.string.config_default_provider'));
   }
 
   capitalize(s: string): string {

@@ -1,4 +1,4 @@
-import { Colors, FontSize, Spacing, Radius, Duration, Shadow, Layout } from '../../constants/DesignTokens';
+import { Colors, FontSize, Spacing, Radius, Duration, Shadow, Layout, getLocalizedString } from '../../constants/DesignTokens';
 import { ChatStore } from '../../common/model/ChatState';
 import { CustomIcon } from '../../common/ui/CustomIcon';
 import { MessageData } from '../../common/model/MessageData';
@@ -54,6 +54,13 @@ export struct ChatPage {
   @State iconScale: number = 1.0;
   @State followsOutput: boolean = true;   // Stage 2: scroll anchoring
   @State showJumpButton: boolean = false; // Stage 2: floating jump-to-bottom
+
+  localize(res: Resource, ...args: Array<string | number>): string {
+    let context = this.getUIContext().getHostContext();
+    if (!context) return '';
+    return getLocalizedString(context, res, ...args);
+  }
+
   aboutToAppear(): void {
     this.dataSource = new MessageDataSource(this.messages);
     setTimeout(() => {
@@ -119,7 +126,7 @@ export struct ChatPage {
         .borderRadius(Radius.md)
         .margin({ top: Spacing.xs, bottom: Spacing.xs })
         .transition(TransitionEffect.OPACITY)
-        .accessibilityText('Loading session')
+        .accessibilityText(this.localize($r('app.string.chat_loading_session')))
       }
 
       if (this.messages.length === 0) {
@@ -165,7 +172,7 @@ export struct ChatPage {
                   msgSendStatus: msg.sendStatus,
                   time: this.formatTime(msg.timestamp),
                   status: (msg.role === 'assistant' && msg.type === 'text'
-                    && ChatStore.turnActive) ? 'Running' : '',
+                    && ChatStore.turnActive) ? this.localize($r('app.string.common_running')) : '',
                   msgContent: msg.content,
                   msgType: msg.type,
                   msgToolName: msg.toolName,
@@ -210,10 +217,10 @@ export struct ChatPage {
             ListItem() {
               Row() {
                 SymbolGlyph($r('sys.symbol.checkmark')).fontSize(14).fontColor([Colors.foregroundMuted]).margin({ right: Spacing.sm })
-                Text('Tokens: ' + ChatStore.lastUsage!.totalTokens.toString())
+                Text(this.localize($r('app.string.chat_tokens_usage'), ChatStore.lastUsage!.totalTokens))
                   .fontSize(FontSize.xs).fontColor(Colors.foregroundMuted)
                 Blank()
-                Text('Done').fontSize(FontSize.xs).fontColor(Colors.foregroundMuted)
+                Text($r('app.string.chat_done')).fontSize(FontSize.xs).fontColor(Colors.foregroundMuted)
               }
               .width('100%')
               .padding({ left: Spacing.lg, right: Spacing.lg, top: Spacing.sm, bottom: Spacing.md })
@@ -239,7 +246,7 @@ export struct ChatPage {
             SymbolGlyph($r('sys.symbol.chevron_down'))
               .fontSize(12)
               .fontColor([Colors.foreground])
-            Text('跳至最新')
+            Text($r('app.string.chat_jump_latest_label'))
               .fontSize(FontSize.xs)
               .fontColor(Colors.foreground)
               .fontWeight(FontWeight.Medium)
@@ -273,10 +280,10 @@ export struct ChatPage {
     if (!ts) return '';
     let d = Date.now() - ts;
     let m = Math.floor(d / 60000);
-    if (m < 1) return 'now';
-    if (m < 60) return m + 'm';
+    if (m < 1) return this.localize($r('app.string.common_now'));
+    if (m < 60) return this.localize($r('app.string.common_minutes_ago'), m);
     let h = Math.floor(m / 60);
-    if (h < 24) return h + 'h';
+    if (h < 24) return this.localize($r('app.string.common_hours_ago'), h);
     let date = new Date(ts);
     return date.getHours().toString().padStart(2, '0') + ':' + date.getMinutes().toString().padStart(2, '0');
   }

@@ -1,10 +1,16 @@
-import { Colors, FontSize, Spacing, Radius, Layout } from '../../constants/DesignTokens';
+import { Colors, FontSize, Spacing, Radius, Layout, getLocalizedString } from '../../constants/DesignTokens';
 import { ChatStore } from '../../common/model/ChatState';
 import { ServerSession } from '../../common/model/WorkspaceInfo';
 
 @Component
 export struct SessionsTimelineView {
   onSelectSession?: (session: ServerSession) => void;
+
+  text(res: Resource, ...args: Array<string | number>): string {
+    let context = this.getUIContext().getHostContext();
+    if (!context) return '';
+    return getLocalizedString(context, res, ...args);
+  }
 
   formatTime(epoch: number): string {
     if (!epoch || epoch <= 0) return '';
@@ -16,11 +22,11 @@ export struct SessionsTimelineView {
     if (!epoch || epoch <= 0) return '';
     let diff = Date.now() - epoch;
     let mins = Math.floor(diff / 60000);
-    if (mins < 1) return 'Just now';
-    if (mins < 60) return mins.toString() + 'm ago';
+    if (mins < 1) return this.text($r('app.string.common_now'));
+    if (mins < 60) return this.text($r('app.string.common_minutes_ago'), mins);
     let hours = Math.floor(mins / 60);
-    if (hours < 24) return hours.toString() + 'h ago';
-    return Math.floor(hours / 24).toString() + 'd ago';
+    if (hours < 24) return this.text($r('app.string.common_hours_ago'), hours);
+    return this.text($r('app.string.common_days_ago'), Math.floor(hours / 24));
   }
 
   getSortedSessions(): ServerSession[] {
@@ -40,7 +46,7 @@ export struct SessionsTimelineView {
     Column() {
       // Header
       Row() {
-        Text("Sessions").fontSize(FontSize.xxxxl).fontWeight(FontWeight.Bold).fontColor(Colors.foreground)
+        Text($r('app.string.session_timeline_title')).fontSize(FontSize.xxxxl).fontWeight(FontWeight.Bold).fontColor(Colors.foreground)
       }
       .width(Layout.contentWidth)
       .padding({ top: Spacing.xxxl, bottom: Spacing.lg })
@@ -48,7 +54,7 @@ export struct SessionsTimelineView {
       if (ChatStore.sessions.length === 0) {
         // Empty state
         Column() {
-          Text("No Sessions Yet. Start a conversation to see sessions here.")
+          Text($r('app.string.session_timeline_empty'))
             .fontSize(FontSize.sm)
             .fontColor(Colors.foregroundMuted)
         }
@@ -87,10 +93,10 @@ export struct SessionsTimelineView {
       Column() {
         Row() {
           SymbolGlyph($r('sys.symbol.person_2')).fontSize(14).fontColor([Colors.foregroundMuted]).margin({ right: Spacing.xs })
-          Text(session.agent || 'Agent').fontSize(FontSize.xs).fontColor(Colors.foregroundMuted)
+          Text(session.agent || this.text($r('app.string.config_agent'))).fontSize(FontSize.xs).fontColor(Colors.foregroundMuted)
         }.margin({ bottom: 4 })
 
-        Text(session.title || 'Untitled').fontSize(FontSize.md).fontWeight(FontWeight.Medium).fontColor(Colors.foreground).margin({ bottom: 4 })
+        Text(session.title || this.text($r('app.string.common_untitled'))).fontSize(FontSize.md).fontWeight(FontWeight.Medium).fontColor(Colors.foreground).margin({ bottom: 4 })
         Text(this.formatRelativeTime(session.createdAt)).fontSize(FontSize.xs).fontColor(Colors.foregroundMuted)
       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
     }

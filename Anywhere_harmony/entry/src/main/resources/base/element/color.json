@@ -25,6 +25,10 @@
       "value": "#FFFFFF"
     },
     {
+      "name": "user_bubble",
+      "value": "#F4F4F4"
+    },
+    {
       "name": "foreground",
       "value": "#1A1D23"
     },
@@ -119,6 +123,10 @@
     {
       "name": "inline_code_bg",
       "value": "#336E7681"
+    },
+    {
+      "name": "shadow",
+      "value": "#1A1D2310"
     }
   ]
 }

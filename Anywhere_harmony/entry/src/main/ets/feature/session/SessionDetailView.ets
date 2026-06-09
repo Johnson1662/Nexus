@@ -1,4 +1,4 @@
-import { Colors, FontSize, Spacing, Radius, Shadow, Layout } from '../../constants/DesignTokens';
+import { Colors, FontSize, Spacing, Radius, Shadow, Layout, getLocalizedString } from '../../constants/DesignTokens';
 import { ServerSession } from '../../common/model/WorkspaceInfo';
 import { ChatStore, PlanEntry } from '../../common/model/ChatState';
 import { MessageData } from '../../common/model/MessageData';
@@ -10,10 +10,16 @@ export struct SessionDetailView {
   @State detailTabIndex: number = 0;
   @State composerText: string = '';
 
+  text(res: Resource, ...args: Array<string | number>): string {
+    let context = this.getUIContext().getHostContext();
+    if (!context) return '';
+    return getLocalizedString(context, res, ...args);
+  }
+
   getTitle(): string {
     if (ChatStore.sessionTitle.length > 0) return ChatStore.sessionTitle;
     if (this.session.title.length > 0) return this.session.title;
-    return 'Untitled session';
+    return this.text($r('app.string.session_untitled'));
   }
 
   getAgent(): string {
@@ -38,14 +44,14 @@ export struct SessionDetailView {
   }
 
   formatRelativeTime(epoch: number): string {
-    if (!epoch || epoch <= 0) return '刚刚';
+    if (!epoch || epoch <= 0) return this.text($r('app.string.common_now'));
     let diff: number = Date.now() - epoch;
     let minutes: number = Math.floor(diff / 60000);
-    if (minutes < 1) return '刚刚';
-    if (minutes < 60) return minutes.toString() + ' 分钟前';
+    if (minutes < 1) return this.text($r('app.string.common_now'));
+    if (minutes < 60) return this.text($r('app.string.common_minutes_ago'), minutes);
     let hours: number = Math.floor(minutes / 60);
-    if (hours < 24) return hours.toString() + ' 小时前';
-    return Math.floor(hours / 24).toString() + ' 天前';
+    if (hours < 24) return this.text($r('app.string.common_hours_ago'), hours);
+    return this.text($r('app.string.common_days_ago'), Math.floor(hours / 24));
   }
 
   getToolMessages(): MessageData[] {
@@ -94,7 +100,7 @@ export struct SessionDetailView {
     if (ChatStore.streamingText.length > 0) {
       return ChatStore.streamingText;
     }
-    return '会话内容加载后会显示在这里。';
+    return this.text($r('app.string.session_preview_empty'));
   }
 
   build() {
@@ -127,10 +133,10 @@ export struct SessionDetailView {
         .padding({ top: Spacing.xxxl, left: Spacing.xl, right: Spacing.xl, bottom: Spacing.md })
 
         Row({ space: Spacing.sm }) {
-          this.TabButton('Conversation', 0)
-          this.TabButton('Timeline', 1)
-          this.TabButton('Files', 2)
-          this.TabButton('Logs', 3)
+          this.TabButton(this.text($r('app.string.session_tab_conversation')), 0)
+          this.TabButton(this.text($r('app.string.session_tab_timeline')), 1)
+          this.TabButton(this.text($r('app.string.session_tab_files')), 2)
+          this.TabButton(this.text($r('app.string.session_tab_logs')), 3)
         }
         .width(Layout.contentWidth)
         .padding({ bottom: Spacing.md })
@@ -189,7 +195,7 @@ export struct SessionDetailView {
                 .height(18)
                 .color(Colors.foreground)
                 .margin({ right: Spacing.sm })
-              Text('正在加载会话历史...')
+              Text($r('app.string.session_loading_history'))
                 .fontSize(FontSize.sm)
                 .fontColor(Colors.foregroundMuted)
             }
@@ -199,7 +205,7 @@ export struct SessionDetailView {
           }
 
           Column() {
-            Text('用户任务')
+            Text($r('app.string.session_user_task'))
               .fontSize(FontSize.xs)
               .fontWeight(FontWeight.Medium)
               .fontColor(Colors.foregroundMuted)
@@ -215,7 +221,7 @@ export struct SessionDetailView {
 
           Column() {
             Row() {
-              Text('执行进度')
+              Text($r('app.string.session_progress'))
                 .fontSize(FontSize.md)
                 .fontWeight(FontWeight.Medium)
                 .fontColor(Colors.foreground)
@@ -239,7 +245,7 @@ export struct SessionDetailView {
                 this.PlanRow(entry.content, entry.status)
               }, (entry: PlanEntry) => entry.content + entry.status)
             } else {
-              this.PlanRow('等待 Agent 返回执行步骤', ChatStore.turnActive ? 'in_progress' : 'pending')
+              this.PlanRow(this.text($r('app.string.session_plan_waiting')), ChatStore.turnActive ? 'in_progress' : 'pending')
             }
           }
           .width(Layout.contentWidth)
@@ -247,7 +253,7 @@ export struct SessionDetailView {
           .padding({ top: Spacing.md, bottom: Spacing.xl })
 
           Column() {
-            Text('最新输出')
+            Text($r('app.string.session_latest_output'))
               .fontSize(FontSize.md)
               .fontWeight(FontWeight.Medium)
               .fontColor(Colors.foreground)
@@ -270,7 +276,7 @@ export struct SessionDetailView {
       .layoutWeight(1)
 
       Row() {
-        TextInput({ placeholder: '继续追问这个会话...', text: this.composerText })
+        TextInput({ placeholder: this.text($r('app.string.session_continue_placeholder')), text: this.composerText })
           .layoutWeight(1)
           .height(44)
           .backgroundColor(Colors.surface1)
@@ -332,18 +338,20 @@ export struct SessionDetailView {
   TimelineTab() {
     Scroll() {
       Column() {
-        this.TimelineEvent(this.formatTime(this.session.createdAt), 'Session started', this.getUserRequest())
+        this.TimelineEvent(this.formatTime(this.session.createdAt), this.text($r('app.string.session_timeline_started')), this.getUserRequest())
         ForEach(this.getToolMessages(), (message: MessageData) => {
           this.TimelineEvent(
             this.formatTime(message.timestamp),
-            message.toolName || 'Tool call',
-            message.toolPath || message.toolContent || message.content || '工具调用执行中'
+            message.toolName || this.text($r('app.string.session_tool_call')),
+            message.toolPath || message.toolContent || message.content || this.text($r('app.string.session_tool_running'))
           )
         }, (message: MessageData) => message.toolCallId + message.toolStatus + message.toolContent.length.toString())
         if (ChatStore.turnActive) {
-          this.TimelineEvent(this.formatTime(Date.now()), 'Agent working', '当前轮次仍在执行')
+          this.TimelineEvent(this.formatTime(Date.now()), this.text($r('app.string.session_agent_working')),
+            this.text($r('app.string.session_turn_active')))
         } else if (ChatStore.messages.length > 0) {
-          this.TimelineEvent(this.formatTime(Date.now()), 'Turn finished', '当前轮次已经结束')
+          this.TimelineEvent(this.formatTime(Date.now()), this.text($r('app.string.session_turn_finished')),
+            this.text($r('app.string.session_turn_finished_detail')))
         }
       }
       .width(Layout.contentWidth)
@@ -407,7 +415,7 @@ export struct SessionDetailView {
   FilesTab() {
     Scroll() {
       Column() {
-        Text('文件变更')
+        Text($r('app.string.session_files_title'))
           .fontSize(FontSize.md)
           .fontWeight(FontWeight.Medium)
           .fontColor(Colors.foreground)
@@ -415,11 +423,11 @@ export struct SessionDetailView {
           .margin({ bottom: Spacing.md })
 
         if (this.getFileMessages().length === 0) {
-          this.FileRow('当前没有可提取的文件变更记录', '+0', '-0')
+          this.FileRow(this.text($r('app.string.session_files_empty')), '+0', '-0')
         } else {
           ForEach(this.getFileMessages(), (message: MessageData) => {
             this.FileRow(
-              message.toolPath || message.toolName || '未命名文件',
+              message.toolPath || message.toolName || this.text($r('app.string.session_unnamed_file')),
               message.toolNewText.length > 0 ? '+' + message.toolNewText.split('\n').length.toString() : '+?',
               message.toolOldText.length > 0 ? '-' + message.toolOldText.split('\n').length.toString() : '-?'
             )
@@ -475,11 +483,11 @@ export struct SessionDetailView {
   LogsTab() {
     Scroll() {
       Column() {
-        this.LogRow('Session ID', this.session.sessionId || ChatStore.acpSessionId || '—')
-        this.LogRow('Bridge Session', ChatStore.bridgeSessionId || '—')
-        this.LogRow('Model', ChatStore.sessionCurrentModelId || ChatStore.lastModelId || '—')
-        this.LogRow('Token Usage', ChatStore.lastUsage ? ChatStore.lastUsage.totalTokens.toString() : '—')
-        this.LogRow('Workspace', this.session.cwd || '—')
+        this.LogRow(this.text($r('app.string.session_log_session_id')), this.session.sessionId || ChatStore.acpSessionId || '—')
+        this.LogRow(this.text($r('app.string.session_log_bridge_session')), ChatStore.bridgeSessionId || '—')
+        this.LogRow(this.text($r('app.string.session_log_model')), ChatStore.sessionCurrentModelId || ChatStore.lastModelId || '—')
+        this.LogRow(this.text($r('app.string.session_log_token_usage')), ChatStore.lastUsage ? ChatStore.lastUsage.totalTokens.toString() : '—')
+        this.LogRow(this.text($r('app.string.session_log_workspace')), this.session.cwd || '—')
       }
       .width(Layout.contentWidth)
       .alignItems(HorizontalAlign.Center)

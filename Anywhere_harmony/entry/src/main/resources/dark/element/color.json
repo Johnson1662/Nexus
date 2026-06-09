@@ -5,6 +5,10 @@
       "value": "#000000"
     },
     {
+      "name": "app_icon",
+      "value": "#34D399"
+    },
+    {
       "name": "surface0",
       "value": "#1A1D23"
     },
@@ -119,6 +123,10 @@
     {
       "name": "inline_code_bg",
       "value": "#26E8E8ED"
+    },
+    {
+      "name": "shadow",
+      "value": "#00000055"
     }
   ]
 }

@@ -1,6 +1,10 @@
 {
   "string": [
     {
+      "name": "app_name",
+      "value": "Anywhere"
+    },
+    {
       "name": "app_desc",
       "value": "HarmonyOS AI Agent 客户端"
     },
@@ -153,6 +157,18 @@
       "value": "↓ 回到最新"
     },
     {
+      "name": "chat_jump_latest_label",
+      "value": "跳至最新"
+    },
+    {
+      "name": "chat_tokens_usage",
+      "value": "Tokens: %d"
+    },
+    {
+      "name": "chat_done",
+      "value": "完成"
+    },
+    {
       "name": "chat_new_chat_button",
       "value": "新建聊天"
     },
@@ -217,6 +233,130 @@
       "value": "删除"
     },
     {
+      "name": "workspace_search_placeholder",
+      "value": "搜索工作区、任务或路径..."
+    },
+    {
+      "name": "workspace_filter_all",
+      "value": "全部"
+    },
+    {
+      "name": "workspace_filter_active",
+      "value": "活跃"
+    },
+    {
+      "name": "workspace_filter_idle",
+      "value": "空闲"
+    },
+    {
+      "name": "workspace_filter_offline",
+      "value": "离线"
+    },
+    {
+      "name": "workspace_empty_manage",
+      "value": "还没有工作区。先从聊天页侧边栏添加项目路径，再从这里管理工作区和会话。"
+    },
+    {
+      "name": "workspace_no_sessions",
+      "value": "还没有历史会话"
+    },
+    {
+      "name": "workspace_sessions_count",
+      "value": "%d 个会话"
+    },
+    {
+      "name": "workspace_unspecified_agent",
+      "value": "未指定 Agent"
+    },
+    {
+      "name": "workspace_status_running",
+      "value": "运行中"
+    },
+    {
+      "name": "workspace_status_active",
+      "value": "活跃"
+    },
+    {
+      "name": "workspace_status_idle",
+      "value": "空闲"
+    },
+    {
+      "name": "workspace_status_ready",
+      "value": "就绪"
+    },
+    {
+      "name": "workspace_status_offline",
+      "value": "离线"
+    },
+    {
+      "name": "workspace_status_completed",
+      "value": "已完成"
+    },
+    {
+      "name": "workspace_detail_no_task",
+      "value": "还没有会话任务"
+    },
+    {
+      "name": "workspace_detail_created_session",
+      "value": "创建了新会话"
+    },
+    {
+      "name": "workspace_plan_completed",
+      "value": "已完成"
+    },
+    {
+      "name": "workspace_plan_in_progress",
+      "value": "进行中"
+    },
+    {
+      "name": "workspace_plan_pending",
+      "value": "待处理"
+    },
+    {
+      "name": "workspace_quick_new_session",
+      "value": "新建会话"
+    },
+    {
+      "name": "workspace_quick_activity",
+      "value": "查看活动"
+    },
+    {
+      "name": "workspace_tab_sessions",
+      "value": "会话"
+    },
+    {
+      "name": "workspace_tab_agents",
+      "value": "Agent"
+    },
+    {
+      "name": "workspace_tab_activity",
+      "value": "活动"
+    },
+    {
+      "name": "workspace_started_at",
+      "value": "开始于 %s"
+    },
+    {
+      "name": "workspace_waiting_first_task",
+      "value": "等待首条任务"
+    },
+    {
+      "name": "workspace_empty_current",
+      "value": "这个工作区还没有会话"
+    },
+    {
+      "name": "workspace_empty_activity",
+      "value": "最近还没有活动"
+    },
+    {
+      "name": "workspace_title_fallback",
+      "value": "工作区"
+    },
+    {
+      "name": "workspace_project_fallback",
+      "value": "项目"
+    },
+    {
       "name": "server_delete_confirm_title",
       "value": "移除服务器"
     },
@@ -241,6 +381,10 @@
       "value": "模式"
     },
     {
+      "name": "picker_agents",
+      "value": "Agent"
+    },
+    {
       "name": "menu_switch_session",
       "value": "切换会话"
     },
@@ -261,8 +405,624 @@
       "value": "需要授权"
     },
     {
+      "name": "accessibility_permission_request",
+      "value": "权限请求"
+    },
+    {
+      "name": "accessibility_currently_selected",
+      "value": "当前已选择"
+    },
+    {
+      "name": "accessibility_selected_item",
+      "value": "%s，已选择"
+    },
+    {
+      "name": "empty_no_data",
+      "value": "暂无数据"
+    },
+    {
+      "name": "session_tab_conversation",
+      "value": "对话"
+    },
+    {
+      "name": "session_tab_timeline",
+      "value": "时间线"
+    },
+    {
+      "name": "session_tab_files",
+      "value": "文件"
+    },
+    {
+      "name": "session_tab_logs",
+      "value": "日志"
+    },
+    {
+      "name": "session_timeline_title",
+      "value": "会话"
+    },
+    {
+      "name": "session_timeline_empty",
+      "value": "暂无会话。开始一次对话后，会话会显示在这里。"
+    },
+    {
+      "name": "session_untitled",
+      "value": "未命名会话"
+    },
+    {
+      "name": "session_preview_empty",
+      "value": "会话内容加载后会显示在这里。"
+    },
+    {
+      "name": "session_loading_history",
+      "value": "正在加载会话历史..."
+    },
+    {
+      "name": "session_user_task",
+      "value": "用户任务"
+    },
+    {
+      "name": "session_progress",
+      "value": "执行进度"
+    },
+    {
+      "name": "session_plan_waiting",
+      "value": "等待 Agent 返回执行步骤"
+    },
+    {
+      "name": "session_latest_output",
+      "value": "最新输出"
+    },
+    {
+      "name": "session_continue_placeholder",
+      "value": "继续追问这个会话..."
+    },
+    {
+      "name": "session_timeline_started",
+      "value": "会话开始"
+    },
+    {
+      "name": "session_tool_call",
+      "value": "工具调用"
+    },
+    {
+      "name": "session_tool_running",
+      "value": "工具调用执行中"
+    },
+    {
+      "name": "session_agent_working",
+      "value": "Agent 正在工作"
+    },
+    {
+      "name": "session_turn_active",
+      "value": "当前轮次仍在执行"
+    },
+    {
+      "name": "session_turn_finished",
+      "value": "轮次完成"
+    },
+    {
+      "name": "session_turn_finished_detail",
+      "value": "当前轮次已经结束"
+    },
+    {
+      "name": "session_files_title",
+      "value": "文件变更"
+    },
+    {
+      "name": "session_files_empty",
+      "value": "当前没有可提取的文件变更记录"
+    },
+    {
+      "name": "session_unnamed_file",
+      "value": "未命名文件"
+    },
+    {
+      "name": "session_log_session_id",
+      "value": "会话 ID"
+    },
+    {
+      "name": "session_log_bridge_session",
+      "value": "桥接会话"
+    },
+    {
+      "name": "session_log_model",
+      "value": "模型"
+    },
+    {
+      "name": "session_log_token_usage",
+      "value": "Token 用量"
+    },
+    {
+      "name": "session_log_workspace",
+      "value": "工作区"
+    },
+    {
+      "name": "common_now",
+      "value": "刚刚"
+    },
+    {
+      "name": "common_minutes_ago",
+      "value": "%d 分钟前"
+    },
+    {
+      "name": "common_hours_ago",
+      "value": "%d 小时前"
+    },
+    {
+      "name": "common_days_ago",
+      "value": "%d 天前"
+    },
+    {
+      "name": "common_untitled",
+      "value": "未命名"
+    },
+    {
+      "name": "common_ready",
+      "value": "就绪"
+    },
+    {
+      "name": "common_running",
+      "value": "运行中"
+    },
+    {
+      "name": "common_idle",
+      "value": "空闲"
+    },
+    {
+      "name": "common_not_selected",
+      "value": "未选择"
+    },
+    {
+      "name": "common_connected",
+      "value": "已连接"
+    },
+    {
+      "name": "common_disconnected",
+      "value": "未连接"
+    },
+    {
+      "name": "common_cancel",
+      "value": "取消"
+    },
+    {
+      "name": "common_delete",
+      "value": "删除"
+    },
+    {
+      "name": "common_none",
+      "value": "无"
+    },
+    {
+      "name": "home_no_host",
+      "value": "未连接主机"
+    },
+    {
+      "name": "home_select_workspace",
+      "value": "选择一个工作区开始"
+    },
+    {
+      "name": "home_projects",
+      "value": "项目"
+    },
+    {
+      "name": "home_view_all",
+      "value": "查看全部"
+    },
+    {
+      "name": "home_no_projects",
+      "value": "还没有项目。从菜单添加主机或进入聊天后添加工作区。"
+    },
+    {
+      "name": "home_workspace_updated",
+      "value": "main · 更新于 %s"
+    },
+    {
+      "name": "home_recent_chats",
+      "value": "最近聊天"
+    },
+    {
+      "name": "home_search_chats",
+      "value": "搜索聊天"
+    },
+    {
+      "name": "home_chat",
+      "value": "聊天"
+    },
+    {
+      "name": "home_link_manually",
+      "value": "手动连接"
+    },
+    {
+      "name": "home_connect",
+      "value": "连接"
+    },
+    {
+      "name": "agents_title",
+      "value": "Agent"
+    },
+    {
+      "name": "agents_filter_all",
+      "value": "全部"
+    },
+    {
+      "name": "agents_filter_online",
+      "value": "在线"
+    },
+    {
+      "name": "agents_filter_offline",
+      "value": "离线"
+    },
+    {
+      "name": "agents_empty_title",
+      "value": "暂无 Agent"
+    },
+    {
+      "name": "agents_empty_subtitle",
+      "value": "添加第一台 ACP Bridge Server\n开始管理 Agent"
+    },
+    {
+      "name": "agents_add_device",
+      "value": "添加设备"
+    },
+    {
+      "name": "agent_status_online",
+      "value": "在线"
+    },
+    {
+      "name": "agent_status_connecting",
+      "value": "连接中"
+    },
+    {
+      "name": "agent_status_waiting_host",
+      "value": "等待主机"
+    },
+    {
+      "name": "agent_status_waiting_short",
+      "value": "等待中"
+    },
+    {
+      "name": "agent_status_reconnecting",
+      "value": "重连中"
+    },
+    {
+      "name": "agent_status_error",
+      "value": "错误"
+    },
+    {
+      "name": "agent_status_offline",
+      "value": "离线"
+    },
+    {
+      "name": "agent_unknown_host",
+      "value": "未知主机"
+    },
+    {
+      "name": "agent_tab_overview",
+      "value": "概览"
+    },
+    {
+      "name": "agent_tab_tools",
+      "value": "工具"
+    },
+    {
+      "name": "agent_tab_sessions",
+      "value": "会话"
+    },
+    {
+      "name": "agent_device_info",
+      "value": "设备信息"
+    },
+    {
+      "name": "agent_host_id",
+      "value": "Host ID"
+    },
+    {
+      "name": "agent_endpoint",
+      "value": "端点"
+    },
+    {
+      "name": "agent_acp_agents",
+      "value": "ACP Agent"
+    },
+    {
+      "name": "agent_found_count",
+      "value": "发现 %d 个"
+    },
+    {
+      "name": "agent_no_acp_agents",
+      "value": "未发现 ACP Agent"
+    },
+    {
+      "name": "agent_capabilities",
+      "value": "能力"
+    },
+    {
+      "name": "agent_file_system",
+      "value": "文件系统"
+    },
+    {
+      "name": "agent_shell_access",
+      "value": "Shell 访问"
+    },
+    {
+      "name": "agent_no_agents_connected",
+      "value": "暂无已连接 Agent"
+    },
+    {
+      "name": "agent_no_sessions",
+      "value": "暂无会话"
+    },
+    {
+      "name": "config_agent",
+      "value": "Agent"
+    },
+    {
+      "name": "config_model",
+      "value": "Model"
+    },
+    {
+      "name": "config_mode",
+      "value": "Mode"
+    },
+    {
+      "name": "config_select_agent",
+      "value": "选择 Agent"
+    },
+    {
+      "name": "config_select_model",
+      "value": "选择 Model"
+    },
+    {
+      "name": "config_select_mode",
+      "value": "选择 Mode"
+    },
+    {
+      "name": "config_no_agent_refresh",
+      "value": "暂无 Agent，点击右上角刷新"
+    },
+    {
+      "name": "config_no_model_refresh",
+      "value": "暂无 Model，点击右上角刷新"
+    },
+    {
+      "name": "config_no_model",
+      "value": "暂无 Model"
+    },
+    {
+      "name": "config_no_mode",
+      "value": "暂无 Mode"
+    },
+    {
+      "name": "config_models_count",
+      "value": "%d 个模型"
+    },
+    {
+      "name": "config_default_provider",
+      "value": "默认"
+    },
+    {
+      "name": "new_session_title",
+      "value": "新建会话"
+    },
+    {
+      "name": "new_session_next",
+      "value": "下一步"
+    },
+    {
+      "name": "new_session_create",
+      "value": "创建会话"
+    },
+    {
+      "name": "new_session_back",
+      "value": "上一步"
+    },
+    {
+      "name": "new_session_choose_workspace",
+      "value": "选择工作区"
+    },
+    {
+      "name": "new_session_choose_workspace_desc",
+      "value": "选择这次会话要进入的目录。"
+    },
+    {
+      "name": "new_session_empty_workspaces",
+      "value": "还没有工作区。先在 Chat 或 Workspace 侧边栏里添加项目路径，再回来创建会话。"
+    },
+    {
+      "name": "new_session_choose_agent",
+      "value": "选择"
+    },
+    {
+      "name": "new_session_choose_agent_desc",
+      "value": "选择这次任务要交给谁。"
+    },
+    {
+      "name": "new_session_empty_agents",
+      "value": "暂无可用 Agent。先连接设备并发现 Agent，或至少选中过一次 Agent。"
+    },
+    {
+      "name": "new_session_task_config",
+      "value": "任务配置"
+    },
+    {
+      "name": "new_session_task_config_desc",
+      "value": "写下你要它现在开始做的事。"
+    },
+    {
+      "name": "new_session_summary_workspace",
+      "value": "工作区"
+    },
+    {
+      "name": "new_session_summary_connection",
+      "value": "连接状态"
+    },
+    {
+      "name": "new_session_task_prompt",
+      "value": "任务描述"
+    },
+    {
+      "name": "new_session_task_prompt_placeholder",
+      "value": "例如：实现登录鉴权，使用 Next.js + Tailwind CSS，并补齐路由与表单校验"
+    },
+    {
+      "name": "settings_title",
+      "value": "设置"
+    },
+    {
+      "name": "settings_hosts_section",
+      "value": "连接与主机"
+    },
+    {
+      "name": "settings_preferences_section",
+      "value": "偏好设置"
+    },
+    {
+      "name": "settings_delete_host_title",
+      "value": "删除主机"
+    },
+    {
+      "name": "settings_delete_host_message",
+      "value": "%s\n删除后需要重新扫码或手动连接。"
+    },
+    {
+      "name": "settings_action_current",
+      "value": "当前"
+    },
+    {
+      "name": "settings_action_connecting",
+      "value": "连接中"
+    },
+    {
+      "name": "settings_action_reconnecting",
+      "value": "重连中"
+    },
+    {
+      "name": "settings_action_waiting_host",
+      "value": "等待主机"
+    },
+    {
+      "name": "settings_action_retry",
+      "value": "重试"
+    },
+    {
+      "name": "settings_action_switch",
+      "value": "切换"
+    },
+    {
+      "name": "settings_action_connect",
+      "value": "连接"
+    },
+    {
+      "name": "settings_phase_online",
+      "value": "已连接"
+    },
+    {
+      "name": "settings_phase_syncing",
+      "value": "同步中"
+    },
+    {
+      "name": "settings_phase_offline",
+      "value": "离线"
+    },
+    {
+      "name": "settings_phase_error",
+      "value": "连接失败"
+    },
+    {
+      "name": "settings_phase_unknown",
+      "value": "未检测"
+    },
+    {
+      "name": "settings_connection_unconnected",
+      "value": "未连接"
+    },
+    {
+      "name": "settings_connection_relay",
+      "value": "中继"
+    },
+    {
+      "name": "settings_connection_direct",
+      "value": "直连"
+    },
+    {
+      "name": "settings_configured",
+      "value": "已配置"
+    },
+    {
+      "name": "settings_unconfigured",
+      "value": "未配置"
+    },
+    {
+      "name": "settings_saved",
+      "value": "已保存"
+    },
+    {
+      "name": "settings_missing",
+      "value": "缺失"
+    },
+    {
+      "name": "settings_detail_connection_type",
+      "value": "连接方式"
+    },
+    {
+      "name": "settings_detail_current_address",
+      "value": "当前地址"
+    },
+    {
+      "name": "settings_detail_ipv4_address",
+      "value": "IPv4 地址"
+    },
+    {
+      "name": "settings_ipv4_count",
+      "value": "%d 个"
+    },
+    {
+      "name": "settings_empty_ipv4",
+      "value": "暂无可自动连接的 IPv4 地址"
+    },
+    {
+      "name": "settings_manual_address",
+      "value": "地址"
+    },
+    {
+      "name": "settings_manual_helper",
+      "value": "输入电脑端 Bridge Server 地址"
+    },
+    {
+      "name": "settings_empty_hosts",
+      "value": "暂无已保存的主机"
+    },
+    {
+      "name": "settings_reconnect",
+      "value": "重新连接"
+    },
+    {
+      "name": "settings_rescan",
+      "value": "重新扫码"
+    },
+    {
+      "name": "settings_delete_host_action",
+      "value": "删除主机"
+    },
+    {
+      "name": "settings_pref_thinking_title",
+      "value": "Thinking 默认展开"
+    },
+    {
+      "name": "settings_pref_thinking_desc",
+      "value": "流式结束后自动展开思考内容"
+    },
+    {
+      "name": "settings_pref_tool_title",
+      "value": "工具调用默认展开"
+    },
+    {
+      "name": "settings_pref_tool_desc",
+      "value": "完成后自动展开工具调用详情"
+    },
+    {
       "name": "thinking_label",
-      "value": "思考中"
+      "value": "思考中…"
     },
     {
       "name": "thinking_done_label",

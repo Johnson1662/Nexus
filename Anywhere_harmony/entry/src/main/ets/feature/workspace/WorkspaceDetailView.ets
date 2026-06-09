@@ -1,4 +1,4 @@
-import { Colors, FontSize, Spacing, Radius, Layout } from '../../constants/DesignTokens';
+import { Colors, FontSize, Spacing, Radius, Layout, getLocalizedString } from '../../constants/DesignTokens';
 import { WorkspaceStore, WorkspaceInfo, ServerSession } from '../../common/model/WorkspaceInfo';
 import { ChatStore, PlanEntry } from '../../common/model/ChatState';
 import { HostRuntimeStore } from '../../common/model/HostState';
@@ -25,6 +25,12 @@ export struct WorkspaceDetailView {
   onNewSession?: (workspaceIndex: number) => void;
 
   @State detailTabIndex: number = 0;
+
+  text(res: Resource, ...args: Array<string | number>): string {
+    let context = this.getUIContext().getHostContext();
+    if (!context) return '';
+    return getLocalizedString(context, res, ...args);
+  }
 
   getWorkspace(): WorkspaceInfo {
     if (this.workspaceIndex >= 0 && this.workspaceIndex < WorkspaceStore.workspaces.length) {
@@ -53,7 +59,7 @@ export struct WorkspaceDetailView {
 
   getCurrentAgentName(): string {
     let latest: ServerSession | null = this.getLatestSession();
-    return latest?.agent || ChatStore.selectedAgentName || ChatStore.agentType || 'Claude Code';
+    return latest?.agent || ChatStore.selectedAgentName || ChatStore.agentType || this.text($r('app.string.config_agent'));
   }
 
   getProgressValue(): number {
@@ -73,18 +79,18 @@ export struct WorkspaceDetailView {
     if (ChatStore.sessionTitle.length > 0) return ChatStore.sessionTitle;
     let latest: ServerSession | null = this.getLatestSession();
     if (latest && latest.title.length > 0) return latest.title;
-    return '还没有会话任务';
+    return this.text($r('app.string.workspace_detail_no_task'));
   }
 
   formatRelativeTime(epoch: number): string {
-    if (!epoch || epoch <= 0) return '刚刚';
+    if (!epoch || epoch <= 0) return this.text($r('app.string.common_now'));
     let diff: number = Date.now() - epoch;
     let minutes: number = Math.floor(diff / 60000);
-    if (minutes < 1) return '刚刚';
-    if (minutes < 60) return minutes.toString() + ' 分钟前';
+    if (minutes < 1) return this.text($r('app.string.common_now'));
+    if (minutes < 60) return this.text($r('app.string.common_minutes_ago'), minutes);
     let hours: number = Math.floor(minutes / 60);
-    if (hours < 24) return hours.toString() + ' 小时前';
-    return Math.floor(hours / 24).toString() + ' 天前';
+    if (hours < 24) return this.text($r('app.string.common_hours_ago'), hours);
+    return this.text($r('app.string.common_days_ago'), Math.floor(hours / 24));
   }
 
   getAgentStatus(agentName: string): string {
@@ -130,14 +136,16 @@ export struct WorkspaceDetailView {
     if (latest) {
       let latestRow: WorkspaceActivityRow = new WorkspaceActivityRow();
       latestRow.time = this.formatRelativeTime(latest.createdAt);
-      latestRow.actor = latest.agent || 'Agent';
-      latestRow.content = latest.title || '创建了新会话';
+      latestRow.actor = latest.agent || this.text($r('app.string.config_agent'));
+      latestRow.content = latest.title || this.text($r('app.string.workspace_detail_created_session'));
       rows.push(latestRow);
     }
     for (let i: number = 0; i < ChatStore.planEntries.length && i < 4; i++) {
       let entry: PlanEntry = ChatStore.planEntries[i];
       let row: WorkspaceActivityRow = new WorkspaceActivityRow();
-      row.time = entry.status === 'completed' ? '已完成' : (entry.status === 'in_progress' ? '进行中' : '待处理');
+      row.time = entry.status === 'completed' ? this.text($r('app.string.workspace_plan_completed')) :
+        (entry.status === 'in_progress' ? this.text($r('app.string.workspace_plan_in_progress')) :
+          this.text($r('app.string.workspace_plan_pending')));
       row.actor = this.getCurrentAgentName();
       row.content = entry.content;
       rows.push(row);
@@ -158,6 +166,15 @@ export struct WorkspaceDetailView {
     return Colors.warning;
   }
 
+  getStatusLabel(status: string): string {
+    if (status === 'Running') return this.text($r('app.string.workspace_status_running'));
+    if (status === 'Ready') return this.text($r('app.string.workspace_status_ready'));
+    if (status === 'Idle') return this.text($r('app.string.workspace_status_idle'));
+    if (status === 'Offline') return this.text($r('app.string.workspace_status_offline'));
+    if (status === 'Completed') return this.text($r('app.string.workspace_status_completed'));
+    return status;
+  }
+
   build() {
     NavDestination() {
       Column() {
@@ -166,8 +183,8 @@ export struct WorkspaceDetailView {
         Scroll() {
           Column() {
             Row({ space: Spacing.sm }) {
-              this.QuickAction('新建会话', 'plus')
-              this.QuickAction('查看活动', 'clock')
+              this.QuickAction(this.text($r('app.string.workspace_quick_new_session')), 'plus')
+              this.QuickAction(this.text($r('app.string.workspace_quick_activity')), 'clock')
             }
             .width(Layout.contentWidth)
             .padding({ bottom: Spacing.lg })
@@ -175,9 +192,9 @@ export struct WorkspaceDetailView {
             this.CurrentAgentCard()
 
             Row({ space: Spacing.sm }) {
-              this.DetailTab('Sessions', 0)
-              this.DetailTab('Agents', 1)
-              this.DetailTab('Activity', 2)
+              this.DetailTab(this.text($r('app.string.workspace_tab_sessions')), 0)
+              this.DetailTab(this.text($r('app.string.workspace_tab_agents')), 1)
+              this.DetailTab(this.text($r('app.string.workspace_tab_activity')), 2)
             }
             .width(Layout.contentWidth)
             .padding({ top: Spacing.lg, bottom: Spacing.md })
@@ -210,7 +227,7 @@ export struct WorkspaceDetailView {
   @Builder
   TitleBarBuilder() {
     Row() {
-      Text(this.getWorkspace().name || 'Workspace')
+      Text(this.getWorkspace().name || this.text($r('app.string.workspace_title_fallback')))
         .fontSize(FontSize.md)
         .fontWeight(FontWeight.Medium)
         .fontColor(Colors.foreground)
@@ -290,7 +307,8 @@ export struct WorkspaceDetailView {
           .backgroundColor(Colors.surface0)
 
         Row() {
-          Text(this.getLatestSession() ? '开始于 ' + this.formatRelativeTime(this.getLatestSession()!.createdAt) : '等待首条任务')
+          Text(this.getLatestSession() ? this.text($r('app.string.workspace_started_at'),
+            this.formatRelativeTime(this.getLatestSession()!.createdAt)) : this.text($r('app.string.workspace_waiting_first_task')))
             .fontSize(FontSize.xs)
             .fontColor(Colors.foregroundMuted)
           Blank()
@@ -334,7 +352,7 @@ export struct WorkspaceDetailView {
   SessionsSection() {
     if (this.getWorkspaceSessions().length === 0) {
       Column() {
-        Text('这个工作区还没有会话')
+        Text($r('app.string.workspace_empty_current'))
           .fontSize(FontSize.sm)
           .fontColor(Colors.foregroundMuted)
       }
@@ -371,13 +389,13 @@ export struct WorkspaceDetailView {
       .margin({ right: Spacing.md })
 
       Column() {
-        Text(session.title || 'Untitled')
+        Text(session.title || this.text($r('app.string.common_untitled')))
           .fontSize(FontSize.md)
           .fontWeight(FontWeight.Medium)
           .fontColor(Colors.foreground)
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
-        Text((session.agent || 'Agent') + ' · ' + this.formatRelativeTime(session.createdAt))
+        Text((session.agent || this.text($r('app.string.config_agent'))) + ' · ' + this.formatRelativeTime(session.createdAt))
           .fontSize(FontSize.xs)
           .fontColor(Colors.foregroundMuted)
           .margin({ top: Spacing.xxs })
@@ -444,7 +462,7 @@ export struct WorkspaceDetailView {
   ActivitySection() {
     if (this.getActivityRows().length === 0) {
       Column() {
-        Text('最近还没有活动')
+        Text($r('app.string.workspace_empty_activity'))
           .fontSize(FontSize.sm)
           .fontColor(Colors.foregroundMuted)
       }
@@ -502,7 +520,7 @@ export struct WorkspaceDetailView {
       Circle({ width: 6, height: 6 })
         .fill(this.getStatusDotColor(status))
         .margin({ right: Spacing.xs })
-      Text(status)
+      Text(this.getStatusLabel(status))
         .fontSize(FontSize.xs)
         .fontColor(Colors.foregroundMuted)
     }

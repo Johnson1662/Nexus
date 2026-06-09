@@ -1,4 +1,4 @@
-import { Colors, FontSize, Spacing, Radius, Layout } from '../../constants/DesignTokens';
+import { Colors, FontSize, Spacing, Radius, Layout, Duration, getLocalizedString } from '../../constants/DesignTokens';
 import { HostStore, DeviceEntry } from '../../common/model/WorkspaceInfo';
 import { HostPhase, HostRuntimeStore } from '../../common/model/HostState';
 import { CustomIcon } from '../../common/ui/CustomIcon';
@@ -9,6 +9,12 @@ export struct AgentsView {
   onNavigateToSettings?: () => void;
   @State filterIndex: number = 0;
   @State itemPressScale: number = 1.0;
+
+  text(res: Resource): string {
+    let context = this.getUIContext().getHostContext();
+    if (!context) return '';
+    return getLocalizedString(context, res);
+  }
 
   getHostKey(device: DeviceEntry): string {
     return device.hostId || device.name;
@@ -24,12 +30,12 @@ export struct AgentsView {
 
   getDeviceStatusText(device: DeviceEntry): string {
     let phase: string = this.getDevicePhase(device);
-    if (phase === HostPhase.ONLINE || phase === HostPhase.SYNCING) return 'Online';
-    if (phase === HostPhase.CONNECTING) return 'Connecting';
-    if (phase === HostPhase.WAITING_HOST) return 'Waiting';
-    if (phase === HostPhase.RECONNECTING) return 'Reconnecting';
-    if (phase === HostPhase.ERROR) return 'Error';
-    return 'Offline';
+    if (phase === HostPhase.ONLINE || phase === HostPhase.SYNCING) return this.text($r('app.string.agent_status_online'));
+    if (phase === HostPhase.CONNECTING) return this.text($r('app.string.agent_status_connecting'));
+    if (phase === HostPhase.WAITING_HOST) return this.text($r('app.string.agent_status_waiting_short'));
+    if (phase === HostPhase.RECONNECTING) return this.text($r('app.string.agent_status_reconnecting'));
+    if (phase === HostPhase.ERROR) return this.text($r('app.string.agent_status_error'));
+    return this.text($r('app.string.agent_status_offline'));
   }
 
   getDeviceStatusColor(device: DeviceEntry): Resource {
@@ -58,7 +64,7 @@ export struct AgentsView {
     Column() {
       // Header
       Row() {
-        Text("Agents").fontSize(FontSize.xxxxl).fontWeight(FontWeight.Bold).fontColor(Colors.foreground)
+        Text($r('app.string.agents_title')).fontSize(FontSize.xxxxl).fontWeight(FontWeight.Bold).fontColor(Colors.foreground)
         Blank()
         SymbolGlyph($r('sys.symbol.person_badge_plus')).fontSize(24).fontColor([Colors.foreground])
           .onClick(() => { this.onNavigateToSettings?.(); })
@@ -69,9 +75,9 @@ export struct AgentsView {
       if (HostStore.devices.length > 0) {
         // Filter Tabs
         Row({ space: Spacing.sm }) {
-          this.FilterTab('All', 0)
-          this.FilterTab('Online', 1)
-          this.FilterTab('Offline', 2)
+          this.FilterTab(this.text($r('app.string.agents_filter_all')), 0)
+          this.FilterTab(this.text($r('app.string.agents_filter_online')), 1)
+          this.FilterTab(this.text($r('app.string.agents_filter_offline')), 2)
         }
         .width(Layout.contentWidth)
         .padding({ bottom: Spacing.lg })
@@ -93,10 +99,10 @@ export struct AgentsView {
         Column() {
           SymbolGlyph($r('sys.symbol.person_2')).fontSize(56).fontColor([Colors.foregroundMuted]).margin({ bottom: Spacing.lg })
             .opacity(0.55)
-          Text("No Agents Yet").fontSize(FontSize.xl).fontWeight(FontWeight.Bold).fontColor(Colors.foreground).margin({ bottom: Spacing.xs })
-          Text("Add your first ACP bridge server\nto start managing agents").fontSize(FontSize.sm).fontColor(Colors.foregroundMuted)
+          Text($r('app.string.agents_empty_title')).fontSize(FontSize.xl).fontWeight(FontWeight.Bold).fontColor(Colors.foreground).margin({ bottom: Spacing.xs })
+          Text($r('app.string.agents_empty_subtitle')).fontSize(FontSize.sm).fontColor(Colors.foregroundMuted)
             .textAlign(TextAlign.Center).margin({ bottom: Spacing.xl })
-          Button("Add Device")
+          Button($r('app.string.agents_add_device'))
             .fontSize(FontSize.sm).fontWeight(FontWeight.Medium)
             .fontColor(Colors.surface0).backgroundColor(Colors.foreground)
             .borderRadius(Radius.lg).padding({ left: Spacing.xxl, right: Spacing.xxl, top: Spacing.md, bottom: Spacing.md })

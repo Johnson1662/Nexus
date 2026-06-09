@@ -166,13 +166,13 @@ export struct ToolCallCard {
       Column() {
         Text(this.getPreviewText(this.content))
           .fontSize(FontSize.xs)
-          .fontColor('#E5E7EB')
+          .fontColor(Colors.terminalFg)
           .fontFamily('monospace')
           .lineHeight(18)
       }
       .layoutWeight(1)
       .padding(Spacing.sm)
-      .backgroundColor('#111827')
+      .backgroundColor(Colors.terminalBg)
       .borderRadius(Radius.sm)
     } else if (this.contentType === 'diff') {
       Column() {
@@ -309,7 +309,7 @@ export struct ToolCallCard {
         } else if (this.status === 'failed' || this.status === 'error') {
           SymbolGlyph($r('sys.symbol.xmark_circle'))
             .fontSize(FontSize.sm)
-            .fontColor(['#EF4444']) // error red
+            .fontColor([Colors.error])
         }
       }
       .width('100%')

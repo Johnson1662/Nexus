@@ -1,4 +1,4 @@
-import { Colors, FontSize, Spacing, Radius, Duration, Layout } from '../../constants/DesignTokens';
+import { Colors, FontSize, Spacing, Radius, Duration, Layout, getLocalizedString } from '../../constants/DesignTokens';
 import { ChatStore, PendingPermission, PermissionOption } from '../../common/model/ChatState';
 import { CustomIcon } from '../../common/ui/CustomIcon';
 import { WorkspaceStore } from '../../common/model/WorkspaceInfo';
@@ -33,6 +33,12 @@ export struct ChatView {
   onPermissionResponse?: (optionId: string) => void;
   onNavigateToSettings?: () => void;
 
+  text(res: Resource, ...args: Array<string | number>): string {
+    let context = this.getUIContext().getHostContext();
+    if (!context) return '';
+    return getLocalizedString(context, res, ...args);
+  }
+
   aboutToAppear(): void {
     if (WorkspaceStore.currentIndex < 0 && WorkspaceStore.workspaces.length > 0) {
       WorkspaceStore.currentIndex = 0;
@@ -47,7 +53,7 @@ export struct ChatView {
 
   getSessionTitle(): string {
     if (!ChatStore.bridgeSessionId && !ChatStore.acpSessionId) {
-      return 'New Session';
+      return this.text($r('app.string.chat_new_session'));
     }
     // Prefer the live sessionTitle from server updates
     if (ChatStore.sessionTitle.length > 0) {
@@ -62,7 +68,7 @@ export struct ChatView {
     if (targetId.length > 0) {
       return targetId.substring(0, 8);
     }
-    return 'Session';
+    return this.text($r('app.string.chat_session_fallback'));
   }
 
   getModelName(): string {
@@ -75,10 +81,10 @@ export struct ChatView {
 
 
   /** Create and persist a new workspace in the global store. */
-  static addWorkspace(path: string): WorkspaceInfo {
+  addWorkspace(path: string): WorkspaceInfo {
     let ws = new WorkspaceInfo();
     ws.id = Date.now().toString();
-    ws.name = path.split('\\').pop() || path.split('/').pop() || 'Project';
+    ws.name = path.split('\\').pop() || path.split('/').pop() || this.text($r('app.string.workspace_project_fallback'));
     ws.path = path;
     WorkspaceStore.workspaces.push(ws);
     WorkspaceStore.currentIndex = WorkspaceStore.workspaces.length - 1;
@@ -102,13 +108,13 @@ export struct ChatView {
   }
   openPicker(mode: number): void {
     if (mode === 0) {
-      this.pickerTitle = getContext(this).resourceManager.getStringSync($r('app.string.picker_sessions').id);
+      this.pickerTitle = this.text($r('app.string.picker_sessions'));
     } else if (mode === 3) {
-      this.pickerTitle = 'Agents';
+      this.pickerTitle = this.text($r('app.string.picker_agents'));
     } else if (mode === 1) {
-      this.pickerTitle = getContext(this).resourceManager.getStringSync($r('app.string.picker_models').id);
+      this.pickerTitle = this.text($r('app.string.picker_models'));
     } else if (mode === 2) {
-      this.pickerTitle = getContext(this).resourceManager.getStringSync($r('app.string.picker_modes').id);
+      this.pickerTitle = this.text($r('app.string.picker_modes'));
     }
     this.pickerMode = mode;
     this.showPicker = true;
@@ -186,7 +192,7 @@ export struct ChatView {
             },
             onClose: () => { (this.getUIContext() as UIContext)?.animateTo({ duration: Duration.normal }, () => { this.showDrawer = false }) },
             onAddWorkspace: (p: string) => {
-              ChatView.addWorkspace(p);
+              this.addWorkspace(p);
               (this.getUIContext() as UIContext)?.animateTo({ duration: Duration.normal }, () => { this.showDrawer = false });
               if (this.onWorkspaceSelect) this.onWorkspaceSelect(WorkspaceStore.workspaces.length - 1);
             },
@@ -196,18 +202,18 @@ export struct ChatView {
           Column() {
             if (this.showPathInput) {
               Row() {
-                TextInput({ placeholder: '/path/to/project', text: this.newPath })
+                TextInput({ placeholder: $r('app.string.ws_path_placeholder'), text: this.newPath })
                   .layoutWeight(1).height(36)
                   .backgroundColor(Colors.surface1).borderRadius(Radius.sm)
                   .padding({ left: Spacing.md, right: Spacing.md })
                   .fontSize(FontSize.xs)
                   .onChange((v: string) => { this.newPath = v })
-                Button('Add').height(36).backgroundColor(Colors.accent).fontColor(Color.White)
+                Button($r('app.string.ws_add')).height(36).backgroundColor(Colors.accent).fontColor(Colors.surface0)
                   .borderRadius(Radius.sm).fontSize(FontSize.xs)
                   .onClick(() => {
                     let p = this.newPath.trim();
                     if (p.length > 0) {
-                      ChatView.addWorkspace(p);
+                      this.addWorkspace(p);
                       this.newPath = '';
                       this.showPathInput = false;
                       if (this.onWorkspaceSelect) this.onWorkspaceSelect(WorkspaceStore.workspaces.length - 1);
@@ -279,16 +285,18 @@ export struct ChatView {
   ControlBar() {
     Column() {
       Row({ space: Spacing.xs }) {
-        this.ControlChip('Agent', ChatStore.selectedAgentName || '选择 Agent', () => {
+        this.ControlChip(this.text($r('app.string.config_agent')),
+          ChatStore.selectedAgentName || this.text($r('app.string.config_select_agent')), () => {
           this.openPicker(3);
         })
-        this.ControlChip('Model', this.getModelName().length > 0 ? this.getModelName() : '选择 Model', () => {
+        this.ControlChip(this.text($r('app.string.config_model')),
+          this.getModelName().length > 0 ? this.getModelName() : this.text($r('app.string.config_select_model')), () => {
           if ((ChatStore.selectedAgentName || ChatStore.agentType).length > 0) {
             this.openPicker(1);
           }
         }, (ChatStore.selectedAgentName || ChatStore.agentType).length > 0)
-        this.ControlChip('Mode', ChatStore.modeIndex >= 0 && ChatStore.modeIndex < ChatStore.modes.length
-          ? ChatStore.modes[ChatStore.modeIndex].name : '选择', () => {
+        this.ControlChip(this.text($r('app.string.config_mode')), ChatStore.modeIndex >= 0 && ChatStore.modeIndex < ChatStore.modes.length
+          ? ChatStore.modes[ChatStore.modeIndex].name : this.text($r('app.string.config_select_mode')), () => {
             if (ChatStore.modes.length > 0) {
               this.openPicker(2);
             }
@@ -367,12 +375,18 @@ struct PermissionSheet {
   @Prop permission: PendingPermission | null = null;
   onSelect?: (optionId: string) => void;
 
+  text(res: Resource, ...args: Array<string | number>): string {
+    let context = this.getUIContext().getHostContext();
+    if (!context) return '';
+    return getLocalizedString(context, res, ...args);
+  }
+
   build() {
     Column() {
       Row() {
         Text($r('app.string.perm_title'))
           .fontSize(FontSize.xl).fontWeight(FontWeight.Bold).fontColor(Colors.foreground)
-          .accessibilityText('Permission request')
+          .accessibilityText($r('app.string.accessibility_permission_request'))
       }
       .width(Layout.contentWidth)
       .padding({ top: Spacing.xl, bottom: Spacing.md })
@@ -424,6 +438,12 @@ struct PickerSheet {
   @Prop pickerTitle: string = '';
   onSelect?: (index: number) => void;
 
+  text(res: Resource, ...args: Array<string | number>): string {
+    let context = this.getUIContext().getHostContext();
+    if (!context) return '';
+    return getLocalizedString(context, res, ...args);
+  }
+
   build() {
     Column() {
       Row() {
@@ -435,7 +455,7 @@ struct PickerSheet {
 
       if (this.getItems().length === 0) {
         Row() {
-          Text('暂无数据')
+          Text($r('app.string.empty_no_data'))
             .fontSize(FontSize.sm).fontColor(Colors.foregroundLight)
         }
         .width(Layout.contentWidth).height(80).justifyContent(FlexAlign.Center)
@@ -453,7 +473,7 @@ struct PickerSheet {
                   SymbolGlyph($r('sys.symbol.checkmark'))
                     .fontSize(16).fontColor([Colors.accent])
                     .margin({ left: Spacing.sm })
-                    .accessibilityText('Currently selected')
+                    .accessibilityText($r('app.string.accessibility_currently_selected'))
                 }
               }
               .width('100%')
@@ -467,7 +487,8 @@ struct PickerSheet {
             })
             .animation({ duration: Duration.fast, curve: Curve.EaseOut })
             .margin({ bottom: Spacing.xs })
-            .accessibilityText(item + (index === this.getCurrentIndex() ? ', selected' : ''))
+            .accessibilityText(index === this.getCurrentIndex() ?
+              this.text($r('app.string.accessibility_selected_item'), item) : item)
             .onClick(() => {
               if (this.onSelect) this.onSelect(index);
             })

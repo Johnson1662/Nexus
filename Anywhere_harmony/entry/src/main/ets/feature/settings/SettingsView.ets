@@ -1,4 +1,4 @@
-import { Colors, FontSize, Spacing, Radius, Layout } from '../../constants/DesignTokens';
+import { Colors, FontSize, Spacing, Radius, Layout, getLocalizedString } from '../../constants/DesignTokens';
 import { StorageService } from '../../services/StorageService';
 import { HostStore, DeviceEntry } from '../../common/model/WorkspaceInfo';
 import { HostPhase, HostRuntimeStore, HostRuntimeState } from '../../common/model/HostState';
@@ -16,6 +16,12 @@ export struct SettingsPage {
   onConnectHost?: (index: number) => void;
   onDeleteHost?: (index: number) => void;
   onScan?: () => void;
+
+  text(res: Resource, ...args: Array<string | number>): string {
+    let context = this.getUIContext().getHostContext();
+    if (!context) return '';
+    return getLocalizedString(context, res, ...args);
+  }
 
   getHostKey(device: DeviceEntry): string {
     return device.hostId || device.name;
@@ -58,24 +64,24 @@ export struct SettingsPage {
 
   getActionText(device: DeviceEntry): string {
     let phase: string = this.getHostPhase(device);
-    if (this.isCurrentHost(device)) return '当前';
-    if (phase === HostPhase.CONNECTING) return '连接中';
-    if (phase === HostPhase.RECONNECTING) return '重连中';
-    if (phase === HostPhase.WAITING_HOST) return '等待主机';
-    if (phase === HostPhase.ERROR) return '重试';
-    if (HostRuntimeStore.isOnline(HostRuntimeStore.activeHostKey)) return '切换';
-    return '连接';
+    if (this.isCurrentHost(device)) return this.text($r('app.string.settings_action_current'));
+    if (phase === HostPhase.CONNECTING) return this.text($r('app.string.settings_action_connecting'));
+    if (phase === HostPhase.RECONNECTING) return this.text($r('app.string.settings_action_reconnecting'));
+    if (phase === HostPhase.WAITING_HOST) return this.text($r('app.string.settings_action_waiting_host'));
+    if (phase === HostPhase.ERROR) return this.text($r('app.string.settings_action_retry'));
+    if (HostRuntimeStore.isOnline(HostRuntimeStore.activeHostKey)) return this.text($r('app.string.settings_action_switch'));
+    return this.text($r('app.string.settings_action_connect'));
   }
 
   getPhaseLabel(phase: string): string {
-    if (phase === HostPhase.ONLINE) return '已连接';
-    if (phase === HostPhase.SYNCING) return '同步中';
-    if (phase === HostPhase.CONNECTING) return '连接中';
-    if (phase === HostPhase.RECONNECTING) return '重连中';
-    if (phase === HostPhase.WAITING_HOST) return '等待主机';
-    if (phase === HostPhase.OFFLINE) return '离线';
-    if (phase === HostPhase.ERROR) return '连接失败';
-    return '未检测';
+    if (phase === HostPhase.ONLINE) return this.text($r('app.string.settings_phase_online'));
+    if (phase === HostPhase.SYNCING) return this.text($r('app.string.settings_phase_syncing'));
+    if (phase === HostPhase.CONNECTING) return this.text($r('app.string.settings_action_connecting'));
+    if (phase === HostPhase.RECONNECTING) return this.text($r('app.string.settings_action_reconnecting'));
+    if (phase === HostPhase.WAITING_HOST) return this.text($r('app.string.settings_action_waiting_host'));
+    if (phase === HostPhase.OFFLINE) return this.text($r('app.string.settings_phase_offline'));
+    if (phase === HostPhase.ERROR) return this.text($r('app.string.settings_phase_error'));
+    return this.text($r('app.string.settings_phase_unknown'));
   }
 
   getPhaseColor(phase: string): Resource {
@@ -103,28 +109,30 @@ export struct SettingsPage {
     let phase: string = this.getHostPhase(device);
     let url: string = this.getCurrentAddress(device);
     if (url.length === 0 || phase === HostPhase.OFFLINE || phase === HostPhase.UNKNOWN || phase === HostPhase.ERROR) {
-      return '未连接';
+      return this.text($r('app.string.settings_connection_unconnected'));
     }
-    if (this.isRelayClientUrl(url)) return '中继';
-    return '直连';
+    if (this.isRelayClientUrl(url)) return this.text($r('app.string.settings_connection_relay'));
+    return this.text($r('app.string.settings_connection_direct'));
   }
 
   getRelayStatus(device: DeviceEntry): string {
-    if ((device.relayUrl || '').length > 0 || this.isRelayClientUrl(this.getActiveUrl(device))) return '已配置';
-    return '未配置';
+    if ((device.relayUrl || '').length > 0 || this.isRelayClientUrl(this.getActiveUrl(device))) {
+      return this.text($r('app.string.settings_configured'));
+    }
+    return this.text($r('app.string.settings_unconfigured'));
   }
 
   getPairingStatus(device: DeviceEntry): string {
     let storedHostId: string = AppStorage.get<string>('hostId') || '';
     let hostEd25519PublicKey: string = AppStorage.get<string>('hostEd25519PublicKey') || '';
     if ((device.hostId || '').length > 0 && storedHostId === device.hostId && hostEd25519PublicKey.length > 0) {
-      return '已保存';
+      return this.text($r('app.string.settings_saved'));
     }
-    return '缺失';
+    return this.text($r('app.string.settings_missing'));
   }
 
   shortText(value: string, head: number = 8, tail: number = 4): string {
-    if (value.length === 0) return '无';
+    if (value.length === 0) return this.text($r('app.string.common_none'));
     if (value.length <= head + tail + 3) return value;
     return value.substring(0, head) + '...' + value.substring(value.length - tail);
   }
@@ -187,14 +195,14 @@ export struct SettingsPage {
     let device: DeviceEntry | undefined = HostStore.devices[index];
     let hostName: string = device ? device.name : '';
     this.getUIContext().showAlertDialog({
-      title: '删除主机',
-      message: hostName + '\n删除后需要重新扫码或手动连接。',
+      title: this.text($r('app.string.settings_delete_host_title')),
+      message: this.text($r('app.string.settings_delete_host_message'), hostName),
       primaryButton: {
-        value: '取消',
+        value: this.text($r('app.string.common_cancel')),
         action: () => {}
       },
       secondaryButton: {
-        value: '删除',
+        value: this.text($r('app.string.common_delete')),
         fontColor: Colors.error,
         action: () => {
           if (this.onDeleteHost) {
@@ -224,7 +232,7 @@ export struct SettingsPage {
   @Builder
   HostSectionTitle() {
     Row() {
-      Text('连接与主机')
+      Text($r('app.string.settings_hosts_section'))
         .fontSize(FontSize.lg)
         .fontColor(Colors.foreground)
         .fontWeight(FontWeight.Bold)
@@ -277,16 +285,16 @@ export struct SettingsPage {
 
   @Builder
   SettingsDivider(insetLeft: number = Spacing.md) {
-    Divider()
+    Row()
       .height(1)
-      .color(Colors.borderLight)
+      .backgroundColor(Colors.borderLight)
       .margin({ left: insetLeft, right: Spacing.md })
   }
 
   @Builder
   DeleteSwipeAction(index: number) {
     Row() {
-      Button('删除')
+      Button($r('app.string.common_delete'))
         .height('100%')
         .width(72)
         .fontSize(FontSize.sm)
@@ -395,10 +403,12 @@ export struct SettingsPage {
   @Builder
   HostDetail(device: DeviceEntry, index: number) {
     Column() {
-      this.DetailRow('连接方式', this.getConnectionType(device))
+      this.DetailRow(this.text($r('app.string.settings_detail_connection_type')), this.getConnectionType(device))
       this.DetailRow('Relay', this.getRelayStatus(device))
       this.DetailRow('Host ID', this.shortText(device.hostId || '', 12, 6))
-      this.DetailRow('当前地址', this.getCurrentAddress(device).length > 0 ? this.getCurrentAddress(device) : '未连接')
+      this.DetailRow(this.text($r('app.string.settings_detail_current_address')),
+        this.getCurrentAddress(device).length > 0 ? this.getCurrentAddress(device) :
+          this.text($r('app.string.settings_connection_unconnected')))
 
       this.AddressToggleRow(device)
 
@@ -406,9 +416,9 @@ export struct SettingsPage {
         this.AddressList(device)
       }
 
-      this.HostDetailActionRow('重新连接', Colors.accent, () => { this.connectHost(index, device); })
-      this.HostDetailActionRow('重新扫码', Colors.foreground, () => { if (this.onScan) this.onScan(); })
-      this.HostDetailActionRow('删除主机', Colors.error, () => { this.showDeleteConfirmDialog(index); })
+      this.HostDetailActionRow(this.text($r('app.string.settings_reconnect')), Colors.accent, () => { this.connectHost(index, device); })
+      this.HostDetailActionRow(this.text($r('app.string.settings_rescan')), Colors.foreground, () => { if (this.onScan) this.onScan(); })
+      this.HostDetailActionRow(this.text($r('app.string.settings_delete_host_action')), Colors.error, () => { this.showDeleteConfirmDialog(index); })
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
@@ -418,11 +428,11 @@ export struct SettingsPage {
   @Builder
   AddressToggleRow(device: DeviceEntry) {
     Row() {
-      Text('IPv4 地址')
+      Text($r('app.string.settings_detail_ipv4_address'))
         .fontSize(FontSize.sm)
         .fontColor(Colors.foregroundMuted)
         .width(92)
-      Text(this.getDirectUrls(device).length.toString() + ' 个')
+      Text(this.text($r('app.string.settings_ipv4_count'), this.getDirectUrls(device).length))
         .fontSize(FontSize.sm)
         .fontColor(Colors.foreground)
         .layoutWeight(1)
@@ -445,7 +455,7 @@ export struct SettingsPage {
   AddressList(device: DeviceEntry) {
     Column() {
       if (this.getDirectUrls(device).length === 0) {
-        Text('暂无可自动连接的 IPv4 地址')
+        Text($r('app.string.settings_empty_ipv4'))
           .fontSize(FontSize.sm)
           .fontColor(Colors.foregroundMuted)
           .width('100%')
@@ -492,21 +502,22 @@ export struct SettingsPage {
   ManualConnectForm() {
     Column() {
       Row() {
-        Text('地址')
+        Text($r('app.string.settings_manual_address'))
           .fontSize(FontSize.sm)
           .fontColor(Colors.foregroundMuted)
-          .width(52)
+          .width(56)
         TextInput({ placeholder: 'ws://IP:PORT', text: this.newUrl })
           .layoutWeight(1)
           .height(40)
-          .padding({ left: 0, right: Spacing.sm })
+          .padding({ left: Spacing.sm, right: Spacing.sm })
           .fontSize(FontSize.sm)
           .fontColor(Colors.foreground)
           .placeholderColor(Colors.foregroundLight)
-          .backgroundColor(Colors.transparent)
+          .backgroundColor(Colors.surface1)
+          .borderRadius(Radius.sm)
           .onChange((v: string) => { this.newUrl = v; })
           .onSubmit(() => { this.submitManualConnect(); })
-        Button('连接')
+        Button($r('app.string.settings_action_connect'))
           .height(32)
           .padding({ left: Spacing.sm, right: Spacing.sm })
           .fontWeight(FontWeight.Medium)
@@ -521,19 +532,19 @@ export struct SettingsPage {
           .onClick(() => { this.submitManualConnect(); })
       }
       .width('100%')
-      .height(48)
+      .height(54)
 
       Row() {
-        Text('输入电脑端 Bridge Server 地址')
+        Text($r('app.string.settings_manual_helper'))
           .fontSize(FontSize.xs)
           .fontColor(Colors.foregroundMuted)
           .layoutWeight(1)
       }
       .width('100%')
-      .padding({ left: 52, bottom: Spacing.sm })
+      .padding({ left: 56, bottom: Spacing.sm })
     }
     .width('100%')
-    .padding({ left: Spacing.md, right: Spacing.md })
+    .padding({ left: Spacing.md, right: Spacing.md, top: Spacing.xs })
   }
 
   @Builder
@@ -587,7 +598,7 @@ export struct SettingsPage {
 
             if (HostStore.devices.length === 0) {
               ListItem() {
-                Text('暂无已保存的主机')
+                Text($r('app.string.settings_empty_hosts'))
                   .fontSize(FontSize.sm)
                   .fontColor(Colors.foregroundMuted)
                   .width('100%')
@@ -629,11 +640,12 @@ export struct SettingsPage {
           .borderRadius(Radius.xxl)
           .clip(true)
 
-          this.SectionTitle('偏好设置')
+          this.SectionTitle(this.text($r('app.string.settings_preferences_section')))
 
           List({ space: 0 }) {
             ListItem() {
-              this.PreferenceRow('Thinking 默认展开', '流式结束后自动展开思考内容', this.thinkingExpanded, (isOn: boolean) => {
+              this.PreferenceRow(this.text($r('app.string.settings_pref_thinking_title')),
+                this.text($r('app.string.settings_pref_thinking_desc')), this.thinkingExpanded, (isOn: boolean) => {
                 this.thinkingExpanded = isOn;
                 StorageService.getInstance().putString('pref_thinking_expanded', isOn ? '1' : '0');
               })
@@ -644,7 +656,8 @@ export struct SettingsPage {
             }
 
             ListItem() {
-              this.PreferenceRow('工具调用默认展开', '完成后自动展开工具调用详情', this.toolcallExpanded, (isOn: boolean) => {
+              this.PreferenceRow(this.text($r('app.string.settings_pref_tool_title')),
+                this.text($r('app.string.settings_pref_tool_desc')), this.toolcallExpanded, (isOn: boolean) => {
                 this.toolcallExpanded = isOn;
                 StorageService.getInstance().putString('pref_toolcall_expanded', isOn ? '1' : '0');
               })
@@ -662,7 +675,7 @@ export struct SettingsPage {
       .width('100%')
       .backgroundColor(Colors.surface1)
     }
-    .title('设置')
+    .title(this.text($r('app.string.settings_title')))
     .width('100%')
     .height('100%')
     .backgroundColor(Colors.surface1)

@@ -1,4 +1,4 @@
-import { Colors, FontSize, Spacing, Radius, Shadow } from '../../constants/DesignTokens';
+import { Colors, FontSize, Spacing, Radius, Shadow, getLocalizedString } from '../../constants/DesignTokens';
 import { WorkspaceStore, WorkspaceInfo } from '../../common/model/WorkspaceInfo';
 import { ChatStore } from '../../common/model/ChatState';
 import { DeviceAgentStore } from '../../common/model/DeviceAgentStore';
@@ -20,6 +20,12 @@ export struct NewSessionView {
   @State selectedWorkspaceIndex: number = -1;
   @State selectedAgentName: string = '';
   @State taskPrompt: string = '';
+
+  localize(res: Resource): string {
+    let context = this.getUIContext().getHostContext();
+    if (!context) return '';
+    return getLocalizedString(context, res);
+  }
 
   aboutToAppear(): void {
     DeviceAgentStore.loadFromDisk();
@@ -93,13 +99,14 @@ export struct NewSessionView {
   }
 
   getPrimaryLabel(): string {
-    return this.stepIndex < 2 ? '下一步' : '创建会话';
+    return this.stepIndex < 2 ? this.localize($r('app.string.new_session_next')) :
+      this.localize($r('app.string.new_session_create'));
   }
 
   getStepTitle(index: number): string {
-    if (index === 0) return '选择工作区';
-    if (index === 1) return '选择';
-    return '任务配置';
+    if (index === 0) return this.localize($r('app.string.new_session_choose_workspace'));
+    if (index === 1) return this.localize($r('app.string.new_session_choose_agent'));
+    return this.localize($r('app.string.new_session_task_config'));
   }
 
   build() {
@@ -140,7 +147,7 @@ export struct NewSessionView {
   @Builder
   Header() {
     Row() {
-      Button(this.stepIndex === 0 ? '取消' : '上一步')
+      Button(this.stepIndex === 0 ? this.localize($r('app.string.common_cancel')) : this.localize($r('app.string.new_session_back')))
         .fontSize(FontSize.sm)
         .fontColor(Colors.foregroundMuted)
         .backgroundColor(Colors.transparent)
@@ -153,7 +160,7 @@ export struct NewSessionView {
           }
         })
       Blank()
-      Text('新建会话')
+      Text($r('app.string.new_session_title'))
         .fontSize(FontSize.base)
         .fontWeight(FontWeight.Bold)
         .fontColor(Colors.foreground)
@@ -202,13 +209,13 @@ export struct NewSessionView {
   @Builder
   WorkspaceStep() {
     Column() {
-      Text('选择工作区')
+      Text($r('app.string.new_session_choose_workspace'))
         .fontSize(FontSize.xxxl)
         .fontWeight(FontWeight.Bold)
         .fontColor(Colors.foreground)
         .width('100%')
         .margin({ bottom: Spacing.xs })
-      Text('选择这次会话要进入的目录。')
+      Text($r('app.string.new_session_choose_workspace_desc'))
         .fontSize(FontSize.sm)
         .fontColor(Colors.foregroundMuted)
         .width('100%')
@@ -216,7 +223,7 @@ export struct NewSessionView {
 
       if (WorkspaceStore.workspaces.length === 0) {
         Column() {
-          Text('还没有工作区。先在 Chat 或 Workspace 侧边栏里添加项目路径，再回来创建会话。')
+          Text($r('app.string.new_session_empty_workspaces'))
             .fontSize(FontSize.sm)
             .fontColor(Colors.foregroundMuted)
         }
@@ -298,13 +305,13 @@ export struct NewSessionView {
   @Builder
   AgentStep() {
     Column() {
-      Text('选择')
+      Text($r('app.string.new_session_choose_agent'))
         .fontSize(FontSize.xxxl)
         .fontWeight(FontWeight.Bold)
         .fontColor(Colors.foreground)
         .width('100%')
         .margin({ bottom: Spacing.xs })
-      Text('选择这次任务要交给谁。')
+      Text($r('app.string.new_session_choose_agent_desc'))
         .fontSize(FontSize.sm)
         .fontColor(Colors.foregroundMuted)
         .width('100%')
@@ -312,7 +319,7 @@ export struct NewSessionView {
 
       if (this.getAvailableAgents().length === 0) {
         Column() {
-          Text('暂无可用 Agent。先连接设备并在引导页发现 Agent，或至少选中过一次 Agent。')
+          Text($r('app.string.new_session_empty_agents'))
             .fontSize(FontSize.sm)
             .fontColor(Colors.foregroundMuted)
         }
@@ -389,35 +396,38 @@ export struct NewSessionView {
   @Builder
   TaskStep() {
     Column() {
-      Text('任务配置')
+      Text($r('app.string.new_session_task_config'))
         .fontSize(FontSize.xxxl)
         .fontWeight(FontWeight.Bold)
         .fontColor(Colors.foreground)
         .width('100%')
         .margin({ bottom: Spacing.xs })
-      Text('写下你要它现在开始做的事。')
+      Text($r('app.string.new_session_task_config_desc'))
         .fontSize(FontSize.sm)
         .fontColor(Colors.foregroundMuted)
         .width('100%')
         .margin({ bottom: Spacing.xl })
 
       Column() {
-        this.SummaryRow('工作区', this.getWorkspace()?.name || '未选择')
-        this.SummaryRow('Agent', this.selectedAgentName || '未选择')
-        this.SummaryRow('连接状态', ChatStore.connected ? '已连接' : '未连接')
+        this.SummaryRow(this.localize($r('app.string.new_session_summary_workspace')),
+          this.getWorkspace()?.name || this.localize($r('app.string.common_not_selected')))
+        this.SummaryRow(this.localize($r('app.string.config_agent')),
+          this.selectedAgentName || this.localize($r('app.string.common_not_selected')))
+        this.SummaryRow(this.localize($r('app.string.new_session_summary_connection')),
+          ChatStore.connected ? this.localize($r('app.string.common_connected')) : this.localize($r('app.string.common_disconnected')))
       }
       .width('100%')
       .margin({ bottom: Spacing.xl })
 
       Column() {
-        Text('任务描述')
+        Text($r('app.string.new_session_task_prompt'))
           .fontSize(FontSize.sm)
           .fontWeight(FontWeight.Medium)
           .fontColor(Colors.foreground)
           .width('100%')
           .margin({ bottom: Spacing.sm })
         TextArea({
-          placeholder: '例如：实现登录鉴权，使用 Next.js + Tailwind CSS，并补齐路由与表单校验',
+          placeholder: this.localize($r('app.string.new_session_task_prompt_placeholder')),
           text: this.taskPrompt
         })
           .height(180)

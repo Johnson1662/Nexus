@@ -1,4 +1,4 @@
-import { Colors, FontSize, Spacing, Radius, Layout } from '../../constants/DesignTokens';
+import { Colors, FontSize, Spacing, Radius, Layout, getLocalizedString } from '../../constants/DesignTokens';
 import { WorkspaceStore, WorkspaceInfo, ServerSession } from '../../common/model/WorkspaceInfo';
 import { ChatStore } from '../../common/model/ChatState';
 import { HostRuntimeStore } from '../../common/model/HostState';
@@ -14,6 +14,12 @@ export struct WorkspaceListView {
   @State filterIndex: number = 0;
   @State showAddWorkspace: boolean = false;
   @State newWorkspacePath: string = '';
+
+  text(res: Resource, ...args: Array<string | number>): string {
+    let context = this.getUIContext().getHostContext();
+    if (!context) return '';
+    return getLocalizedString(context, res, ...args);
+  }
 
   getBranch(_: WorkspaceInfo): string {
     return 'main';
@@ -56,14 +62,14 @@ export struct WorkspaceListView {
   }
 
   formatRelativeTime(epoch: number): string {
-    if (!epoch || epoch <= 0) return '刚刚';
+    if (!epoch || epoch <= 0) return this.text($r('app.string.common_now'));
     let diff: number = Date.now() - epoch;
     let minutes: number = Math.floor(diff / 60000);
-    if (minutes < 1) return '刚刚';
-    if (minutes < 60) return minutes.toString() + ' 分钟前';
+    if (minutes < 1) return this.text($r('app.string.common_now'));
+    if (minutes < 60) return this.text($r('app.string.common_minutes_ago'), minutes);
     let hours: number = Math.floor(minutes / 60);
-    if (hours < 24) return hours.toString() + ' 小时前';
-    return Math.floor(hours / 24).toString() + ' 天前';
+    if (hours < 24) return this.text($r('app.string.common_hours_ago'), hours);
+    return this.text($r('app.string.common_days_ago'), Math.floor(hours / 24));
   }
 
   matchesSearch(workspace: WorkspaceInfo): boolean {
@@ -94,12 +100,21 @@ export struct WorkspaceListView {
     return Colors.warning;
   }
 
+  getStatusLabel(status: string): string {
+    if (status === 'Running') return this.text($r('app.string.workspace_status_running'));
+    if (status === 'Active') return this.text($r('app.string.workspace_status_active'));
+    if (status === 'Idle') return this.text($r('app.string.workspace_status_idle'));
+    if (status === 'Ready') return this.text($r('app.string.workspace_status_ready'));
+    if (status === 'Offline') return this.text($r('app.string.workspace_status_offline'));
+    return status;
+  }
+
   addWorkspace(): void {
     let path = this.newWorkspacePath.trim();
     if (path.length === 0) return;
     let ws = new WorkspaceInfo();
     ws.id = Date.now().toString();
-    ws.name = path.split('\\').pop() || path.split('/').pop() || 'Project';
+    ws.name = path.split('\\').pop() || path.split('/').pop() || this.text($r('app.string.workspace_project_fallback'));
     ws.path = path;
     WorkspaceStore.workspaces.push(ws);
     WorkspaceStore.currentIndex = WorkspaceStore.workspaces.length - 1;
@@ -116,7 +131,7 @@ export struct WorkspaceListView {
             .fontSize(18)
             .fontColor([Colors.foregroundMuted])
             .margin({ right: Spacing.sm })
-          TextInput({ placeholder: '搜索工作区、任务或路径...', text: this.searchText })
+          TextInput({ placeholder: $r('app.string.workspace_search_placeholder'), text: this.searchText })
             .layoutWeight(1)
             .height(44)
             .backgroundColor(Colors.transparent)
@@ -131,17 +146,17 @@ export struct WorkspaceListView {
         .margin({ bottom: Spacing.md })
 
         Row({ space: Spacing.sm }) {
-          this.FilterTab('全部', 0)
-          this.FilterTab('活跃', 1)
-          this.FilterTab('空闲', 2)
-          this.FilterTab('离线', 3)
+          this.FilterTab(this.text($r('app.string.workspace_filter_all')), 0)
+          this.FilterTab(this.text($r('app.string.workspace_filter_active')), 1)
+          this.FilterTab(this.text($r('app.string.workspace_filter_idle')), 2)
+          this.FilterTab(this.text($r('app.string.workspace_filter_offline')), 3)
         }
         .width(Layout.contentWidth)
         .padding({ bottom: Spacing.lg })
 
         if (WorkspaceStore.workspaces.length === 0) {
           Column() {
-            Text('还没有工作区。先从聊天页侧边栏添加项目路径，再从这里管理工作区和会话。')
+            Text($r('app.string.workspace_empty_manage'))
               .fontSize(FontSize.sm)
               .fontColor(Colors.foregroundMuted)
           }
@@ -168,7 +183,7 @@ export struct WorkspaceListView {
 
         if (this.showAddWorkspace) {
           Row() {
-            TextInput({ placeholder: '/path/to/project', text: this.newWorkspacePath })
+            TextInput({ placeholder: $r('app.string.ws_path_placeholder'), text: this.newWorkspacePath })
               .layoutWeight(1).height(44)
               .borderRadius(Radius.sm)
               .padding({ left: Spacing.md, right: Spacing.md })
@@ -176,7 +191,7 @@ export struct WorkspaceListView {
               .backgroundColor(Colors.transparent)
               .onChange((v: string) => { this.newWorkspacePath = v })
               .onSubmit(() => { this.addWorkspace(); })
-            Button('添加')
+            Button($r('app.string.ws_add'))
               .height(44).backgroundColor(Colors.transparent).fontColor(Colors.accent)
               .fontWeight(FontWeight.Medium).borderRadius(Radius.sm).fontSize(FontSize.sm)
               .margin({ left: Spacing.sm })
@@ -198,7 +213,7 @@ export struct WorkspaceListView {
     }
     .titleBar({
       content: {
-        title: { mainTitle: 'Workspaces' },
+        title: { mainTitle: this.text($r('app.string.ws_title')) },
         menu: {
           value: [{
             content: {
@@ -255,7 +270,7 @@ export struct WorkspaceListView {
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
           Text(this.getBranch(workspace) + ' · ' + (this.getLatestSession(workspace) ?
-            this.formatRelativeTime(this.getLatestSession(workspace)!.createdAt) : '暂无会话'))
+            this.formatRelativeTime(this.getLatestSession(workspace)!.createdAt) : this.text($r('app.string.workspace_no_sessions'))))
             .fontSize(FontSize.xs)
             .fontColor(Colors.foregroundMuted)
             .margin({ top: Spacing.xxs })
@@ -269,7 +284,7 @@ export struct WorkspaceListView {
       .margin({ bottom: Spacing.md })
 
       if (this.getLatestSession(workspace)) {
-        Text(this.getLatestSession(workspace)!.title || 'Untitled')
+        Text(this.getLatestSession(workspace)!.title || this.text($r('app.string.common_untitled')))
           .fontSize(FontSize.md)
           .fontColor(Colors.foreground)
           .width('100%')
@@ -277,7 +292,7 @@ export struct WorkspaceListView {
           .textOverflow({ overflow: TextOverflow.Ellipsis })
           .margin({ bottom: Spacing.xs })
       } else {
-        Text('还没有历史会话')
+        Text($r('app.string.workspace_no_sessions'))
           .fontSize(FontSize.sm)
           .fontColor(Colors.foregroundMuted)
           .width('100%')
@@ -285,11 +300,12 @@ export struct WorkspaceListView {
       }
 
       Row() {
-        Text(this.getWorkspaceSessions(workspace).length.toString() + ' 个会话')
+        Text(this.text($r('app.string.workspace_sessions_count'), this.getWorkspaceSessions(workspace).length))
           .fontSize(FontSize.xs)
           .fontColor(Colors.foregroundMuted)
         Blank()
-        Text(this.getLatestSession(workspace)?.agent || ChatStore.selectedAgentName || ChatStore.agentType || '未指定 Agent')
+        Text(this.getLatestSession(workspace)?.agent || ChatStore.selectedAgentName || ChatStore.agentType ||
+          this.text($r('app.string.workspace_unspecified_agent')))
           .fontSize(FontSize.xs)
           .fontColor(Colors.foregroundMuted)
       }
@@ -314,7 +330,7 @@ export struct WorkspaceListView {
       Circle({ width: 6, height: 6 })
         .fill(this.getStatusDotColor(status))
         .margin({ right: Spacing.xs })
-      Text(status)
+      Text(this.getStatusLabel(status))
         .fontSize(FontSize.xs)
         .fontColor(Colors.foregroundMuted)
     }

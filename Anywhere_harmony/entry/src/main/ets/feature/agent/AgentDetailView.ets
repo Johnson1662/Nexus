@@ -1,4 +1,4 @@
-import { Colors, FontSize, Spacing, Radius, Layout } from '../../constants/DesignTokens';
+import { Colors, FontSize, Spacing, Radius, Layout, getLocalizedString } from '../../constants/DesignTokens';
 import { HostStore, DeviceEntry, ServerSession } from '../../common/model/WorkspaceInfo';
 import { ChatStore } from '../../common/model/ChatState';
 import { HostPhase, HostRuntimeStore } from '../../common/model/HostState';
@@ -45,6 +45,12 @@ export struct AgentDetailView {
   @State currentTab: string = 'overview';
   @State backBg: ResourceColor = Colors.transparent;
 
+  text(res: Resource, ...args: Array<string | number>): string {
+    let context = this.getUIContext().getHostContext();
+    if (!context) return '';
+    return getLocalizedString(context, res, ...args);
+  }
+
   getDevice(): DeviceEntry | null {
     if (this.deviceIndex >= 0 && this.deviceIndex < HostStore.devices.length) {
       return HostStore.devices[this.deviceIndex];
@@ -72,12 +78,12 @@ export struct AgentDetailView {
 
   getStatusText(): string {
     let phase: string = this.getHostPhase();
-    if (phase === HostPhase.ONLINE || phase === HostPhase.SYNCING) return 'Online';
-    if (phase === HostPhase.CONNECTING) return 'Connecting';
-    if (phase === HostPhase.WAITING_HOST) return 'Waiting for host';
-    if (phase === HostPhase.RECONNECTING) return 'Reconnecting';
-    if (phase === HostPhase.ERROR) return 'Error';
-    return 'Offline';
+    if (phase === HostPhase.ONLINE || phase === HostPhase.SYNCING) return this.text($r('app.string.agent_status_online'));
+    if (phase === HostPhase.CONNECTING) return this.text($r('app.string.agent_status_connecting'));
+    if (phase === HostPhase.WAITING_HOST) return this.text($r('app.string.agent_status_waiting_host'));
+    if (phase === HostPhase.RECONNECTING) return this.text($r('app.string.agent_status_reconnecting'));
+    if (phase === HostPhase.ERROR) return this.text($r('app.string.agent_status_error'));
+    return this.text($r('app.string.agent_status_offline'));
   }
 
   getStatusColor(): Resource {
@@ -108,7 +114,7 @@ export struct AgentDetailView {
           .width(80).height(80)
           .justifyContent(FlexAlign.Center).margin({ bottom: Spacing.md })
 
-          Text(this.getDevice()?.name || 'Unknown')
+          Text(this.getDevice()?.name || this.text($r('app.string.agent_unknown_host')))
             .fontSize(FontSize.xl).fontWeight(FontWeight.Bold).fontColor(Colors.foreground)
             .margin({ bottom: Spacing.xs })
 
@@ -125,9 +131,9 @@ export struct AgentDetailView {
 
         // Tabs
         Row() {
-          TabItem({ itemKey: 'overview', name: 'Overview', currentTab: this.currentTab, onSelect: () => { this.currentTab = 'overview'; } })
-          TabItem({ itemKey: 'tools', name: 'Tools', currentTab: this.currentTab, onSelect: () => { this.currentTab = 'tools'; } })
-          TabItem({ itemKey: 'sessions', name: 'Sessions', currentTab: this.currentTab, onSelect: () => { this.currentTab = 'sessions'; } })
+          TabItem({ itemKey: 'overview', name: this.text($r('app.string.agent_tab_overview')), currentTab: this.currentTab, onSelect: () => { this.currentTab = 'overview'; } })
+          TabItem({ itemKey: 'tools', name: this.text($r('app.string.agent_tab_tools')), currentTab: this.currentTab, onSelect: () => { this.currentTab = 'tools'; } })
+          TabItem({ itemKey: 'sessions', name: this.text($r('app.string.agent_tab_sessions')), currentTab: this.currentTab, onSelect: () => { this.currentTab = 'sessions'; } })
         }
         .width(Layout.contentWidth).justifyContent(FlexAlign.SpaceEvenly)
         .margin({ bottom: Spacing.xl })
@@ -158,13 +164,13 @@ export struct AgentDetailView {
   @Builder
   OverviewContent() {
     Column() {
-      Text("Device Info").fontSize(FontSize.md).fontWeight(FontWeight.Bold).fontColor(Colors.foreground)
+      Text($r('app.string.agent_device_info')).fontSize(FontSize.md).fontWeight(FontWeight.Bold).fontColor(Colors.foreground)
         .margin({ bottom: Spacing.xl })
 
       Row() {
         SymbolGlyph($r('sys.symbol.vpn_key')).fontSize(24).fontColor([Colors.foregroundMuted]).margin({ right: Spacing.lg })
         Column() {
-          Text("Host ID").fontSize(FontSize.sm).fontWeight(FontWeight.Medium).fontColor(Colors.foregroundMuted).margin({ bottom: 2 })
+          Text($r('app.string.agent_host_id')).fontSize(FontSize.sm).fontWeight(FontWeight.Medium).fontColor(Colors.foregroundMuted).margin({ bottom: 2 })
           Text(this.getDevice()?.hostId || this.getDevice()?.name || '—').fontSize(FontSize.md).fontWeight(FontWeight.Medium).fontColor(Colors.foreground)
         }.alignItems(HorizontalAlign.Start)
       }.width('100%').margin({ bottom: Spacing.xl })
@@ -173,7 +179,7 @@ export struct AgentDetailView {
       Row() {
         SymbolGlyph($r('sys.symbol.wifi')).fontSize(24).fontColor([Colors.foregroundMuted]).margin({ right: Spacing.lg })
         Column() {
-          Text("Endpoint").fontSize(FontSize.sm).fontWeight(FontWeight.Medium).fontColor(Colors.foregroundMuted).margin({ bottom: 2 })
+          Text($r('app.string.agent_endpoint')).fontSize(FontSize.sm).fontWeight(FontWeight.Medium).fontColor(Colors.foregroundMuted).margin({ bottom: 2 })
           Text(this.getDevice()?.urls && this.getDevice()!.urls!.length > 0 ? this.cleanUrl(this.getDevice()!.urls![0]) : '—')
             .fontSize(FontSize.md).fontWeight(FontWeight.Medium).fontColor(Colors.foreground)
         }.alignItems(HorizontalAlign.Start)
@@ -181,9 +187,10 @@ export struct AgentDetailView {
 
       if (this.getAgents().length > 0) {
         Row() {
-          Text("ACP Agents").fontSize(FontSize.md).fontWeight(FontWeight.Bold).fontColor(Colors.foreground)
+          Text($r('app.string.agent_acp_agents')).fontSize(FontSize.md).fontWeight(FontWeight.Bold).fontColor(Colors.foreground)
           Blank()
-          Text(this.getAgents().length.toString() + ' found').fontSize(FontSize.sm).fontWeight(FontWeight.Medium).fontColor(Colors.foregroundMuted)
+          Text(this.text($r('app.string.agent_found_count'), this.getAgents().length))
+            .fontSize(FontSize.sm).fontWeight(FontWeight.Medium).fontColor(Colors.foregroundMuted)
         }.width('100%').margin({ top: Spacing.xl, bottom: Spacing.lg })
 
         ForEach(this.getAgents(), (agent: AgentInfo) => {
@@ -198,7 +205,7 @@ export struct AgentDetailView {
           }.width('100%').padding({ top: Spacing.md, bottom: Spacing.md })
         }, (agent: AgentInfo) => agent.name)
       } else {
-        Text("No ACP agents discovered").fontSize(FontSize.sm).fontWeight(FontWeight.Medium).fontColor(Colors.foregroundMuted).padding({ top: Spacing.lg })
+        Text($r('app.string.agent_no_acp_agents')).fontSize(FontSize.sm).fontWeight(FontWeight.Medium).fontColor(Colors.foregroundMuted).padding({ top: Spacing.lg })
       }
     }
     .width(Layout.contentWidth).alignItems(HorizontalAlign.Start)
@@ -207,20 +214,20 @@ export struct AgentDetailView {
   @Builder
   ToolsContent() {
     Column() {
-      Text("Capabilities").fontSize(FontSize.md).fontWeight(FontWeight.Bold).fontColor(Colors.foreground)
+      Text($r('app.string.agent_capabilities')).fontSize(FontSize.md).fontWeight(FontWeight.Bold).fontColor(Colors.foreground)
         .margin({ bottom: Spacing.xl })
 
       if (this.getAgents().length > 0) {
         Row() {
           SymbolGlyph($r('sys.symbol.folder')).fontSize(24).fontColor([Colors.foregroundMuted]).margin({ right: Spacing.lg })
-          Text("File System").fontSize(FontSize.md).fontWeight(FontWeight.Medium).fontColor(Colors.foreground)
+          Text($r('app.string.agent_file_system')).fontSize(FontSize.md).fontWeight(FontWeight.Medium).fontColor(Colors.foreground)
           Blank()
           SymbolGlyph($r('sys.symbol.checkmark')).fontSize(16).fontColor([Colors.foreground])
         }.width('100%').padding({ top: Spacing.md, bottom: Spacing.md })
 
         Row() {
           SymbolGlyph($r('sys.symbol.gearshape')).fontSize(24).fontColor([Colors.foregroundMuted]).margin({ right: Spacing.lg })
-          Text("Shell Access").fontSize(FontSize.md).fontWeight(FontWeight.Medium).fontColor(Colors.foreground)
+          Text($r('app.string.agent_shell_access')).fontSize(FontSize.md).fontWeight(FontWeight.Medium).fontColor(Colors.foreground)
           Blank()
           SymbolGlyph($r('sys.symbol.checkmark')).fontSize(16).fontColor([Colors.foreground])
         }.width('100%').padding({ top: Spacing.md, bottom: Spacing.md })
@@ -232,7 +239,7 @@ export struct AgentDetailView {
           }
         }, (agent: AgentInfo) => 'cap_' + agent.name)
       } else {
-        Text("No agents connected").fontSize(FontSize.sm).fontWeight(FontWeight.Medium).fontColor(Colors.foregroundMuted)
+        Text($r('app.string.agent_no_agents_connected')).fontSize(FontSize.sm).fontWeight(FontWeight.Medium).fontColor(Colors.foregroundMuted)
       }
     }.width(Layout.contentWidth).alignItems(HorizontalAlign.Start)
   }
@@ -241,7 +248,7 @@ export struct AgentDetailView {
   SessionsContent() {
     Column() {
       Row() {
-        Text("Sessions").fontSize(FontSize.md).fontWeight(FontWeight.Bold).fontColor(Colors.foreground)
+        Text($r('app.string.agent_tab_sessions')).fontSize(FontSize.md).fontWeight(FontWeight.Bold).fontColor(Colors.foreground)
         Blank()
         Text(ChatStore.sessions.length.toString()).fontSize(FontSize.sm).fontWeight(FontWeight.Medium).fontColor(Colors.foregroundMuted)
       }.width('100%').margin({ bottom: Spacing.xl })
@@ -255,7 +262,7 @@ export struct AgentDetailView {
           .justifyContent(FlexAlign.Center).margin({ right: Spacing.lg })
 
           Column() {
-            Text(session.title || 'Untitled').fontSize(FontSize.md).fontWeight(FontWeight.Bold).fontColor(Colors.foreground)
+            Text(session.title || this.text($r('app.string.common_untitled'))).fontSize(FontSize.md).fontWeight(FontWeight.Bold).fontColor(Colors.foreground)
               .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
             Text(session.agent || '').fontSize(FontSize.sm).fontColor(Colors.foregroundMuted)
           }.alignItems(HorizontalAlign.Start).layoutWeight(1)
@@ -263,7 +270,7 @@ export struct AgentDetailView {
       }, (session: ServerSession) => session.sessionId)
 
       if (ChatStore.sessions.length === 0) {
-        Text("No sessions").fontSize(FontSize.sm).fontWeight(FontWeight.Medium).fontColor(Colors.foregroundMuted).padding({ top: Spacing.lg })
+        Text($r('app.string.agent_no_sessions')).fontSize(FontSize.sm).fontWeight(FontWeight.Medium).fontColor(Colors.foregroundMuted).padding({ top: Spacing.lg })
       }
     }.width(Layout.contentWidth)
   }

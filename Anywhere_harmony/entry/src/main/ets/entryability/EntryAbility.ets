@@ -75,14 +75,6 @@ export default class EntryAbility extends UIAbility {
   onWindowStageCreate(windowStage: window.WindowStage): void {
     hilog.info(DOMAIN, TAG, 'Ability onWindowStageCreate');
 
-    windowStage.getMainWindow().then((windowClass) => {
-      windowClass.setWindowSystemBarProperties({
-        statusBarContentColor: '#000000'
-      });
-    }).catch(() => {
-      hilog.error(DOMAIN, TAG, 'Failed to obtain main window.');
-    });
-
     windowStage.loadContent('pages/Index', (err) => {
       if (err.code) {
         hilog.error(DOMAIN, TAG, 'Failed to load content. Cause: %{public}s', JSON.stringify(err));

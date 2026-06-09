@@ -102,7 +102,7 @@ export struct WorkspaceDrawer {
       Column() {
         if (this.showForm) {
           Column() {
-            TextInput({ placeholder: '/path/to/project', text: this.newPath })
+            TextInput({ placeholder: $r('app.string.ws_path_placeholder'), text: this.newPath })
               .width('100%').height(44)
               .backgroundColor(Colors.transparent)
               .padding({ left: Spacing.md, right: Spacing.md })
@@ -117,7 +117,7 @@ export struct WorkspaceDrawer {
                 .onClick(() => { this.showForm = false; this.newPath = '' })
               Button($r('app.string.ws_add'))
                 .layoutWeight(1).height(44)
-                .backgroundColor(Colors.accent).fontColor(Color.White)
+                .backgroundColor(Colors.accent).fontColor(Colors.surface0)
                 .borderRadius(Radius.md).fontSize(FontSize.base)
                 .onClick(() => {
                   if (this.newPath.length > 0 && this.onAddWorkspace) {

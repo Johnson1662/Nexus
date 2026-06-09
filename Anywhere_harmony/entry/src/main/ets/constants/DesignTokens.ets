@@ -41,11 +41,9 @@ export class Colors {
   static readonly terminalBg: Resource = $r('app.color.terminal_bg');
   static readonly terminalFg: Resource = $r('app.color.terminal_fg');
   static readonly inlineCodeBg: Resource = $r('app.color.inline_code_bg');
+  static readonly shadow: Resource = $r('app.color.shadow');
 
-  // String fallbacks for runtime logic (no dark-mode switch needed for these)
   static readonly transparent: string = 'transparent';
-  static readonly colorWhite: string = '#FFFFFF';
-  static readonly colorBlack: string = '#000000';
 }
 
 export class Spacing {
@@ -89,14 +87,14 @@ export class FontSize {
 
 export interface ShadowStyle {
   radius: number;
-  color: string;
+  color: ResourceColor;
   offsetY: number;
 }
 
 export class Shadow {
-  static readonly sm: ShadowStyle = { radius: 4, color: '#1A1D2306', offsetY: 2 };
-  static readonly md: ShadowStyle = { radius: 8, color: '#1A1D230C', offsetY: 4 };
-  static readonly lg: ShadowStyle = { radius: 16, color: '#1A1D2310', offsetY: 8 };
+  static readonly sm: ShadowStyle = { radius: 4, color: Colors.shadow, offsetY: 2 };
+  static readonly md: ShadowStyle = { radius: 8, color: Colors.shadow, offsetY: 4 };
+  static readonly lg: ShadowStyle = { radius: 16, color: Colors.shadow, offsetY: 8 };
 }
 
 export class Duration {
@@ -107,6 +105,13 @@ export class Duration {
 }
 
 /** Get localized string via UIContext-host context (non-deprecated path). */
-export function getLocalizedString(context: common.Context, res: Resource): string {
-  return context.resourceManager.getStringSync(res.id);
+export function getLocalizedString(context: common.Context, res: Resource, ...args: Array<string | number>): string {
+  try {
+    if (args.length === 0) {
+      return context.resourceManager.getStringSync(res.id);
+    }
+    return context.resourceManager.getStringSync(res.id, ...args);
+  } catch (_err) {
+    return '';
+  }
 }

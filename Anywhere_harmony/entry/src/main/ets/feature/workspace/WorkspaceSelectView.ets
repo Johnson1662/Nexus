@@ -24,9 +24,9 @@ export struct WorkspaceSelectView {
         // 空状态
         if (WorkspaceStore.workspaces.length === 0) {
           Column() {
-            Text('No Workspaces')
+            Text($r('app.string.ws_empty_prompt'))
               .fontSize(FontSize.sm).fontColor(Colors.foregroundMuted)
-            Text('Add a project path to get started')
+            Text($r('app.string.ws_empty_subtitle'))
               .fontSize(FontSize.sm).fontColor(Colors.foregroundMuted)
               .margin({ top: Spacing.xs })
           }
@@ -95,7 +95,7 @@ export struct WorkspaceSelectView {
         Column() {
           if (this.showForm) {
             Column() {
-              TextInput({ placeholder: '/path/to/project', text: this.newPath })
+              TextInput({ placeholder: $r('app.string.ws_path_placeholder'), text: this.newPath })
                 .width('100%').height(44)
                 .backgroundColor(Colors.transparent)
                 .padding({ left: Spacing.md, right: Spacing.md })
@@ -103,14 +103,14 @@ export struct WorkspaceSelectView {
                 .onChange((v: string) => { this.newPath = v })
 
               Row() {
-                Button('Cancel')
+                Button($r('app.string.ws_cancel'))
                   .layoutWeight(1).height(40)
                   .backgroundColor('transparent').fontColor(Colors.foregroundMuted)
                   .fontSize(FontSize.sm)
                   .onClick(() => { this.showForm = false; this.newPath = '' })
-                Button('Add')
+                Button($r('app.string.ws_add'))
                   .layoutWeight(1).height(40)
-                  .backgroundColor(Colors.accent).fontColor(Color.White)
+                  .backgroundColor(Colors.accent).fontColor(Colors.surface0)
                   .borderRadius(Radius.md).fontSize(FontSize.sm)
                   .onClick(() => {
                     if (this.newPath.length > 0 && this.onAddWorkspace) {
@@ -131,7 +131,7 @@ export struct WorkspaceSelectView {
                 .fontSize(18)
                 .fontColor([Colors.foregroundMuted])
                 .margin({ right: Spacing.sm })
-              Text('Add Workspace')
+              Text($r('app.string.ws_add_button'))
                 .fontSize(FontSize.base)
                 .fontColor(Colors.foregroundMuted)
             }

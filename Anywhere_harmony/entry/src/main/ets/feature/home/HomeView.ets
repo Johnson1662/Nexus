@@ -1,4 +1,4 @@
-import { Colors, FontSize, Spacing, Radius, Shadow, Layout, Duration } from '../../constants/DesignTokens';
+import { Colors, FontSize, Spacing, Radius, Shadow, Layout, Duration, getLocalizedString } from '../../constants/DesignTokens';
 import { ChatStore } from '../../common/model/ChatState';
 import { HostStore, DeviceEntry, WorkspaceStore, WorkspaceInfo, ServerSession } from '../../common/model/WorkspaceInfo';
 import { DeviceAgentStore } from '../../common/model/DeviceAgentStore';
@@ -18,6 +18,12 @@ export struct HomeView {
   @State manualHostUrl: string = '';
   @State entered: boolean = false;
 
+  text(res: Resource, ...args: Array<string | number>): string {
+    let context = this.getUIContext().getHostContext();
+    if (!context) return '';
+    return getLocalizedString(context, res, ...args);
+  }
+
   aboutToAppear(): void {
     DeviceAgentStore.loadFromDisk();
     if (WorkspaceStore.currentIndex < 0 && WorkspaceStore.workspaces.length > 0) {
@@ -35,7 +41,7 @@ export struct HomeView {
   }
 
   getCurrentDeviceName(): string {
-    if (!this.isConnectedToHost()) return '未连接主机';
+    if (!this.isConnectedToHost()) return this.text($r('app.string.home_no_host'));
     let currentHostKey: string = HostRuntimeStore.activeHostKey;
     for (let i: number = 0; i < HostStore.devices.length; i++) {
       let device: DeviceEntry = HostStore.devices[i];
@@ -50,7 +56,7 @@ export struct HomeView {
     if (WorkspaceStore.currentIndex >= 0 && WorkspaceStore.currentIndex < WorkspaceStore.workspaces.length) {
       return WorkspaceStore.workspaces[WorkspaceStore.currentIndex].name;
     }
-    return '选择一个工作区开始';
+    return this.text($r('app.string.home_select_workspace'));
   }
 
   getRecentSessions(): ServerSession[] {
@@ -66,14 +72,14 @@ export struct HomeView {
   }
 
   formatRelativeTime(epoch: number): string {
-    if (!epoch || epoch <= 0) return '刚刚';
+    if (!epoch || epoch <= 0) return this.text($r('app.string.common_now'));
     let diff: number = Date.now() - epoch;
     let mins: number = Math.floor(diff / 60000);
-    if (mins < 1) return '刚刚';
-    if (mins < 60) return mins.toString() + ' 分钟前';
+    if (mins < 1) return this.text($r('app.string.common_now'));
+    if (mins < 60) return this.text($r('app.string.common_minutes_ago'), mins);
     let hours: number = Math.floor(mins / 60);
-    if (hours < 24) return hours.toString() + ' 小时前';
-    return Math.floor(hours / 24).toString() + ' 天前';
+    if (hours < 24) return this.text($r('app.string.common_hours_ago'), hours);
+    return this.text($r('app.string.common_days_ago'), Math.floor(hours / 24));
   }
 
   getWorkspaceSessions(workspace: WorkspaceInfo): ServerSession[] {
@@ -100,7 +106,7 @@ export struct HomeView {
   getWorkspaceLatestTitle(workspace: WorkspaceInfo): string {
     let latest: ServerSession | null = this.getWorkspaceLatestSession(workspace);
     if (latest) {
-      return latest.title || 'Untitled';
+      return latest.title || this.text($r('app.string.common_untitled'));
     }
     return '';
   }
@@ -116,7 +122,7 @@ export struct HomeView {
 
   getWorkspaceTime(workspace: WorkspaceInfo): string {
     let latest: ServerSession | null = this.getWorkspaceLatestSession(workspace);
-    return latest ? this.formatRelativeTime(latest.createdAt) : 'Ready';
+    return latest ? this.formatRelativeTime(latest.createdAt) : this.text($r('app.string.common_ready'));
   }
 
   getHostKey(device: DeviceEntry): string {
@@ -179,16 +185,16 @@ export struct HomeView {
   WorkspaceSection() {
     Column() {
       Row() {
-        Text('Projects')
+        Text($r('app.string.home_projects'))
           .fontSize(FontSize.xl)
           .fontColor(Colors.foreground)
           .fontWeight(FontWeight.Bold)
         Blank()
-        Button('View All')
+        Button($r('app.string.home_view_all'))
           .fontSize(FontSize.sm)
           .fontColor(Colors.accent)
           .fontWeight(FontWeight.Medium)
-          .backgroundColor(Color.Transparent)
+          .backgroundColor(Colors.transparent)
           .borderRadius(Radius.md)
           .padding({ left: Spacing.sm, right: Spacing.sm, top: Spacing.xs, bottom: Spacing.xs })
           .onClick(() => { this.onNavigateToWorkspaceList?.(); })
@@ -197,7 +203,7 @@ export struct HomeView {
       .margin({ bottom: Spacing.lg })
 
       if (WorkspaceStore.workspaces.length === 0) {
-        Text('还没有项目。从菜单添加主机或进入聊天后添加工作区。')
+        Text($r('app.string.home_no_projects'))
           .fontSize(FontSize.sm)
           .fontColor(Colors.foregroundMuted)
           .width('100%')
@@ -232,7 +238,7 @@ export struct HomeView {
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
           Row() {
-            Text('main · Updated ' + this.getWorkspaceTime(workspace))
+            Text(this.text($r('app.string.home_workspace_updated'), this.getWorkspaceTime(workspace)))
               .fontSize(FontSize.xs)
               .fontColor(Colors.foregroundMuted)
           }
@@ -246,7 +252,7 @@ export struct HomeView {
           Circle({ width: 6, height: 6 })
             .fill(this.isWorkspaceRunning(workspace) ? Colors.success : Colors.foregroundMuted)
             .margin({ right: Spacing.xs })
-          Text(this.isWorkspaceRunning(workspace) ? 'Running' : 'Idle')
+          Text(this.isWorkspaceRunning(workspace) ? this.text($r('app.string.common_running')) : this.text($r('app.string.common_idle')))
             .fontSize(FontSize.xs)
             .fontColor(Colors.foregroundMuted)
             .margin({ right: Spacing.sm })
@@ -272,7 +278,7 @@ export struct HomeView {
   @Builder
   RecentSection() {
     Column() {
-      Text('Recent chats')
+      Text($r('app.string.home_recent_chats'))
         .fontSize(FontSize.xl)
         .fontWeight(FontWeight.Bold)
         .fontColor(Colors.foreground)
@@ -302,7 +308,7 @@ export struct HomeView {
           .margin({ right: Spacing.lg, left: Spacing.xs })
 
         Column() {
-          Text(session.title || 'Untitled')
+          Text(session.title || this.text($r('app.string.common_untitled')))
             .fontSize(FontSize.md)
             .fontWeight(FontWeight.Bold)
             .fontColor(Colors.foreground)
@@ -349,7 +355,7 @@ export struct HomeView {
             .fontSize(18)
             .fontColor([Colors.foregroundMuted])
             .margin({ right: Spacing.sm })
-          Text('Search chats')
+          Text($r('app.string.home_search_chats'))
             .fontSize(FontSize.sm)
             .fontColor(Colors.foregroundMuted)
         }
@@ -377,7 +383,7 @@ export struct HomeView {
             .fontSize(16)
             .fontColor([Colors.surface0])
             .margin({ right: Spacing.sm })
-          Text('Chat')
+          Text($r('app.string.home_chat'))
             .fontSize(FontSize.sm)
             .fontWeight(FontWeight.Medium)
             .fontColor(Colors.surface0)
@@ -409,7 +415,7 @@ export struct HomeView {
         .backgroundColor(Colors.transparent)
         .onClick(() => { this.showManualHostForm = false; })
       Column() {
-        Text('Link manually')
+        Text($r('app.string.home_link_manually'))
           .fontSize(FontSize.xs)
           .fontWeight(FontWeight.Bold)
           .fontColor(Colors.foreground)
@@ -425,7 +431,7 @@ export struct HomeView {
           .borderRadius(Radius.md)
           .padding({ left: Spacing.md, right: Spacing.md })
           .onChange((value: string) => { this.manualHostUrl = value; })
-        Button('Connect')
+        Button($r('app.string.home_connect'))
           .width('100%')
           .height(44)
           .fontSize(FontSize.sm)
