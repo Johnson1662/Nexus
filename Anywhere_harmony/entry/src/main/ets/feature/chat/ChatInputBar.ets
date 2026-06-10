@@ -59,11 +59,11 @@ export struct ChatInputBar {
   @State pendingFileType: string = '';
   @State pendingFileBase64: string = '';
   @State pendingFileMime: string = '';
-  @State @Watch('onShowSheetChanged') showSheet: boolean = false;
+  @State showSheet: boolean = false;
   @State sheetView: string = 'summary';
   @State selectedProvider: string = '';
   @State isRefreshing: boolean = false;
-  private pendingSheetVersion: number = 0;
+  private pendingSheetView: string | null = null;
   onSend?: (text: string) => void;
   onCancel?: () => void;
   onSelectAgent?: (index: number) => void;
@@ -399,7 +399,14 @@ export struct ChatInputBar {
       dragBar: true,
       backgroundColor: Colors.surface0,
       showClose: false,
-      preferType: SheetType.BOTTOM
+      preferType: SheetType.BOTTOM,
+      onDisappear: () => {
+        if (this.pendingSheetView !== null) {
+          this.sheetView = this.pendingSheetView;
+          this.pendingSheetView = null;
+          this.showSheet = true;
+        }
+      }
     })
   }
 
@@ -529,7 +536,7 @@ export struct ChatInputBar {
       .width(32).height(32)
       .backgroundColor(Colors.transparent)
       .borderRadius(Radius.full)
-      .onClick(() => { this.showSheet = false })
+      .onClick(() => { this.pendingSheetView = null; this.showSheet = false })
     }
     .width('100%')
     .padding({ left: Spacing.md, right: Spacing.md, top: Spacing.xs, bottom: Spacing.sm })
@@ -684,44 +691,30 @@ export struct ChatInputBar {
     .borderRadius({ topLeft: Radius.xl, topRight: Radius.xl })
   }
 
+  /** 切换 sheet 内容：关闭 → onDidDisappear 自动重开 */
+  switchView(view: string): void {
+    this.pendingSheetView = view;
+    this.showSheet = false;
+  }
+
+  /** 打开 sheet */
+  openSheet(view: string): void {
+    if (this.showSheet) {
+      // 已打开 → 切换内容
+      this.pendingSheetView = view;
+      this.showSheet = false;
+    } else {
+      // 直接打开
+      this.sheetView = view;
+      this.showSheet = true;
+    }
+  }
   getPanelTitle(): string {
     if (this.sheetView === 'agents') return this.localize($r('app.string.config_select_agent'));
     if (this.sheetView === 'providers') return this.localize($r('app.string.config_select_model'));
     if (this.sheetView === 'models') return this.selectedProvider.length > 0 ? this.selectedProvider : this.localize($r('app.string.config_model'));
     if (this.sheetView === 'modes') return this.localize($r('app.string.config_select_mode'));
     return '';
-  }
-  /** showSheet 变化时：如果关闭了，标记让待决 timeout 失效 */
-  onShowSheetChanged(): void {
-    if (!this.showSheet) {
-      this.pendingSheetVersion++;
-    }
-  }
-
-  /** 切换 sheet 内容（关闭后重开以重新渲染） */
-  switchView(view: string): void {
-    this.pendingSheetVersion++;
-    let ver: number = this.pendingSheetVersion;
-    this.showSheet = false;
-    this.sheetView = view;
-    setTimeout(() => {
-      if (ver === this.pendingSheetVersion) {
-        this.showSheet = true;
-      }
-    }, 80);
-  }
-
-  /** 打开 sheet，先确保 closed 再打开 */
-  openSheet(view: string): void {
-    this.pendingSheetVersion++;
-    let ver: number = this.pendingSheetVersion;
-    this.sheetView = view;
-    this.showSheet = false;
-    setTimeout(() => {
-      if (ver === this.pendingSheetVersion) {
-        this.showSheet = true;
-      }
-    }, 50);
   }
 
   doRefresh(): void {
