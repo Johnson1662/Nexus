@@ -35,9 +35,8 @@ export function bufferAgentEvent(sessionId: string, eventPayload: object): strin
   });
   // Sliding window: trim if over max
   if (sess.messageBuffer.length > MAX_MESSAGE_BUFFER) {
-    sess.messageBuffer = sess.messageBuffer.slice(
-      sess.messageBuffer.length - MAX_MESSAGE_BUFFER,
-    );
+    const excess = sess.messageBuffer.length - MAX_MESSAGE_BUFFER;
+    sess.messageBuffer.splice(0, excess);
   }
   return messageId;
 }

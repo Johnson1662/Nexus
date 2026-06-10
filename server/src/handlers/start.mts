@@ -1,21 +1,21 @@
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import path from "node:path";
 import { AcpClient } from "../acp/client.mjs";
-import { getAgentLaunchArgs, isValidAgent } from "../discovery/agents.mjs";
-import { getLastModel, setLastModel } from "../prefs.mjs";
+import { getAgentLaunchArgs } from "../discovery/agents.mjs";
+import { getLastModel } from "../prefs.mjs";
 import {
   setSession,
   deleteSession,
   getSession,
   killSessionProcess,
   cleanupWsSessions,
-  trimToolCallIds,
   bufferAgentEvent,
 } from "../session.mjs";
 import { createAcpCallbacks } from "../acp-callbacks.mjs";
 import type { SessionState } from "../acp/types.mjs";
 import type { WebSocket } from "ws";
+import { extractModelList, setCachedModelList } from "../model-list.mjs";
+import { recordToolCallIds } from "../tool-call-map.mjs";
 
 interface StartParams {
   agent?: string;
@@ -60,48 +60,9 @@ export async function handleStart(
 
   const client = new AcpClient(proc, {
     onSessionUpdate: async (update) => {
-      const type = update.update?.sessionUpdate || "unknown";
-      if (type === "tool_call" || type === "tool_call_update") {
-        try {
-          const obj = JSON.parse(JSON.stringify(update.update));
-          console.log(`[debug] ${type} keys=${Object.keys(obj).join(",")} toolCallId=${String(obj.toolCallId||"")} hasContent=${!!obj.content} contentIsArray=${Array.isArray(obj.content)} status=${String(obj.status||"")} hasToolCallContent=${!!obj.toolCallContent}`);
-          if (Array.isArray(obj.content)) {
-            for (let i = 0; i < Math.min(obj.content.length, 2); i++) {
-              console.log(`[debug]   content[${i}]=${JSON.stringify(obj.content[i]).slice(0, 200)}`);
-            }
-          }
-        } catch (e) {
-          console.log(`[debug] parse error: ${e}`);
-        }
-      }
-      const toolCallEvt = update.update as any;
-      if (type === "tool_call" && toolCallEvt?.toolCallId) {
-        const sess = getSession(sessionId);
-        if (sess) {
-          const rawId = String(toolCallEvt.toolCallId);
-          const locations = (toolCallEvt.locations || []) as Array<{ path: string }>;
-          const rawInput = toolCallEvt.rawInput as Record<string, unknown> | undefined;
-          for (const loc of locations) {
-            if (loc.path) {
-              const rp = path.resolve(loc.path);
-              sess.toolCallIdMap.set(`read:${rp}`, rawId);
-              sess.toolCallIdMap.set(`write:${rp}`, rawId);
-            }
-          }
-          if (locations.length === 0 && rawInput && typeof rawInput.path === "string") {
-            const rp = path.resolve(rawInput.path as string);
-            if (toolCallEvt.kind === "read") {
-              sess.toolCallIdMap.set(`read:${rp}`, rawId);
-            } else if (toolCallEvt.kind === "edit") {
-              sess.toolCallIdMap.set(`write:${rp}`, rawId);
-            } else {
-              sess.toolCallIdMap.set(`read:${rp}`, rawId);
-              sess.toolCallIdMap.set(`write:${rp}`, rawId);
-            }
-          }
-          sess.lastToolCallId = rawId;
-          trimToolCallIds(sess);
-        }
+      const currentSess = getSession(sessionId);
+      if (currentSess) {
+        recordToolCallIds(currentSess, update.update);
       }
       // Q5 grill: parallel send + buffer — bufferAgentEvent runs
       // independently even if ws.send() fails (disconnected WS).
@@ -191,36 +152,22 @@ export async function handleStart(
       if (modelOpt) console.log(`[server] agent default model: ${modelOpt.currentValue}`);
     }
 
-    let effectiveModel = model || getLastModel(agent);
-    if (!model && effectiveModel) {
-      console.log(`[server] using last model: ${effectiveModel}`);
-    }
-
-    if (effectiveModel) {
-      console.log(`[server] setting model to ${effectiveModel}`);
-      await client.setSessionModel(acpSessionId, effectiveModel);
-    }
-
-    const models = (sessionResult as any).models?.availableModels || [];
-    const modes = (sessionResult as any).modes?.availableModes || [];
-    const mappedModels = models.map((m: any) => ({
-      modelId: m.modelId,
-      name: m.name,
-    }));
-    const mappedModes = modes.map((m: any) => ({
-      value: m.id,
-      name: m.name,
-    }));
-
+    const modelList = extractModelList(sessionResult);
+    setCachedModelList(agent, cwd || process.cwd(), modelList);
     try {
       sess.ws?.send(
         JSON.stringify({
           type: "model_list",
-          models: mappedModels,
-          modes: mappedModes,
+          models: modelList.models,
+          modes: modelList.modes,
         }),
       );
     } catch {}
+
+    const effectiveModel = model || getLastModel(agent);
+    if (!model && effectiveModel) {
+      console.log(`[server] using last model: ${effectiveModel}`);
+    }
 
     try {
       const sessionTitle = prompt ? prompt.slice(0, 50) + (prompt.length > 50 ? "\u2026" : "") : "New Session";
@@ -238,6 +185,21 @@ export async function handleStart(
     } catch {}
 
     if (prompt) {
+      if (effectiveModel) {
+        try {
+          console.log(`[server] setting model to ${effectiveModel}`);
+          await client.setSessionModel(acpSessionId, effectiveModel);
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.log(`[server] set initial model failed: ${msg}`);
+          try {
+            bufferAgentEvent(sessionId, { type: "agent_event", sessionId, event: { sessionUpdate: "turn_ended", stopReason: "error" } });
+            sess.ws?.send(JSON.stringify({ type: "turn_ended", sessionId, stopReason: "error" }));
+            sess.ws?.send(JSON.stringify({ type: "error", sessionId, text: `model setup failed: ${msg}` }));
+          } catch {}
+          return;
+        }
+      }
       // Keep WS alive while agent processes (mobile carrier NAT timeout workaround)
       const keepAlive = setInterval(() => {
         try { sess.ws?.send(JSON.stringify({ type: "heartbeat", sessionId, ts: Date.now() })); } catch {}
@@ -247,7 +209,7 @@ export async function handleStart(
           clearInterval(keepAlive);
           console.log(`[server] turn ended: ${result?.stopReason}`);
           try {
-            bufferAgentEvent(sessionId, { type: "agent_event", sessionId, event: { sessionUpdate: 'turn_ended', stopReason: result?.stopReason } });
+            bufferAgentEvent(sessionId, { type: "agent_event", sessionId, event: { sessionUpdate: "turn_ended", stopReason: result?.stopReason } });
             sess.ws?.send(
               JSON.stringify({
                 type: "turn_ended",
@@ -263,13 +225,21 @@ export async function handleStart(
           const msg = err instanceof Error ? err.message : String(err);
           console.log(`[server] prompt error: ${msg}`);
           try {
-            bufferAgentEvent(sessionId, { type: "agent_event", sessionId, event: { sessionUpdate: 'turn_ended', stopReason: "error" } });
+            bufferAgentEvent(sessionId, { type: "agent_event", sessionId, event: { sessionUpdate: "turn_ended", stopReason: "error" } });
             sess.ws?.send(JSON.stringify({ type: "turn_ended", sessionId, stopReason: "error" }));
             sess.ws?.send(JSON.stringify({ type: "error", sessionId, text: `Agent error: ${msg}` }));
           } catch {}
         },
 
       );
+    } else if (effectiveModel) {
+      console.log(`[server] restoring model to ${effectiveModel}`);
+      client.setSessionModel(acpSessionId, effectiveModel).catch((err: Error) => {
+        console.log(`[server] restore model failed: ${err.message}`);
+        try {
+          sess.ws?.send(JSON.stringify({ type: "error", sessionId, text: `model restore failed: ${err.message}` }));
+        } catch {}
+      });
     }
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);

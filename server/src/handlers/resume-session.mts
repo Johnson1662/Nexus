@@ -1,6 +1,5 @@
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import path from "node:path";
 import type { WebSocket } from "ws";
 import { AcpClient } from "../acp/client.mjs";
 import { getAgentLaunchArgs, isValidAgent } from "../discovery/agents.mjs";
@@ -14,6 +13,8 @@ import {
 } from "../session.mjs";
 import { createAcpCallbacks } from "../acp-callbacks.mjs";
 import type { SessionState } from "../acp/types.mjs";
+import { extractModelList, setCachedModelList } from "../model-list.mjs";
+import { recordToolCallIds } from "../tool-call-map.mjs";
 
 export async function handleResumeSession(
   ws: WebSocket,
@@ -63,33 +64,9 @@ export async function handleResumeSession(
 
   const client = new AcpClient(proc, {
     onSessionUpdate: async (update) => {
-      const toolCallEvt = update.update as any;
-      if (toolCallEvt?.sessionUpdate === "tool_call" && toolCallEvt?.toolCallId) {
-        const s = getSession(bridgeSessionId);
-        if (s) {
-          const rawId = String(toolCallEvt.toolCallId);
-          const locations = (toolCallEvt.locations || []) as Array<{ path: string }>;
-          const rawInput = toolCallEvt.rawInput as Record<string, unknown> | undefined;
-          for (const loc of locations) {
-            if (loc.path) {
-              const rp = path.resolve(loc.path);
-              s.toolCallIdMap.set(`read:${rp}`, rawId);
-              s.toolCallIdMap.set(`write:${rp}`, rawId);
-            }
-          }
-          if (locations.length === 0 && rawInput && typeof rawInput.path === "string") {
-            const rp = path.resolve(rawInput.path as string);
-            if (toolCallEvt.kind === "read") {
-              s.toolCallIdMap.set(`read:${rp}`, rawId);
-            } else if (toolCallEvt.kind === "edit") {
-              s.toolCallIdMap.set(`write:${rp}`, rawId);
-            } else {
-              s.toolCallIdMap.set(`read:${rp}`, rawId);
-              s.toolCallIdMap.set(`write:${rp}`, rawId);
-            }
-          }
-          s.lastToolCallId = rawId;
-        }
+      const s = getSession(bridgeSessionId);
+      if (s) {
+        recordToolCallIds(s, update.update);
       }
       try {
         const eventPayload = {
@@ -160,12 +137,10 @@ export async function handleResumeSession(
     const result = await client.loadSession(targetSessionId, cwd || process.cwd());
     sess.acpSessionId = targetSessionId;
 
-    const models = (result as any).models?.availableModels || [];
-    const modes = (result as any).modes?.availableModes || [];
-    if (models.length > 0 || modes.length > 0) {
-      const mappedModels = models.map((m: any) => ({ modelId: m.modelId, name: m.name }));
-      const mappedModes = modes.map((m: any) => ({ value: m.id, name: m.name }));
-      sess.ws?.send(JSON.stringify({ type: "model_list", models: mappedModels, modes: mappedModes }));
+    const modelList = extractModelList(result);
+    setCachedModelList(agent, cwd || process.cwd(), modelList);
+    if (modelList.models.length > 0 || modelList.modes.length > 0) {
+      sess.ws?.send(JSON.stringify({ type: "model_list", models: modelList.models, modes: modelList.modes }));
     }
 
     if (model) {

@@ -1,13 +1,13 @@
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import path from "node:path";
 import kill from "tree-kill";
 import type { WebSocket } from "ws";
 import { getSession, setSession, killTerminalProcesses, killSessionProcess, bufferAgentEvent } from "../session.mjs";
 import { AcpClient } from "../acp/client.mjs";
-import { getAgentLaunchArgs, isValidAgent } from "../discovery/agents.mjs";
-import { isPathWithinCwd, createAcpCallbacks } from "../acp-callbacks.mjs";
+import { getAgentLaunchArgs } from "../discovery/agents.mjs";
+import { createAcpCallbacks } from "../acp-callbacks.mjs";
 import { getLastModel } from "../prefs.mjs";
+import { recordToolCallIds } from "../tool-call-map.mjs";
 
 const PROMPT_TIMEOUT = 120 * 1000; // 2 minutes
 const MODEL_ERROR_PATTERNS: RegExp[] = [
@@ -59,36 +59,9 @@ async function ensureSessionAlive(ws: WebSocket, sessionId: string): Promise<boo
   const client = new AcpClient(proc, {
     onSessionUpdate: async (update) => {
       if (suppressingReplay) return; // skip history replay during loadSession
-      const toolCallEvt = update.update as any;
-      if (toolCallEvt?.sessionUpdate === "tool_call" && toolCallEvt?.toolCallId) {
-        const s = getSession(sessionId);
-        if (s) {
-          const rawId = String(toolCallEvt.toolCallId);
-          const locations = (toolCallEvt.locations || []) as Array<{ path: string }>;
-          const rawInput = toolCallEvt.rawInput as Record<string, unknown> | undefined;
-          for (const loc of locations) {
-            if (loc.path) {
-              const rp = path.resolve(loc.path);
-              s.toolCallIdMap.set(`read:${rp}`, rawId);
-              s.toolCallIdMap.set(`write:${rp}`, rawId);
-            }
-          }
-          if (locations.length === 0 && rawInput && typeof rawInput.path === "string") {
-            const rp = path.resolve(rawInput.path as string);
-            if (toolCallEvt.kind === "read") {
-              s.toolCallIdMap.set(`read:${rp}`, rawId);
-            } else if (toolCallEvt.kind === "edit") {
-              s.toolCallIdMap.set(`write:${rp}`, rawId);
-            } else {
-              s.toolCallIdMap.set(`read:${rp}`, rawId);
-              s.toolCallIdMap.set(`write:${rp}`, rawId);
-            }
-          }
-          s.lastToolCallId = rawId;
-        }
-      }
-      if (toolCallEvt?.sessionUpdate === "tool_call_update") {
-        console.log(`[debug] tool_call_update toolCallId=${JSON.stringify(toolCallEvt.toolCallId)} status=${JSON.stringify(toolCallEvt.status)} hasContent=${!!toolCallEvt.content} hasToolCallContent=${!!toolCallEvt.toolCallContent} contentKeys=${toolCallEvt.content ? Object.keys(toolCallEvt.content).join(",") : "none"}`);
+      const s = getSession(sessionId);
+      if (s) {
+        recordToolCallIds(s, update.update);
       }
       // Q5 grill: parallel send + buffer — bufferAgentEvent runs
       // independently even if ws.send() fails (disconnected WS).

@@ -1,5 +1,6 @@
 import type { WebSocket } from "ws";
 import { getSession } from "../session.mjs";
+import { invalidateModelListCache } from "../model-list.mjs";
 
 export async function handleSetConfig(
   ws: WebSocket,
@@ -19,6 +20,7 @@ export async function handleSetConfig(
       configId,
       value,
     );
+    invalidateModelListCache(sess.agent || undefined);
     ws.send(JSON.stringify({
       type: "config_option_updated",
       sessionId,

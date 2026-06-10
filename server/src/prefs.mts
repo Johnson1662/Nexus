@@ -7,6 +7,8 @@ interface AgentPrefs {
 
 const PREFS_DIR = join(process.env.HOME || process.env.USERPROFILE || ".", ".anywhere");
 const PREFS_FILE = join(PREFS_DIR, "agent-prefs.json");
+let cachedPrefs: Record<string, AgentPrefs> | null = null;
+
 
 function ensureDir(): void {
   if (!existsSync(PREFS_DIR)) {
@@ -15,18 +17,23 @@ function ensureDir(): void {
 }
 
 function loadPrefs(): Record<string, AgentPrefs> {
+  if (cachedPrefs) return cachedPrefs;
   try {
     ensureDir();
     if (existsSync(PREFS_FILE)) {
-      return JSON.parse(readFileSync(PREFS_FILE, "utf-8"));
+      const parsed = JSON.parse(readFileSync(PREFS_FILE, "utf-8")) as Record<string, AgentPrefs>;
+      cachedPrefs = parsed;
+      return parsed;
     }
   } catch {
     // ignore corrupt file
   }
-  return {};
+  cachedPrefs = {};
+  return cachedPrefs;
 }
 
 function savePrefs(prefs: Record<string, AgentPrefs>): void {
+  cachedPrefs = prefs;
   ensureDir();
   writeFileSync(PREFS_FILE, JSON.stringify(prefs, null, 2), "utf-8");
 }

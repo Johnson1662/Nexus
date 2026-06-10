@@ -343,7 +343,9 @@ function handleIncomingConnection(transport: any, isRelay: boolean = false) {
         // Send immediate ack before spawning agent to prevent WS timeout
         transport.send(JSON.stringify({ type: "start_ack" }));
         clearSessionListCache(transport);
-        enqueueWsOp(transport, () => handleStart(transport, msg));
+        handleStart(transport, msg).catch((err: Error) => {
+          console.log(`[server] handleStart error: ${err.message}`);
+        });
         break;
 
       case "list_agents": {
@@ -378,7 +380,7 @@ function handleIncomingConnection(transport: any, isRelay: boolean = false) {
 
       case "list_models":
         console.log(`[server] handleListModels agent="${msg.agent || ""}"`);
-        enqueueWsOp(transport, () => handleListModels(transport, msg.agent));
+        enqueueWsOp(transport, () => handleListModels(transport, msg.agent, Boolean(msg.refresh)));
         break;
 
       case "list_sessions":
