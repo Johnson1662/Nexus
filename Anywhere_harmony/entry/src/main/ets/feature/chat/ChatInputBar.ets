@@ -144,8 +144,6 @@ export struct ChatInputBar {
       fileIo.closeSync(file);
       let decoder = new util.TextDecoder('utf-8', { ignoreBOM: true });
       let content: string = decoder.decodeToString(new Uint8Array(buf));
-      this.pendingFileName = fileName;
-      this.pendingFileContent = content;
       this.pendingFileType = 'text';
       this.pendingFileBase64 = '';
       this.pendingFileMime = '';
@@ -295,11 +293,11 @@ export struct ChatInputBar {
           Row({ space: Spacing.sm }) {
             Button() {
               SymbolGlyph($r('sys.symbol.paperclip'))
-                .fontSize(22)
+                .fontSize(18)
                 .fontColor([this.disabled ? Colors.border : Colors.foregroundMuted])
             }
-            .width(36)
-            .height(36)
+            .width(30)
+            .height(30)
             .backgroundColor(Colors.transparent)
             .enabled(!this.disabled)
             .stateStyles({
@@ -312,32 +310,30 @@ export struct ChatInputBar {
             // Model name chip → opens config bindsheet
             Button() {
               Row() {
+                SymbolGlyph($r('sys.symbol.square_grid_2x2'))
+                  .fontSize(10)
+                  .fontColor([Colors.foregroundMuted])
+                  .margin({ right: Spacing.xs })
                 Text(this.getModelName().length > 0 ? this.getModelName() : this.localize($r('app.string.config_model')))
-                  .fontSize(FontSize.xs)
+                  .fontSize(11)
                   .fontColor(Colors.foreground)
                   .fontWeight(FontWeight.Medium)
                   .maxLines(1)
                 SymbolGlyph($r('sys.symbol.chevron_down'))
-                  .fontSize(10)
+                  .fontSize(8)
                   .fontColor([Colors.foregroundMuted])
                   .margin({ left: Spacing.xxs })
               }
             }
-            .height(28)
-            .padding({ left: Spacing.md, right: Spacing.md })
+            .height(26)
+            .padding({ left: Spacing.sm, right: Spacing.sm })
             .backgroundColor(Colors.surface1)
-            .borderRadius(Radius.full)
+            .borderRadius(Radius.sm)
             .stateStyles({
-              pressed: {
-                .scale({ x: 0.97, y: 0.97 })
-                .backgroundColor(Colors.surface2)
-              },
-              normal: {
-                .scale({ x: 1, y: 1 })
-                .backgroundColor(Colors.surface1)
-              }
+              pressed: { .backgroundColor(Colors.surface2) },
+              normal: { .backgroundColor(Colors.surface1) }
             })
-            .animation({ duration: Duration.normal, curve: Duration.spring })
+            .animation({ duration: Duration.fast, curve: Curve.EaseOut })
             .onClick(() => { this.sheetView = 'summary'; this.showSheet = true; })
           }
           .alignItems(VerticalAlign.Center)
@@ -402,10 +398,11 @@ export struct ChatInputBar {
     .backgroundColor(Colors.surface0)
     .accessibilityGroup(true)
     .bindSheet($$this.showSheet, this.ConfigPanel(), {
-      height: SheetSize.MEDIUM,
+      detents: [SheetSize.MEDIUM, SheetSize.LARGE],
       dragBar: true,
       backgroundColor: Colors.surface0,
-      showClose: false
+      showClose: false,
+      preferType: SheetType.BOTTOM
     })
   }
 
@@ -490,168 +487,193 @@ export struct ChatInputBar {
   // 唯一 bindSheet：根据 sheetView 切换内容
   // ──────────────────────────────────────────────
   @Builder
+  PanelHeader(title: string, showBack: boolean = false, showRefresh: boolean = false) {
+    Row() {
+      if (showBack) {
+        Button({ type: ButtonType.Normal }) {
+          SymbolGlyph($r('sys.symbol.chevron_left'))
+            .fontSize(20)
+            .fontColor([Colors.foreground])
+        }
+        .width(36).height(36)
+        .backgroundColor(Colors.transparent)
+        .borderRadius(Radius.full)
+        .margin({ right: Spacing.xs })
+        .onClick(() => {
+          if (this.sheetView === 'models') {
+            this.switchView('providers');
+          }
+        })
+      }
+
+      Text(title)
+        .fontSize(FontSize.xl)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(Colors.foreground)
+        .layoutWeight(1)
+
+      if (showRefresh) {
+        Button({ type: ButtonType.Normal }) {
+          SymbolGlyph($r('sys.symbol.arrow_clockwise'))
+            .fontSize(18)
+            .fontColor([Colors.foregroundMuted])
+        }
+        .width(36).height(36)
+        .backgroundColor(Colors.transparent)
+        .borderRadius(Radius.full)
+        .onClick(() => { this.doRefresh() })
+      }
+
+      Button({ type: ButtonType.Normal }) {
+        SymbolGlyph($r('sys.symbol.xmark'))
+          .fontSize(18)
+          .fontColor([Colors.foregroundMuted])
+      }
+      .width(36).height(36)
+      .backgroundColor(Colors.transparent)
+      .borderRadius(Radius.full)
+      .onClick(() => { this.showSheet = false })
+    }
+    .width('100%')
+    .padding({ left: Spacing.md, right: Spacing.md, top: Spacing.sm, bottom: Spacing.sm })
+  }
+
+  @Builder
   ConfigPanel() {
-    Column() {
-      if (this.sheetView === 'summary') {
-        // ── 摘要卡片（统一用 Scroll 保持布局一致性）──
-        Scroll() {
-          Column() {
-            this.SummaryRow('sys.symbol.person_2', this.localize($r('app.string.config_agent')),
-              this.getAgentDisplayName(),
-              () => { this.switchView('agents') })
+    Stack({ alignContent: Alignment.Top }) {
+      Column() {
+        if (this.sheetView === 'summary') {
+          // ── 摘要视图 ──
+          this.PanelHeader(this.localize($r('app.string.config_panel_title')))
 
-            Divider().height(1).color(Colors.borderLight).margin({ left: Spacing.lg, right: Spacing.lg })
+          Scroll() {
+            Column() {
+              Column() {
+                this.SummaryRow(this.localize($r('app.string.config_agent')),
+                  this.getAgentDisplayName(),
+                  () => { this.switchView('agents') })
 
-            this.SummaryRow('sys.symbol.square_grid_2x2', this.localize($r('app.string.config_model')),
-              this.getModelName().length > 0 ? this.getModelName() : this.localize($r('app.string.common_not_selected')),
-              () => { this.switchView('providers') })
+                Divider().height(0.5).color(Colors.borderLight).margin({ left: Spacing.lg, right: Spacing.lg })
 
-            Divider().height(1).color(Colors.borderLight).margin({ left: Spacing.lg, right: Spacing.lg })
+                this.SummaryRow(this.localize($r('app.string.config_model')),
+                  this.getModelName().length > 0 ? this.getModelName() : this.localize($r('app.string.common_not_selected')),
+                  () => { this.switchView('providers') })
 
-            this.SummaryRow('sys.symbol.ellipsis', this.localize($r('app.string.config_mode')),
-              this.getModeName().length > 0 ? this.getModeName() : this.localize($r('app.string.common_not_selected')),
-              () => { this.switchView('modes') })
+                Divider().height(0.5).color(Colors.borderLight).margin({ left: Spacing.lg, right: Spacing.lg })
 
-            Column().height(Spacing.xxxl)
+                this.SummaryRow(this.localize($r('app.string.config_mode')),
+                  this.getModeName().length > 0 ? this.getModeName() : this.localize($r('app.string.common_not_selected')),
+                  () => { this.switchView('modes') })
+              }
+              .backgroundColor(Colors.surface1)
+              .borderRadius(Radius.lg)
+              .margin({ left: Spacing.lg, right: Spacing.lg, bottom: Spacing.lg })
+              .clip(true)
+            }
+            .width('100%')
           }
           .width('100%')
-          .alignItems(HorizontalAlign.Start)
-          .padding({ left: Spacing.lg, right: Spacing.lg, top: Spacing.sm })
-        }
-        .width('100%')
-        .layoutWeight(1)
-      } else {
-        // ── 选择列表 ──
-        Row() {
-          if (this.sheetView === 'models') {
-            Button({ type: ButtonType.Normal }) {
-              SymbolGlyph($r('sys.symbol.chevron_left'))
-                .fontSize(20)
-                .fontColor([Colors.foreground])
-            }
-            .width(36).height(36)
-            .backgroundColor(Colors.transparent)
-            .borderRadius(Radius.full)
-            .margin({ right: Spacing.xs })
-            .onClick(() => { this.switchView('providers') })
-          }
+          .layoutWeight(1)
+        } else {
+          // ── 选择列表 ──
+          this.PanelHeader(this.getPanelTitle(), this.sheetView === 'models', true)
 
-          Text(this.getPanelTitle())
-            .fontSize(FontSize.xl)
-            .fontWeight(FontWeight.Bold)
-            .fontColor(Colors.foreground)
-            .layoutWeight(1)
-
-          Button({ type: ButtonType.Normal }) {
-            SymbolGlyph($r('sys.symbol.arrow_clockwise'))
-              .fontSize(18)
-              .fontColor([Colors.foregroundMuted])
-          }
-          .width(36).height(36)
-          .backgroundColor(Colors.transparent)
-          .borderRadius(Radius.full)
-          .onClick(() => { this.doRefresh() })
-
-          Button({ type: ButtonType.Normal }) {
-            SymbolGlyph($r('sys.symbol.xmark'))
-              .fontSize(18)
-              .fontColor([Colors.foregroundMuted])
-          }
-          .width(36).height(36)
-          .backgroundColor(Colors.transparent)
-          .borderRadius(Radius.full)
-          .onClick(() => { this.showSheet = false })
-        }
-        .width('100%')
-        .padding({ left: Spacing.lg, right: Spacing.lg, top: Spacing.sm, bottom: 0 })
-
-        Scroll() {
-          Column() {
-            if (this.sheetView === 'agents') {
-              if (this.getAgentNames().length === 0) {
-                this.EmptyRow(this.localize($r('app.string.config_no_agent_refresh')))
-              } else {
-                ForEach(this.getAgentNames(), (name: string, idx: number) => {
-                  this.SelectableRow({
-                    label: name,
-                    selected: idx === this.getCurrentAgentIndex(),
-                    onClick: () => {
-                      this.showSheet = false;
-                      if (this.onSelectAgent) this.onSelectAgent(idx + 1);
-                    }
-                  })
-                }, (name: string) => name)
-              }
-            } else if (this.sheetView === 'providers') {
-              if (ChatStore.models.length === 0) {
-                this.EmptyRow(this.localize($r('app.string.config_no_model_refresh')))
-              } else if (this.getProviders().length <= 1) {
-                ForEach(ChatStore.models, (model: ModelItem, idx: number) => {
-                  this.SelectableRow({
-                    label: model.name,
-                    selected: idx === ChatStore.modelIndex,
-                    onClick: () => {
-                      this.showSheet = false;
-                      if (this.onSwitchModel) this.onSwitchModel(idx + 1);
-                    }
-                  })
-                }, (model: ModelItem) => model.modelId)
-              } else {
-                ForEach(this.getProviders(), (provider: string) => {
-                  this.ProviderRow(provider)
-                }, (provider: string) => provider)
-              }
-            } else if (this.sheetView === 'models') {
-              if (this.selectedProvider.length > 0) {
-                if (this.getModelsForProvider(this.selectedProvider).length === 0) {
-                  this.EmptyRow(this.localize($r('app.string.config_no_model')))
+          Scroll() {
+            Column() {
+              if (this.sheetView === 'agents') {
+                if (this.getAgentNames().length === 0) {
+                  this.EmptyRow(this.localize($r('app.string.config_no_agent_refresh')))
                 } else {
-                  ForEach(this.getModelsForProvider(this.selectedProvider), (model: ModelItem) => {
+                  ForEach(this.getAgentNames(), (name: string, idx: number) => {
                     this.SelectableRow({
-                      label: this.stripProvider(model.name || model.modelId),
-                      selected: model.modelId === ChatStore.models[ChatStore.modelIndex]?.modelId,
+                      label: name,
+                      selected: idx === this.getCurrentAgentIndex(),
                       onClick: () => {
                         this.showSheet = false;
-                        for (let i: number = 0; i < ChatStore.models.length; i++) {
-                          if (ChatStore.models[i].modelId === model.modelId) {
-                            if (this.onSwitchModel) this.onSwitchModel(i + 1);
-                            break;
-                          }
-                        }
+                        if (this.onSelectAgent) this.onSelectAgent(idx + 1);
+                      }
+                    })
+                  }, (name: string) => name)
+                }
+              } else if (this.sheetView === 'providers') {
+                if (ChatStore.loadingModels) {
+                  this.LoadingRow()
+                } else if (ChatStore.models.length === 0) {
+                  this.EmptyRow(this.localize($r('app.string.config_no_model_refresh')))
+                } else if (this.getProviders().length <= 1) {
+                  ForEach(ChatStore.models, (model: ModelItem, idx: number) => {
+                    this.SelectableRow({
+                      label: model.name,
+                      selected: idx === ChatStore.modelIndex,
+                      onClick: () => {
+                        this.showSheet = false;
+                        if (this.onSwitchModel) this.onSwitchModel(idx + 1);
                       }
                     })
                   }, (model: ModelItem) => model.modelId)
+                } else {
+                  ForEach(this.getProviders(), (provider: string) => {
+                    this.ProviderRow(provider)
+                  }, (provider: string) => provider)
+                }
+              } else if (this.sheetView === 'models') {
+                if (this.selectedProvider.length > 0 && ChatStore.loadingModels) {
+                  this.LoadingRow()
+                } else if (this.selectedProvider.length > 0) {
+                  if (this.getModelsForProvider(this.selectedProvider).length === 0) {
+                    this.EmptyRow(this.localize($r('app.string.config_no_model')))
+                  } else {
+                    ForEach(this.getModelsForProvider(this.selectedProvider), (model: ModelItem) => {
+                      this.SelectableRow({
+                        label: this.stripProvider(model.name || model.modelId),
+                        selected: model.modelId === ChatStore.models[ChatStore.modelIndex]?.modelId,
+                        onClick: () => {
+                          this.showSheet = false;
+                          for (let i: number = 0; i < ChatStore.models.length; i++) {
+                            if (ChatStore.models[i].modelId === model.modelId) {
+                              if (this.onSwitchModel) this.onSwitchModel(i + 1);
+                              break;
+                            }
+                          }
+                        }
+                      })
+                    }, (model: ModelItem) => model.modelId)
+                  }
+                }
+              } else if (this.sheetView === 'modes') {
+                if (ChatStore.loadingModels) {
+                  this.LoadingRow()
+                } else if (ChatStore.modes.length === 0) {
+                  this.EmptyRow(this.localize($r('app.string.config_no_mode')))
+                } else {
+                  ForEach(ChatStore.modes, (mode: ModeItem, idx: number) => {
+                    this.SelectableRow({
+                      label: mode.name,
+                      selected: idx === ChatStore.modeIndex,
+                      onClick: () => {
+                        this.showSheet = false;
+                        if (this.onSwitchMode) this.onSwitchMode(idx + 1);
+                      }
+                    })
+                  }, (mode: ModeItem) => mode.value)
                 }
               }
-            } else if (this.sheetView === 'modes') {
-              if (ChatStore.modes.length === 0) {
-                this.EmptyRow(this.localize($r('app.string.config_no_mode')))
-              } else {
-                ForEach(ChatStore.modes, (mode: ModeItem, idx: number) => {
-                  this.SelectableRow({
-                    label: mode.name,
-                    selected: idx === ChatStore.modeIndex,
-                    onClick: () => {
-                      this.showSheet = false;
-                      if (this.onSwitchMode) this.onSwitchMode(idx + 1);
-                    }
-                  })
-                }, (mode: ModeItem) => mode.value)
-              }
-            }
 
-            Column().height(Spacing.xxxl)
+              Column().height(Spacing.xxxl)
+            }
+            .width('100%')
+            .alignItems(HorizontalAlign.Start)
+            .padding({ left: Spacing.lg, right: Spacing.lg })
           }
           .width('100%')
-          .alignItems(HorizontalAlign.Start)
-          .padding({ left: Spacing.lg, right: Spacing.lg })
+          .layoutWeight(1)
         }
-        .width('100%')
-        .layoutWeight(1)
       }
+      .width('100%')
+      .justifyContent(FlexAlign.Start)
     }
     .width('100%')
-    .alignItems(HorizontalAlign.Start)
+    .height('100%')
     .backgroundColor(Colors.surface0)
     .borderRadius({ topLeft: Radius.xl, topRight: Radius.xl })
   }
@@ -702,7 +724,6 @@ export struct ChatInputBar {
     }
     return result;
   }
-
   getCurrentAgentIndex(): number {
     let agents = DeviceAgentStore.getAgents(ChatStore.currentDeviceId);
     for (let i: number = 0; i < agents.length; i++) {
@@ -745,22 +766,18 @@ export struct ChatInputBar {
   }
 
   @Builder
-  SummaryRow(iconName: string, label: string, value: string, onClick: () => void) {
+  SummaryRow(label: string, value: string, onClick: () => void) {
     Button({ type: ButtonType.Normal }) {
       Row() {
-        SymbolGlyph($r(iconName))
-          .fontSize(20)
-          .fontColor([Colors.foregroundMuted])
-          .margin({ right: Spacing.md })
-
         Column() {
           Text(label)
-            .fontSize(FontSize.xs)
+            .fontSize(11)
             .fontColor(Colors.foregroundMuted)
-            .fontWeight(FontWeight.Medium)
+            .fontWeight(FontWeight.Regular)
             .width('100%')
+            .margin({ bottom: 2 })
           Text(value)
-            .fontSize(FontSize.base)
+            .fontSize(FontSize.md)
             .fontColor(Colors.foreground)
             .fontWeight(FontWeight.Medium)
             .maxLines(1)
@@ -770,22 +787,17 @@ export struct ChatInputBar {
         .layoutWeight(1)
         .alignItems(HorizontalAlign.Start)
 
-        SymbolGlyph($r('sys.symbol.chevron_right'))
-          .fontSize(14)
-          .fontColor([Colors.border])
-          .margin({ left: Spacing.sm })
+        // Minimalist: No chevron
       }
       .width('100%')
-      .padding({ left: Spacing.lg, right: Spacing.lg, top: Spacing.md, bottom: Spacing.md })
+      .padding({ left: Spacing.lg, right: Spacing.lg, top: Spacing.lg, bottom: Spacing.lg })
     }
     .width('100%')
-    .height(64)
-    .backgroundColor(Colors.transparent)
+    .backgroundColor(Color.Transparent)
     .stateStyles({
-      pressed: { .backgroundColor(Colors.surface1) },
-      normal: { .backgroundColor(Colors.transparent) }
+      pressed: { .backgroundColor(Colors.surface2) },
+      normal: { .backgroundColor(Color.Transparent) }
     })
-    .borderRadius(0)
     .onClick(() => { if (onClick) onClick() })
   }
 
@@ -820,7 +832,7 @@ export struct ChatInputBar {
     .borderRadius(Radius.md)
     .stateStyles({
       pressed: { .backgroundColor(Colors.surface1) },
-      normal: { .backgroundColor(Colors.transparent) }
+      normal: { .backgroundColor(Color.Transparent) }
     })
     .onClick(() => {
       this.selectedProvider = provider;
@@ -857,35 +869,49 @@ export struct ChatInputBar {
   }
 
   @Builder
+  LoadingRow() {
+    Column() {
+      LoadingProgress()
+        .width(24).height(24)
+        .color(Colors.foregroundMuted)
+        .margin({ bottom: Spacing.sm })
+      Text(this.localize($r('app.string.config_loading_models')))
+        .fontSize(FontSize.sm)
+        .fontColor(Colors.foregroundLight)
+    }
+    .width('100%')
+    .padding({ top: Spacing.xl, bottom: Spacing.xl })
+  }
+
+  @Builder
   SelectableRow(params: ConfigRowParams) {
     Button({ type: ButtonType.Normal }) {
       Row() {
         Text(params.label)
           .fontSize(FontSize.base)
           .fontWeight(params.selected ? FontWeight.Medium : FontWeight.Regular)
-          .fontColor(params.selected ? Colors.foreground : Colors.foregroundMuted)
+          .fontColor(params.selected ? Colors.accent : Colors.foreground)
           .layoutWeight(1)
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
+        
         if (params.selected) {
           SymbolGlyph($r('sys.symbol.checkmark'))
-            .fontSize(14)
-            .fontColor([Colors.foreground])
+            .fontSize(16)
+            .fontColor([Colors.accent])
         }
       }
       .width('100%')
-      .padding({ top: Spacing.sm, bottom: Spacing.sm, left: Spacing.md, right: Spacing.md })
+      .padding({ top: Spacing.md, bottom: Spacing.md, left: Spacing.lg, right: Spacing.lg })
     }
     .width('100%')
-    .height(44)
-    .backgroundColor(Colors.transparent)
-    .borderRadius(Radius.md)
+    .backgroundColor(Color.Transparent)
     .stateStyles({
       pressed: {
         .backgroundColor(Colors.surface1)
       },
       normal: {
-        .backgroundColor(Colors.transparent)
+        .backgroundColor(Color.Transparent)
       }
     })
     .onClick(() => { if (params.onClick) params.onClick() })
