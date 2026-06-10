@@ -59,10 +59,11 @@ export struct ChatInputBar {
   @State pendingFileType: string = '';
   @State pendingFileBase64: string = '';
   @State pendingFileMime: string = '';
-  @State showSheet: boolean = false;             // 唯一 bindsheet
-  @State sheetView: string = 'summary';          // summary | agents | providers | models | modes
-  @State selectedProvider: string = '';          // Model 钻取：选中的 provider
+  @State @Watch('onShowSheetChanged') showSheet: boolean = false;
+  @State sheetView: string = 'summary';
+  @State selectedProvider: string = '';
   @State isRefreshing: boolean = false;
+  private pendingSheetVersion: number = 0;
   onSend?: (text: string) => void;
   onCancel?: () => void;
   onSelectAgent?: (index: number) => void;
@@ -290,14 +291,14 @@ export struct ChatInputBar {
         .padding({ top: Spacing.md, bottom: Spacing.xs })
 
         Row() {
-          Row({ space: Spacing.sm }) {
+          Row({ space: Spacing.xs }) {
             Button() {
               SymbolGlyph($r('sys.symbol.paperclip'))
-                .fontSize(15)
+                .fontSize(19)
                 .fontColor([this.disabled ? Colors.border : Colors.foregroundMuted])
             }
-            .width(28)
-            .height(28)
+            .width(32)
+            .height(32)
             .backgroundColor(Colors.transparent)
             .enabled(!this.disabled)
             .stateStyles({
@@ -310,23 +311,19 @@ export struct ChatInputBar {
             // Model name chip → opens config bindsheet
             Button() {
               Row() {
-                SymbolGlyph($r('sys.symbol.square_grid_2x2'))
-                  .fontSize(8)
-                  .fontColor([Colors.foregroundMuted])
-                  .margin({ right: Spacing.xxs })
-                Text(this.getModelName().length > 0 ? this.getModelName() : this.localize($r('app.string.config_model')))
-                  .fontSize(10)
+                Text(this.getModelName().length > 0 ? this.stripProvider(this.getModelName()) : this.localize($r('app.string.config_model')))
+                  .fontSize(14)
                   .fontColor(Colors.foreground)
                   .fontWeight(FontWeight.Medium)
                   .maxLines(1)
                 SymbolGlyph($r('sys.symbol.chevron_down'))
-                  .fontSize(6)
+                  .fontSize(8)
                   .fontColor([Colors.foregroundMuted])
                   .margin({ left: Spacing.xxs })
               }
             }
-            .height(22)
-            .padding({ left: Spacing.xs, right: Spacing.xs })
+            .height(28)
+            .padding({ left: Spacing.sm, right: Spacing.sm })
             .backgroundColor(Colors.surface1)
             .borderRadius(Radius.sm)
             .stateStyles({
@@ -334,7 +331,7 @@ export struct ChatInputBar {
               normal: { .backgroundColor(Colors.surface1) }
             })
             .animation({ duration: Duration.fast, curve: Curve.EaseOut })
-            .onClick(() => { this.sheetView = 'summary'; this.showSheet = true; })
+            .onClick(() => { this.openSheet('summary') })
           }
           .alignItems(VerticalAlign.Center)
 
@@ -383,7 +380,7 @@ export struct ChatInputBar {
           }
         }
         .width('100%')
-        .padding({ left: Spacing.lg, right: Spacing.lg, bottom: Spacing.md })
+        .padding({ left: Spacing.sm, right: Spacing.lg, bottom: Spacing.md })
         .alignItems(VerticalAlign.Center)
       }
       .backgroundColor(Colors.surfaceElevated)
@@ -507,7 +504,7 @@ export struct ChatInputBar {
       }
 
       Text(title)
-        .fontSize(FontSize.xl)
+        .fontSize(FontSize.xxl)
         .fontWeight(FontWeight.Bold)
         .fontColor(Colors.foreground)
         .layoutWeight(1)
@@ -566,8 +563,9 @@ export struct ChatInputBar {
                   () => { this.switchView('modes') })
               }
               .backgroundColor(Colors.surface1)
-              .borderRadius(Radius.lg)
+              .borderRadius(Radius.xl)
               .margin({ left: Spacing.lg, right: Spacing.lg, bottom: Spacing.lg })
+              .shadow(Shadow.sm)
               .clip(true)
             }
             .width('100%')
@@ -584,31 +582,37 @@ export struct ChatInputBar {
                   this.EmptyRow(this.localize($r('app.string.config_no_agent_refresh')))
                 } else {
                   ForEach(this.getAgentNames(), (name: string, idx: number) => {
-                    this.SelectableRow({
-                      label: name,
-                      selected: idx === this.getCurrentAgentIndex(),
-                      onClick: () => {
-                        this.showSheet = false;
-                        if (this.onSelectAgent) this.onSelectAgent(idx + 1);
-                      }
-                    })
-                  }, (name: string) => name)
-                }
-              } else if (this.sheetView === 'providers') {
+                    Column() {
+                      this.SelectableRow({
+                        label: name,
+                        selected: idx === this.getCurrentAgentIndex(),
+                        onClick: () => {
+                          this.showSheet = false;
+                          if (this.onSelectAgent) this.onSelectAgent(idx + 1);
+                        }
+                      })
+                      Divider().height(0.5).color(Colors.borderLight).margin({ left: Spacing.lg })
+                    }
+      }, (name: string) => name)
+      }
+    } else if (this.sheetView === 'providers') {
                 if (ChatStore.loadingModels) {
                   this.LoadingRow()
                 } else if (ChatStore.models.length === 0) {
                   this.EmptyRow(this.localize($r('app.string.config_no_model_refresh')))
                 } else if (this.getProviders().length <= 1) {
                   ForEach(ChatStore.models, (model: ModelItem, idx: number) => {
-                    this.SelectableRow({
-                      label: model.name,
-                      selected: idx === ChatStore.modelIndex,
-                      onClick: () => {
-                        this.showSheet = false;
-                        if (this.onSwitchModel) this.onSwitchModel(idx + 1);
-                      }
-                    })
+                    Column() {
+                      this.SelectableRow({
+                        label: model.name,
+                        selected: idx === ChatStore.modelIndex,
+                        onClick: () => {
+                          this.showSheet = false;
+                          if (this.onSwitchModel) this.onSwitchModel(idx + 1);
+                        }
+                      })
+                      Divider().height(0.5).color(Colors.borderLight).margin({ left: Spacing.lg })
+                    }
                   }, (model: ModelItem) => model.modelId)
                 } else {
                   ForEach(this.getProviders(), (provider: string) => {
@@ -623,19 +627,22 @@ export struct ChatInputBar {
                     this.EmptyRow(this.localize($r('app.string.config_no_model')))
                   } else {
                     ForEach(this.getModelsForProvider(this.selectedProvider), (model: ModelItem) => {
-                      this.SelectableRow({
-                        label: this.stripProvider(model.name || model.modelId),
-                        selected: model.modelId === ChatStore.models[ChatStore.modelIndex]?.modelId,
-                        onClick: () => {
-                          this.showSheet = false;
-                          for (let i: number = 0; i < ChatStore.models.length; i++) {
-                            if (ChatStore.models[i].modelId === model.modelId) {
-                              if (this.onSwitchModel) this.onSwitchModel(i + 1);
-                              break;
+                      Column() {
+                        this.SelectableRow({
+                          label: this.stripProvider(model.name || model.modelId),
+                          selected: model.modelId === ChatStore.models[ChatStore.modelIndex]?.modelId,
+                          onClick: () => {
+                            this.showSheet = false;
+                            for (let i: number = 0; i < ChatStore.models.length; i++) {
+                              if (ChatStore.models[i].modelId === model.modelId) {
+                                if (this.onSwitchModel) this.onSwitchModel(i + 1);
+                                break;
+                              }
                             }
                           }
-                        }
-                      })
+                        })
+                        Divider().height(0.5).color(Colors.borderLight).margin({ left: Spacing.lg })
+                      }
                     }, (model: ModelItem) => model.modelId)
                   }
                 }
@@ -646,14 +653,17 @@ export struct ChatInputBar {
                   this.EmptyRow(this.localize($r('app.string.config_no_mode')))
                 } else {
                   ForEach(ChatStore.modes, (mode: ModeItem, idx: number) => {
-                    this.SelectableRow({
-                      label: mode.name,
-                      selected: idx === ChatStore.modeIndex,
-                      onClick: () => {
-                        this.showSheet = false;
-                        if (this.onSwitchMode) this.onSwitchMode(idx + 1);
-                      }
-                    })
+                    Column() {
+                      this.SelectableRow({
+                        label: mode.name,
+                        selected: idx === ChatStore.modeIndex,
+                        onClick: () => {
+                          this.showSheet = false;
+                          if (this.onSwitchMode) this.onSwitchMode(idx + 1);
+                        }
+                      })
+                      Divider().height(0.5).color(Colors.borderLight).margin({ left: Spacing.lg })
+                    }
                   }, (mode: ModeItem) => mode.value)
                 }
               }
@@ -681,12 +691,37 @@ export struct ChatInputBar {
     if (this.sheetView === 'modes') return this.localize($r('app.string.config_select_mode'));
     return '';
   }
+  /** showSheet 变化时：如果关闭了，标记让待决 timeout 失效 */
+  onShowSheetChanged(): void {
+    if (!this.showSheet) {
+      this.pendingSheetVersion++;
+    }
+  }
 
   /** 切换 sheet 内容（关闭后重开以重新渲染） */
   switchView(view: string): void {
+    this.pendingSheetVersion++;
+    let ver: number = this.pendingSheetVersion;
     this.showSheet = false;
     this.sheetView = view;
-    setTimeout(() => { this.showSheet = true; }, 30);
+    setTimeout(() => {
+      if (ver === this.pendingSheetVersion) {
+        this.showSheet = true;
+      }
+    }, 80);
+  }
+
+  /** 打开 sheet，先确保 closed 再打开 */
+  openSheet(view: string): void {
+    this.pendingSheetVersion++;
+    let ver: number = this.pendingSheetVersion;
+    this.sheetView = view;
+    this.showSheet = false;
+    setTimeout(() => {
+      if (ver === this.pendingSheetVersion) {
+        this.showSheet = true;
+      }
+    }, 50);
   }
 
   doRefresh(): void {
@@ -730,7 +765,7 @@ export struct ChatInputBar {
 
   getModelName(): string {
     if (ChatStore.modelIndex >= 0 && ChatStore.modelIndex < ChatStore.models.length) {
-      return this.stripProvider(ChatStore.models[ChatStore.modelIndex].name);
+      return ChatStore.models[ChatStore.modelIndex].name;
     }
     return '';
   }
@@ -760,20 +795,19 @@ export struct ChatInputBar {
     }
     return result;
   }
-
   @Builder
   SummaryRow(label: string, value: string, onClick: () => void) {
     Button({ type: ButtonType.Normal }) {
       Row() {
         Column() {
           Text(label)
-            .fontSize(10)
+            .fontSize(11)
             .fontColor(Colors.foregroundMuted)
             .fontWeight(FontWeight.Regular)
             .width('100%')
-            .margin({ bottom: 1 })
+            .margin({ bottom: 2 })
           Text(value)
-            .fontSize(FontSize.sm)
+            .fontSize(FontSize.md)
             .fontColor(Colors.foreground)
             .fontWeight(FontWeight.Medium)
             .maxLines(1)
@@ -782,9 +816,14 @@ export struct ChatInputBar {
         }
         .layoutWeight(1)
         .alignItems(HorizontalAlign.Start)
+
+        SymbolGlyph($r('sys.symbol.chevron_right'))
+          .fontSize(14)
+          .fontColor([Colors.border])
+          .margin({ left: Spacing.xs })
       }
       .width('100%')
-      .padding({ left: Spacing.lg, right: Spacing.lg, top: Spacing.md, bottom: Spacing.md })
+      .padding({ left: Spacing.lg, right: Spacing.lg, top: Spacing.lg, bottom: Spacing.lg })
     }
     .width('100%')
     .backgroundColor(Color.Transparent)
@@ -801,12 +840,12 @@ export struct ChatInputBar {
       Row() {
         Column() {
           Text(provider)
-            .fontSize(FontSize.base)
+            .fontSize(FontSize.lg)
             .fontWeight(FontWeight.Medium)
             .fontColor(Colors.foreground)
             .width('100%')
           Text(this.localize($r('app.string.config_models_count'), this.getModelsForProvider(provider).length))
-            .fontSize(FontSize.xs)
+            .fontSize(FontSize.sm)
             .fontColor(Colors.foregroundMuted)
             .width('100%')
         }
@@ -814,14 +853,14 @@ export struct ChatInputBar {
         .alignItems(HorizontalAlign.Start)
 
         SymbolGlyph($r('sys.symbol.chevron_right'))
-          .fontSize(12)
+          .fontSize(14)
           .fontColor([Colors.border])
       }
       .width('100%')
       .padding({ left: Spacing.md, right: Spacing.md })
     }
     .width('100%')
-    .height(48)
+    .height(52)
     .backgroundColor(Color.Transparent)
     .borderRadius(Radius.md)
     .stateStyles({
@@ -833,7 +872,6 @@ export struct ChatInputBar {
       this.switchView('models');
     })
   }
-
   /**
    * Check whether models span multiple providers (not all "Default").
    */
@@ -841,11 +879,10 @@ export struct ChatInputBar {
     let providers: string[] = this.getProviders();
     return providers.length > 1 || (providers.length === 1 && providers[0] !== this.localize($r('app.string.config_default_provider')));
   }
-
   @Builder
   SectionHeader(label: string) {
     Text(label)
-      .fontSize(FontSize.xs)
+      .fontSize(FontSize.sm)
       .fontWeight(FontWeight.Medium)
       .fontColor(Colors.foregroundMuted)
       .letterSpacing(0.5)
@@ -856,7 +893,7 @@ export struct ChatInputBar {
   @Builder
   EmptyRow(msg: string) {
     Text(msg)
-      .fontSize(FontSize.sm)
+      .fontSize(FontSize.md)
       .fontColor(Colors.foregroundLight)
       .width('100%')
       .padding({ top: Spacing.xs, bottom: Spacing.sm, left: Spacing.md })
@@ -870,7 +907,7 @@ export struct ChatInputBar {
         .color(Colors.foregroundMuted)
         .margin({ bottom: Spacing.sm })
       Text(this.localize($r('app.string.config_loading_models')))
-        .fontSize(FontSize.sm)
+        .fontSize(FontSize.md)
         .fontColor(Colors.foregroundLight)
     }
     .width('100%')
@@ -882,7 +919,7 @@ export struct ChatInputBar {
     Button({ type: ButtonType.Normal }) {
       Row() {
         Text(params.label)
-          .fontSize(FontSize.base)
+          .fontSize(FontSize.lg)
           .fontWeight(params.selected ? FontWeight.Medium : FontWeight.Regular)
           .fontColor(params.selected ? Colors.accent : Colors.foreground)
           .layoutWeight(1)
@@ -891,7 +928,7 @@ export struct ChatInputBar {
 
         if (params.selected) {
           SymbolGlyph($r('sys.symbol.checkmark'))
-            .fontSize(14)
+            .fontSize(16)
             .fontColor([Colors.accent])
         }
       }
