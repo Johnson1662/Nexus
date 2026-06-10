@@ -293,11 +293,11 @@ export struct ChatInputBar {
           Row({ space: Spacing.sm }) {
             Button() {
               SymbolGlyph($r('sys.symbol.paperclip'))
-                .fontSize(18)
+                .fontSize(15)
                 .fontColor([this.disabled ? Colors.border : Colors.foregroundMuted])
             }
-            .width(30)
-            .height(30)
+            .width(28)
+            .height(28)
             .backgroundColor(Colors.transparent)
             .enabled(!this.disabled)
             .stateStyles({
@@ -311,22 +311,22 @@ export struct ChatInputBar {
             Button() {
               Row() {
                 SymbolGlyph($r('sys.symbol.square_grid_2x2'))
-                  .fontSize(10)
+                  .fontSize(8)
                   .fontColor([Colors.foregroundMuted])
-                  .margin({ right: Spacing.xs })
+                  .margin({ right: Spacing.xxs })
                 Text(this.getModelName().length > 0 ? this.getModelName() : this.localize($r('app.string.config_model')))
-                  .fontSize(11)
+                  .fontSize(10)
                   .fontColor(Colors.foreground)
                   .fontWeight(FontWeight.Medium)
                   .maxLines(1)
                 SymbolGlyph($r('sys.symbol.chevron_down'))
-                  .fontSize(8)
+                  .fontSize(6)
                   .fontColor([Colors.foregroundMuted])
                   .margin({ left: Spacing.xxs })
               }
             }
-            .height(26)
-            .padding({ left: Spacing.sm, right: Spacing.sm })
+            .height(22)
+            .padding({ left: Spacing.xs, right: Spacing.xs })
             .backgroundColor(Colors.surface1)
             .borderRadius(Radius.sm)
             .stateStyles({
@@ -492,10 +492,10 @@ export struct ChatInputBar {
       if (showBack) {
         Button({ type: ButtonType.Normal }) {
           SymbolGlyph($r('sys.symbol.chevron_left'))
-            .fontSize(20)
+            .fontSize(18)
             .fontColor([Colors.foreground])
         }
-        .width(36).height(36)
+        .width(32).height(32)
         .backgroundColor(Colors.transparent)
         .borderRadius(Radius.full)
         .margin({ right: Spacing.xs })
@@ -515,10 +515,10 @@ export struct ChatInputBar {
       if (showRefresh) {
         Button({ type: ButtonType.Normal }) {
           SymbolGlyph($r('sys.symbol.arrow_clockwise'))
-            .fontSize(18)
+            .fontSize(16)
             .fontColor([Colors.foregroundMuted])
         }
-        .width(36).height(36)
+        .width(32).height(32)
         .backgroundColor(Colors.transparent)
         .borderRadius(Radius.full)
         .onClick(() => { this.doRefresh() })
@@ -526,16 +526,16 @@ export struct ChatInputBar {
 
       Button({ type: ButtonType.Normal }) {
         SymbolGlyph($r('sys.symbol.xmark'))
-          .fontSize(18)
+          .fontSize(16)
           .fontColor([Colors.foregroundMuted])
       }
-      .width(36).height(36)
+      .width(32).height(32)
       .backgroundColor(Colors.transparent)
       .borderRadius(Radius.full)
       .onClick(() => { this.showSheet = false })
     }
     .width('100%')
-    .padding({ left: Spacing.md, right: Spacing.md, top: Spacing.sm, bottom: Spacing.sm })
+    .padding({ left: Spacing.md, right: Spacing.md, top: Spacing.xs, bottom: Spacing.sm })
   }
 
   @Builder
@@ -730,7 +730,7 @@ export struct ChatInputBar {
 
   getModelName(): string {
     if (ChatStore.modelIndex >= 0 && ChatStore.modelIndex < ChatStore.models.length) {
-      return ChatStore.models[ChatStore.modelIndex].name;
+      return this.stripProvider(ChatStore.models[ChatStore.modelIndex].name);
     }
     return '';
   }
@@ -767,13 +767,13 @@ export struct ChatInputBar {
       Row() {
         Column() {
           Text(label)
-            .fontSize(11)
+            .fontSize(10)
             .fontColor(Colors.foregroundMuted)
             .fontWeight(FontWeight.Regular)
             .width('100%')
-            .margin({ bottom: 2 })
+            .margin({ bottom: 1 })
           Text(value)
-            .fontSize(FontSize.md)
+            .fontSize(FontSize.sm)
             .fontColor(Colors.foreground)
             .fontWeight(FontWeight.Medium)
             .maxLines(1)
@@ -782,11 +782,9 @@ export struct ChatInputBar {
         }
         .layoutWeight(1)
         .alignItems(HorizontalAlign.Start)
-
-        // Minimalist: No chevron
       }
       .width('100%')
-      .padding({ left: Spacing.lg, right: Spacing.lg, top: Spacing.lg, bottom: Spacing.lg })
+      .padding({ left: Spacing.lg, right: Spacing.lg, top: Spacing.md, bottom: Spacing.md })
     }
     .width('100%')
     .backgroundColor(Color.Transparent)
@@ -816,15 +814,15 @@ export struct ChatInputBar {
         .alignItems(HorizontalAlign.Start)
 
         SymbolGlyph($r('sys.symbol.chevron_right'))
-          .fontSize(14)
+          .fontSize(12)
           .fontColor([Colors.border])
       }
       .width('100%')
       .padding({ left: Spacing.md, right: Spacing.md })
     }
     .width('100%')
-    .height(56)
-    .backgroundColor(Colors.transparent)
+    .height(48)
+    .backgroundColor(Color.Transparent)
     .borderRadius(Radius.md)
     .stateStyles({
       pressed: { .backgroundColor(Colors.surface1) },
@@ -890,15 +888,15 @@ export struct ChatInputBar {
           .layoutWeight(1)
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
-        
+
         if (params.selected) {
           SymbolGlyph($r('sys.symbol.checkmark'))
-            .fontSize(16)
+            .fontSize(14)
             .fontColor([Colors.accent])
         }
       }
       .width('100%')
-      .padding({ top: Spacing.md, bottom: Spacing.md, left: Spacing.lg, right: Spacing.lg })
+      .padding({ top: Spacing.sm, bottom: Spacing.sm, left: Spacing.lg, right: Spacing.lg })
     }
     .width('100%')
     .backgroundColor(Color.Transparent)
