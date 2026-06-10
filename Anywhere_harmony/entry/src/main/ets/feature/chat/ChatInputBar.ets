@@ -398,7 +398,7 @@ export struct ChatInputBar {
     .backgroundColor(Colors.surface0)
     .accessibilityGroup(true)
     .bindSheet($$this.showSheet, this.ConfigPanel(), {
-      detents: [SheetSize.MEDIUM, SheetSize.LARGE],
+      detents: [SheetSize.FIT_CONTENT, SheetSize.LARGE],
       dragBar: true,
       backgroundColor: Colors.surface0,
       showClose: false,
@@ -573,7 +573,6 @@ export struct ChatInputBar {
             .width('100%')
           }
           .width('100%')
-          .layoutWeight(1)
         } else {
           // ── 选择列表 ──
           this.PanelHeader(this.getPanelTitle(), this.sheetView === 'models', true)
@@ -666,14 +665,11 @@ export struct ChatInputBar {
             .padding({ left: Spacing.lg, right: Spacing.lg })
           }
           .width('100%')
-          .layoutWeight(1)
         }
       }
       .width('100%')
       .justifyContent(FlexAlign.Start)
     }
-    .width('100%')
-    .height('100%')
     .backgroundColor(Colors.surface0)
     .borderRadius({ topLeft: Radius.xl, topRight: Radius.xl })
   }
