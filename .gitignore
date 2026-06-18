@@ -48,7 +48,8 @@ qr.png
 qr-display.html
 start-bridge.cmd
 open_qr.cmd
-^
+
 query.txt
 wstest/
-UserslneooDesktop*
+*.tar.gz
+.deveco/
