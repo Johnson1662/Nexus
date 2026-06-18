@@ -113,9 +113,9 @@ export struct MessageCard {
       let pasteData = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, this.msgContent);
       let systemPasteboard = pasteboard.getSystemPasteboard();
       systemPasteboard.setData(pasteData).then(() => {
-        (this.getUIContext() as UIContext).getPromptAction().showToast({ message: getContext(this).resourceManager.getStringSync($r('app.string.chat_copy_confirm').id) });
+        (this.getUIContext()).getPromptAction().showToast({ message: getContext(this).resourceManager.getStringSync($r('app.string.chat_copy_confirm').id) });
       })
-    } catch (e) {}
+    } catch (_e) { /* silently handled */ }
   }
 
   build() {

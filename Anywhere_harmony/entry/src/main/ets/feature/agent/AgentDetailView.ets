@@ -157,7 +157,8 @@ export struct AgentDetailView {
       }
       .width('100%').height('100%').alignItems(HorizontalAlign.Center).backgroundColor(Colors.surface0)
     }
-    .hideTitleBar(true)
+    .hideTitleBar(false)
+    .title(this.getDevice()?.name || this.text($r('app.string.agent_unknown_host')))
 
   }
 

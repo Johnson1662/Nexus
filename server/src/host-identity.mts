@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-
+import { homedir } from 'node:os';
 export interface HostIdentityData {
   schemaVersion: number;
   hostId: string;
@@ -11,7 +11,23 @@ export interface HostIdentityData {
   ed25519PrivateKeyHex?: string;
 }
 
-const IDENTITY_PATH = path.resolve(process.cwd(), '.anywhere-host.json');
+const ANYWHERE_DIR = path.join(homedir(), '.anywhere');
+const IDENTITY_PATH = path.join(ANYWHERE_DIR, 'host-identity.json');
+const OLD_IDENTITY_PATH = path.resolve(process.cwd(), '.anywhere-host.json');
+
+// Migration from old location (project root) to ~/.anywhere/
+try {
+  if (fs.existsSync(OLD_IDENTITY_PATH) && !fs.existsSync(IDENTITY_PATH)) {
+    fs.mkdirSync(ANYWHERE_DIR, { recursive: true });
+    fs.copyFileSync(OLD_IDENTITY_PATH, IDENTITY_PATH);
+    fs.unlinkSync(OLD_IDENTITY_PATH);
+    console.log(`[host-identity] migrated from project root to ${IDENTITY_PATH}`);
+  }
+} catch (err) {
+  console.log(`[host-identity] migration check failed: ${err}`);
+}
+fs.mkdirSync(ANYWHERE_DIR, { recursive: true });
+
 
 function generateHostId(): string {
   return crypto.randomUUID();

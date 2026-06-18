@@ -85,7 +85,7 @@ export struct ThinkingSection {
         .padding({ left: Spacing.md, top: Spacing.xs, bottom: Spacing.sm })
         .margin({ left: 7 })
         .border({ width: { left: 1 }, color: { left: Colors.border } })
-        .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: -4 })))
+        .transition(TransitionEffect.OPACITY.animation({ duration: 150, curve: Curve.EaseOut }))
       }
     }
     .width('100%')

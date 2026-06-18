@@ -209,7 +209,7 @@ export struct WorkspaceListView {
       .height('100%')
       .alignItems(HorizontalAlign.Center)
       .backgroundColor(Colors.surface0)
-      .padding({ top: 56 })
+      .padding({ top: 42 })
     }
     .titleBar({
       content: {

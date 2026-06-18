@@ -29,7 +29,7 @@ class DeviceAgentStoreModel {
     try {
       let raw = await storage.getString(PrefsKeys.DEVICE_AGENTS_CACHE, '');
       if (raw && raw.length > 0) {
-        let parsed = JSON.parse(raw) as Record<string, AgentInfo[]>;
+        let parsed: Record<string, AgentInfo[]> = JSON.parse(raw);
         let keys = Object.keys(parsed);
         for (let i = 0; i < keys.length; i++) {
           this.cache.set(keys[i], parsed[keys[i]]);

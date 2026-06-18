@@ -1,4 +1,4 @@
-import { Colors, FontSize, Spacing, Radius, Duration, Layout, getLocalizedString } from '../../constants/DesignTokens';
+import { Colors, FontSize, Spacing, Radius, Duration, Layout, Shadow, getLocalizedString } from '../../constants/DesignTokens';
 import { ChatStore, PendingPermission, PermissionOption } from '../../common/model/ChatState';
 import { CustomIcon } from '../../common/ui/CustomIcon';
 import { WorkspaceStore, WorkspaceInfo, HostStore, DeviceEntry } from '../../common/model/WorkspaceInfo';
@@ -356,7 +356,7 @@ export struct ChatView {
             }
           }
           .width('85%')
-          .maxHeight('55%')
+          .constraintSize({ maxHeight: '55%' })
           .backgroundColor(Colors.surface0)
           .borderRadius(Radius.xl)
           .padding({ top: Spacing.sm, bottom: Spacing.sm })

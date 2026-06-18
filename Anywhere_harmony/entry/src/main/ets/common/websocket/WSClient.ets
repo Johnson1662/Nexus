@@ -375,7 +375,7 @@ export class WSClient {
         };
       }
 
-      let data = JSON.parse(String(response.result)) as Record<string, Object>;
+      let data: Record<string, Object> = JSON.parse(String(response.result));
       let kind: string = getStringField(data, 'kind');
       let hostId: string = getStringField(data, 'hostId');
       let hostname: string = getStringField(data, 'hostname');
@@ -613,7 +613,7 @@ export class WSClient {
     this.cancelReconnect();
     this.reconnectAttempts++;
     const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts - 1), 30000);
-    hilog.info(DOMAIN, TAG, `reconnect in ${delay}ms (attempt ${this.reconnectAttempts})`);
+    hilog.info(DOMAIN, TAG, 'reconnect in ' + delay.toString() + 'ms (attempt ' + this.reconnectAttempts.toString() + ')');
     if (ChatStore.bridgeSessionId.length > 0) {
       ChatStore.reconnectPhase = 'reconnecting';
     }
@@ -945,7 +945,7 @@ export class WSClient {
   private handleE2EEMessage(raw: string): void {
     let parsed: Record<string, Object>;
     try {
-      parsed = JSON.parse(raw) as Record<string, Object>;
+      parsed = JSON.parse(raw);
     } catch { return; }
     let type: string = String(parsed['type'] || '');
     if (type === 'e2ee_ready') {
@@ -1039,9 +1039,9 @@ export class WSClient {
                       (raw.indexOf('type:heartbeat') >= 0 && raw.indexOf('ts:') >= 0);
     if (isHeartbeat) {
       try {
-        const hb = JSON.parse(raw) as Record<string, Object>;
+        const hb: Record<string, Object> = JSON.parse(raw);
         if (hb['type'] === 'heartbeat') {
-          this.handleHeartbeat(hb as Record<string, Object>);
+          this.handleHeartbeat(hb);
           return;
         }
       } catch {}
@@ -1062,7 +1062,7 @@ export class WSClient {
       msg = JSON.parse(raw) as ServerMessage;
       // 从原始 JSON 提取 sessions 以访问 updatedAt（ServerMessage/sessions 类型不包含此字段）
       let rawStr: string = raw;
-      let rawParsed: Record<string, Object> = JSON.parse(rawStr) as Record<string, Object>;
+      let rawParsed: Record<string, Object> = JSON.parse(rawStr);
       let sessionsRaw = rawParsed['sessions'];
       if (sessionsRaw) {
         rawSessions = sessionsRaw as Record<string, Object>[];
@@ -1165,6 +1165,7 @@ export class WSClient {
         }
         break;
       case 'model_list':
+        ChatStore.loadingModels = false;
         ChatStore.models = msg.models || [];
         ChatStore.modes = msg.modes || [];
         if (ChatStore.sessionCurrentModelId) {

@@ -164,25 +164,25 @@ function getContentFromAgentFormat(u: AcpUpdate): AcpToolCallContent[] | undefin
         items.push({
           type: 'content',
           content: { type: 'text', text: String(nested['text'] || '') },
-        } as AcpToolCallContent);
+        });
       } else if (type === 'diff') {
         items.push({
           type: 'diff',
           path: String(c['path'] || ''),
           oldText: String(c['oldText'] || ''),
           newText: String(c['newText'] || ''),
-        } as AcpToolCallContent);
+        });
       } else if (type === 'text' && c['text']) {
         items.push({
           type: 'content',
           content: { type: 'text', text: String(c['text'] || '') },
-        } as AcpToolCallContent);
+        });
       } else if (type === 'resolved' && c['content']) {
         let nested = c['content'] as Record<string, Object>;
         items.push({
           type: 'content',
           content: { type: 'text', text: String(nested['text'] || '') },
-        } as AcpToolCallContent);
+        });
       } else {
         let nestedContent = c['content'] as Record<string, Object> | undefined;
         let textValue = '';
@@ -195,7 +195,7 @@ function getContentFromAgentFormat(u: AcpUpdate): AcpToolCallContent[] | undefin
           type: type,
           content: { type: 'text', text: textValue },
           path: String(c['path'] || ''),
-        } as AcpToolCallContent);
+        });
       }
     }
     hilog.info(DOMAIN, TAG, 'getContentFromAgentFormat: returning ' + String(items.length) + ' items');

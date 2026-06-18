@@ -21,7 +21,7 @@ import { handlePermissionResponse } from "./handlers/permission.mjs";
 import { handleAuth } from "./handlers/auth.mjs";
 import { cleanupWsSessions, enqueueWsOp, getSession, getBufferedAfter, reclaimOrphanedSession } from "./session.mjs";
 
-const PORT = 12138;
+const PORT = parseInt(process.env.PORT || "", 10) || 12138;
 const RELAY_URL = process.env.ANYWHERE_RELAY_URL || "ws://relay.anywhere12138.lat:12138";
 const PHONE_RELAY_URL = process.env.ANYWHERE_PHONE_RELAY_URL || "ws://relay.anywhere12138.lat:12138";
 const HOST_ID = getOrCreateHostId();

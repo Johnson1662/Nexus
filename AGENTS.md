@@ -32,7 +32,7 @@ Anywhere 是一个 HarmonyOS App，通过 Relay 中继连接到 PC 端 Bridge Se
 | **Git 提交** | 每次成功改动后执行 `git commit`，只 stage 本次改动的文件 |
 | **语言** | 永远用中文回答；需要解释时给出简要思路与结论，不输出隐藏思考链 |
 | **设计参考** | 原型图在 `prototype_picture/`，实机截图在 `app_test_picture/`。无视觉能力的模型用 `vision_analyze` 分析截图 |
-| **查文档** | 用 `hmdev-cli` skill 查鸿蒙官方文档、构建部署项目。不确定就查文档！ |
+| **查文档 无限调试 连接手机部署** | 用 `deveco-cli` skill 查鸿蒙官方文档、连接手机，部署项目。不确定就查文档！ |
 
 Codegraph MCP 用于理解代码结构。当前 MCP server 带 watcher，通常会自动 sync；若怀疑索引过期，用 `node D:/Development/codegraph-arkts/dist/bin/codegraph.js status .` 确认，必要时再手动 `sync .`，不再要求每次提交后固定执行 `index .`。
 

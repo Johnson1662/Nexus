@@ -1,4 +1,4 @@
-import { Colors, FontSize, Spacing, Radius, Duration } from '../../constants/DesignTokens';
+import { Colors, FontSize, Spacing, Radius } from '../../constants/DesignTokens';
 import { DeviceEntry } from '../../common/model/WorkspaceInfo';
 import { HostPhase, HostRuntimeStore } from '../../common/model/HostState';
 import { ChatStore } from '../../common/model/ChatState';
@@ -14,7 +14,6 @@ export struct HostFilterBar {
   build() {
     Scroll() {
       Row({ space: Spacing.sm }) {
-        this.Chip('All', 'all', HostPhase.UNKNOWN)
         ForEach(this.devices, (device: DeviceEntry) => {
           this.Chip(
             this.getHostLabel(device),
@@ -61,11 +60,9 @@ export struct HostFilterBar {
   Chip(label: string, key: string, phase: string) {
     Button() {
       Row() {
-        if (key !== 'all') {
-          Circle({ width: 6, height: 6 })
-            .fill(this.getPhaseColor(phase))
-            .margin({ right: Spacing.xs })
-        }
+        Circle({ width: 6, height: 6 })
+          .fill(this.getPhaseColor(phase))
+          .margin({ right: Spacing.xs })
         Text(label)
           .fontSize(FontSize.md)
           .fontWeight(this.selectedKey === key ? FontWeight.Medium : FontWeight.Normal)
@@ -77,17 +74,13 @@ export struct HostFilterBar {
     .padding({ left: Spacing.lg, right: Spacing.lg })
     .backgroundColor(this.selectedKey === key ? Colors.foreground : Colors.surface1)
     .stateStyles({
-      pressed: { .backgroundColor(this.selectedKey === key ? Colors.foreground : Colors.surface2) },
-      normal: { .backgroundColor(this.selectedKey === key ? Colors.foreground : Colors.surface1) }
+      pressed: { .backgroundColor(Colors.surface0) }
     })
-    .scale(this.pressedKey === key ? { x: 0.97, y: 0.97 } : { x: 1, y: 1 })
+
     .border({ width: 0 })
     .borderRadius(Radius.full)
-    .animation({ duration: Duration.normal, curve: Duration.spring })
-    .onTouch((event: TouchEvent) => {
-      if (event.type === TouchType.Down) { this.pressedKey = key; }
-      if (event.type === TouchType.Up || event.type === TouchType.Cancel) { this.pressedKey = ''; }
-    })
+    .animation({ duration: 150, curve: Curve.EaseOut })
+
     .onClick(() => { if (this.onSelect) this.onSelect(key); })
   }
   getHostLabel(device: DeviceEntry): string {

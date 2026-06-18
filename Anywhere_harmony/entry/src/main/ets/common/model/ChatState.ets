@@ -106,6 +106,8 @@ export class ChatStoreModel {
   @Trace reconnectPhase: string = '';
   /** 重连尝试次数 */
   @Trace reconnectAttempt: number = 0;
+  /** 模型列表请求正在进行（list_models 请求已发出，响应未到） */
+  @Trace loadingModels: boolean = false;
 }
 
 export const ChatStore: ChatStoreModel = new ChatStoreModel();

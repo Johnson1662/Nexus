@@ -156,8 +156,8 @@ export struct SessionDetailView {
       .alignItems(HorizontalAlign.Center)
       .backgroundColor(Colors.surface0)
     }
-    .hideTitleBar(true)
-
+    .hideTitleBar(false)
+    .title(this.getTitle())
     .width('100%')
     .height('100%')
   }

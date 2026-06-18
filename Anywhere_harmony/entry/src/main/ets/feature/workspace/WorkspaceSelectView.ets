@@ -154,7 +154,8 @@ export struct WorkspaceSelectView {
       .alignItems(HorizontalAlign.Center)
       .backgroundColor(Colors.surfaceElevated)
     }
-    .hideTitleBar(true)
+    .hideTitleBar(false)
+    .title($r('app.string.ws_title'))
     .width('100%').height('100%')
     .backgroundColor(Colors.surfaceElevated)
   }

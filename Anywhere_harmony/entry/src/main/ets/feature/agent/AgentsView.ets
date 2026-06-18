@@ -1,4 +1,4 @@
-import { Colors, FontSize, Spacing, Radius, Layout, Duration, getLocalizedString } from '../../constants/DesignTokens';
+import { Colors, FontSize, Spacing, Radius, Layout, getLocalizedString } from '../../constants/DesignTokens';
 import { HostStore, DeviceEntry } from '../../common/model/WorkspaceInfo';
 import { HostPhase, HostRuntimeStore } from '../../common/model/HostState';
 import { CustomIcon } from '../../common/ui/CustomIcon';
@@ -8,7 +8,6 @@ export struct AgentsView {
   onNavigateToDetail?: (index: number) => void;
   onNavigateToSettings?: () => void;
   @State filterIndex: number = 0;
-  @State itemPressScale: number = 1.0;
 
   text(res: Resource): string {
     let context = this.getUIContext().getHostContext();
@@ -97,22 +96,15 @@ export struct AgentsView {
       } else {
         // Empty state — host pairing now lives in the shared host management flow.
         Column() {
-          SymbolGlyph($r('sys.symbol.person_2')).fontSize(56).fontColor([Colors.foregroundMuted]).margin({ bottom: Spacing.lg })
-            .opacity(0.55)
-          Text($r('app.string.agents_empty_title')).fontSize(FontSize.xl).fontWeight(FontWeight.Bold).fontColor(Colors.foreground).margin({ bottom: Spacing.xs })
-          Text($r('app.string.agents_empty_subtitle')).fontSize(FontSize.sm).fontColor(Colors.foregroundMuted)
-            .textAlign(TextAlign.Center).margin({ bottom: Spacing.xl })
-          Button($r('app.string.agents_add_device'))
-            .fontSize(FontSize.sm).fontWeight(FontWeight.Medium)
-            .fontColor(Colors.surface0).backgroundColor(Colors.foreground)
-            .borderRadius(Radius.lg).padding({ left: Spacing.xxl, right: Spacing.xxl, top: Spacing.md, bottom: Spacing.md })
-            .onClick(() => { this.onNavigateToSettings?.(); })
+          Text($r('app.string.agents_empty_title'))
+            .fontSize(FontSize.sm)
+            .fontColor(Colors.foregroundMuted)
         }
         .width(Layout.contentWidth)
         .layoutWeight(1)
-        .justifyContent(FlexAlign.Center)
-        .alignItems(HorizontalAlign.Center)
-        .padding(Spacing.xxl)
+        .justifyContent(FlexAlign.Start)
+        .alignItems(HorizontalAlign.Start)
+        .padding({ left: Spacing.lg, right: Spacing.lg, top: Spacing.md })
       }
     }
     .width('100%')
@@ -167,11 +159,10 @@ export struct AgentsView {
     .backgroundColor(Colors.surface0)
     .borderRadius(Radius.lg)
     .onClick(() => { this.onNavigateToDetail?.(index); })
-    .onTouch((event: TouchEvent) => {
-      if (event.type === TouchType.Down) { this.itemPressScale = 0.97; }
-      else { this.itemPressScale = 1.0; }
+    .stateStyles({
+      pressed: { .backgroundColor(Colors.surface1) },
+      normal: { .backgroundColor(Colors.transparent) }
     })
-    .scale({ x: this.itemPressScale, y: this.itemPressScale })
-    .animation({ duration: Duration.fast, curve: Curve.EaseOut })
+    .transition(TransitionEffect.OPACITY.animation({ duration: 150, curve: Curve.EaseOut }))
   }
 }

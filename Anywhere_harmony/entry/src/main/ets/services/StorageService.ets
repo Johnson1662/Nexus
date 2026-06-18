@@ -7,6 +7,7 @@ const PREF_NAME = 'app_settings';
 
 export class StorageService {
   private static instance: StorageService;
+  static fallbackScopes: string[] = [];
   private dataPreferences: preferences.Preferences | null = null;
   private initPromise: Promise<void> | null = null;
 
@@ -42,7 +43,7 @@ export class StorageService {
   async getString(key: string, def: string): Promise<string> {
     if (!this.dataPreferences) return def;
     try {
-      return await this.dataPreferences.get(key, def) as string;
+      return String(await this.dataPreferences.get(key, def));
     } catch (e) {
       return def;
     }
@@ -59,9 +60,9 @@ export class StorageService {
   async getStringArray(key: string, def: string[]): Promise<string[]> {
     if (!this.dataPreferences) return def;
     try {
-      let raw = await this.dataPreferences.get(key, JSON.stringify(def)) as string;
+      let raw = String(await this.dataPreferences.get(key, JSON.stringify(def)));
       try {
-        return JSON.parse(raw) as string[];
+        return JSON.parse(raw);
       } catch {
         return def;
       }
@@ -81,9 +82,9 @@ export class StorageService {
   async getObject<T>(key: string, def: T): Promise<T> {
     if (!this.dataPreferences) return def;
     try {
-      let raw = await this.dataPreferences.get(key, JSON.stringify(def)) as string;
+      let raw = String(await this.dataPreferences.get(key, JSON.stringify(def)));
       try {
-        return JSON.parse(raw) as T;
+        return JSON.parse(raw);
       } catch {
         return def;
       }
@@ -139,10 +140,9 @@ function sanitizeScope(scope: string): string {
 }
 // Configurable fallback scopes for workspace migration/hostId recovery.
 // Populated by the app at startup with known hostname/IPs when needed.
-let fallbackScopes: string[] = [];
 
 export function configureFallbackScopes(scopes: string[]): void {
-  fallbackScopes = scopes;
+  StorageService.fallbackScopes = scopes;
 }
 
 function getWorkspaceScopes(serverUrl: string): string[] {
@@ -162,9 +162,9 @@ function getWorkspaceScopes(serverUrl: string): string[] {
   }
   
   // Append any configured fallback scopes (for hostId migration recovery)
-  for (let i: number = 0; i < fallbackScopes.length; i++) {
-    if (scopes.indexOf(fallbackScopes[i]) < 0) {
-      scopes.push(fallbackScopes[i]);
+  for (let i: number = 0; i < StorageService.fallbackScopes.length; i++) {
+    if (scopes.indexOf(StorageService.fallbackScopes[i]) < 0) {
+      scopes.push(StorageService.fallbackScopes[i]);
     }
   }
   

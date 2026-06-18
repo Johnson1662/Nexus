@@ -109,7 +109,7 @@ export struct ChatInputBar {
   }
 
   pickFile(): void {
-    let ctx = (this.getUIContext() as UIContext).getHostContext();
+    let ctx = (this.getUIContext()).getHostContext();
     if (!ctx) return;
     let documentPicker = new picker.DocumentViewPicker(ctx);
     try {
@@ -222,7 +222,7 @@ export struct ChatInputBar {
         .border({ width: 1, color: Colors.borderLight })
         .shadow(Shadow.md)
         .margin({ bottom: Spacing.sm })
-        .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: -8 })))
+        .transition(TransitionEffect.OPACITY.animation({ duration: 150, curve: Curve.EaseOut }))
         .animation({ duration: 200, curve: Curve.EaseOut })
       }
 
@@ -265,7 +265,7 @@ export struct ChatInputBar {
         .padding({ left: Spacing.lg, right: Spacing.lg, top: Spacing.sm, bottom: Spacing.xs })
         .backgroundColor(Colors.surface1)
         .borderRadius({ topLeft: Radius.lg, topRight: Radius.lg })
-        .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: -8 })))
+        .transition(TransitionEffect.OPACITY.animation({ duration: 150, curve: Curve.EaseOut }))
         .animation({ duration: Duration.fast, curve: Curve.EaseOut })
       }
 
@@ -302,10 +302,10 @@ export struct ChatInputBar {
             .backgroundColor(Colors.transparent)
             .enabled(!this.disabled)
             .stateStyles({
-              pressed: { .scale({ x: 0.92, y: 0.92 }) },
-              normal: { .scale({ x: 1, y: 1 }) }
+              pressed: { .backgroundColor(Colors.surface1) },
+              normal: { .backgroundColor(Colors.transparent) }
             })
-            .animation({ duration: Duration.fast, curve: Curve.EaseOut })
+            .animation({ duration: 150, curve: Curve.EaseOut })
             .onClick(() => { if (!this.disabled) this.pickFile() })
 
             // Model name chip → opens config bindsheet
@@ -345,13 +345,13 @@ export struct ChatInputBar {
             }
             .backgroundColor(Colors.transparent)
             .stateStyles({
-              pressed: { .scale({ x: 0.92, y: 0.92 }) },
-              normal: { .scale({ x: 1, y: 1 }) }
+              pressed: { .backgroundColor(Colors.surface1) },
+              normal: { .backgroundColor(Colors.transparent) }
             })
-            .animation({ duration: Duration.fast, curve: Curve.EaseOut })
+            .animation({ duration: 150, curve: Curve.EaseOut })
             .accessibilityText(this.localize($r('app.string.chat_cancel_button')))
             .onClick(() => { if (this.onCancel) this.onCancel() })
-            .transition(TransitionEffect.OPACITY.combine(TransitionEffect.scale({ x: 0.5, y: 0.5 })))
+            .transition(TransitionEffect.OPACITY.animation({ duration: 150, curve: Curve.EaseOut }))
           } else if (this.text.length > 0 || this.pendingFileName.length > 0) {
             Button() {
               SymbolGlyph($r('sys.symbol.arrow_up_circle_fill'))
@@ -360,13 +360,13 @@ export struct ChatInputBar {
             }
             .backgroundColor(Colors.transparent)
             .stateStyles({
-              pressed: { .scale({ x: 0.92, y: 0.92 }) },
-              normal: { .scale({ x: 1, y: 1 }) }
+              pressed: { .backgroundColor(Colors.surface1) },
+              normal: { .backgroundColor(Colors.transparent) }
             })
-            .animation({ duration: Duration.fast, curve: Curve.EaseOut })
+            .animation({ duration: 150, curve: Curve.EaseOut })
             .accessibilityText(this.localize($r('app.string.chat_send_button')))
             .onClick(() => { this.doSend() })
-            .transition(TransitionEffect.OPACITY.combine(TransitionEffect.scale({ x: 0.5, y: 0.5 })))
+            .transition(TransitionEffect.OPACITY.animation({ duration: 150, curve: Curve.EaseOut }))
           } else {
             Button() {
               SymbolGlyph($r('sys.symbol.arrow_up_circle_fill'))
@@ -376,7 +376,7 @@ export struct ChatInputBar {
             .backgroundColor(Colors.transparent)
             .enabled(false)
             .accessibilityText(this.localize($r('app.string.chat_send_button')))
-            .transition(TransitionEffect.OPACITY.combine(TransitionEffect.scale({ x: 0.5, y: 0.5 })))
+            .transition(TransitionEffect.OPACITY.animation({ duration: 150, curve: Curve.EaseOut }))
           }
         }
         .width('100%')

@@ -1,7 +1,7 @@
-import { execSync, spawn, type SpawnOptions } from "node:child_process";
-import { existsSync } from "node:fs";
+import { spawn, type SpawnOptions } from "node:child_process";
+import { existsSync, readdirSync, statSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import path from "node:path";
-import os from "node:os";
+import { homedir } from "node:os";
 
 interface AgentEntry {
   binary: string;
@@ -10,6 +10,7 @@ interface AgentEntry {
 }
 
 const ACP_AGENTS: AgentEntry[] = [
+  { binary: "pi", title: "Pi", args: ["--mode", "rpc"] },
   { binary: "opencode", title: "OpenCode", args: ["acp"] },
   { binary: "claude-agent-acp", title: "Claude Agent (ACP)", args: [] },
   { binary: "gemini", title: "Gemini CLI", args: ["--acp"] },
@@ -79,8 +80,10 @@ const ACP_AGENTS: AgentEntry[] = [
 ];
 
 const AGENT_ARGS_MAP = new Map<string, string[]>();
+const AGENT_TITLE_MAP = new Map<string, string>();
 for (const entry of ACP_AGENTS) {
   AGENT_ARGS_MAP.set(entry.binary, entry.args);
+  AGENT_TITLE_MAP.set(entry.binary, entry.title);
 }
 
 export function getAgentLaunchArgs(agentName: string): string[] {
@@ -100,67 +103,106 @@ export interface AgentInfo {
   installed: boolean;
 }
 
-function findInPath(binaryName: string): string | null {
-  const pathDirs = (process.env.PATH || "").split(path.delimiter);
-  // Also check local node_modules/.bin for npm-installed packages
+function getPathDirs(): string[] {
+  const dirs = (process.env.PATH || "").split(path.delimiter).filter(Boolean);
   const localBin = path.join(process.cwd(), "node_modules", ".bin");
-
-  if (pathDirs.indexOf(localBin) === -1) {
-    pathDirs.push(localBin);
-  }
-  // Prefer .exe (native) over .cmd/.bat (need shell) over .ps1
-  // Iterate extensions first so we find .exe anywhere on PATH before .cmd
-  const extensions = [".exe", ".cmd", ".bat", ".ps1", ""];
-  for (const ext of extensions) {
-    for (const dir of pathDirs) {
-      if (!dir) continue;
-      const fullPath = path.join(dir.trim(), binaryName + ext);
-      try {
-        if (existsSync(fullPath)) return fullPath;
-      } catch {}
-    }
-  }
-  return null;
+  if (!dirs.includes(localBin)) dirs.push(localBin);
+  return dirs;
 }
 
-// Some agents fail on --version but respond to --help
-const SKIP_VERSION_CHECK = new Set(["codex-acp"]);
+// ── Cache ─────────────────────────────────────────────────────────────
+const CACHE_DIR = path.join(homedir(), '.anywhere');
+const CACHE_FILE = path.join(CACHE_DIR, 'agents-cache.json');
+let cachedAgents: AgentInfo[] | null = null;
 
-function getAgentVersion(binaryPath: string, binaryName: string): string | null {
-  const commands = SKIP_VERSION_CHECK.has(binaryName) ? ["--help"] : ["--version", "--help"];
-  for (const cmd of commands) {
-    try {
-      const result = execSync(`"${binaryPath}" ${cmd}`, {
-        encoding: "utf8",
-        timeout: 3000,
-      });
-      return result.trim().split("\n")[0];
-    } catch {
-      // try next command
-    }
+function loadAgentCache(): AgentInfo[] | null {
+  try {
+    if (!existsSync(CACHE_FILE)) return null;
+    const raw = readFileSync(CACHE_FILE, 'utf-8');
+    return JSON.parse(raw) as AgentInfo[];
+  } catch {
+    return null;
   }
-  return null;
 }
 
+function saveAgentCache(agents: AgentInfo[]): void {
+  try {
+    if (!existsSync(CACHE_DIR)) {
+      mkdirSync(CACHE_DIR, { recursive: true });
+    }
+    writeFileSync(CACHE_FILE, JSON.stringify(agents, null, 2), 'utf-8');
+  } catch (err) {
+    console.log(`[agents] cache write failed: ${err}`);
+  }
+}
 
+/**
+ * Discover ACP agents on PATH. Result is cached to disk in ~/.anywhere/agents-cache.json
+ * so subsequent server starts skip the directory scan.
+ * Call refreshAgentCache() to force re-scan.
+ */
 export function discoverAgents(): AgentInfo[] {
-  const discovered: AgentInfo[] = [];
-  for (const entry of ACP_AGENTS) {
-    const binaryPath = findInPath(entry.binary);
-    if (binaryPath) {
-      const version = getAgentVersion(binaryPath, entry.binary);
-      discovered.push({
-        name: entry.binary,
-        title: entry.title,
-        version: version || "unknown",
-        source: "path",
-        binaryPath,
-        installed: true,
-      });
-    }
+  if (cachedAgents) return cachedAgents;
+  const fromDisk = loadAgentCache();
+  if (fromDisk) {
+    cachedAgents = fromDisk;
+    return cachedAgents;
   }
+  cachedAgents = scanPathForAgents();
+  saveAgentCache(cachedAgents);
+  return cachedAgents;
+}
+
+export function refreshAgentCache(): AgentInfo[] {
+  cachedAgents = null;
+  const fresh = scanPathForAgents();
+  saveAgentCache(fresh);
+  cachedAgents = fresh;
+  return fresh;
+}
+
+function scanPathForAgents(): AgentInfo[] {
+  const knownNames = new Set(ACP_AGENTS.map(e => e.binary));
+  const found: AgentInfo[] = [];
+  const seen = new Set<string>();  // track by binary name to take first PATH hit
+
+  for (const dir of getPathDirs()) {
+    let entries: string[];
+    try {
+      entries = readdirSync(dir);
+    } catch {
+      continue;  // dir doesn't exist or not accessible
+    }
+
+    for (const name of entries) {
+      const fullPath = path.join(dir, name);
+      let isExe = false;
+      try { isExe = statSync(fullPath).isFile(); } catch { continue; }
+      if (!isExe) continue;
+
+      // Strip extension (.exe / .cmd / .bat / .ps1)
+      const parsed = path.parse(name);
+      const baseName = parsed.name;
+
+      if (knownNames.has(baseName) && !seen.has(baseName)) {
+        seen.add(baseName);
+        const title = AGENT_TITLE_MAP.get(baseName) ?? baseName;
+        found.push({
+          name: baseName,
+          title,
+          version: "unknown",
+          source: "path",
+          binaryPath: fullPath,
+          installed: true,
+        });
+      }
+    }
+
+    if (seen.size === knownNames.size) break;  // all found
+  }
+
   console.log(
-    `[server] discovered ${discovered.length} ACP agents: ${discovered.map((a) => a.name).join(", ")}`
+    `[server] discovered ${found.length} ACP agents: ${found.map(a => a.name).join(", ")}`
   );
-  return discovered;
+  return found;
 }

@@ -1,9 +1,11 @@
 import { spawn } from "node:child_process";
+import { join } from "node:path";
+import { homedir } from "node:os";
+import { mkdirSync } from "node:fs";
 import { existsSync } from "node:fs";
 import type { RequestPermissionResponse } from "@agentclientprotocol/sdk";
 import { AcpClient } from "./acp/client.mjs";
 import { getAgentLaunchArgs } from "./discovery/agents.mjs";
-
 /**
  * Creates a temporary ACP client + agent process for one-shot listing operations.
  * Call destroy() to clean up (kills process and closes connection).
@@ -14,7 +16,9 @@ export async function createTempClient(
 ): Promise<{ client: AcpClient; destroy: () => void }> {
   const args = getAgentLaunchArgs(agent);
   // cwd must exist, otherwise spawn with shell:true throws misleading ENOENT on cmd.exe
-  const resolvedCwd = cwd && existsSync(cwd) ? cwd : process.cwd();
+  const ANYWHERE_DIR = join(homedir(), '.anywhere');
+  mkdirSync(ANYWHERE_DIR, { recursive: true });
+  const resolvedCwd = cwd && existsSync(cwd) ? cwd : ANYWHERE_DIR;
   const proc = spawn(agent, args, {
     cwd: resolvedCwd,
     env: { ...process.env, FORCE_COLOR: "0", NO_COLOR: "1" },

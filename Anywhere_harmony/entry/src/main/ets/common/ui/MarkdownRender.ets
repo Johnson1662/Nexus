@@ -60,7 +60,6 @@ export struct MarkdownRender {
     this.selectionUnion = generateRandomString();
     MDBaseController.setMarkdownController(this.controller);
     this.controller.setUIContext(this.getUIContext());
-    this.controller.setUIContext(this.getUIContext());
     MarkdownPluginRegistry.registerPlugins(this.pluginUnion, this.plugins);
 
     if (this.text.length > 0) {

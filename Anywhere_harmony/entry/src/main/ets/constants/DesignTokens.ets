@@ -101,7 +101,7 @@ export class Duration {
   static readonly fast: number = 200;
   static readonly normal: number = 300;
   static readonly slow: number = 500;
-  static readonly spring: Curve = Curve.Friction;
+  static readonly springCurve: Curve = Curve.Friction; // 类型与其它字段（number）不同，故用不同命名
 }
 
 /** Get localized string via UIContext-host context (non-deprecated path). */

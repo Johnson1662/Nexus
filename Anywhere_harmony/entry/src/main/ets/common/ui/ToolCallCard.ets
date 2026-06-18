@@ -251,17 +251,27 @@ export struct ToolCallCard {
     }
   }
 
+  private get iconCustomName(): string {
+    let r = this.getIconResource();
+    return typeof r === 'string' ? r : '';
+  }
+
+  private get iconSymbolRes(): Resource {
+    let r = this.getIconResource();
+    return typeof r !== 'string' ? r : $r('sys.symbol.paperclip');
+  }
+
   build() {
     Column() {
       Row() {
         if (this.isCustomIcon(this.getIconResource())) {
           CustomIcon({
-            name: this.getIconResource() as string,
+            name: this.iconCustomName,
             iconSize: 14,
             color: Colors.foregroundMuted
           }).margin({ right: Spacing.sm })
         } else {
-          SymbolGlyph(this.getIconResource() as Resource)
+          SymbolGlyph(this.iconSymbolRes)
             .fontSize(FontSize.md)
             .fontColor([Colors.foregroundMuted])
             .margin({ right: Spacing.sm })
@@ -316,6 +326,10 @@ export struct ToolCallCard {
       .padding({ left: Spacing.sm, right: Spacing.md, top: Spacing.xs, bottom: Spacing.xs })
       .alignItems(VerticalAlign.Center)
       .enabled(this.hasDetail())
+      .stateStyles({
+        pressed: { .backgroundColor(Colors.surface2) },
+        normal: { .backgroundColor(Colors.surface0) }
+      })
       .onClick(() => {
         if (this.hasDetail()) {
           this.expanded = !this.expanded;

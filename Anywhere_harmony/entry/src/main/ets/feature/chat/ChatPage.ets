@@ -13,13 +13,13 @@ struct PulsingDots {
   @State opacities: number[] = [0.3, 0.3, 0.3];
 
   aboutToAppear(): void {
-    (this.getUIContext() as UIContext)?.animateTo({ duration: 600, curve: Curve.EaseInOut, delay: 0, iterations: -1, playMode: PlayMode.Alternate }, () => {
+    (this.getUIContext())?.animateTo({ duration: 600, curve: Curve.EaseInOut, delay: 0, iterations: -1, playMode: PlayMode.Alternate }, () => {
       this.opacities[0] = 1.0;
     });
-    (this.getUIContext() as UIContext)?.animateTo({ duration: 600, curve: Curve.EaseInOut, delay: 200, iterations: -1, playMode: PlayMode.Alternate }, () => {
+    (this.getUIContext())?.animateTo({ duration: 600, curve: Curve.EaseInOut, delay: 200, iterations: -1, playMode: PlayMode.Alternate }, () => {
       this.opacities[1] = 1.0;
     });
-    (this.getUIContext() as UIContext)?.animateTo({ duration: 600, curve: Curve.EaseInOut, delay: 400, iterations: -1, playMode: PlayMode.Alternate }, () => {
+    (this.getUIContext())?.animateTo({ duration: 600, curve: Curve.EaseInOut, delay: 400, iterations: -1, playMode: PlayMode.Alternate }, () => {
       this.opacities[2] = 1.0;
     });
   }
@@ -259,11 +259,11 @@ export struct ChatPage {
         .borderRadius(Radius.full)
         .shadow(Shadow.md)
         .stateStyles({
-          pressed: { .scale({ x: 0.97, y: 0.97 }) },
-          normal: { .scale({ x: 1, y: 1 }) }
+          pressed: { .backgroundColor(Colors.surface1) },
+          normal: { .backgroundColor(Color.Transparent) }
         })
-        .animation({ duration: Duration.fast, curve: Curve.EaseOut })
-        .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: 8 })))
+        .animation({ duration: 150, curve: Curve.EaseOut })
+        .transition(TransitionEffect.OPACITY.animation({ duration: 150, curve: Curve.EaseOut }))
         .onClick(() => {
           this.scroller.scrollEdge(Edge.Bottom);
           this.followsOutput = true;
