@@ -10,6 +10,7 @@ export struct HomeView {
   onNavigateToAgentDetail?: (index: number) => void;
   onOpenWorkspace?: (index: number) => void;
   onOpenChat?: (workspaceIndex: number) => void;
+  onNewChat?: () => void;
   onConnectHost?: (url: string) => void;
   onRefreshHostsAgents?: () => void;
   onNavigateToWorkspaceList?: () => void;
@@ -30,7 +31,7 @@ export struct HomeView {
       WorkspaceStore.currentIndex = 0;
     }
     setTimeout(() => {
-      (this.getUIContext() as UIContext)?.animateTo({ duration: Duration.fast, curve: Curve.EaseOut }, () => {
+      (this.getUIContext())?.animateTo({ duration: 150, curve: Curve.EaseOut }, () => {
         this.entered = true;
       });
     }, 30);
@@ -217,8 +218,7 @@ export struct HomeView {
     .width(Layout.contentWidth)
     .padding({ top: 0, bottom: Spacing.xxl })
     .opacity(this.entered ? 1 : 0)
-    .opacity(this.entered ? 1 : 0)
-    .animation({ duration: Duration.fast, curve: Curve.EaseOut })
+    .animation({ duration: 150, curve: Curve.EaseOut })
   }
 
   @Builder
@@ -271,7 +271,7 @@ export struct HomeView {
     })
     .border({ width: 0 })
     .borderRadius(Radius.md)
-    .animation({ duration: Duration.normal, curve: Duration.spring })
+    .animation({ duration: 150, curve: Curve.EaseOut })
     .onClick(() => { this.onOpenWorkspace?.(index); })
   }
 
@@ -294,8 +294,7 @@ export struct HomeView {
     .width(Layout.contentWidth)
     .padding({ bottom: Spacing.xxl })
     .opacity(this.entered ? 1 : 0)
-    .opacity(this.entered ? 1 : 0)
-    .animation({ duration: Duration.fast, curve: Curve.EaseOut })
+    .animation({ duration: 150, curve: Curve.EaseOut })
   }
 
   @Builder
@@ -342,7 +341,7 @@ export struct HomeView {
     })
     .border({ width: 0 })
     .borderRadius(Radius.md)
-    .animation({ duration: Duration.normal, curve: Duration.spring })
+    .animation({ duration: 150, curve: Curve.EaseOut })
     .onClick(() => {})
   }
 
@@ -372,7 +371,7 @@ export struct HomeView {
         pressed: { .backgroundColor(Colors.surface2) },
         normal: { .backgroundColor(Colors.surface1) }
       })
-      .animation({ duration: Duration.normal, curve: Duration.spring })
+      .animation({ duration: 150, curve: Curve.EaseOut })
       .onClick(() => {
         this.onOpenChat?.(WorkspaceStore.currentIndex);
       })
@@ -398,9 +397,9 @@ export struct HomeView {
         pressed: { .backgroundColor(Colors.accentDark) },
         normal: { .backgroundColor(Colors.foreground) }
       })
-      .animation({ duration: Duration.normal, curve: Duration.spring })
+      .animation({ duration: 150, curve: Curve.EaseOut })
       .onClick(() => {
-        this.onOpenChat?.(WorkspaceStore.currentIndex);
+        this.onNewChat?.();
       })
     }
     .width(Layout.contentWidth)
@@ -445,7 +444,7 @@ export struct HomeView {
             pressed: { .opacity(0.8) },
             normal: { .opacity(1.0) }
           })
-          .animation({ duration: Duration.normal, curve: Duration.spring })
+          .animation({ duration: 150, curve: Curve.EaseOut })
           .onClick(() => {
             let url: string = this.manualHostUrl.trim();
             this.showManualHostForm = false;
@@ -459,7 +458,7 @@ export struct HomeView {
       .borderRadius(Radius.xl)
       .shadow(Shadow.md)
       .margin({ top: 4, right: Spacing.xl })
-      .transition(TransitionEffect.OPACITY.combine(TransitionEffect.scale({ x: 0.9, y: 0.9 })))
+      .transition(TransitionEffect.OPACITY.animation({ duration: 150, curve: Curve.EaseOut }))
     }
     .width('100%')
     .height('100%')

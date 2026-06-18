@@ -1,9 +1,9 @@
 import { Colors, FontSize, Spacing, Radius, Duration, Layout, getLocalizedString } from '../../constants/DesignTokens';
 import { ChatStore, PendingPermission, PermissionOption } from '../../common/model/ChatState';
 import { CustomIcon } from '../../common/ui/CustomIcon';
-import { WorkspaceStore } from '../../common/model/WorkspaceInfo';
-import { WorkspaceInfo } from '../../common/model/WorkspaceInfo';
+import { WorkspaceStore, WorkspaceInfo, HostStore, DeviceEntry } from '../../common/model/WorkspaceInfo';
 import { DeviceAgentStore } from '../../common/model/DeviceAgentStore';
+import { HostRuntimeStore } from '../../common/model/HostState';
 import { StorageService, saveWorkspaces } from '../../services/StorageService';
 import { ChatPage } from './ChatPage';
 import { ChatInputBar } from './ChatInputBar';
@@ -19,6 +19,8 @@ export struct ChatView {
   @State pickerMode: number = -1;
   @State showRename: boolean = false;
   @State renameText: string = '';
+  @State showWorkspacePicker: boolean = false;
+  @State pickerShowPathInput: boolean = false;
   onSendMessage?: (text: string) => void;
   onRetry?: (id: string, content: string) => void;
   onSelectAgent?: (index: number) => void;
@@ -29,6 +31,7 @@ export struct ChatView {
   onWorkspaceSelect?: (index: number) => void;
   onRefreshAgents?: () => void;
   onRefreshModels?: () => void;
+  onPrefetchModels?: () => void;
   onRefreshSessions?: () => void;
   onPermissionResponse?: (optionId: string) => void;
   onNavigateToSettings?: () => void;
@@ -43,11 +46,16 @@ export struct ChatView {
     if (WorkspaceStore.currentIndex < 0 && WorkspaceStore.workspaces.length > 0) {
       WorkspaceStore.currentIndex = 0;
     }
-    if (WorkspaceStore.currentIndex < 0) {
-      setTimeout(() => { this.showDrawer = true; }, 200);
+    let needPick: boolean = AppStorage.get<boolean>('chatShowWorkspacePicker') || false;
+    AppStorage.setOrCreate('chatShowWorkspacePicker', false);
+    if (needPick || WorkspaceStore.currentIndex < 0) {
+      this.showWorkspacePicker = true;
     }
-    if (WorkspaceStore.currentIndex >= 0 && this.onWorkspaceSelect) {
+    if (!this.showWorkspacePicker && WorkspaceStore.currentIndex >= 0 && this.onWorkspaceSelect) {
       this.onWorkspaceSelect(WorkspaceStore.currentIndex);
+    }
+    if (this.onPrefetchModels) {
+      setTimeout(() => { this.onPrefetchModels?.(); }, 1000);
     }
   }
 
@@ -78,7 +86,31 @@ export struct ChatView {
     return '';
   }
 
+  getWorkspaceHostLabel(): string {
+    let parts: string[] = [];
+    if (WorkspaceStore.currentIndex >= 0 && WorkspaceStore.currentIndex < WorkspaceStore.workspaces.length) {
+      parts.push(WorkspaceStore.workspaces[WorkspaceStore.currentIndex].name);
+    }
+    let hostKey: string = HostRuntimeStore.activeHostKey;
+    if (hostKey.length > 0 && HostRuntimeStore.isOnline(hostKey)) {
+      for (let i: number = 0; i < HostStore.devices.length; i++) {
+        let device: DeviceEntry = HostStore.devices[i];
+        if (device.hostId === hostKey || device.name === hostKey) {
+          parts.push(device.name);
+          break;
+        }
+      }
+    }
+    if (parts.length === 0) return '';
+    return parts.join(' · ');
+  }
 
+  selectWorkspace(index: number): void {
+    WorkspaceStore.currentIndex = index;
+    this.showWorkspacePicker = false;
+    this.pickerShowPathInput = false;
+    if (this.onWorkspaceSelect) this.onWorkspaceSelect(index);
+  }
 
   /** Create and persist a new workspace in the global store. */
   addWorkspace(path: string): WorkspaceInfo {
@@ -135,7 +167,7 @@ export struct ChatView {
 
   showDeleteConfirmDialog(index: number) {
     let wsName = WorkspaceStore.workspaces[index]?.name || '';
-    (this.getUIContext() as UIContext).showAlertDialog({
+    (this.getUIContext()).showAlertDialog({
       title: getContext(this).resourceManager.getStringSync($r('app.string.ws_delete_confirm_title').id),
       message: wsName,
       primaryButton: {
@@ -184,16 +216,16 @@ export struct ChatView {
             currentIndex: WorkspaceStore.currentIndex,
             onSelect: (i: number) => {
               WorkspaceStore.currentIndex = i;
-              (this.getUIContext() as UIContext)?.animateTo({ duration: Duration.normal }, () => { this.showDrawer = false });
+              (this.getUIContext())?.animateTo({ duration: 150 }, () => { this.showDrawer = false });
               if (this.onWorkspaceSelect) this.onWorkspaceSelect(i);
             },
             onDelete: (i: number) => {
               this.showDeleteConfirmDialog(i);
             },
-            onClose: () => { (this.getUIContext() as UIContext)?.animateTo({ duration: Duration.normal }, () => { this.showDrawer = false }) },
+            onClose: () => { (this.getUIContext())?.animateTo({ duration: 150 }, () => { this.showDrawer = false }) },
             onAddWorkspace: (p: string) => {
               this.addWorkspace(p);
-              (this.getUIContext() as UIContext)?.animateTo({ duration: Duration.normal }, () => { this.showDrawer = false });
+              (this.getUIContext())?.animateTo({ duration: 150 }, () => { this.showDrawer = false });
               if (this.onWorkspaceSelect) this.onWorkspaceSelect(WorkspaceStore.workspaces.length - 1);
             },
 
@@ -255,10 +287,107 @@ export struct ChatView {
         .maxSideBarWidth('100%')
         .width('100%').height('100%')
 
+        // Workspace picker overlay
+        Column() {
+          Column() {
+            Text($r('app.string.new_session_choose_workspace'))
+              .fontSize(FontSize.xxxl)
+              .fontWeight(FontWeight.Bold)
+              .fontColor(Colors.foreground)
+            Text($r('app.string.new_session_choose_workspace_desc'))
+              .fontSize(FontSize.sm)
+              .fontColor(Colors.foregroundMuted)
+              .margin({ top: Spacing.xs })
+          }
+          .width('100%')
+          .alignItems(HorizontalAlign.Start)
+          .padding({ top: Spacing.xxxl, left: Spacing.xl, right: Spacing.xl, bottom: Spacing.xl })
+
+          if (WorkspaceStore.workspaces.length === 0) {
+            Column() {
+              Text($r('app.string.ws_empty_prompt'))
+                .fontSize(FontSize.sm)
+                .fontColor(Colors.foregroundMuted)
+              Text($r('app.string.ws_empty_subtitle'))
+                .fontSize(FontSize.sm)
+                .fontColor(Colors.foregroundMuted)
+                .margin({ top: Spacing.xs })
+            }
+            .width('100%')
+            .padding({ left: Spacing.xl, right: Spacing.xl, top: Spacing.md })
+            .alignItems(HorizontalAlign.Start)
+          } else {
+            Scroll() {
+              Column() {
+                ForEach(WorkspaceStore.workspaces, (workspace: WorkspaceInfo, index: number) => {
+                  this.PickerWorkspaceRow(workspace, index)
+                }, (workspace: WorkspaceInfo) => workspace.id)
+              }
+              .width('100%')
+              .alignItems(HorizontalAlign.Center)
+            }
+            .layoutWeight(1)
+            .width('100%')
+            .scrollBar(BarState.Off)
+          }
+
+          Column() {
+            if (this.pickerShowPathInput) {
+              Row() {
+                TextInput({ placeholder: $r('app.string.ws_path_placeholder'), text: this.newPath })
+                  .layoutWeight(1).height(36)
+                  .backgroundColor(Colors.surface1).borderRadius(Radius.sm)
+                  .padding({ left: Spacing.md, right: Spacing.md })
+                  .fontSize(FontSize.xs)
+                  .onChange((v: string) => { this.newPath = v })
+                Button($r('app.string.ws_add')).height(36).backgroundColor(Colors.accent).fontColor(Colors.surface0)
+                  .borderRadius(Radius.sm).fontSize(FontSize.xs)
+                  .onClick(() => {
+                    let p = this.newPath.trim();
+                    if (p.length > 0) {
+                      this.addWorkspace(p);
+                      this.newPath = '';
+                      this.pickerShowPathInput = false;
+                      this.selectWorkspace(WorkspaceStore.workspaces.length - 1);
+                    }
+                  })
+              }
+              .width(Layout.contentWidth)
+              .padding({ top: Spacing.xs, bottom: Spacing.xs })
+            } else {
+              Button() {
+                Row() {
+                  SymbolGlyph($r('sys.symbol.plus'))
+                    .fontSize(16)
+                    .fontColor([Colors.foreground])
+                    .margin({ right: Spacing.sm })
+                  Text($r('app.string.ws_add_button'))
+                    .fontSize(FontSize.sm)
+                    .fontColor(Colors.foreground)
+                    .fontWeight(FontWeight.Medium)
+                }
+              }
+              .backgroundColor(Colors.transparent)
+              .stateStyles({
+                pressed: { .backgroundColor(Colors.surface1) },
+                normal: { .backgroundColor(Colors.transparent) }
+              })
+              .onClick(() => { this.pickerShowPathInput = true })
+            }
+          }
+          .width('100%')
+          .padding({ left: Spacing.xl, right: Spacing.xl, bottom: Spacing.xxxl, top: Spacing.lg })
+        }
+        .width('100%')
+        .height('100%')
+        .backgroundColor(Colors.surface0)
+        .visibility(this.showWorkspacePicker ? Visibility.Visible : Visibility.Hidden)
+        .transition(TransitionEffect.OPACITY.animation({ duration: 150, curve: Curve.EaseOut }))
+
       }
       .width('100%').height('100%')
     }
-    .title(this.getSessionTitle())
+    .title({ main: this.getSessionTitle(), sub: this.getWorkspaceHostLabel() })
     .bindSheet($$this.showPicker, this.PickerSheetBuilder(), {
       height: SheetSize.MEDIUM,
       dragBar: true,
@@ -276,74 +405,9 @@ export struct ChatView {
         }
       }
     })
-    .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: 20 })))
+    .transition(TransitionEffect.OPACITY.animation({ duration: 150, curve: Curve.EaseOut }))
     .width('100%').height('100%')
     .backgroundColor(Colors.surface0)
-  }
-
-  @Builder
-  ControlBar() {
-    Column() {
-      Row({ space: Spacing.xs }) {
-        this.ControlChip(this.text($r('app.string.config_agent')),
-          ChatStore.selectedAgentName || this.text($r('app.string.config_select_agent')), () => {
-          this.openPicker(3);
-        })
-        this.ControlChip(this.text($r('app.string.config_model')),
-          this.getModelName().length > 0 ? this.getModelName() : this.text($r('app.string.config_select_model')), () => {
-          if ((ChatStore.selectedAgentName || ChatStore.agentType).length > 0) {
-            this.openPicker(1);
-          }
-        }, (ChatStore.selectedAgentName || ChatStore.agentType).length > 0)
-        this.ControlChip(this.text($r('app.string.config_mode')), ChatStore.modeIndex >= 0 && ChatStore.modeIndex < ChatStore.modes.length
-          ? ChatStore.modes[ChatStore.modeIndex].name : this.text($r('app.string.config_select_mode')), () => {
-            if (ChatStore.modes.length > 0) {
-              this.openPicker(2);
-            }
-          }, ChatStore.modes.length > 0)
-      }
-      .width(Layout.contentWidth)
-      .padding({ top: Spacing.xs, bottom: Spacing.sm })
-    }
-    .width('100%')
-    .alignItems(HorizontalAlign.Center)
-    .backgroundColor(Colors.surface0)
-  }
-
-  @Builder
-  ControlChip(label: string, value: string, action: () => void, enabled: boolean = true) {
-    Button() {
-      Column() {
-        Text(label)
-          .fontSize(FontSize.xxs)
-          .fontColor(Colors.foregroundMuted)
-        Text(value)
-          .fontSize(FontSize.xs)
-          .fontColor(enabled ? Colors.foreground : Colors.foregroundMuted)
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-          .margin({ top: 2 })
-      }
-      .alignItems(HorizontalAlign.Start)
-    }
-    .enabled(enabled)
-    .layoutWeight(1)
-    .height(44)
-    .padding({ left: Spacing.sm, right: Spacing.sm, top: Spacing.xs, bottom: Spacing.xs })
-    .backgroundColor(Colors.surface1)
-    .borderRadius(Radius.md)
-    .stateStyles({
-      pressed: {
-        .scale({ x: 0.98, y: 0.98 })
-        .backgroundColor(Colors.surface2)
-      },
-      normal: {
-        .scale({ x: 1, y: 1 })
-        .backgroundColor(Colors.surface1)
-      }
-    })
-    .animation({ duration: Duration.normal, curve: Duration.spring })
-    .onClick(action)
   }
 
   @Builder
@@ -357,16 +421,65 @@ export struct ChatView {
     .borderRadius(Radius.md)
     .stateStyles({
       pressed: {
-        .scale({ x: 0.95, y: 0.95 })
         .backgroundColor(Colors.surface2)
       },
       normal: {
-        .scale({ x: 1, y: 1 })
         .backgroundColor(Colors.surface1)
       }
     })
-    .animation({ duration: Duration.normal, curve: Duration.spring })
+    .animation({ duration: 150, curve: Curve.EaseOut })
     .onClick(action)
+  }
+
+  @Builder
+  PickerWorkspaceRow(workspace: WorkspaceInfo, index: number) {
+    Row() {
+      Row() {
+        SymbolGlyph($r('sys.symbol.folder'))
+          .fontSize(18)
+          .fontColor([Colors.foreground])
+      }
+      .width(40)
+      .height(40)
+      .borderRadius(Radius.md)
+      .backgroundColor(Colors.surface1)
+      .justifyContent(FlexAlign.Center)
+      .margin({ right: Spacing.md })
+
+      Column() {
+        Text(workspace.name)
+          .fontSize(FontSize.md)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(Colors.foreground)
+          .maxLines(1)
+        Text(workspace.path)
+          .fontSize(FontSize.xs)
+          .fontColor(Colors.foregroundMuted)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .margin({ top: Spacing.xxs })
+      }
+      .alignItems(HorizontalAlign.Start)
+      .layoutWeight(1)
+
+      if (WorkspaceStore.currentIndex === index) {
+        SymbolGlyph($r('sys.symbol.checkmark_circle_fill'))
+          .fontSize(22)
+          .fontColor([Colors.foreground])
+      } else {
+        SymbolGlyph($r('sys.symbol.circle'))
+          .fontSize(22)
+          .fontColor([Colors.border])
+      }
+    }
+    .width(Layout.contentWidth)
+    .padding(Spacing.lg)
+    .backgroundColor(Colors.transparent)
+    .onClick(() => { this.selectWorkspace(index); })
+    .stateStyles({
+      pressed: { .backgroundColor(Colors.surface1) },
+      normal: { .backgroundColor(Colors.transparent) }
+    })
   }
 }
 
@@ -428,7 +541,7 @@ struct PermissionSheet {
     .padding({ bottom: Spacing.xxxl })
     .backgroundColor(Colors.surface0)
     .borderRadius({ topLeft: Radius.xl, topRight: Radius.xl })
-    .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: 20 })))
+    .transition(TransitionEffect.OPACITY.animation({ duration: 150, curve: Curve.EaseOut }))
   }
 }
 
@@ -502,7 +615,7 @@ struct PickerSheet {
     .padding({ bottom: Spacing.xxxl })
     .backgroundColor(Colors.surface0)
     .borderRadius({ topLeft: Radius.xl, topRight: Radius.xl })
-    .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: 20 })))
+    .transition(TransitionEffect.OPACITY.animation({ duration: 150, curve: Curve.EaseOut }))
   }
 
   getItems(): string[] {

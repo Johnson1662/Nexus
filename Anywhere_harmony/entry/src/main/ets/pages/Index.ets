@@ -87,6 +87,9 @@ struct Index {
             onOpenChat: (workspaceIndex: number) => {
               this.openChat(workspaceIndex);
             },
+            onNewChat: () => {
+              this.newChat();
+            },
             onConnectHost: (url: string) => {
               this.connectToHostUrl(url);
             },
@@ -131,7 +134,7 @@ struct Index {
         }
       })
       .mode(NavDestinationMode.STANDARD)
-      .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: 10 })))
+      .transition(TransitionEffect.OPACITY.animation({ duration: 150, curve: Curve.EaseOut }))
     } else if (name === 'workspaceDetail') {
       WorkspaceDetailView({
         workspaceIndex: this.selectedWorkspaceIndex,
@@ -168,8 +171,8 @@ struct Index {
         onSelectSession: (i: number) => { this.handleSessionPickerSelection(i); },
         onNewSession: () => { this.resetForNewChat(); },
         onWorkspaceSelect: (index: number) => { this.prepareWorkspace(index, false); },
+        onPrefetchModels: () => { this.refreshModels(false); },
         onRefreshAgents: () => { this.refreshAgents(true); },
-        onRefreshModels: () => { this.refreshModels(true); },
         onRefreshSessions: () => { this.refreshSessionsForWorkspace(WorkspaceStore.currentIndex, true); },
         onPermissionResponse: (optionId: string) => { this.ws.sendPermissionResponse(optionId); },
         onNavigateToSettings: () => { this.navStack.pushPath({ name: 'settings' }); }
@@ -186,15 +189,7 @@ struct Index {
       })
     }
   }
-  @Builder
-  HostFilterChips() {
-    HostFilterBar({
-      devices: HostStore.devices,
-      selectedKey: this.selectedHostFilter,
-      statusRevision: this.hostStatusRevision,
-      onSelect: (key: string) => { this.selectedHostFilter = key; }
-    })
-  }
+
 
   ensureHomeRoute(): void {
     if (this.homeRouteReady || this.navStack.size() > 0) {
@@ -539,7 +534,7 @@ struct Index {
         enableMultiMode: false,
         enableAlbum: false
       };
-      let context = (this.getUIContext() as UIContext).getHostContext() as common.UIAbilityContext;
+      let context = (this.getUIContext()).getHostContext() as common.UIAbilityContext;
       let result = await scanBarcode.startScanForResult(context, options);
       if (result.originalValue) {
         let targetUrl: string = await this.parsePairingPayload(result.originalValue);
@@ -567,6 +562,18 @@ struct Index {
     }
     this.prepareWorkspace(WorkspaceStore.currentIndex, false);
     this.resetForNewChat();
+    this.navStack.pushPath({ name: 'chat' });
+  }
+
+  newChat(): void {
+    AppStorage.setOrCreate('chatShowWorkspacePicker', true);
+    this.resetForNewChat();
+    if (WorkspaceStore.currentIndex < 0 && WorkspaceStore.workspaces.length > 0) {
+      WorkspaceStore.currentIndex = 0;
+    }
+    if (WorkspaceStore.currentIndex >= 0) {
+      this.prepareWorkspace(WorkspaceStore.currentIndex, false);
+    }
     this.navStack.pushPath({ name: 'chat' });
   }
 
@@ -655,6 +662,7 @@ struct Index {
     if (!ChatStore.connected || ChatStore.agentType.length === 0) {
       return;
     }
+    ChatStore.loadingModels = true;
     let hostKey: string = this.getCurrentHostKey();
     let workspacePath: string = this.getWorkspacePath(WorkspaceStore.currentIndex);
     if (!force) {
@@ -662,6 +670,7 @@ struct Index {
         if (cached !== null) {
           ChatStore.models = cached.models;
           ChatStore.modes = cached.modes;
+          ChatStore.loadingModels = false;
         } else {
           this.ws.send({ type: 'list_models', agent: ChatStore.agentType } as ClientMessage);
         }
