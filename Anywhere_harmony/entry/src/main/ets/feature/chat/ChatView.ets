@@ -287,51 +287,37 @@ export struct ChatView {
         .maxSideBarWidth('100%')
         .width('100%').height('100%')
 
-        // Workspace picker overlay
-        Column() {
-          Column() {
-            Text($r('app.string.new_session_choose_workspace'))
-              .fontSize(FontSize.xxxl)
-              .fontWeight(FontWeight.Bold)
-              .fontColor(Colors.foreground)
-            Text($r('app.string.new_session_choose_workspace_desc'))
-              .fontSize(FontSize.sm)
-              .fontColor(Colors.foregroundMuted)
-              .margin({ top: Spacing.xs })
-          }
-          .width('100%')
-          .alignItems(HorizontalAlign.Start)
-          .padding({ top: Spacing.xxxl, left: Spacing.xl, right: Spacing.xl, bottom: Spacing.xl })
+        // Workspace picker overlay — centered card
+        Stack({ alignContent: Alignment.Center }) {
+          // Tap-to-dismiss backdrop
+          Column()
+            .width('100%')
+            .height('100%')
+            .backgroundColor('rgba(0,0,0,0.3)')
+            .onClick(() => { this.showWorkspacePicker = false; })
 
-          if (WorkspaceStore.workspaces.length === 0) {
-            Column() {
+          // Card
+          Column() {
+            if (WorkspaceStore.workspaces.length === 0) {
               Text($r('app.string.ws_empty_prompt'))
                 .fontSize(FontSize.sm)
                 .fontColor(Colors.foregroundMuted)
-              Text($r('app.string.ws_empty_subtitle'))
-                .fontSize(FontSize.sm)
-                .fontColor(Colors.foregroundMuted)
-                .margin({ top: Spacing.xs })
-            }
-            .width('100%')
-            .padding({ left: Spacing.xl, right: Spacing.xl, top: Spacing.md })
-            .alignItems(HorizontalAlign.Start)
-          } else {
-            Scroll() {
-              Column() {
-                ForEach(WorkspaceStore.workspaces, (workspace: WorkspaceInfo, index: number) => {
-                  this.PickerWorkspaceRow(workspace, index)
-                }, (workspace: WorkspaceInfo) => workspace.id)
+                .width('100%')
+                .padding(Spacing.lg)
+            } else {
+              Scroll() {
+                Column() {
+                  ForEach(WorkspaceStore.workspaces, (workspace: WorkspaceInfo, index: number) => {
+                    this.PickerWorkspaceRow(workspace, index)
+                  }, (workspace: WorkspaceInfo) => workspace.id)
+                }
+                .width('100%')
               }
+              .scrollBar(BarState.Off)
+              .constraintSize({ maxHeight: '40%' })
               .width('100%')
-              .alignItems(HorizontalAlign.Center)
             }
-            .layoutWeight(1)
-            .width('100%')
-            .scrollBar(BarState.Off)
-          }
 
-          Column() {
             if (this.pickerShowPathInput) {
               Row() {
                 TextInput({ placeholder: $r('app.string.ws_path_placeholder'), text: this.newPath })
@@ -352,35 +338,32 @@ export struct ChatView {
                     }
                   })
               }
-              .width(Layout.contentWidth)
-              .padding({ top: Spacing.xs, bottom: Spacing.xs })
+              .width('100%')
+              .padding({ top: Spacing.sm, bottom: Spacing.sm, left: Spacing.md, right: Spacing.md })
             } else {
-              Button() {
-                Row() {
-                  SymbolGlyph($r('sys.symbol.plus'))
-                    .fontSize(16)
-                    .fontColor([Colors.foreground])
-                    .margin({ right: Spacing.sm })
-                  Text($r('app.string.ws_add_button'))
-                    .fontSize(FontSize.sm)
-                    .fontColor(Colors.foreground)
-                    .fontWeight(FontWeight.Medium)
-                }
+              Row() {
+                SymbolGlyph($r('sys.symbol.plus'))
+                  .fontSize(14)
+                  .fontColor([Colors.foregroundMuted])
+                  .margin({ right: Spacing.xs })
+                Text($r('app.string.ws_add_button'))
+                  .fontSize(FontSize.sm)
+                  .fontColor(Colors.foregroundMuted)
               }
-              .backgroundColor(Colors.transparent)
-              .stateStyles({
-                pressed: { .backgroundColor(Colors.surface1) },
-                normal: { .backgroundColor(Colors.transparent) }
-              })
+              .width('100%')
+              .padding({ top: Spacing.sm, bottom: Spacing.md, left: Spacing.md, right: Spacing.md })
               .onClick(() => { this.pickerShowPathInput = true })
             }
           }
-          .width('100%')
-          .padding({ left: Spacing.xl, right: Spacing.xl, bottom: Spacing.xxxl, top: Spacing.lg })
+          .width('85%')
+          .maxHeight('55%')
+          .backgroundColor(Colors.surface0)
+          .borderRadius(Radius.xl)
+          .padding({ top: Spacing.sm, bottom: Spacing.sm })
+          .shadow(Shadow.md)
         }
         .width('100%')
         .height('100%')
-        .backgroundColor(Colors.surface0)
         .visibility(this.showWorkspacePicker ? Visibility.Visible : Visibility.Hidden)
         .transition(TransitionEffect.OPACITY.animation({ duration: 150, curve: Curve.EaseOut }))
 
@@ -434,46 +417,30 @@ export struct ChatView {
   @Builder
   PickerWorkspaceRow(workspace: WorkspaceInfo, index: number) {
     Row() {
-      Row() {
-        SymbolGlyph($r('sys.symbol.folder'))
-          .fontSize(18)
-          .fontColor([Colors.foreground])
-      }
-      .width(40)
-      .height(40)
-      .borderRadius(Radius.md)
-      .backgroundColor(Colors.surface1)
-      .justifyContent(FlexAlign.Center)
-      .margin({ right: Spacing.md })
+      SymbolGlyph($r('sys.symbol.folder'))
+        .fontSize(16)
+        .fontColor([Colors.foreground])
+        .margin({ right: Spacing.sm })
 
-      Column() {
-        Text(workspace.name)
-          .fontSize(FontSize.md)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(Colors.foreground)
-          .maxLines(1)
-        Text(workspace.path)
-          .fontSize(FontSize.xs)
-          .fontColor(Colors.foregroundMuted)
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-          .margin({ top: Spacing.xxs })
-      }
-      .alignItems(HorizontalAlign.Start)
-      .layoutWeight(1)
+      Text(workspace.name)
+        .fontSize(FontSize.sm)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(Colors.foreground)
+        .maxLines(1)
+        .layoutWeight(1)
 
       if (WorkspaceStore.currentIndex === index) {
         SymbolGlyph($r('sys.symbol.checkmark_circle_fill'))
-          .fontSize(22)
+          .fontSize(18)
           .fontColor([Colors.foreground])
       } else {
         SymbolGlyph($r('sys.symbol.circle'))
-          .fontSize(22)
+          .fontSize(18)
           .fontColor([Colors.border])
       }
     }
-    .width(Layout.contentWidth)
-    .padding(Spacing.lg)
+    .width('100%')
+    .padding({ left: Spacing.md, right: Spacing.md, top: Spacing.sm, bottom: Spacing.sm })
     .backgroundColor(Colors.transparent)
     .onClick(() => { this.selectWorkspace(index); })
     .stateStyles({
