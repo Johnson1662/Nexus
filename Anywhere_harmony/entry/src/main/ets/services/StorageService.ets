@@ -1,7 +1,11 @@
 import { preferences } from '@kit.ArkData';
 import { common } from '@kit.AbilityKit';
+import { hilog } from '@kit.PerformanceAnalysisKit';
 import { WorkspaceStore, WorkspaceInfo, HostStore, DeviceEntry, HostInfo, ServerSession } from '../common/model/WorkspaceInfo';
 import { ChatStore, ModelItem, ModeItem } from '../common/model/ChatState';
+
+const TAG: string = 'StorageService';
+const DOMAIN: number = 0x0000;
 
 const PREF_NAME = 'app_settings';
 
@@ -145,29 +149,59 @@ export function configureFallbackScopes(scopes: string[]): void {
   StorageService.fallbackScopes = scopes;
 }
 
-function getWorkspaceScopes(serverUrl: string): string[] {
+// Resolve workspace scopes for a connection. hostKey (hostId) is the primary
+// identity; serverUrl is a fallback when hostKey is empty.
+// Matching by hostId avoids cross-host contamination when URLs get merged
+// across devices by handleServerInfo's dedup logic.
+function getWorkspaceScopes(serverUrl: string, hostKey: string = ''): string[] {
   let scopes: string[] = [];
-  for (let i: number = 0; i < HostStore.devices.length; i++) {
-    let device: DeviceEntry = HostStore.devices[i];
-    if (device.urls.indexOf(serverUrl) >= 0) {
-      scopes.push('device_' + device.name);
-      for (let j: number = 0; j < device.urls.length; j++) {
-        scopes.push(device.urls[j]);
+  let matched: boolean = false;
+
+  // 1) Prefer hostId match — the authoritative device identity
+  if (hostKey.length > 0) {
+    for (let i: number = 0; i < HostStore.devices.length; i++) {
+      let device: DeviceEntry = HostStore.devices[i];
+      if (device.hostId === hostKey || device.name === hostKey) {
+        scopes.push('device_' + device.name);
+        for (let j: number = 0; j < device.urls.length; j++) {
+          scopes.push(device.urls[j]);
+        }
+        matched = true;
+        break;
       }
-      break;
     }
   }
+
+  // 2) Fallback: match by URL only if hostId didn't match
+  if (!matched) {
+    for (let i: number = 0; i < HostStore.devices.length; i++) {
+      let device: DeviceEntry = HostStore.devices[i];
+      if (device.urls.indexOf(serverUrl) >= 0) {
+        scopes.push('device_' + device.name);
+        for (let j: number = 0; j < device.urls.length; j++) {
+          scopes.push(device.urls[j]);
+        }
+        matched = true;
+        break;
+      }
+    }
+  }
+
   if (scopes.indexOf(serverUrl) < 0) {
     scopes.push(serverUrl);
   }
-  
-  // Append any configured fallback scopes (for hostId migration recovery)
-  for (let i: number = 0; i < StorageService.fallbackScopes.length; i++) {
-    if (scopes.indexOf(StorageService.fallbackScopes[i]) < 0) {
-      scopes.push(StorageService.fallbackScopes[i]);
+
+  // Only append fallback scopes when no device was matched (for hostId migration recovery).
+  if (!matched) {
+    for (let i: number = 0; i < StorageService.fallbackScopes.length; i++) {
+      if (scopes.indexOf(StorageService.fallbackScopes[i]) < 0) {
+        scopes.push(StorageService.fallbackScopes[i]);
+      }
     }
   }
-  
+  hilog.info(DOMAIN, TAG, 'getWorkspaceScopes: url=' + serverUrl + ' hostKey=' + hostKey +
+    ' matched=' + matched + ' devices=' + HostStore.devices.length +
+    ' resultScopes=' + scopes.length);
   return scopes;
 }
 
@@ -177,10 +211,10 @@ function scopeWorkspaceKey(base: string, scope: string): string {
 }
 
 // Save workspaces for the given server URL
-export async function saveWorkspaces(serverUrl: string): Promise<void> {
+export async function saveWorkspaces(serverUrl: string, hostKey: string = ''): Promise<void> {
   if (serverUrl.length === 0) return;
   let storage = StorageService.getInstance();
-  let scopes: string[] = getWorkspaceScopes(serverUrl);
+  let scopes: string[] = getWorkspaceScopes(serverUrl, hostKey);
   let primaryScope: string = scopes[0];
   let data: WorkspaceData[] = [];
   for (let i = 0; i < WorkspaceStore.workspaces.length; i++) {
@@ -192,10 +226,11 @@ export async function saveWorkspaces(serverUrl: string): Promise<void> {
 }
 
 // Load workspaces for the given server URL into WorkspaceStore
-export async function loadWorkspaces(serverUrl: string): Promise<void> {
+export async function loadWorkspaces(serverUrl: string, hostKey: string = ''): Promise<void> {
   if (serverUrl.length === 0) return;
   let storage = StorageService.getInstance();
-  let scopes: string[] = getWorkspaceScopes(serverUrl);
+  let scopes: string[] = getWorkspaceScopes(serverUrl, hostKey);
+  hilog.info(DOMAIN, TAG, 'loadWorkspaces: url=' + serverUrl + ' hostKey=' + hostKey + ' scopes=' + JSON.stringify(scopes));
   let data: WorkspaceData[] = [];
   let indexStr: string = '-1';
   let loadedScope: string = scopes[0];
@@ -210,6 +245,7 @@ export async function loadWorkspaces(serverUrl: string): Promise<void> {
       break;
     }
   }
+  hilog.info(DOMAIN, TAG, 'loadWorkspaces: loadedScope=' + loadedScope + ' count=' + data.length);
   let workspaces: WorkspaceInfo[] = [];
   for (let i = 0; i < data.length; i++) {
     let d = data[i];

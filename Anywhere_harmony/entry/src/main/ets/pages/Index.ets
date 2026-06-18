@@ -29,7 +29,10 @@ import { SettingsPage } from '../feature/settings/SettingsView';
 import { handleAcpUpdate } from '../common/model/MessageHandler';
 import { DeviceAgentStore } from '../common/model/DeviceAgentStore';
 import { getOrCreateClientKeyPair } from '../common/websocket/CryptoHelper';
+import { hilog } from '@kit.PerformanceAnalysisKit';
 
+const TAG: string = 'Index';
+const DOMAIN: number = 0x0000;
 const DEFAULT_RELAY_URL: string = 'ws://relay.anywhere12138.lat:12138';
 
 @Entry
@@ -229,11 +232,19 @@ struct Index {
     });
     this.ws.onServerInfo(async () => {
       this.bumpHostStatusRevision();
+      // Sync selectedHostFilter to the actually connected host
+      let connectedHostKey: string = ChatStore.currentDeviceId;
+      if (connectedHostKey.length > 0) {
+        this.selectedHostFilter = connectedHostKey;
+      }
       // Ensure workspace list is loaded for this host before preparing
       let url: string = AppStorage.get<string>('serverUrl') || '';
+      hilog.info(DOMAIN, TAG, 'onServerInfo: hostKey=' + connectedHostKey + ' url=' + url +
+        ' workspaces_before=' + WorkspaceStore.workspaces.length);
       if (url.length > 0) {
-        await loadWorkspaces(url);
+        await loadWorkspaces(url, connectedHostKey);
       }
+      hilog.info(DOMAIN, TAG, 'onServerInfo: workspaces_after=' + WorkspaceStore.workspaces.length);
       this.refreshAgents(false);
       if (WorkspaceStore.currentIndex >= 0 && WorkspaceStore.currentIndex < WorkspaceStore.workspaces.length) {
         this.prepareWorkspace(WorkspaceStore.currentIndex, false);
@@ -524,12 +535,15 @@ struct Index {
 
   connectSavedHost(index: number): void {
     if (index < 0 || index >= HostStore.devices.length) {
+      hilog.error(DOMAIN, TAG, 'connectSavedHost: invalid index ' + index);
       return;
     }
     let device: DeviceEntry = HostStore.devices[index];
     let serverUrl: string = AppStorage.get<string>('serverUrl') || '';
     let candidates: string[] = this.getConnectCandidates(device, serverUrl);
     let hostKey: string = device.hostId || device.name;
+    hilog.info(DOMAIN, TAG, 'connectSavedHost: index=' + index + ' hostKey=' + hostKey +
+      ' candidates=' + candidates.length + ' currentDeviceId=' + ChatStore.currentDeviceId);
     ChatStore.selectedAgentName = '';
     ChatStore.agentType = '';
     ChatStore.models = [];
@@ -539,6 +553,8 @@ struct Index {
       this.ws.connectBest(candidates, hostKey);
     } else if (candidates.length === 1) {
       this.ws.connect(candidates[0], hostKey);
+    } else {
+      hilog.error(DOMAIN, TAG, 'connectSavedHost: no candidates for ' + hostKey);
     }
   }
 

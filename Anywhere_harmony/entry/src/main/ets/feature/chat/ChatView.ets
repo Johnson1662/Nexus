@@ -120,7 +120,7 @@ export struct ChatView {
     ws.path = path;
     WorkspaceStore.workspaces.push(ws);
     WorkspaceStore.currentIndex = WorkspaceStore.workspaces.length - 1;
-    saveWorkspaces(AppStorage.get<string>('serverUrl') || '');
+    saveWorkspaces(AppStorage.get<string>('serverUrl') || '', ChatStore.currentDeviceId);
     return ws;
   }
 
@@ -182,7 +182,7 @@ export struct ChatView {
           if (WorkspaceStore.currentIndex >= WorkspaceStore.workspaces.length) {
             WorkspaceStore.currentIndex = WorkspaceStore.workspaces.length - 1;
           }
-          saveWorkspaces(AppStorage.get<string>('serverUrl') || '');
+          saveWorkspaces(AppStorage.get<string>('serverUrl') || '', ChatStore.currentDeviceId);
         }
       }
     });
