@@ -149,24 +149,6 @@ export function configureFallbackScopes(scopes: string[]): void {
   StorageService.fallbackScopes = scopes;
 }
 
-// Check if workspace data looks valid for the given device.
-// Dirty data can occur when previous bugs caused cross-host workspace writes.
-// We check the first workspace path format: Linux hosts get `/` paths,
-// Windows hosts get `X:\` paths. If they mismatch, the data is likely stale.
-function isWorkspaceDataValidForDevice(data: WorkspaceData[], device: DeviceEntry): boolean {
-  if (data.length === 0) return true;
-  let firstPath: string = data[0].path || '';
-  if (firstPath.length === 0) return true;
-  let isWindowsPath: boolean = /^[A-Za-z]:\\/.test(firstPath) || firstPath.indexOf(':\\') >= 0;
-  let isUnixPath: boolean = firstPath.startsWith('/') && !isWindowsPath;
-  // Detect host OS from device name: "instance-*" patterns are Linux cloud VMs.
-  // NOTE: using hostId length is unreliable because Windows hosts (LAPTOP) also have UUID-length hostIds.
-  let isLikelyLinux: boolean = device.name.startsWith('instance-');
-  if (isLikelyLinux && isWindowsPath) return false;
-  if (!isLikelyLinux && isUnixPath) return false;
-  return true;
-}
-
 // Resolve workspace scope for a connection.
 // When hostKey is provided and matches a device, we use ONLY `device_<name>` as the scope.
 // This prevents cross-host contamination from URL-based matching.
@@ -280,28 +262,6 @@ export async function loadWorkspaces(serverUrl: string, hostKey: string = ''): P
             try { await storage.putObject(urlScopeKey, []); } catch (_) {}
             break;
           }
-        }
-        break;
-      }
-    }
-  }
-
-  // Data integrity check: if workspace paths don't match the device, it's stale data
-  // from a previous cross-host contamination bug. Clear it.
-  if (data.length > 0 && hostKey.length > 0) {
-    for (let i: number = 0; i < HostStore.devices.length; i++) {
-      let device: DeviceEntry = HostStore.devices[i];
-      if (device.hostId === hostKey || device.name === hostKey) {
-        if (!isWorkspaceDataValidForDevice(data, device)) {
-          hilog.info(DOMAIN, TAG, 'loadWorkspaces: detected stale workspace data for ' + hostKey +
-            ', clearing (path=' + data[0].path + ')');
-          data = [];
-          indexStr = '-1';
-          loadedScope = '';
-          // Persist the cleanup immediately
-          let cleanKey: string = scopeWorkspaceKey(PrefsKeys.WORKSPACES, 'device_' + device.name);
-          await storage.putObject(cleanKey, []);
-          await storage.putString(scopeWorkspaceKey(PrefsKeys.WORKSPACE_INDEX, 'device_' + device.name), '-1');
         }
         break;
       }
