@@ -149,59 +149,69 @@ export function configureFallbackScopes(scopes: string[]): void {
   StorageService.fallbackScopes = scopes;
 }
 
-// Resolve workspace scopes for a connection. hostKey (hostId) is the primary
-// identity; serverUrl is a fallback when hostKey is empty.
-// Matching by hostId avoids cross-host contamination when URLs get merged
-// across devices by handleServerInfo's dedup logic.
+// Check if workspace data looks valid for the given device.
+// Dirty data can occur when previous bugs caused cross-host workspace writes.
+// We check the first workspace path format: Linux hosts get `/` paths,
+// Windows hosts get `X:\` paths. If they mismatch, the data is likely stale.
+function isWorkspaceDataValidForDevice(data: WorkspaceData[], device: DeviceEntry): boolean {
+  if (data.length === 0) return true;
+  let firstPath: string = data[0].path || '';
+  if (firstPath.length === 0) return true;
+  let isWindowsPath: boolean = /^[A-Za-z]:\\/.test(firstPath) || firstPath.indexOf(':\\') >= 0;
+  let isUnixPath: boolean = firstPath.startsWith('/') && !isWindowsPath;
+  // Detect host OS from device name: "instance-*" patterns are Linux cloud VMs.
+  // NOTE: using hostId length is unreliable because Windows hosts (LAPTOP) also have UUID-length hostIds.
+  let isLikelyLinux: boolean = device.name.startsWith('instance-');
+  if (isLikelyLinux && isWindowsPath) return false;
+  if (!isLikelyLinux && isUnixPath) return false;
+  return true;
+}
+
+// Resolve workspace scope for a connection.
+// When hostKey is provided and matches a device, we use ONLY `device_<name>` as the scope.
+// This prevents cross-host contamination from URL-based matching.
+// When hostKey is empty (startup), fall back to URL matching.
 function getWorkspaceScopes(serverUrl: string, hostKey: string = ''): string[] {
   let scopes: string[] = [];
   let matched: boolean = false;
 
-  // 1) Prefer hostId match — the authoritative device identity
   if (hostKey.length > 0) {
+    // hostKey-based match — authoritative, uses only the device-name scope
     for (let i: number = 0; i < HostStore.devices.length; i++) {
       let device: DeviceEntry = HostStore.devices[i];
       if (device.hostId === hostKey || device.name === hostKey) {
         scopes.push('device_' + device.name);
-        for (let j: number = 0; j < device.urls.length; j++) {
-          scopes.push(device.urls[j]);
-        }
         matched = true;
         break;
       }
     }
   }
 
-  // 2) Fallback: match by URL only if hostId didn't match
+  // Fallback: URL-based match (startup or no hostKey)
   if (!matched) {
     for (let i: number = 0; i < HostStore.devices.length; i++) {
       let device: DeviceEntry = HostStore.devices[i];
       if (device.urls.indexOf(serverUrl) >= 0) {
         scopes.push('device_' + device.name);
-        for (let j: number = 0; j < device.urls.length; j++) {
-          scopes.push(device.urls[j]);
-        }
         matched = true;
         break;
       }
     }
   }
 
-  if (scopes.indexOf(serverUrl) < 0) {
-    scopes.push(serverUrl);
-  }
-
-  // Only append fallback scopes when no device was matched (for hostId migration recovery).
   if (!matched) {
+    scopes.push(serverUrl);
+    // Append fallback scopes for migration recovery
     for (let i: number = 0; i < StorageService.fallbackScopes.length; i++) {
       if (scopes.indexOf(StorageService.fallbackScopes[i]) < 0) {
         scopes.push(StorageService.fallbackScopes[i]);
       }
     }
   }
+
   hilog.info(DOMAIN, TAG, 'getWorkspaceScopes: url=' + serverUrl + ' hostKey=' + hostKey +
     ' matched=' + matched + ' devices=' + HostStore.devices.length +
-    ' resultScopes=' + scopes.length);
+    ' resultScopes=' + scopes.length + ' firstScope=' + (scopes.length > 0 ? scopes[0] : '(empty)'));
   return scopes;
 }
 
@@ -233,7 +243,7 @@ export async function loadWorkspaces(serverUrl: string, hostKey: string = ''): P
   hilog.info(DOMAIN, TAG, 'loadWorkspaces: url=' + serverUrl + ' hostKey=' + hostKey + ' scopes=' + JSON.stringify(scopes));
   let data: WorkspaceData[] = [];
   let indexStr: string = '-1';
-  let loadedScope: string = scopes[0];
+  let loadedScope: string = '';
   for (let i: number = 0; i < scopes.length; i++) {
     let scopedData: WorkspaceData[] = await storage.getObject<WorkspaceData[]>(
       scopeWorkspaceKey(PrefsKeys.WORKSPACES, scopes[i]), []);
@@ -246,6 +256,58 @@ export async function loadWorkspaces(serverUrl: string, hostKey: string = ''): P
     }
   }
   hilog.info(DOMAIN, TAG, 'loadWorkspaces: loadedScope=' + loadedScope + ' count=' + data.length);
+
+  // Data migration: when hostKey matched a device but no data found under device_<name>,
+  // check URL-based scopes (old storage format). If found, migrate to device_<name> scope.
+  if (data.length === 0 && hostKey.length > 0) {
+    for (let di: number = 0; di < HostStore.devices.length; di++) {
+      let device: DeviceEntry = HostStore.devices[di];
+      if (device.hostId === hostKey || device.name === hostKey) {
+        let deviceScope: string = 'device_' + device.name;
+        for (let ui: number = 0; ui < device.urls.length; ui++) {
+          let urlScopeKey: string = scopeWorkspaceKey(PrefsKeys.WORKSPACES, device.urls[ui]);
+          let urlData: WorkspaceData[] = await storage.getObject<WorkspaceData[]>(urlScopeKey, []);
+          if (urlData.length > 0) {
+            hilog.info(DOMAIN, TAG, 'loadWorkspaces: migrating data from URL scope to ' + deviceScope +
+              ' count=' + urlData.length);
+            data = urlData;
+            indexStr = await storage.getString(
+              scopeWorkspaceKey(PrefsKeys.WORKSPACE_INDEX, device.urls[ui]), '-1');
+            loadedScope = deviceScope;
+            // Save to device scope and clean old URL scope
+            await storage.putObject(scopeWorkspaceKey(PrefsKeys.WORKSPACES, deviceScope), data);
+            await storage.putString(scopeWorkspaceKey(PrefsKeys.WORKSPACE_INDEX, deviceScope), indexStr);
+            try { await storage.putObject(urlScopeKey, []); } catch (_) {}
+            break;
+          }
+        }
+        break;
+      }
+    }
+  }
+
+  // Data integrity check: if workspace paths don't match the device, it's stale data
+  // from a previous cross-host contamination bug. Clear it.
+  if (data.length > 0 && hostKey.length > 0) {
+    for (let i: number = 0; i < HostStore.devices.length; i++) {
+      let device: DeviceEntry = HostStore.devices[i];
+      if (device.hostId === hostKey || device.name === hostKey) {
+        if (!isWorkspaceDataValidForDevice(data, device)) {
+          hilog.info(DOMAIN, TAG, 'loadWorkspaces: detected stale workspace data for ' + hostKey +
+            ', clearing (path=' + data[0].path + ')');
+          data = [];
+          indexStr = '-1';
+          loadedScope = '';
+          // Persist the cleanup immediately
+          let cleanKey: string = scopeWorkspaceKey(PrefsKeys.WORKSPACES, 'device_' + device.name);
+          await storage.putObject(cleanKey, []);
+          await storage.putString(scopeWorkspaceKey(PrefsKeys.WORKSPACE_INDEX, 'device_' + device.name), '-1');
+        }
+        break;
+      }
+    }
+  }
+
   let workspaces: WorkspaceInfo[] = [];
   for (let i = 0; i < data.length; i++) {
     let d = data[i];
