@@ -16,6 +16,7 @@ import { common } from '@kit.AbilityKit';
 import {
   StorageService,
   PrefsKeys,
+  loadWorkspaces,
   loadWorkspaceSessionCache,
   loadWorkspaceModelCache,
   loadLastAgentSelection,
@@ -68,7 +69,16 @@ struct Index {
               statusRevision: this.hostStatusRevision,
               onSelect: (key: string) => {
                 this.selectedHostFilter = key;
-                this.refreshAgents(false);
+                // Guard against reconnecting to the same host
+                for (let i: number = 0; i < HostStore.devices.length; i++) {
+                  let d: DeviceEntry = HostStore.devices[i];
+                  if ((d.hostId && d.hostId === key) || d.name === key) {
+                    let hostKey: string = d.hostId || d.name;
+                    if (hostKey === ChatStore.currentDeviceId && ChatStore.connected) return;
+                    this.connectSavedHost(i);
+                    break;
+                  }
+                }
               }
             })
           }
@@ -217,10 +227,15 @@ struct Index {
         }
       }
     });
-    this.ws.onServerInfo(() => {
+    this.ws.onServerInfo(async () => {
       this.bumpHostStatusRevision();
+      // Ensure workspace list is loaded for this host before preparing
+      let url: string = AppStorage.get<string>('serverUrl') || '';
+      if (url.length > 0) {
+        await loadWorkspaces(url);
+      }
       this.refreshAgents(false);
-      if (WorkspaceStore.currentIndex >= 0) {
+      if (WorkspaceStore.currentIndex >= 0 && WorkspaceStore.currentIndex < WorkspaceStore.workspaces.length) {
         this.prepareWorkspace(WorkspaceStore.currentIndex, false);
       }
     });
