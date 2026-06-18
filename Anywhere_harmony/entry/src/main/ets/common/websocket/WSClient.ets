@@ -10,7 +10,6 @@ import {
   StorageService,
   PrefsKeys,
   saveHosts,
-  loadWorkspaces,
   saveWorkspaceModelCache,
   saveWorkspaceSessionCache,
   saveAgentCache,
@@ -920,7 +919,6 @@ export class WSClient {
       ChatStore.reconnectPhase = '';
     }
     saveHosts();
-    loadWorkspaces(connectedUrl);
     for (let cb of this.serverInfoListeners) {
       cb();
     }

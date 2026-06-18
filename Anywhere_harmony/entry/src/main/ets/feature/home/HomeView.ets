@@ -16,6 +16,7 @@ export struct HomeView {
   onNavigateToWorkspaceList?: () => void;
 
   @StorageLink('homeShowManualHost') showManualHostForm: boolean = false;
+  @StorageLink('serverUrl') currentServerUrl: string = '';
   @State manualHostUrl: string = '';
   @State entered: boolean = false;
 
