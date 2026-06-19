@@ -1,5 +1,4 @@
 import { Colors, FontSize, Spacing, Radius, Duration, getLocalizedString } from '../../constants/DesignTokens';
-import { CustomIcon } from './CustomIcon';
 @Component
 export struct ThinkingSection {
   @Prop thinking: string = '';
@@ -32,19 +31,15 @@ export struct ThinkingSection {
       Button() {
         Row() {
           if (this.isStreaming) {
-            CustomIcon({
-              name: 'thinking',
-              iconSize: 16,
-              color: Colors.foregroundMuted
-            })
+            SymbolGlyph($r('sys.symbol.lightbulb'))
+              .fontSize(16)
+              .fontColor([Colors.foregroundMuted])
               .margin({ right: Spacing.sm })
               .transition(TransitionEffect.OPACITY.animation({ duration: 150, curve: Curve.EaseOut }))
           } else {
-            CustomIcon({
-              name: 'thinking_done',
-              iconSize: 16,
-              color: Colors.foregroundMuted
-            })
+            SymbolGlyph($r('sys.symbol.checkmark_circle'))
+              .fontSize(16)
+              .fontColor([Colors.foregroundMuted])
               .margin({ right: Spacing.sm })
               .transition(TransitionEffect.OPACITY.animation({ duration: 150, curve: Curve.EaseOut }))
           }

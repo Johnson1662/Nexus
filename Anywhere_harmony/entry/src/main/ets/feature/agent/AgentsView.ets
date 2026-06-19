@@ -1,7 +1,6 @@
 import { Colors, FontSize, Spacing, Radius, Layout, getLocalizedString } from '../../constants/DesignTokens';
 import { HostStore, DeviceEntry } from '../../common/model/WorkspaceInfo';
 import { HostPhase, HostRuntimeStore } from '../../common/model/HostState';
-import { CustomIcon } from '../../common/ui/CustomIcon';
 
 @Component
 export struct AgentsView {
@@ -129,7 +128,9 @@ export struct AgentsView {
   AgentListItem(device: DeviceEntry, index: number) {
     Row() {
       Column() {
-        CustomIcon({ name: 'model', iconSize: 24, color: Colors.foreground })
+        SymbolGlyph($r('sys.symbol.externaldrive'))
+          .fontSize(24)
+          .fontColor([Colors.foreground])
       }
       .width(48)
       .height(48)

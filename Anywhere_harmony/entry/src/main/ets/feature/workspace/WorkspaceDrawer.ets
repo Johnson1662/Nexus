@@ -1,6 +1,5 @@
-import { Colors, FontSize, Spacing, Radius, Duration, Layout } from '../../constants/DesignTokens';
+import { Colors, FontSize, Spacing, Radius, Layout, Duration } from '../../constants/DesignTokens';
 import { WorkspaceInfo } from '../../common/model/WorkspaceInfo';
-import { CustomIcon } from '../../common/ui/CustomIcon';
 
 @Component
 export struct WorkspaceDrawer {
@@ -17,8 +16,15 @@ export struct WorkspaceDrawer {
     Column() {
       // Header
       Row() {
-        CustomIcon({ name: 'close', iconSize: 24, color: Colors.foreground })
-          .onClick(() => { if (this.onClose) this.onClose() })
+        Button() {
+          SymbolGlyph($r('sys.symbol.xmark'))
+            .fontSize(24)
+            .fontColor([Colors.foreground])
+        }
+        .type(ButtonType.Normal)
+        .backgroundColor(Color.Transparent)
+        .width(40).height(40)
+        .onClick(() => { if (this.onClose) this.onClose() })
 
         Text($r('app.string.ws_title'))
           .fontSize(FontSize.lg)

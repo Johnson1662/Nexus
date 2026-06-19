@@ -1,6 +1,5 @@
 import { Colors, FontSize, Spacing, Radius, Duration, Shadow, Layout, getLocalizedString } from '../../constants/DesignTokens';
 import { ChatStore } from '../../common/model/ChatState';
-import { CustomIcon } from '../../common/ui/CustomIcon';
 import { MessageData } from '../../common/model/MessageData';
 import { MessageCard } from '../../common/ui/MessageCard';
 import { ThinkingSection } from '../../common/ui/ThinkingSection';
@@ -30,12 +29,12 @@ struct PulsingDots {
   }
 
   build() {
-    Row({ space: 5 }) {
-      Circle().width(6).height(6).fill(Colors.foregroundMuted)
+    Row({ space: 4 }) {
+      Circle().width(5).height(5).fill(Colors.foregroundMuted)
         .opacity(this.opacities[0])
-      Circle().width(6).height(6).fill(Colors.foregroundMuted)
+      Circle().width(5).height(5).fill(Colors.foregroundMuted)
         .opacity(this.opacities[1])
-      Circle().width(6).height(6).fill(Colors.foregroundMuted)
+      Circle().width(5).height(5).fill(Colors.foregroundMuted)
         .opacity(this.opacities[2])
     }
   }
@@ -100,7 +99,9 @@ export struct ChatPage {
     Column() {
       if (ChatStore.reconnectPhase.length > 0) {
         Row() {
-          CustomIcon({ name: 'warning', iconSize: 14, color: Colors.warning })
+          SymbolGlyph($r('sys.symbol.exclamationmark_circle'))
+            .fontSize(14)
+            .fontColor([Colors.warning])
             .margin({ right: Spacing.sm })
           Text(this.getReconnectBannerText())
             .fontSize(FontSize.sm).fontColor(Colors.warningFgDark).fontWeight(FontWeight.Medium)
@@ -153,8 +154,8 @@ export struct ChatPage {
             }
           }
         .width('100%').layoutWeight(1)
-        .justifyContent(FlexAlign.Start).alignItems(HorizontalAlign.Start)
-        .padding({ left: Spacing.lg, right: Spacing.lg, top: Spacing.xxxl })
+        .justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Start)
+        .padding({ left: Spacing.lg, right: Spacing.lg, top: Spacing.xxxl, bottom: Spacing.xxxl })
       } else {
         List({ scroller: this.scroller }) {
           LazyForEach(this.dataSource, (msg: MessageData) => {
@@ -257,7 +258,6 @@ export struct ChatPage {
         .height(32)
         .padding({ left: Spacing.lg, right: Spacing.lg })
         .backgroundColor(Colors.surfaceElevated)
-        .border({ width: 1, color: Colors.borderLight })
         .borderRadius(Radius.full)
         .shadow(Shadow.sm)
         .stateStyles({

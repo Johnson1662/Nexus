@@ -3,7 +3,6 @@ import { ChatStore } from '../../common/model/ChatState';
 import { HostStore, DeviceEntry, WorkspaceStore, WorkspaceInfo, ServerSession } from '../../common/model/WorkspaceInfo';
 import { DeviceAgentStore } from '../../common/model/DeviceAgentStore';
 import { HostRuntimeStore } from '../../common/model/HostState';
-import { CustomIcon } from '../../common/ui/CustomIcon';
 
 @Component
 export struct HomeView {

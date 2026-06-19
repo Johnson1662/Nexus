@@ -1,5 +1,4 @@
 import { Colors, FontSize, Spacing, Duration, Radius } from '../../constants/DesignTokens';
-import { CustomIcon } from './CustomIcon';
 @Component
 export struct ToolCallCard {
   @Prop name: string = '';
@@ -33,50 +32,46 @@ export struct ToolCallCard {
     return formatted.charAt(0).toUpperCase() + formatted.slice(1);
   }
 
-  getIconResource(): Resource | string {
+  getIconResource(): Resource {
     const n = this.name.toLowerCase();
-    
+
     if (n.includes('web') || n.includes('fetch') || n.includes('browser') || n.includes('url') ||
         n.includes('search') || n.includes('find') || n.includes('glob') || n.includes('grep')) {
       return $r('sys.symbol.magnifyingglass');
     }
-    
+
     // Command Line / Shell / Tools
     if (n.includes('bash') || n.includes('cmd') || n.includes('shell') || n.includes('terminal') ||
         n.includes('tool') || n.includes('exec') || n.includes('run') || n.includes('deploy')) {
-      return 'tool';
+      return $r('sys.symbol.gearshape');
     }
-    
+
     if (n.includes('edit') || n.includes('write') || n.includes('modify')) {
-      return 'edit';
+      return $r('sys.symbol.pencil_waveform');
     }
-    
+
     // Read / View
     if (n.includes('read') || n.includes('cat')) {
-      return $r('sys.symbol.doc');
+      return $r('sys.symbol.doc_text');
     }
-    
+
     // Create / New
     if (n.includes('create') || n.includes('new') || n.includes('add') || n.includes('make')) {
-      return $r('sys.symbol.ohos_folder_badge_plus');
+      return $r('sys.symbol.folder_badge_plus');
     }
-    
+
     // Delete / Remove
     if (n.includes('delete') || n.includes('remove') || n.includes('rm')) {
-      return $r('sys.symbol.ohos_trash');
+      return $r('sys.symbol.trash');
     }
-    
+
     // Folders / Directory
     if (n.includes('folder') || n.includes('dir') || n.includes('ls')) {
       return $r('sys.symbol.folder');
     }
-    
+
     // Fallback
     return $r('sys.symbol.paperclip');
-  }
-
-  isCustomIcon(icon: Resource | string): boolean {
-    return typeof icon === 'string';
   }
 
   getPathLabel(): string {
@@ -248,33 +243,14 @@ export struct ToolCallCard {
     }
   }
 
-  private get iconCustomName(): string {
-    let r = this.getIconResource();
-    return typeof r === 'string' ? r : '';
-  }
-
-  private get iconSymbolRes(): Resource {
-    let r = this.getIconResource();
-    return typeof r !== 'string' ? r : $r('sys.symbol.paperclip');
-  }
-
   build() {
     Column() {
       Button() {
         Row() {
-          if (this.isCustomIcon(this.getIconResource())) {
-            CustomIcon({
-              name: this.iconCustomName,
-              iconSize: 14,
-              color: Colors.foregroundMuted
-            }).margin({ right: Spacing.sm })
-          } else {
-            SymbolGlyph(this.iconSymbolRes)
-              .fontSize(FontSize.md)
-              .fontColor([Colors.foregroundMuted])
-              .margin({ right: Spacing.sm })
-          }
-
+          SymbolGlyph(this.getIconResource())
+            .fontSize(FontSize.md)
+            .fontColor([Colors.foregroundMuted])
+            .margin({ right: Spacing.sm })
 
           Text(this.getFormattedName())
             .fontSize(FontSize.sm)
@@ -297,11 +273,9 @@ export struct ToolCallCard {
           }
 
           if (this.status === 'in_progress') {
-            CustomIcon({
-              name: 'progress',
-              iconSize: 14,
-              color: Colors.foregroundMuted
-            })
+            SymbolGlyph($r('sys.symbol.arrow_clockwise'))
+              .fontSize(14)
+              .fontColor([Colors.foregroundMuted])
               .opacity(this.breathFlag ? 0.3 : 1.0)
               .rotate({ angle: this.breathFlag ? 360 : 0 })
               .animation({
@@ -321,7 +295,7 @@ export struct ToolCallCard {
           }
         }
         .width('100%')
-        .padding({ left: Spacing.sm, right: Spacing.md, top: Spacing.xs, bottom: Spacing.xs })
+        .padding({ left: Spacing.sm, right: Spacing.md, top: Spacing.sm, bottom: Spacing.sm })
         .alignItems(VerticalAlign.Center)
       }
       .type(ButtonType.Normal)

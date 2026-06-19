@@ -1,6 +1,5 @@
 import { Colors, FontSize, Spacing, Radius, Duration, Layout, Shadow, getLocalizedString } from '../../constants/DesignTokens';
 import { ChatStore, PendingPermission, PermissionOption } from '../../common/model/ChatState';
-import { CustomIcon } from '../../common/ui/CustomIcon';
 import { WorkspaceStore, WorkspaceInfo, HostStore, DeviceEntry } from '../../common/model/WorkspaceInfo';
 import { DeviceAgentStore } from '../../common/model/DeviceAgentStore';
 import { HostRuntimeStore } from '../../common/model/HostState';

@@ -3,7 +3,6 @@ import { WorkspaceStore, WorkspaceInfo } from '../../common/model/WorkspaceInfo'
 import { ChatStore } from '../../common/model/ChatState';
 import { DeviceAgentStore } from '../../common/model/DeviceAgentStore';
 import { AgentInfo } from '../../common/websocket/WSProtocol';
-import { CustomIcon } from '../../common/ui/CustomIcon';
 
 class AgentOption {
   name: string = '';
@@ -347,7 +346,9 @@ export struct NewSessionView {
   AgentRow(agent: AgentOption) {
     Row() {
       Row() {
-        CustomIcon({ name: 'model', iconSize: 18, color: Colors.foreground })
+        SymbolGlyph($r('sys.symbol.externaldrive'))
+          .fontSize(18)
+          .fontColor([Colors.foreground])
       }
       .width(40)
       .height(40)

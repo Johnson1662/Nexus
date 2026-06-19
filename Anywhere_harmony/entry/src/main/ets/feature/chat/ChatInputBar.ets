@@ -1,6 +1,5 @@
 import { Colors, FontSize, Spacing, Radius, Shadow, Duration, Layout, getLocalizedString } from '../../constants/DesignTokens';
 import { ChatStore, AvailableCommand, ModelItem, ModeItem } from '../../common/model/ChatState';
-import { CustomIcon } from '../../common/ui/CustomIcon';
 import { picker } from '@kit.CoreFileKit';
 import { fileIo } from '@kit.CoreFileKit';
 import { util } from '@kit.ArkTS';

@@ -4,7 +4,6 @@ import { ChatStore } from '../../common/model/ChatState';
 import { HostPhase, HostRuntimeStore } from '../../common/model/HostState';
 import { DeviceAgentStore } from '../../common/model/DeviceAgentStore';
 import { AgentInfo } from '../../common/websocket/WSProtocol';
-import { CustomIcon } from '../../common/ui/CustomIcon';
 
 @Component
 struct TabItem {
@@ -109,7 +108,9 @@ export struct AgentDetailView {
         // Device Info
         Column() {
           Column() {
-            CustomIcon({ name: 'model', iconSize: 48, color: Colors.foreground })
+            SymbolGlyph($r('sys.symbol.externaldrive'))
+              .fontSize(48)
+              .fontColor([Colors.foreground])
           }
           .width(80).height(80)
           .justifyContent(FlexAlign.Center).margin({ bottom: Spacing.md })
@@ -196,7 +197,10 @@ export struct AgentDetailView {
 
         ForEach(this.getAgents(), (agent: AgentInfo) => {
           Row() {
-            CustomIcon({ name: 'model', iconSize: 24, color: Colors.foreground }).margin({ right: Spacing.lg })
+            SymbolGlyph($r('sys.symbol.externaldrive'))
+              .fontSize(24)
+              .fontColor([Colors.foreground])
+              .margin({ right: Spacing.lg })
             Column() {
               Text(agent.title || agent.name).fontSize(FontSize.md).fontWeight(FontWeight.Bold).fontColor(Colors.foreground)
               if (agent.title && agent.title !== agent.name) {
