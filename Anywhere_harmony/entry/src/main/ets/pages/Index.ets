@@ -175,7 +175,10 @@ struct Index {
     } else if (name === 'agentDetail') {
       AgentDetailView({ deviceIndex: this.getSelectedDeviceIndex(), onBack: () => { this.navStack.pop(); } })
     } else if (name === 'sessionDetail') {
-      SessionDetailView({ session: this.selectedSession })
+      SessionDetailView({
+        session: this.selectedSession,
+        onOpenChat: () => { this.navStack.replacePath({ name: 'chat' }); }
+      })
     } else if (name === 'chat') {
       ChatView({
         onSendMessage: (t: string) => { this.sendMessage(t); },

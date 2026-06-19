@@ -1,4 +1,4 @@
-import { Colors, FontSize, Spacing, Radius, Shadow, Layout, getLocalizedString } from '../../constants/DesignTokens';
+import { Colors, FontSize, Spacing, Radius, Layout, getLocalizedString } from '../../constants/DesignTokens';
 import { ServerSession } from '../../common/model/WorkspaceInfo';
 import { ChatStore, PlanEntry } from '../../common/model/ChatState';
 import { MessageData } from '../../common/model/MessageData';
@@ -6,9 +6,8 @@ import { MessageData } from '../../common/model/MessageData';
 @Component
 export struct SessionDetailView {
   @Prop session: ServerSession = new ServerSession();
-
-  @State detailTabIndex: number = 0;
-  @State composerText: string = '';
+  onOpenChat?: () => void;
+  @State showDetails: boolean = false;
 
   text(res: Resource, ...args: Array<string | number>): string {
     let context = this.getUIContext().getHostContext();
@@ -35,6 +34,18 @@ export struct SessionDetailView {
       }
     }
     return this.getTitle();
+  }
+
+  getStatusText(): string {
+    if (ChatStore.turnActive) return 'Running';
+    if (ChatStore.messages.length > 0) return 'Completed';
+    return 'Idle';
+  }
+
+  getStatusColor(): ResourceColor {
+    if (ChatStore.turnActive) return Colors.accent;
+    if (ChatStore.messages.length > 0) return Colors.success;
+    return Colors.foregroundMuted;
   }
 
   formatTime(epoch: number): string {
@@ -90,71 +101,24 @@ export struct SessionDetailView {
     return Math.floor((completed / ChatStore.planEntries.length) * 100);
   }
 
-  getConversationPreview(): string {
-    for (let i: number = ChatStore.messages.length - 1; i >= 0; i--) {
-      let message: MessageData = ChatStore.messages[i];
-      if (message.role === 'assistant' && message.type === 'text' && message.content.length > 0) {
-        return message.content;
-      }
-    }
-    if (ChatStore.streamingText.length > 0) {
-      return ChatStore.streamingText;
-    }
-    return this.text($r('app.string.session_preview_empty'));
-  }
-
   build() {
     NavDestination() {
-      Column() {
+      Scroll() {
         Column() {
-          Text(this.getTitle())
-            .fontSize(FontSize.xxxl)
-            .fontWeight(FontWeight.Bold)
-            .fontColor(Colors.foreground)
-            .maxLines(2)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .margin({ bottom: Spacing.xs })
-
-          Row() {
-            Text(this.getAgent())
-              .fontSize(FontSize.sm)
-              .fontColor(Colors.foregroundMuted)
-            Text('·')
-              .fontSize(FontSize.sm)
-              .fontColor(Colors.foregroundMuted)
-              .margin({ left: Spacing.xs, right: Spacing.xs })
-            Text(this.formatRelativeTime(this.session.createdAt))
-              .fontSize(FontSize.sm)
-              .fontColor(Colors.foregroundMuted)
-          }
+          this.HeaderSection()
+          this.RunStatusSection()
+          this.ActivityFeedSection()
+          this.ChangedFilesSection()
+          this.OpenChatButton()
         }
         .width('100%')
-        .alignItems(HorizontalAlign.Start)
-        .padding({ top: Spacing.xxxl, left: Spacing.xl, right: Spacing.xl, bottom: Spacing.md })
-
-        Row({ space: Spacing.sm }) {
-          this.TabButton(this.text($r('app.string.session_tab_conversation')), 0)
-          this.TabButton(this.text($r('app.string.session_tab_timeline')), 1)
-          this.TabButton(this.text($r('app.string.session_tab_files')), 2)
-          this.TabButton(this.text($r('app.string.session_tab_logs')), 3)
-        }
-        .width(Layout.contentWidth)
-        .padding({ bottom: Spacing.md })
-
-        if (this.detailTabIndex === 0) {
-          this.ConversationTab()
-        } else if (this.detailTabIndex === 1) {
-          this.TimelineTab()
-        } else if (this.detailTabIndex === 2) {
-          this.FilesTab()
-        } else {
-          this.LogsTab()
-        }
+        .alignItems(HorizontalAlign.Center)
+        .padding({ bottom: Spacing.xxxl })
+        .backgroundColor(Colors.surface0)
       }
       .width('100%')
       .height('100%')
-      .alignItems(HorizontalAlign.Center)
-      .backgroundColor(Colors.surface0)
+      .scrollBar(BarState.Off)
     }
     .hideTitleBar(false)
     .title(this.getTitle())
@@ -163,146 +127,124 @@ export struct SessionDetailView {
   }
 
   @Builder
-  TabButton(label: string, idx: number) {
-    Button(label)
-      .type(ButtonType.Normal)
-      .fontSize(FontSize.sm)
-      .fontWeight(this.detailTabIndex === idx ? FontWeight.Medium : FontWeight.Normal)
-      .fontColor(this.detailTabIndex === idx ? Colors.foreground : Colors.foregroundMuted)
-      .backgroundColor(Colors.transparent)
-      .borderRadius(Radius.md)
-      .padding({ left: Spacing.md, right: Spacing.md, top: Spacing.sm, bottom: Spacing.sm })
-      .onClick(() => { this.detailTabIndex = idx; })
-      .stateStyles({
-        pressed: {
-          .backgroundColor(Colors.surface1)
-        },
-        normal: {
-          .backgroundColor(Colors.transparent)
-        }
-      })
+  HeaderSection() {
+    Column() {
+      Text(this.getTitle())
+        .fontSize(FontSize.xxxl)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(Colors.foreground)
+        .maxLines(2)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .margin({ bottom: Spacing.xs })
+
+      Row() {
+        Text(this.getAgent())
+          .fontSize(FontSize.sm)
+          .fontColor(Colors.foregroundMuted)
+        Text('·')
+          .fontSize(FontSize.sm)
+          .fontColor(Colors.foregroundMuted)
+          .margin({ left: Spacing.xs, right: Spacing.xs })
+        Text(this.formatRelativeTime(this.session.createdAt))
+          .fontSize(FontSize.sm)
+          .fontColor(Colors.foregroundMuted)
+      }
+    }
+    .width('100%')
+    .alignItems(HorizontalAlign.Start)
+    .padding({ top: Spacing.xxxl, left: Spacing.xl, right: Spacing.xl, bottom: Spacing.md })
   }
 
   @Builder
-  ConversationTab() {
+  RunStatusSection() {
     Column() {
-      Scroll() {
-        Column() {
-          if (ChatStore.loadingSession) {
-            Row() {
-              LoadingProgress()
-                .width(18)
-                .height(18)
-                .color(Colors.foreground)
-                .margin({ right: Spacing.sm })
-              Text($r('app.string.session_loading_history'))
-                .fontSize(FontSize.sm)
-                .fontColor(Colors.foregroundMuted)
-            }
-            .width(Layout.contentWidth)
-            .padding({ top: Spacing.md, bottom: Spacing.md })
-            .margin({ bottom: Spacing.lg })
-          }
+      Row() {
+        Circle({ width: 8, height: 8 })
+          .fill(this.getStatusColor())
+          .margin({ right: Spacing.sm })
 
-          Column() {
-            Text($r('app.string.session_user_task'))
-              .fontSize(FontSize.xs)
-              .fontWeight(FontWeight.Medium)
-              .fontColor(Colors.foregroundMuted)
-              .margin({ bottom: Spacing.sm })
-            Text(this.getUserRequest())
-              .fontSize(FontSize.md)
-              .fontColor(Colors.foreground)
-              .lineHeight(24)
-          }
-          .width(Layout.contentWidth)
-          .alignItems(HorizontalAlign.Start)
-          .padding({ top: Spacing.md, bottom: Spacing.xl })
+        Text(this.getStatusText())
+          .fontSize(FontSize.sm)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(Colors.foreground)
 
-          Column() {
-            Row() {
-              Text($r('app.string.session_progress'))
-                .fontSize(FontSize.md)
-                .fontWeight(FontWeight.Medium)
-                .fontColor(Colors.foreground)
-              Blank()
-              Text(this.getProgressPercent().toString() + '%')
-                .fontSize(FontSize.sm)
-                .fontColor(Colors.foregroundMuted)
-            }
-            .width('100%')
-            .margin({ bottom: Spacing.md })
+        Blank()
 
-            Progress({ value: this.getProgressPercent(), total: 100, type: ProgressType.Linear })
-              .width('100%')
-              .height(4)
-              .color(Colors.foreground)
-              .backgroundColor(Colors.surface1)
-              .margin({ bottom: Spacing.lg })
+        Text(this.getAgent())
+          .fontSize(FontSize.sm)
+          .fontColor(Colors.foregroundMuted)
+      }
+      .width('100%')
+      .margin({ bottom: Spacing.md })
 
-            if (ChatStore.planEntries.length > 0) {
-              ForEach(ChatStore.planEntries, (entry: PlanEntry) => {
-                this.PlanRow(entry.content, entry.status)
-              }, (entry: PlanEntry) => entry.content + entry.status)
-            } else {
-              this.PlanRow(this.text($r('app.string.session_plan_waiting')), ChatStore.turnActive ? 'in_progress' : 'pending')
-            }
-          }
-          .width(Layout.contentWidth)
-          .alignItems(HorizontalAlign.Start)
-          .padding({ top: Spacing.md, bottom: Spacing.xl })
+      Text(this.getUserRequest())
+        .fontSize(FontSize.md)
+        .fontColor(Colors.foreground)
+        .lineHeight(24)
+        .width('100%')
+        .margin({ bottom: Spacing.lg })
 
-          Column() {
-            Text($r('app.string.session_latest_output'))
-              .fontSize(FontSize.md)
-              .fontWeight(FontWeight.Medium)
-              .fontColor(Colors.foreground)
-              .margin({ bottom: Spacing.md })
-            Text(this.getConversationPreview())
-              .fontSize(FontSize.sm)
-              .fontColor(Colors.foregroundMuted)
-              .lineHeight(24)
-              .maxLines(10)
-              .textOverflow({ overflow: TextOverflow.Ellipsis })
-          }
-          .width(Layout.contentWidth)
-          .alignItems(HorizontalAlign.Start)
-          .padding({ top: Spacing.md, bottom: Spacing.xl })
+      if (ChatStore.turnActive) {
+        Row() {
+          Text(this.text($r('app.string.session_progress')))
+            .fontSize(FontSize.md)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(Colors.foreground)
+          Blank()
+          Text(this.getProgressPercent().toString() + '%')
+            .fontSize(FontSize.sm)
+            .fontColor(Colors.foregroundMuted)
         }
         .width('100%')
-        .alignItems(HorizontalAlign.Center)
-        .padding({ bottom: Spacing.xl })
-      }
-      .layoutWeight(1)
+        .margin({ bottom: Spacing.md })
 
-      Row() {
-        TextInput({ placeholder: this.text($r('app.string.session_continue_placeholder')), text: this.composerText })
-          .layoutWeight(1)
-          .height(44)
+        Progress({ value: this.getProgressPercent(), total: 100, type: ProgressType.Linear })
+          .width('100%')
+          .height(4)
+          .color(Colors.foreground)
           .backgroundColor(Colors.surface1)
-          .borderRadius(Radius.full)
-          .padding({ left: Spacing.lg, right: Spacing.lg })
-          .fontSize(FontSize.sm)
-          .fontColor(Colors.foreground)
-          .placeholderColor(Colors.foregroundMuted)
-          .onChange((value: string) => { this.composerText = value; })
-        Button() {
-          SymbolGlyph($r('sys.symbol.arrow_up_circle_fill'))
-            .fontSize(32)
-            .fontColor([Colors.foreground])
+          .margin({ bottom: Spacing.md })
+
+        if (ChatStore.planEntries.length > 0) {
+          ForEach(ChatStore.planEntries, (entry: PlanEntry) => {
+            this.PlanRow(entry.content, entry.status)
+          }, (entry: PlanEntry) => entry.content + entry.status)
+        } else {
+          this.PlanRow(this.text($r('app.string.session_plan_waiting')), 'in_progress')
         }
-        .width(44)
-        .height(44)
-        .backgroundColor(Colors.transparent)
-        .margin({ left: Spacing.sm })
+
+        Text('Started ' + this.formatRelativeTime(this.session.createdAt))
+          .fontSize(FontSize.sm)
+          .fontColor(Colors.foregroundMuted)
+          .margin({ top: Spacing.sm })
+          .width('100%')
+      } else if (ChatStore.messages.length > 0) {
+        Row() {
+          SymbolGlyph($r('sys.symbol.checkmark'))
+            .fontSize(16)
+            .fontColor([Colors.success])
+            .margin({ right: Spacing.sm })
+          Text(this.text($r('app.string.session_turn_finished')))
+            .fontSize(FontSize.md)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(Colors.foreground)
+        }
+        .width('100%')
+        .margin({ bottom: Spacing.md })
+
+        if (ChatStore.lastUsage) {
+          Row() {
+            Text('Tokens: ' + ChatStore.lastUsage.totalTokens.toString())
+              .fontSize(FontSize.sm)
+              .fontColor(Colors.foregroundMuted)
+          }
+          .width('100%')
+        }
       }
-      .width(Layout.contentWidth)
-      .padding({ top: Spacing.md, bottom: Spacing.xl })
-      .backgroundColor(Colors.surface0)
     }
-    .layoutWeight(1)
-    .width('100%')
-    .alignItems(HorizontalAlign.Center)
+    .width(Layout.contentWidth)
+    .alignItems(HorizontalAlign.Start)
+    .padding({ top: Spacing.md, bottom: Spacing.xl })
   }
 
   @Builder
@@ -335,31 +277,41 @@ export struct SessionDetailView {
   }
 
   @Builder
-  TimelineTab() {
-    Scroll() {
-      Column() {
-        this.TimelineEvent(this.formatTime(this.session.createdAt), this.text($r('app.string.session_timeline_started')), this.getUserRequest())
-        ForEach(this.getToolMessages(), (message: MessageData) => {
-          this.TimelineEvent(
-            this.formatTime(message.timestamp),
-            message.toolName || this.text($r('app.string.session_tool_call')),
-            message.toolPath || message.toolContent || message.content || this.text($r('app.string.session_tool_running'))
-          )
-        }, (message: MessageData) => message.toolCallId + message.toolStatus + message.toolContent.length.toString())
-        if (ChatStore.turnActive) {
-          this.TimelineEvent(this.formatTime(Date.now()), this.text($r('app.string.session_agent_working')),
-            this.text($r('app.string.session_turn_active')))
-        } else if (ChatStore.messages.length > 0) {
-          this.TimelineEvent(this.formatTime(Date.now()), this.text($r('app.string.session_turn_finished')),
-            this.text($r('app.string.session_turn_finished_detail')))
-        }
+  ActivityFeedSection() {
+    Column() {
+      this.TimelineEvent(
+        this.formatTime(this.session.createdAt),
+        this.text($r('app.string.session_timeline_started')),
+        this.getUserRequest()
+      )
+
+      ForEach(this.getToolMessages(), (message: MessageData) => {
+        this.TimelineEvent(
+          this.formatTime(message.timestamp),
+          message.toolName || this.text($r('app.string.session_tool_call')),
+          message.toolPath || message.toolContent || message.content || this.text($r('app.string.session_tool_running'))
+        )
+      }, (message: MessageData) => message.toolCallId + message.toolStatus + message.toolContent.length.toString())
+
+      if (ChatStore.turnActive) {
+        this.TimelineEvent(
+          this.formatTime(Date.now()),
+          this.text($r('app.string.session_agent_working')),
+          this.text($r('app.string.session_turn_active'))
+        )
+      } else if (ChatStore.messages.length > 0) {
+        this.TimelineEvent(
+          this.formatTime(Date.now()),
+          this.text($r('app.string.session_turn_finished')),
+          this.text($r('app.string.session_turn_finished_detail'))
+        )
       }
-      .width(Layout.contentWidth)
-      .alignItems(HorizontalAlign.Center)
-      .padding({ top: Spacing.md, bottom: Spacing.xxxl })
+
+      this.DetailsSection()
     }
-    .layoutWeight(1)
-    .width('100%')
+    .width(Layout.contentWidth)
+    .alignItems(HorizontalAlign.Start)
+    .padding({ top: Spacing.md, bottom: Spacing.xl })
   }
 
   @Builder
@@ -412,34 +364,105 @@ export struct SessionDetailView {
   }
 
   @Builder
-  FilesTab() {
-    Scroll() {
-      Column() {
-        Text($r('app.string.session_files_title'))
-          .fontSize(FontSize.md)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(Colors.foreground)
-          .width('100%')
-          .margin({ bottom: Spacing.md })
-
-        if (this.getFileMessages().length === 0) {
-          this.FileRow(this.text($r('app.string.session_files_empty')), '+0', '-0')
-        } else {
-          ForEach(this.getFileMessages(), (message: MessageData) => {
-            this.FileRow(
-              message.toolPath || message.toolName || this.text($r('app.string.session_unnamed_file')),
-              message.toolNewText.length > 0 ? '+' + message.toolNewText.split('\n').length.toString() : '+?',
-              message.toolOldText.length > 0 ? '-' + message.toolOldText.split('\n').length.toString() : '-?'
-            )
-          }, (message: MessageData) => message.toolCallId + message.toolPath)
+  DetailsSection() {
+    Column() {
+      Button() {
+        Row() {
+          Text('Details')
+            .fontSize(FontSize.sm)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(Colors.foreground)
+          Blank()
+          Text(this.showDetails ? '▲' : '▼')
+            .fontSize(FontSize.sm)
+            .fontColor(Colors.foregroundMuted)
         }
+        .width('100%')
       }
-      .width(Layout.contentWidth)
-      .alignItems(HorizontalAlign.Center)
-      .padding({ top: Spacing.md, bottom: Spacing.xxxl })
+      .type(ButtonType.Normal)
+      .backgroundColor(Colors.transparent)
+      .padding({ top: Spacing.md, bottom: Spacing.md })
+      .onClick(() => { this.showDetails = !this.showDetails; })
+      .stateStyles({
+        normal: {
+          .backgroundColor(Colors.transparent)
+        },
+        pressed: {
+          .backgroundColor(Colors.surface1)
+        }
+      })
+
+      if (this.showDetails) {
+        Column() {
+          this.LogRow(this.text($r('app.string.session_log_session_id')), this.session.sessionId || ChatStore.acpSessionId || '—')
+          this.LogRow(this.text($r('app.string.session_log_bridge_session')), ChatStore.bridgeSessionId || '—')
+          this.LogRow(this.text($r('app.string.session_log_model')), ChatStore.sessionCurrentModelId || ChatStore.lastModelId || '—')
+          this.LogRow(this.text($r('app.string.session_log_token_usage')), ChatStore.lastUsage ? ChatStore.lastUsage.totalTokens.toString() : '—')
+          this.LogRow(this.text($r('app.string.session_log_workspace')), this.session.cwd || '—')
+        }
+        .width('100%')
+        .padding({ top: Spacing.sm })
+      }
     }
-    .layoutWeight(1)
     .width('100%')
+    .margin({ top: Spacing.md })
+  }
+
+  @Builder
+  LogRow(label: string, value: string) {
+    Column() {
+      Text(label)
+        .fontSize(FontSize.xs)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(Colors.foregroundMuted)
+        .width('100%')
+        .margin({ bottom: Spacing.xs })
+      Text(value)
+        .fontSize(FontSize.sm)
+        .fontColor(Colors.foreground)
+        .width('100%')
+        .fontFamily('monospace')
+    }
+    .width('100%')
+    .padding({ top: Spacing.md, bottom: Spacing.md, left: Spacing.sm, right: Spacing.sm })
+    .backgroundColor(Colors.transparent)
+    .borderRadius(Radius.md)
+    .stateStyles({
+      normal: {
+        .backgroundColor(Colors.transparent)
+      },
+      pressed: {
+        .backgroundColor(Colors.surface1)
+      }
+    })
+    .margin({ bottom: Spacing.xs })
+  }
+
+  @Builder
+  ChangedFilesSection() {
+    Column() {
+      Text(this.text($r('app.string.session_files_title')))
+        .fontSize(FontSize.md)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(Colors.foreground)
+        .width('100%')
+        .margin({ bottom: Spacing.md })
+
+      if (this.getFileMessages().length === 0) {
+        this.FileRow(this.text($r('app.string.session_files_empty')), '+0', '-0')
+      } else {
+        ForEach(this.getFileMessages(), (message: MessageData) => {
+          this.FileRow(
+            message.toolPath || message.toolName || this.text($r('app.string.session_unnamed_file')),
+            message.toolNewText.length > 0 ? '+' + message.toolNewText.split('\n').length.toString() : '+?',
+            message.toolOldText.length > 0 ? '-' + message.toolOldText.split('\n').length.toString() : '-?'
+          )
+        }, (message: MessageData) => message.toolCallId + message.toolPath)
+      }
+    }
+    .width(Layout.contentWidth)
+    .alignItems(HorizontalAlign.Start)
+    .padding({ top: Spacing.md, bottom: Spacing.xl })
   }
 
   @Builder
@@ -480,50 +503,29 @@ export struct SessionDetailView {
   }
 
   @Builder
-  LogsTab() {
-    Scroll() {
-      Column() {
-        this.LogRow(this.text($r('app.string.session_log_session_id')), this.session.sessionId || ChatStore.acpSessionId || '—')
-        this.LogRow(this.text($r('app.string.session_log_bridge_session')), ChatStore.bridgeSessionId || '—')
-        this.LogRow(this.text($r('app.string.session_log_model')), ChatStore.sessionCurrentModelId || ChatStore.lastModelId || '—')
-        this.LogRow(this.text($r('app.string.session_log_token_usage')), ChatStore.lastUsage ? ChatStore.lastUsage.totalTokens.toString() : '—')
-        this.LogRow(this.text($r('app.string.session_log_workspace')), this.session.cwd || '—')
-      }
+  OpenChatButton() {
+    Button('Open chat')
+      .type(ButtonType.Normal)
       .width(Layout.contentWidth)
-      .alignItems(HorizontalAlign.Center)
-      .padding({ top: Spacing.md, bottom: Spacing.xxxl })
-    }
-    .layoutWeight(1)
-    .width('100%')
-  }
-
-  @Builder
-  LogRow(label: string, value: string) {
-    Column() {
-      Text(label)
-        .fontSize(FontSize.xs)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(Colors.foregroundMuted)
-        .width('100%')
-        .margin({ bottom: Spacing.xs })
-      Text(value)
-        .fontSize(FontSize.sm)
-        .fontColor(Colors.foreground)
-        .width('100%')
-        .fontFamily('monospace')
-    }
-    .width('100%')
-    .padding({ top: Spacing.md, bottom: Spacing.md, left: Spacing.sm, right: Spacing.sm })
-    .backgroundColor(Colors.transparent)
-    .borderRadius(Radius.md)
-    .stateStyles({
-      normal: {
-        .backgroundColor(Colors.transparent)
-      },
-      pressed: {
-        .backgroundColor(Colors.surface1)
-      }
-    })
-    .margin({ bottom: Spacing.xs })
+      .height(48)
+      .fontSize(FontSize.md)
+      .fontWeight(FontWeight.Medium)
+      .fontColor(Colors.surface0)
+      .backgroundColor(Colors.foreground)
+      .borderRadius(Radius.lg)
+      .margin({ top: Spacing.lg, bottom: Spacing.xxl })
+      .onClick(() => {
+        if (this.onOpenChat) {
+          this.onOpenChat();
+        }
+      })
+      .stateStyles({
+        normal: {
+          .backgroundColor(Colors.foreground)
+        },
+        pressed: {
+          .backgroundColor(Colors.foregroundMuted)
+        }
+      })
   }
 }

@@ -175,60 +175,57 @@ export struct ToolCallCard {
       .backgroundColor(Colors.terminalBg)
       .borderRadius(Radius.sm)
     } else if (this.contentType === 'diff') {
-      Column() {
-        if (this.content.length > 0) {
-          Text(this.content)
-            .fontSize(FontSize.xs)
-            .fontColor(Colors.foregroundMuted)
-            .fontFamily('monospace')
-            .lineHeight(18)
-            .margin({ bottom: Spacing.sm })
-        }
-        
         Column() {
-          Row() {
-            SymbolGlyph($r('sys.symbol.doc_text'))
-              .fontSize(FontSize.sm)
-              .fontColor([Colors.foregroundMuted])
-              .margin({ right: Spacing.xs })
-            Text(this.getPathLabel())
+          if (this.content.length > 0) {
+            Text(this.content)
               .fontSize(FontSize.xs)
               .fontColor(Colors.foregroundMuted)
-              .fontWeight(FontWeight.Medium)
+              .fontFamily('monospace')
+              .lineHeight(18)
+              .margin({ bottom: Spacing.sm })
           }
-          .width('100%')
-          .padding({ left: Spacing.sm, right: Spacing.sm, top: Spacing.xs, bottom: Spacing.xs })
-          .backgroundColor(Colors.surface1)
-          .border({ width: { bottom: 1 }, color: { bottom: Colors.borderLight } })
-          
+
           Column() {
-            ForEach(this.getDiffLines(), (line: string, index: number) => {
-              Row() {
-                Text(line)
-                  .fontSize(FontSize.xs)
-                  .fontColor(this.getDiffColor(line))
-                  .fontFamily('monospace')
-                  .lineHeight(18)
-                  .textOverflow({ overflow: TextOverflow.Ellipsis })
-                  .maxLines(1)
-              }
-              .width('100%')
-              .padding({ left: Spacing.sm, right: Spacing.sm })
-              .backgroundColor(this.getDiffBgColor(line))
-            }, (line: string, index: number) => index + '_' + line)
+            Row() {
+              SymbolGlyph($r('sys.symbol.doc_text'))
+                .fontSize(FontSize.sm)
+                .fontColor([Colors.foregroundMuted])
+                .margin({ right: Spacing.xs })
+              Text(this.getPathLabel())
+                .fontSize(FontSize.xs)
+                .fontColor(Colors.foregroundMuted)
+                .fontWeight(FontWeight.Medium)
+            }
+            .width('100%')
+            .padding({ left: Spacing.sm, right: Spacing.sm, top: Spacing.xs, bottom: Spacing.xs })
+
+            Column() {
+              ForEach(this.getDiffLines(), (line: string, index: number) => {
+                Row() {
+                  Text(line)
+                    .fontSize(FontSize.xs)
+                    .fontColor(this.getDiffColor(line))
+                    .fontFamily('monospace')
+                    .lineHeight(18)
+                    .textOverflow({ overflow: TextOverflow.Ellipsis })
+                    .maxLines(1)
+                }
+                .width('100%')
+                .padding({ left: Spacing.sm, right: Spacing.sm })
+                .backgroundColor(this.getDiffBgColor(line))
+              }, (line: string, index: number) => index + '_' + line)
+            }
+            .width('100%')
+            .padding({ top: Spacing.xs, bottom: Spacing.xs })
+            .alignItems(HorizontalAlign.Start)
           }
           .width('100%')
-          .padding({ top: Spacing.xs, bottom: Spacing.xs })
-          .alignItems(HorizontalAlign.Start)
+          .clip(true)
+          .backgroundColor(Colors.surface1)
+          .borderRadius(Radius.sm)
         }
-        .width('100%')
-        .clip(true)
-        .backgroundColor(Colors.surface0)
-        .border({ width: 1, color: Colors.borderLight })
-        .borderRadius(Radius.sm)
-      }
-      .layoutWeight(1)
-      .alignItems(HorizontalAlign.Start)
+        .layoutWeight(1)
+        .alignItems(HorizontalAlign.Start)
     } else if (this.contentType === 'content') {
       Column() {
         Text(this.getPreviewText(this.content))
@@ -263,72 +260,78 @@ export struct ToolCallCard {
 
   build() {
     Column() {
-      Row() {
-        if (this.isCustomIcon(this.getIconResource())) {
-          CustomIcon({
-            name: this.iconCustomName,
-            iconSize: 14,
-            color: Colors.foregroundMuted
-          }).margin({ right: Spacing.sm })
-        } else {
-          SymbolGlyph(this.iconSymbolRes)
-            .fontSize(FontSize.md)
-            .fontColor([Colors.foregroundMuted])
-            .margin({ right: Spacing.sm })
-        }
+      Button() {
+        Row() {
+          if (this.isCustomIcon(this.getIconResource())) {
+            CustomIcon({
+              name: this.iconCustomName,
+              iconSize: 14,
+              color: Colors.foregroundMuted
+            }).margin({ right: Spacing.sm })
+          } else {
+            SymbolGlyph(this.iconSymbolRes)
+              .fontSize(FontSize.md)
+              .fontColor([Colors.foregroundMuted])
+              .margin({ right: Spacing.sm })
+          }
 
 
-        Text(this.getFormattedName())
-          .fontSize(FontSize.sm)
-          .fontColor(Colors.foregroundMuted)
-          .fontWeight(FontWeight.Medium)
-
-        Blank()
-
-        if (this.hasDetail()) {
-          Text(getContext(this).resourceManager.getStringSync(this.expanded ? $r('app.string.tool_hide_detail').id : $r('app.string.tool_show_detail').id))
-            .fontSize(FontSize.xs)
-            .fontColor(Colors.foregroundLight)
-            .margin({ right: Spacing.xs })
-
-          SymbolGlyph($r('sys.symbol.chevron_down'))
+          Text(this.getFormattedName())
             .fontSize(FontSize.sm)
-            .fontColor([Colors.foregroundMuted])
-            .rotate({ angle: this.expanded ? 180 : 0 })
-            .animation({ duration: Duration.fast, curve: Curve.EaseOut })
-        }
+            .fontColor(Colors.foregroundMuted)
+            .fontWeight(FontWeight.Medium)
 
-        if (this.status === 'in_progress') {
-          CustomIcon({
-            name: 'progress',
-            iconSize: 14,
-            color: Colors.foregroundMuted
-          })
-            .opacity(this.breathFlag ? 0.3 : 1.0)
-            .rotate({ angle: this.breathFlag ? 360 : 0 })
-            .animation({
-              duration: 1500,
-              curve: Curve.Linear,
-              playMode: PlayMode.Normal,
-              iterations: -1
+          Blank()
+
+          if (this.hasDetail()) {
+            Text(getContext(this).resourceManager.getStringSync(this.expanded ? $r('app.string.tool_hide_detail').id : $r('app.string.tool_show_detail').id))
+              .fontSize(FontSize.xs)
+              .fontColor(Colors.foregroundLight)
+              .margin({ right: Spacing.xs })
+
+            SymbolGlyph($r('sys.symbol.chevron_down'))
+              .fontSize(FontSize.sm)
+              .fontColor([Colors.foregroundMuted])
+              .rotate({ angle: this.expanded ? 180 : 0 })
+              .animation({ duration: Duration.fast, curve: Curve.EaseOut })
+          }
+
+          if (this.status === 'in_progress') {
+            CustomIcon({
+              name: 'progress',
+              iconSize: 14,
+              color: Colors.foregroundMuted
             })
-        } else if (this.status === 'completed' || this.status === 'success') {
-          SymbolGlyph($r('sys.symbol.checkmark'))
-            .fontSize(FontSize.sm)
-            .fontColor([Colors.foregroundMuted])
-        } else if (this.status === 'failed' || this.status === 'error') {
-          SymbolGlyph($r('sys.symbol.xmark_circle'))
-            .fontSize(FontSize.sm)
-            .fontColor([Colors.error])
+              .opacity(this.breathFlag ? 0.3 : 1.0)
+              .rotate({ angle: this.breathFlag ? 360 : 0 })
+              .animation({
+                duration: 1500,
+                curve: Curve.Linear,
+                playMode: PlayMode.Normal,
+                iterations: -1
+              })
+          } else if (this.status === 'completed' || this.status === 'success') {
+            SymbolGlyph($r('sys.symbol.checkmark'))
+              .fontSize(FontSize.sm)
+              .fontColor([Colors.foregroundMuted])
+          } else if (this.status === 'failed' || this.status === 'error') {
+            SymbolGlyph($r('sys.symbol.xmark_circle'))
+              .fontSize(FontSize.sm)
+              .fontColor([Colors.error])
+          }
         }
+        .width('100%')
+        .padding({ left: Spacing.sm, right: Spacing.md, top: Spacing.xs, bottom: Spacing.xs })
+        .alignItems(VerticalAlign.Center)
       }
+      .type(ButtonType.Normal)
       .width('100%')
-      .padding({ left: Spacing.sm, right: Spacing.md, top: Spacing.xs, bottom: Spacing.xs })
-      .alignItems(VerticalAlign.Center)
+      .backgroundColor(Color.Transparent)
+      .padding(0)
       .enabled(this.hasDetail())
       .stateStyles({
-        pressed: { .backgroundColor(Colors.surface2) },
-        normal: { .backgroundColor(Colors.surface0) }
+        pressed: { .backgroundColor(Colors.surface1) },
+        normal: { .backgroundColor(Color.Transparent) }
       })
       .onClick(() => {
         if (this.hasDetail()) {
@@ -348,8 +351,6 @@ export struct ToolCallCard {
       }
     }
     .width('100%')
-    .backgroundColor(Colors.surface0)
-    .borderRadius(Radius.md)
     .padding({ left: 0, right: 0 })
     .animation({ duration: Duration.fast, curve: Curve.EaseOut })
   }

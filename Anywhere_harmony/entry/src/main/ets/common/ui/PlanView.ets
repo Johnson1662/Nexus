@@ -1,4 +1,4 @@
-import { Colors, FontSize, Spacing, Radius } from '../../constants/DesignTokens';
+import { Colors, FontSize, Spacing } from '../../constants/DesignTokens';
 import { PlanEntry } from '../model/ChatState';
 
 @Component
@@ -27,10 +27,8 @@ export struct PlanView {
         .alignItems(VerticalAlign.Top)
       }, (entry: PlanEntry, index: number) => entry.content + index.toString())
     }
-    .width('100%')
-    .backgroundColor(Colors.surface0)
-    .borderRadius(Radius.md)
-    .padding({ left: Spacing.md, right: Spacing.md, top: Spacing.sm, bottom: Spacing.sm })
-    .alignItems(HorizontalAlign.Start)
+.width('100%')
+.padding({ left: Spacing.md, right: Spacing.md, top: Spacing.sm, bottom: Spacing.sm })
+.alignItems(HorizontalAlign.Start)
   }
 }

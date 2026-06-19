@@ -1,4 +1,4 @@
-import { Colors, FontSize, Spacing, Radius, Duration } from '../../constants/DesignTokens';
+import { Colors, FontSize, Spacing, Radius } from '../../constants/DesignTokens';
 import { ThinkingSection } from './ThinkingSection';
 import { ToolCallCard } from './ToolCallCard';
 import { MarkdownRender } from './MarkdownRender';
@@ -137,9 +137,9 @@ export struct MessageCard {
               if (this.msgContent.length > 0) {
                 if (this.streaming) {
                   Text(this.msgContent)
-                    .fontSize(FontSize.base)
+                    .fontSize(FontSize.lg)
                     .fontColor(Colors.foreground)
-                    .lineHeight(22)
+                    .lineHeight(26)
                 } else {
                   MarkdownRender({ text: this.msgContent, streaming: false })
                 }
@@ -170,7 +170,7 @@ export struct MessageCard {
                 .margin({ bottom: Spacing.xs })
               if (this.parsedRestText.length > 0) {
                 Text(this.parsedRestText)
-                  .fontSize(FontSize.base).fontColor(Colors.foreground).lineHeight(22)
+                  .fontSize(FontSize.lg).fontColor(Colors.foreground).lineHeight(26)
               }
             } else if (this.parsedFileType === 'file') {
               Row() {
@@ -178,7 +178,7 @@ export struct MessageCard {
                   .fontSize(16).fontColor([Colors.foregroundMuted])
                   .margin({ right: Spacing.sm })
                 Text(this.parsedFileName)
-                  .fontSize(FontSize.base).fontColor(Colors.foreground)
+                  .fontSize(FontSize.lg).fontColor(Colors.foreground)
                   .fontWeight(FontWeight.Medium)
                   .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
                   .layoutWeight(1)
@@ -187,15 +187,15 @@ export struct MessageCard {
               .padding({ top: Spacing.xs, bottom: Spacing.xs })
               if (this.parsedRestText.length > 0) {
                 Text(this.parsedRestText)
-                  .fontSize(FontSize.base).fontColor(Colors.foreground).lineHeight(22)
+                  .fontSize(FontSize.lg).fontColor(Colors.foreground).lineHeight(26)
                   .margin({ top: Spacing.sm })
               }
             } else {
               if (this.msgContent.length > 0) {
                 Text(this.msgContent)
-                  .fontSize(FontSize.base)
+                  .fontSize(FontSize.lg)
                   .fontColor(Colors.foreground)
-                  .lineHeight(22)
+                  .lineHeight(26)
               }
             }
           }
@@ -206,16 +206,25 @@ export struct MessageCard {
             right: Spacing.lg
           })
           .backgroundColor(Colors.surface1)
-          .borderRadius({ topLeft: Radius.xl, topRight: Radius.xl, bottomLeft: Radius.xl, bottomRight: Radius.xs })
+          .borderRadius(Radius.lg)
           .alignItems(HorizontalAlign.Start)
           .gesture(LongPressGesture().onAction(() => { this.copyContent() }))
 
           if (this.msgSendStatus === 'failed') {
-            SymbolGlyph($r('sys.symbol.xmark_circle'))
-              .fontSize(16)
-              .fontColor([Colors.error])
-              .margin({ top: Spacing.xs })
-              .onClick(() => { if (this.onRetry) this.onRetry(this.msgId, this.msgContent) })
+            Button() {
+              SymbolGlyph($r('sys.symbol.xmark_circle'))
+                .fontSize(16)
+                .fontColor([Colors.error])
+            }
+            .type(ButtonType.Normal)
+            .backgroundColor(Color.Transparent)
+            .padding(0)
+            .margin({ top: Spacing.xs })
+            .stateStyles({
+              pressed: { .backgroundColor(Colors.surface1) },
+              normal: { .backgroundColor(Color.Transparent) }
+            })
+            .onClick(() => { if (this.onRetry) this.onRetry(this.msgId, this.msgContent) })
           }
         }
       }

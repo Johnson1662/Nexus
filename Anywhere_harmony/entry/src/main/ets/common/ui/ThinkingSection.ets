@@ -29,44 +29,61 @@ export struct ThinkingSection {
 
   build() {
     Column() {
-      Row() {
-        CustomIcon({
-          name: this.isStreaming ? 'thinking' : 'thinking_done',
-          iconSize: 16,
-          color: Colors.foregroundMuted
-        }).margin({ right: Spacing.sm })
+      Button() {
+        Row() {
+          if (this.isStreaming) {
+            CustomIcon({
+              name: 'thinking',
+              iconSize: 16,
+              color: Colors.foregroundMuted
+            })
+              .margin({ right: Spacing.sm })
+              .transition(TransitionEffect.OPACITY.animation({ duration: 150, curve: Curve.EaseOut }))
+          } else {
+            CustomIcon({
+              name: 'thinking_done',
+              iconSize: 16,
+              color: Colors.foregroundMuted
+            })
+              .margin({ right: Spacing.sm })
+              .transition(TransitionEffect.OPACITY.animation({ duration: 150, curve: Curve.EaseOut }))
+          }
 
-        if (this.isStreaming) {
-          Text($r('app.string.thinking_label'))
-            .fontSize(FontSize.sm)
-            .fontColor(Colors.foregroundMuted)
-            .fontWeight(FontWeight.Medium)
-        } else {
-          Text($r('app.string.thinking_done_label'))
-            .fontSize(FontSize.sm)
-            .fontColor(Colors.foregroundMuted)
-            .fontWeight(FontWeight.Medium)
+          if (this.isStreaming) {
+            Text($r('app.string.thinking_label'))
+              .fontSize(FontSize.sm)
+              .fontColor(Colors.foregroundMuted)
+              .fontWeight(FontWeight.Medium)
+          } else {
+            Text($r('app.string.thinking_done_label'))
+              .fontSize(FontSize.sm)
+              .fontColor(Colors.foregroundMuted)
+              .fontWeight(FontWeight.Medium)
+          }
+
+          Blank()
+
+          SymbolGlyph($r('sys.symbol.chevron_down'))
+            .fontSize(FontSize.md)
+            .fontColor([Colors.foregroundMuted])
+            .accessibilityText(this.expanded ? this.text($r('app.string.thinking_collapse')) : this.text($r('app.string.thinking_expand')))
+            .rotate({ z: 1, angle: this.expanded ? 0 : -90 })
+            .animation({ duration: Duration.normal, curve: Curve.EaseInOut })
         }
-
-        Blank()
-
-        SymbolGlyph($r('sys.symbol.chevron_down'))
-          .fontSize(FontSize.md)
-          .fontColor([Colors.foregroundMuted])
-          .accessibilityText(this.expanded ? this.text($r('app.string.thinking_collapse')) : this.text($r('app.string.thinking_expand')))
-          .rotate({ z: 1, angle: this.expanded ? 0 : -90 })
-          .animation({ duration: Duration.normal, curve: Curve.EaseInOut })
+        .width('100%')
+        .height(36)
+        .padding({ left: Spacing.sm })
+        .alignItems(VerticalAlign.Center)
       }
+      .type(ButtonType.Normal)
       .width('100%')
-      .height(36)
-      .padding({ left: Spacing.sm })
-      .alignItems(VerticalAlign.Center)
+      .backgroundColor(Color.Transparent)
+      .padding(0)
+      .borderRadius(Radius.md)
       .stateStyles({
         pressed: { .backgroundColor(Colors.surface1) },
         normal: { .backgroundColor(Colors.transparent) }
       })
-      .animation({ duration: Duration.fast, curve: Curve.EaseOut })
-      .borderRadius(Radius.md)
       .onClick(() => {
         this.getUIContext()?.animateTo({ duration: Duration.normal, curve: Curve.EaseInOut }, () => {
           this.expanded = !this.expanded;
@@ -82,8 +99,8 @@ export struct ThinkingSection {
             .width('100%')
         }
         .width('100%')
-        .padding({ left: Spacing.md, top: Spacing.xs, bottom: Spacing.sm })
-        .margin({ left: 7 })
+        .padding({ left: Spacing.md, top: Spacing.sm, bottom: Spacing.sm })
+        .margin({ left: Spacing.md })
         .border({ width: { left: 1 }, color: { left: Colors.border } })
         .transition(TransitionEffect.OPACITY.animation({ duration: 150, curve: Curve.EaseOut }))
       }

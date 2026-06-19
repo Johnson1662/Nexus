@@ -122,8 +122,6 @@ export struct ChatPage {
         }
         .width(Layout.contentWidth)
         .padding({ left: Spacing.lg, right: Spacing.lg, top: Spacing.sm, bottom: Spacing.sm })
-        .backgroundColor(Colors.surface1)
-        .borderRadius(Radius.md)
         .margin({ top: Spacing.xs, bottom: Spacing.xs })
         .transition(TransitionEffect.OPACITY)
         .accessibilityText(this.localize($r('app.string.chat_loading_session')))
@@ -146,7 +144,8 @@ export struct ChatPage {
                 Text($r('app.string.chat_empty_prompt'))
                   .fontSize(FontSize.sm)
                   .fontColor(Colors.foregroundMuted)
-                  .margin({ top: Spacing.xs })
+                  .lineHeight(22)
+                  .margin({ top: Spacing.sm })
               }
               .alignItems(HorizontalAlign.Start)
               .transition(TransitionEffect.OPACITY)
@@ -155,7 +154,7 @@ export struct ChatPage {
           }
         .width('100%').layoutWeight(1)
         .justifyContent(FlexAlign.Start).alignItems(HorizontalAlign.Start)
-        .padding({ left: Spacing.lg, right: Spacing.lg, top: Spacing.xxl })
+        .padding({ left: Spacing.lg, right: Spacing.lg, top: Spacing.xxxl })
       } else {
         List({ scroller: this.scroller }) {
           LazyForEach(this.dataSource, (msg: MessageData) => {
@@ -164,7 +163,7 @@ export struct ChatPage {
                 PlanView({ entries: ChatStore.planEntries })
                   .width('100%')
                   .padding({ left: Spacing.lg, right: Spacing.lg, top: Spacing.xs, bottom: Spacing.xs })
-                  .margin({ bottom: Spacing.sm })
+                  .margin({ bottom: Spacing.xl })
               } else {
                 MessageCard({
                   isUser: msg.role === 'user',
@@ -203,6 +202,7 @@ export struct ChatPage {
                 .padding({ left: Spacing.lg, right: Spacing.lg })
             }
             .height('auto')
+            .margin({ bottom: Spacing.md })
           }
 
           if (ChatStore.turnActive) {
@@ -210,6 +210,7 @@ export struct ChatPage {
               PulsingDots()
                 .padding({ left: Spacing.lg, top: Spacing.xs, bottom: Spacing.xs })
             }
+            .margin({ bottom: Spacing.md })
             .transition(TransitionEffect.OPACITY)
           }
 
@@ -225,6 +226,7 @@ export struct ChatPage {
               .width('100%')
               .padding({ left: Spacing.lg, right: Spacing.lg, top: Spacing.sm, bottom: Spacing.md })
             }
+            .margin({ bottom: Spacing.md })
             .transition(TransitionEffect.OPACITY)
           }
         }
@@ -257,10 +259,10 @@ export struct ChatPage {
         .backgroundColor(Colors.surfaceElevated)
         .border({ width: 1, color: Colors.borderLight })
         .borderRadius(Radius.full)
-        .shadow(Shadow.md)
+        .shadow(Shadow.sm)
         .stateStyles({
           pressed: { .backgroundColor(Colors.surface1) },
-          normal: { .backgroundColor(Color.Transparent) }
+          normal: { .backgroundColor(Colors.surfaceElevated) }
         })
         .animation({ duration: 150, curve: Curve.EaseOut })
         .transition(TransitionEffect.OPACITY.animation({ duration: 150, curve: Curve.EaseOut }))
