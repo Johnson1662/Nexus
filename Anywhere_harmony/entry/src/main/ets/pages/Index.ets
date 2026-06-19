@@ -42,6 +42,7 @@ struct Index {
   private ws: WSClient = new WSClient();
   private wsCallbacksBound: boolean = false;
   private homeRouteReady: boolean = false;
+  private serverInfoGen: number = 0;
 
   @State selectedWorkspaceIndex: number = 0;
   @State selectedSession: ServerSession = new ServerSession();
@@ -71,6 +72,7 @@ struct Index {
               selectedKey: this.selectedHostFilter,
               statusRevision: this.hostStatusRevision,
               onSelect: (key: string) => {
+                hilog.info(DOMAIN, TAG, 'onSelect: key=' + key + ' currentDeviceId=' + ChatStore.currentDeviceId);
                 this.selectedHostFilter = key;
                 // Guard against reconnecting to the same host
                 for (let i: number = 0; i < HostStore.devices.length; i++) {
@@ -228,12 +230,18 @@ struct Index {
           AppStorage.setOrCreate<string>('serverUrl', detail);
           StorageService.getInstance().putString(PrefsKeys.SERVER_URL, detail);
         }
+      } else {
+        // Connection lost — clear loading state so UI doesn't freeze
+        AppStorage.setOrCreate('loadingWorkspaces', false);
       }
     });
     this.ws.onServerInfo(async () => {
+      const gen = ++this.serverInfoGen;
       this.bumpHostStatusRevision();
       // Sync selectedHostFilter to the actually connected host
       let connectedHostKey: string = ChatStore.currentDeviceId;
+      hilog.info(DOMAIN, TAG, 'onServerInfo: connectedHostKey=' + connectedHostKey +
+        ' selectedHostFilter_before=' + this.selectedHostFilter);
       if (connectedHostKey.length > 0) {
         this.selectedHostFilter = connectedHostKey;
       }
@@ -244,6 +252,7 @@ struct Index {
       if (url.length > 0) {
         await loadWorkspaces(url, connectedHostKey);
       }
+      if (gen !== this.serverInfoGen) return; // stale — a newer onServerInfo already fired
       AppStorage.setOrCreate('loadingWorkspaces', false);
       hilog.info(DOMAIN, TAG, 'onServerInfo: workspaces_after=' + WorkspaceStore.workspaces.length);
       this.refreshAgents(false);

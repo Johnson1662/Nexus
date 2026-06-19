@@ -1,7 +1,7 @@
 import { AbilityConstant, UIAbility, Want } from '@kit.AbilityKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { window } from '@kit.ArkUI';
-import { StorageService, PrefsKeys, loadWorkspaces, loadHosts, loadModelCache } from '../services/StorageService';
+import { StorageService, PrefsKeys, loadHosts, loadModelCache } from '../services/StorageService';
 import { ChatStore } from '../common/model/ChatState';
 import { AppPreferenceService } from '../services/AppPreferenceService';
 
@@ -51,8 +51,6 @@ export default class EntryAbility extends UIAbility {
       loadHosts().then(() => {
           storage.getString(PrefsKeys.SERVER_URL, 'ws://192.168.137.1:12138').then((url) => {
           AppStorage.setOrCreate<string>('serverUrl', url);
-          // Load workspaces after host groups so all IPs for one device share a list.
-          loadWorkspaces(url);
         });
       });
       storage.getString(PrefsKeys.LAST_AGENT, '').then((agent) => {

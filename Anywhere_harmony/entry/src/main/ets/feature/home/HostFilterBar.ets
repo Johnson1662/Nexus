@@ -44,7 +44,7 @@ export struct HostFilterBar {
     if (currentHostKey.length === 0) return false;
     if (device.hostId === currentHostKey || device.name === currentHostKey) return true;
     if (HostRuntimeStore.matchesDevice(device, currentHostKey)) return true;
-    return this.devices.length === 1 && HostRuntimeStore.isOnline(currentHostKey);
+    return false;
   }
 
   getPhaseColor(phase: string): Resource {

@@ -205,6 +205,13 @@ function scopeWorkspaceKey(base: string, scope: string): string {
 // Save workspaces for the given server URL
 export async function saveWorkspaces(serverUrl: string, hostKey: string = ''): Promise<void> {
   if (serverUrl.length === 0) return;
+  // Require a valid hostKey — without it we'd save to whichever host the URL
+  // happens to match (which may be wrong after host switch). If disconnected,
+  // the caller should skip saving.
+  if (hostKey.length === 0) {
+    hilog.warn(DOMAIN, TAG, 'saveWorkspaces: skipped, no hostKey (url=' + serverUrl + ')');
+    return;
+  }
   let storage = StorageService.getInstance();
   let scopes: string[] = getWorkspaceScopes(serverUrl, hostKey);
   let primaryScope: string = scopes[0];
