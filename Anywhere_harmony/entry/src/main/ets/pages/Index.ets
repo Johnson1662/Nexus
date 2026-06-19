@@ -244,6 +244,7 @@ struct Index {
       if (url.length > 0) {
         await loadWorkspaces(url, connectedHostKey);
       }
+      AppStorage.setOrCreate('loadingWorkspaces', false);
       hilog.info(DOMAIN, TAG, 'onServerInfo: workspaces_after=' + WorkspaceStore.workspaces.length);
       this.refreshAgents(false);
       if (WorkspaceStore.currentIndex >= 0 && WorkspaceStore.currentIndex < WorkspaceStore.workspaces.length) {
@@ -548,6 +549,7 @@ struct Index {
     ChatStore.models = [];
     ChatStore.modes = [];
     ChatStore.sessions = [];
+    AppStorage.setOrCreate('loadingWorkspaces', true);
     WorkspaceStore.workspaces = [];
     if (candidates.length > 1) {
       this.ws.connectBest(candidates, hostKey);

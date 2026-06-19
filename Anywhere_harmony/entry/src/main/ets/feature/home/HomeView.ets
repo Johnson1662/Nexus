@@ -17,6 +17,7 @@ export struct HomeView {
 
   @StorageLink('homeShowManualHost') showManualHostForm: boolean = false;
   @StorageLink('serverUrl') currentServerUrl: string = '';
+  @StorageLink('loadingWorkspaces') loadingWorkspaces: boolean = false;
   @State manualHostUrl: string = '';
   @State entered: boolean = false;
 
@@ -204,7 +205,21 @@ export struct HomeView {
       .width('100%')
       .margin({ bottom: Spacing.lg })
 
-      if (WorkspaceStore.workspaces.length === 0) {
+      if (this.loadingWorkspaces) {
+        Column() {
+          LoadingProgress()
+            .width(24)
+            .height(24)
+            .color(Colors.foregroundMuted)
+          Text('加载中…')
+            .fontSize(FontSize.sm)
+            .fontColor(Colors.foregroundMuted)
+            .margin({ top: Spacing.sm })
+        }
+        .width('100%')
+        .alignItems(HorizontalAlign.Center)
+        .padding({ top: Spacing.xl, bottom: Spacing.xl })
+      } else if (WorkspaceStore.workspaces.length === 0) {
         Text($r('app.string.home_no_projects'))
           .fontSize(FontSize.sm)
           .fontColor(Colors.foregroundMuted)
