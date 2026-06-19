@@ -341,17 +341,25 @@ export struct ChatView {
               .width('100%')
               .padding({ top: Spacing.sm, bottom: Spacing.sm, left: Spacing.md, right: Spacing.md })
             } else {
-              Row() {
-                SymbolGlyph($r('sys.symbol.plus'))
-                  .fontSize(14)
-                  .fontColor([Colors.foregroundMuted])
-                  .margin({ right: Spacing.xs })
-                Text($r('app.string.ws_add_button'))
-                  .fontSize(FontSize.sm)
-                  .fontColor(Colors.foregroundMuted)
+              Button({ type: ButtonType.Normal }) {
+                Row() {
+                  SymbolGlyph($r('sys.symbol.plus'))
+                    .fontSize(14)
+                    .fontColor([Colors.foregroundMuted])
+                    .margin({ right: Spacing.xs })
+                  Text($r('app.string.ws_add_button'))
+                    .fontSize(FontSize.sm)
+                    .fontColor(Colors.foregroundMuted)
+                }
+                .width('100%')
+                .padding({ top: Spacing.sm, bottom: Spacing.md, left: Spacing.md, right: Spacing.md })
               }
               .width('100%')
-              .padding({ top: Spacing.sm, bottom: Spacing.md, left: Spacing.md, right: Spacing.md })
+              .backgroundColor(Color.Transparent)
+              .stateStyles({
+                pressed: { .backgroundColor(Colors.surface1) },
+                normal: { .backgroundColor(Color.Transparent) }
+              })
               .onClick(() => { this.pickerShowPathInput = true })
             }
           }
@@ -416,37 +424,36 @@ export struct ChatView {
 
   @Builder
   PickerWorkspaceRow(workspace: WorkspaceInfo, index: number) {
-    Row() {
-      SymbolGlyph($r('sys.symbol.folder'))
-        .fontSize(16)
-        .fontColor([Colors.foreground])
-        .margin({ right: Spacing.sm })
+    Button({ type: ButtonType.Normal }) {
+      Row() {
+        SymbolGlyph($r('sys.symbol.folder'))
+          .fontSize(16)
+          .fontColor([Colors.foregroundMuted])
+          .margin({ right: Spacing.sm })
 
-      Text(workspace.name)
-        .fontSize(FontSize.sm)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(Colors.foreground)
-        .maxLines(1)
-        .layoutWeight(1)
+        Text(workspace.name)
+          .fontSize(FontSize.base)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(Colors.foreground)
+          .maxLines(1)
+          .layoutWeight(1)
 
-      if (WorkspaceStore.currentIndex === index) {
-        SymbolGlyph($r('sys.symbol.checkmark_circle_fill'))
-          .fontSize(18)
-          .fontColor([Colors.foreground])
-      } else {
-        SymbolGlyph($r('sys.symbol.circle'))
-          .fontSize(18)
-          .fontColor([Colors.border])
+        if (WorkspaceStore.currentIndex === index) {
+          SymbolGlyph($r('sys.symbol.checkmark'))
+            .fontSize(16)
+            .fontColor([Colors.accent])
+        }
       }
+      .width('100%')
+      .padding({ left: Spacing.lg, right: Spacing.lg, top: Spacing.md, bottom: Spacing.md })
     }
     .width('100%')
-    .padding({ left: Spacing.md, right: Spacing.md, top: Spacing.sm, bottom: Spacing.sm })
-    .backgroundColor(Colors.transparent)
-    .onClick(() => { this.selectWorkspace(index); })
+    .backgroundColor(Color.Transparent)
     .stateStyles({
       pressed: { .backgroundColor(Colors.surface1) },
-      normal: { .backgroundColor(Colors.transparent) }
+      normal: { .backgroundColor(Color.Transparent) }
     })
+    .onClick(() => { this.selectWorkspace(index); })
   }
 }
 
@@ -480,24 +487,29 @@ struct PermissionSheet {
         List() {
           ForEach(this.permission.options, (opt: PermissionOption) => {
             ListItem() {
-              Row() {
-                Text(opt.name)
-                  .fontSize(FontSize.base).fontColor(Colors.foreground)
-                  .padding({ top: Spacing.md, bottom: Spacing.md, left: Spacing.md, right: Spacing.md })
+              Button({ type: ButtonType.Normal }) {
+                Row() {
+                  Text(opt.name)
+                    .fontSize(FontSize.base)
+                    .fontColor(Colors.foreground)
+                    .padding({ top: Spacing.md, bottom: Spacing.md, left: Spacing.md, right: Spacing.md })
+                }
+                .width('100%')
               }
               .width('100%')
+              .borderRadius(Radius.md)
+              .backgroundColor(Colors.surface1)
+              .stateStyles({
+                pressed: { .backgroundColor(Colors.surface2) },
+                normal: { .backgroundColor(Colors.surface1) }
+              })
+              .animation({ duration: Duration.fast, curve: Curve.EaseOut })
+              .onClick(() => {
+                if (this.onSelect) this.onSelect(opt.optionId);
+              })
             }
-            .width('100%').borderRadius(Radius.md)
-            .backgroundColor(Colors.surface1)
-            .stateStyles({
-              pressed: { .backgroundColor(Colors.surface2) },
-              normal: { .backgroundColor(Colors.surface1) }
-            })
-            .animation({ duration: Duration.fast, curve: Curve.EaseOut })
-            .margin({ bottom: Spacing.xs })
-            .onClick(() => {
-              if (this.onSelect) this.onSelect(opt.optionId);
-            })
+            .width('100%')
+            .margin({ bottom: Spacing.sm })
           }, (opt: PermissionOption) => opt.optionId)
         }
         .width(Layout.contentWidth)
@@ -543,35 +555,39 @@ struct PickerSheet {
         List() {
           ForEach(this.getItems(), (item: string, index: number) => {
             ListItem() {
-              Row() {
-                Text(item)
-                  .fontSize(FontSize.base)
-                  .fontColor(index === this.getCurrentIndex() ? Colors.accent : Colors.foreground)
-                  .fontWeight(index === this.getCurrentIndex() ? FontWeight.Medium : FontWeight.Normal)
-                  .layoutWeight(1)
-                if (index === this.getCurrentIndex()) {
-                  SymbolGlyph($r('sys.symbol.checkmark'))
-                    .fontSize(16).fontColor([Colors.accent])
-                    .margin({ left: Spacing.sm })
-                    .accessibilityText($r('app.string.accessibility_currently_selected'))
+              Button({ type: ButtonType.Normal }) {
+                Row() {
+                  Text(item)
+                    .fontSize(FontSize.base)
+                    .fontColor(index === this.getCurrentIndex() ? Colors.accent : Colors.foreground)
+                    .fontWeight(index === this.getCurrentIndex() ? FontWeight.Medium : FontWeight.Normal)
+                    .layoutWeight(1)
+                  if (index === this.getCurrentIndex()) {
+                    SymbolGlyph($r('sys.symbol.checkmark'))
+                      .fontSize(16).fontColor([Colors.accent])
+                      .margin({ left: Spacing.sm })
+                      .accessibilityText($r('app.string.accessibility_currently_selected'))
+                  }
                 }
+                .width('100%')
+                .padding({ top: Spacing.md, bottom: Spacing.md, left: Spacing.md, right: Spacing.md })
               }
               .width('100%')
-              .padding({ top: Spacing.md, bottom: Spacing.md, left: Spacing.md, right: Spacing.md })
+              .borderRadius(Radius.md)
+              .backgroundColor(index === this.getCurrentIndex() ? Colors.accentLight : Colors.surface1)
+              .stateStyles({
+                pressed: { .backgroundColor(index === this.getCurrentIndex() ? Colors.accentLight : Colors.surface2) },
+                normal: { .backgroundColor(index === this.getCurrentIndex() ? Colors.accentLight : Colors.surface1) }
+              })
+              .animation({ duration: Duration.fast, curve: Curve.EaseOut })
+              .accessibilityText(index === this.getCurrentIndex() ?
+                this.text($r('app.string.accessibility_selected_item'), item) : item)
+              .onClick(() => {
+                if (this.onSelect) this.onSelect(index);
+              })
             }
-            .width('100%').borderRadius(Radius.md)
-            .backgroundColor(index === this.getCurrentIndex() ? Colors.accentLight : Colors.surface1)
-            .stateStyles({
-              pressed: { .backgroundColor(index === this.getCurrentIndex() ? Colors.accentLight : Colors.surface2) },
-              normal: { .backgroundColor(index === this.getCurrentIndex() ? Colors.accentLight : Colors.surface1) }
-            })
-            .animation({ duration: Duration.fast, curve: Curve.EaseOut })
-            .margin({ bottom: Spacing.xs })
-            .accessibilityText(index === this.getCurrentIndex() ?
-              this.text($r('app.string.accessibility_selected_item'), item) : item)
-            .onClick(() => {
-              if (this.onSelect) this.onSelect(index);
-            })
+            .width('100%')
+            .margin({ bottom: Spacing.sm })
           }, (item: string) => item)
         }
         .width(Layout.contentWidth)

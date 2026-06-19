@@ -219,7 +219,6 @@ export struct ChatInputBar {
         .height(this.getDropdownHeight())
         .backgroundColor(Colors.surfaceElevated)
         .borderRadius(Radius.lg)
-        .border({ width: 1, color: Colors.borderLight })
         .shadow(Shadow.md)
         .margin({ bottom: Spacing.sm })
         .transition(TransitionEffect.OPACITY.animation({ duration: 150, curve: Curve.EaseOut }))
@@ -257,9 +256,18 @@ export struct ChatInputBar {
           .layoutWeight(1).alignItems(HorizontalAlign.Start)
           .margin({ left: Spacing.xs, right: Spacing.xs })
 
-          SymbolGlyph($r('sys.symbol.xmark'))
-            .fontSize(14).fontColor([Colors.foregroundMuted])
-            .onClick(() => { this.clearPendingFile() })
+          Button() {
+            SymbolGlyph($r('sys.symbol.xmark'))
+              .fontSize(14).fontColor([Colors.foregroundMuted])
+          }
+          .width(28)
+          .height(28)
+          .backgroundColor(Color.Transparent)
+          .stateStyles({
+            pressed: { .backgroundColor(Colors.surface1) },
+            normal: { .backgroundColor(Color.Transparent) }
+          })
+          .onClick(() => { this.clearPendingFile() })
         }
         .width(Layout.contentWidth)
         .padding({ left: Spacing.lg, right: Spacing.lg, top: Spacing.sm, bottom: Spacing.xs })
@@ -281,6 +289,8 @@ export struct ChatInputBar {
             .backgroundColor('transparent')
             .padding({ left: Spacing.md, right: Spacing.md })
             .fontSize(FontSize.base)
+            .fontColor(Colors.foreground)
+            .placeholderColor(Colors.foregroundMuted)
             .enabled(!this.disabled)
             .enterKeyType(EnterKeyType.Send)
             .onChange((val: string) => { this.text = val })
@@ -310,22 +320,25 @@ export struct ChatInputBar {
 
             // Model name chip → opens config bindsheet
             Button() {
-              Row() {
+              Row({ space: Spacing.xxs }) {
+                SymbolGlyph($r('sys.symbol.externaldrive'))
+                  .fontSize(12)
+                  .fontColor([Colors.foregroundMuted])
                 Text(this.getModelName().length > 0 ? this.stripProvider(this.getModelName()) : this.localize($r('app.string.config_model')))
-                  .fontSize(14)
+                  .fontSize(FontSize.sm)
                   .fontColor(Colors.foreground)
                   .fontWeight(FontWeight.Medium)
                   .maxLines(1)
                 SymbolGlyph($r('sys.symbol.chevron_down'))
-                  .fontSize(8)
+                  .fontSize(10)
                   .fontColor([Colors.foregroundMuted])
                   .margin({ left: Spacing.xxs })
               }
             }
-            .height(28)
-            .padding({ left: Spacing.sm, right: Spacing.sm })
+            .height(30)
+            .padding({ left: Spacing.md, right: Spacing.md })
             .backgroundColor(Colors.surface1)
-            .borderRadius(Radius.sm)
+            .borderRadius(Radius.full)
             .stateStyles({
               pressed: { .backgroundColor(Colors.surface2) },
               normal: { .backgroundColor(Colors.surface1) }
@@ -355,7 +368,7 @@ export struct ChatInputBar {
           } else if (this.text.length > 0 || this.pendingFileName.length > 0) {
             Button() {
               SymbolGlyph($r('sys.symbol.arrow_up_circle_fill'))
-                .fontColor([Colors.foreground])
+                .fontColor([Colors.accent])
                 .fontSize(28)
             }
             .backgroundColor(Colors.transparent)
@@ -391,7 +404,7 @@ export struct ChatInputBar {
     }
     .width('100%')
     .alignItems(HorizontalAlign.Center)
-    .padding({ top: Spacing.md, bottom: Spacing.lg })
+    .padding({ top: Spacing.md, bottom: Spacing.xl })
     .backgroundColor(Colors.surface0)
     .accessibilityGroup(true)
     .bindSheet($$this.showSheet, this.ConfigPanel(), {
@@ -926,7 +939,7 @@ export struct ChatInputBar {
         }
       }
       .width('100%')
-      .padding({ top: Spacing.sm, bottom: Spacing.sm, left: Spacing.lg, right: Spacing.lg })
+      .padding({ top: Spacing.md, bottom: Spacing.md, left: Spacing.lg, right: Spacing.lg })
     }
     .width('100%')
     .backgroundColor(Color.Transparent)
