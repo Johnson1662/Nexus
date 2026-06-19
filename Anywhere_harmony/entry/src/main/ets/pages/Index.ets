@@ -96,6 +96,9 @@ struct Index {
               AppStorage.setOrCreate('selectedDeviceIndex', index);
               this.navStack.pushPath({ name: 'agentDetail' });
             },
+            onNavigateToSession: (session: ServerSession) => {
+              this.loadSessionDetail(session);
+            },
             onOpenWorkspace: (index: number) => {
               this.openWorkspaceDetail(index);
             },

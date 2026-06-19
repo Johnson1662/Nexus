@@ -141,16 +141,10 @@ export struct ChatPage {
               .transition(TransitionEffect.OPACITY)
               .animation({ duration: Duration.fast, curve: Curve.EaseInOut })
             } else {
-              Column() {
-                Text($r('app.string.chat_empty_prompt'))
-                  .fontSize(FontSize.sm)
-                  .fontColor(Colors.foregroundMuted)
-                  .lineHeight(22)
-                  .margin({ top: Spacing.sm })
-              }
-              .alignItems(HorizontalAlign.Start)
-              .transition(TransitionEffect.OPACITY)
-              .animation({ duration: Duration.normal, curve: Curve.EaseOut })
+              Column()
+                .alignItems(HorizontalAlign.Start)
+                .transition(TransitionEffect.OPACITY)
+                .animation({ duration: Duration.normal, curve: Curve.EaseOut })
             }
           }
         .width('100%').layoutWeight(1)

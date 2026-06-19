@@ -7,6 +7,7 @@ import { HostRuntimeStore } from '../../common/model/HostState';
 @Component
 export struct HomeView {
   onNavigateToAgentDetail?: (index: number) => void;
+  onNavigateToSession?: (session: ServerSession) => void;
   onOpenWorkspace?: (index: number) => void;
   onOpenChat?: (workspaceIndex: number) => void;
   onNewChat?: () => void;
@@ -357,7 +358,7 @@ export struct HomeView {
     .border({ width: 0 })
     .borderRadius(Radius.md)
     .animation({ duration: 150, curve: Curve.EaseOut })
-    .onClick(() => {})
+    .onClick(() => { this.onNavigateToSession?.(session); })
   }
 
   @Builder
