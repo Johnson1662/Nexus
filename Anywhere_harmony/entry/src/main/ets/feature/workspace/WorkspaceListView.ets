@@ -120,7 +120,7 @@ export struct WorkspaceListView {
     WorkspaceStore.currentIndex = WorkspaceStore.workspaces.length - 1;
     this.newWorkspacePath = '';
     this.showAddWorkspace = false;
-    saveWorkspaces('');
+    saveWorkspaces(AppStorage.get<string>('serverUrl') || '', ChatStore.currentDeviceId);
   }
 
   build() {

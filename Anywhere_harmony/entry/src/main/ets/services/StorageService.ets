@@ -213,6 +213,8 @@ export async function saveWorkspaces(serverUrl: string, hostKey: string = ''): P
     let ws = WorkspaceStore.workspaces[i];
     data.push({ id: ws.id, name: ws.name, path: ws.path });
   }
+  hilog.info(DOMAIN, TAG, 'saveWorkspaces: url=' + serverUrl + ' hostKey=' + hostKey +
+    ' primaryScope=' + primaryScope + ' count=' + data.length);
   await storage.putObject(scopeWorkspaceKey(PrefsKeys.WORKSPACES, primaryScope), data);
   await storage.putString(scopeWorkspaceKey(PrefsKeys.WORKSPACE_INDEX, primaryScope), WorkspaceStore.currentIndex.toString());
 }
@@ -280,7 +282,7 @@ export async function loadWorkspaces(serverUrl: string, hostKey: string = ''): P
   WorkspaceStore.workspaces = workspaces;
   WorkspaceStore.currentIndex = parseInt(indexStr, 10) || -1;
   if (data.length > 0 && loadedScope !== scopes[0]) {
-    await saveWorkspaces(serverUrl);
+    await saveWorkspaces(serverUrl, hostKey);
   }
 }
 

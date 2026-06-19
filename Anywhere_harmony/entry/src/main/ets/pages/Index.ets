@@ -325,7 +325,6 @@ struct Index {
       this.addCandidateUrl(result, url);
     }
     this.addRelayCandidate(result, device.relayUrl || DEFAULT_RELAY_URL, device.hostId || '');
-    this.addCandidateUrl(result, 'ws://192.168.137.1:12138');
     return result;
   }
 
@@ -549,6 +548,7 @@ struct Index {
     ChatStore.models = [];
     ChatStore.modes = [];
     ChatStore.sessions = [];
+    WorkspaceStore.workspaces = [];
     if (candidates.length > 1) {
       this.ws.connectBest(candidates, hostKey);
     } else if (candidates.length === 1) {
