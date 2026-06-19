@@ -854,8 +854,11 @@ export class WSClient {
     );
     let isRelayPairUrl: boolean = isRelayClientUrl(connectedUrl);
     let primaryUrl: string = toPrimaryConnectionUrl(connectedUrl);
-    // Dedup: remove all existing devices with same hostId or same hostname
+    // Dedup: merge URLs from devices with same hostId or hostname.
+    // Preserve the first match's position in the array so the chip doesn't
+    // jump to the end of HostFilterBar when reconnecting.
     let mergedUrls: string[] = [];
+    let firstMatchIndex: number = -1;
     for (let i: number = HostStore.devices.length - 1; i >= 0; i--) {
       let d = HostStore.devices[i];
       let match: boolean = false;
@@ -869,7 +872,10 @@ export class WSClient {
         for (let j: number = 0; j < d.urls.length; j++) {
           if (mergedUrls.indexOf(d.urls[j]) < 0) mergedUrls.push(d.urls[j]);
         }
-        HostStore.removeDevice(i);
+        if (firstMatchIndex >= 0) {
+          HostStore.removeDevice(i);
+        }
+        firstMatchIndex = i;
       }
     }
     addUniqueUrl(mergedUrls, primaryUrl);
@@ -1131,6 +1137,15 @@ export class WSClient {
             s.sessionId = id;
             s.title = String(msg.title || '');
             ChatStore.sessions = [...ChatStore.sessions, s];
+            // 新建 session 后刷新列表以获取服务端真实时间戳
+            if (ChatStore.agentType.length > 0 && WorkspaceStore.currentIndex >= 0 &&
+              WorkspaceStore.currentIndex < WorkspaceStore.workspaces.length) {
+              this.send({
+                type: 'list_sessions',
+                cwd: WorkspaceStore.workspaces[WorkspaceStore.currentIndex].path,
+                agent: ChatStore.agentType
+              });
+            }
           }
         }
         ChatStore.loadingSession = false;
