@@ -30,37 +30,30 @@ export struct ThinkingSection {
     Column() {
       Button() {
         Row() {
-          // Icon in fixed-width column — border line uses same width for perfect alignment
-          Column() {
-            if (this.isStreaming) {
-              SymbolGlyph($r('sys.symbol.lightbulb'))
-                .fontSize(FontSize.md)
-                .fontColor([Colors.foregroundMuted])
-                .transition(TransitionEffect.OPACITY.animation({ duration: 150, curve: Curve.EaseOut }))
-            } else {
-              SymbolGlyph($r('sys.symbol.checkmark_circle'))
-                .fontSize(FontSize.md)
-                .fontColor([Colors.foregroundMuted])
-                .transition(TransitionEffect.OPACITY.animation({ duration: 150, curve: Curve.EaseOut }))
-            }
+          if (this.isStreaming) {
+            SymbolGlyph($r('sys.symbol.lightbulb'))
+              .fontSize(FontSize.md)
+              .fontColor([Colors.foregroundMuted])
+              .margin({ right: Spacing.sm })
+              .transition(TransitionEffect.OPACITY.animation({ duration: 150, curve: Curve.EaseOut }))
+          } else {
+            SymbolGlyph($r('sys.symbol.checkmark_circle'))
+              .fontSize(FontSize.md)
+              .fontColor([Colors.foregroundMuted])
+              .margin({ right: Spacing.sm })
+              .transition(TransitionEffect.OPACITY.animation({ duration: 150, curve: Curve.EaseOut }))
           }
-          .width(28)
-          .height(20)
-          .justifyContent(FlexAlign.Center)
-          .alignItems(HorizontalAlign.Center)
 
           if (this.isStreaming) {
             Text($r('app.string.thinking_label'))
               .fontSize(FontSize.sm)
               .fontColor(Colors.foregroundMuted)
               .fontWeight(FontWeight.Medium)
-              .margin({ left: Spacing.xs })
           } else {
             Text($r('app.string.thinking_done_label'))
               .fontSize(FontSize.sm)
               .fontColor(Colors.foregroundMuted)
               .fontWeight(FontWeight.Medium)
-              .margin({ left: Spacing.xs })
           }
 
           Blank()
@@ -74,6 +67,7 @@ export struct ThinkingSection {
         }
         .width('100%')
         .height(36)
+        .padding({ left: Spacing.sm })
         .alignItems(VerticalAlign.Center)
       }
       .type(ButtonType.Normal)
@@ -93,25 +87,16 @@ export struct ThinkingSection {
 
       if (this.expanded && this.thinking.length > 0) {
         Row() {
-          // Border line in same-width column, centered — matches icon column above
-          Column() {
-            Column()
-              .width(1)
-              .height('100%')
-              .backgroundColor(Colors.border)
-          }
-          .width(28)
-          .alignItems(HorizontalAlign.Center)
-
           Text(this.thinking)
             .fontSize(FontSize.sm)
             .fontColor(Colors.foregroundMuted)
             .lineHeight(22)
-            .layoutWeight(1)
-            .margin({ left: Spacing.xs })
+            .width('100%')
         }
         .width('100%')
-        .padding({ top: Spacing.sm, bottom: Spacing.sm })
+        .padding({ left: 22, top: Spacing.sm, bottom: Spacing.sm })
+        .margin({ left: 10 })
+        .border({ width: { left: 1 }, color: { left: Colors.border } })
         .transition(TransitionEffect.OPACITY.animation({ duration: 150, curve: Curve.EaseOut }))
       }
     }
