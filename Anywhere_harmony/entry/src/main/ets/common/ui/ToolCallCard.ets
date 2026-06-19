@@ -266,7 +266,7 @@ export struct ToolCallCard {
               .margin({ right: Spacing.xs })
 
             SymbolGlyph($r('sys.symbol.chevron_down'))
-              .fontSize(FontSize.sm)
+              .fontSize(FontSize.md)
               .fontColor([Colors.foregroundMuted])
               .rotate({ angle: this.expanded ? 180 : 0 })
               .animation({ duration: Duration.fast, curve: Curve.EaseOut })
@@ -274,7 +274,7 @@ export struct ToolCallCard {
 
           if (this.status === 'in_progress') {
             SymbolGlyph($r('sys.symbol.arrow_clockwise'))
-              .fontSize(14)
+              .fontSize(FontSize.md)
               .fontColor([Colors.foregroundMuted])
               .opacity(this.breathFlag ? 0.3 : 1.0)
               .rotate({ angle: this.breathFlag ? 360 : 0 })
@@ -286,11 +286,11 @@ export struct ToolCallCard {
               })
           } else if (this.status === 'completed' || this.status === 'success') {
             SymbolGlyph($r('sys.symbol.checkmark'))
-              .fontSize(FontSize.sm)
+              .fontSize(FontSize.md)
               .fontColor([Colors.foregroundMuted])
           } else if (this.status === 'failed' || this.status === 'error') {
             SymbolGlyph($r('sys.symbol.xmark_circle'))
-              .fontSize(FontSize.sm)
+              .fontSize(FontSize.md)
               .fontColor([Colors.error])
           }
         }
@@ -315,7 +315,7 @@ export struct ToolCallCard {
 
       if (this.expanded && this.hasDetail()) {
         Row() {
-          Column().width(24) // offset for icon + margin
+          Column().width(Spacing.xxxl) // offset to match icon + margin
 
           this.DetailContent()
         }

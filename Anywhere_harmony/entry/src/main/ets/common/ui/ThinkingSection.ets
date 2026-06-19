@@ -32,13 +32,13 @@ export struct ThinkingSection {
         Row() {
           if (this.isStreaming) {
             SymbolGlyph($r('sys.symbol.lightbulb'))
-              .fontSize(16)
+              .fontSize(FontSize.md)
               .fontColor([Colors.foregroundMuted])
               .margin({ right: Spacing.sm })
               .transition(TransitionEffect.OPACITY.animation({ duration: 150, curve: Curve.EaseOut }))
           } else {
             SymbolGlyph($r('sys.symbol.checkmark_circle'))
-              .fontSize(16)
+              .fontSize(FontSize.md)
               .fontColor([Colors.foregroundMuted])
               .margin({ right: Spacing.sm })
               .transition(TransitionEffect.OPACITY.animation({ duration: 150, curve: Curve.EaseOut }))
@@ -94,8 +94,8 @@ export struct ThinkingSection {
             .width('100%')
         }
         .width('100%')
-        .padding({ left: Spacing.md, top: Spacing.sm, bottom: Spacing.sm })
-        .margin({ left: Spacing.md })
+        .padding({ left: Spacing.xxl, top: Spacing.sm, bottom: Spacing.sm })
+        .margin({ left: Spacing.sm })
         .border({ width: { left: 1 }, color: { left: Colors.border } })
         .transition(TransitionEffect.OPACITY.animation({ duration: 150, curve: Curve.EaseOut }))
       }
