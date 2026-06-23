@@ -1,4 +1,5 @@
 import { DeviceEntry } from './WorkspaceInfo';
+import { ChatStore } from './ChatState';
 
 export class HostPhase {
   static readonly UNKNOWN: string = 'unknown';
@@ -139,6 +140,14 @@ export class HostRuntimeStoreModel {
   }
 
   getDevicePhase(device: DeviceEntry): string {
+    // ChatStore.connected 表示当前有活跃的 WS 连接，优先判断
+    if (ChatStore.connected && ChatStore.currentDeviceId.length > 0) {
+      let currentKey: string = ChatStore.currentDeviceId;
+      if (device.hostId === currentKey || device.name === currentKey ||
+          this.matchesDevice(device, currentKey)) {
+        return HostPhase.ONLINE;
+      }
+    }
     let hostId: string = device.hostId || '';
     let name: string = device.name;
     if (hostId.length > 0 && this.isOnline(hostId)) {
@@ -167,8 +176,9 @@ export class HostRuntimeStoreModel {
     if (device.hostId === hostKey || device.name === hostKey) return true;
     let activeUrl: string = this.getStatus(hostKey).activeUrl;
     if (activeUrl.length === 0) return false;
+    // 精确匹配 URL，不用子串匹配（避免端口号/域名子串误匹配）
     for (let i: number = 0; i < device.urls.length; i++) {
-      if (device.urls[i] === activeUrl || activeUrl.indexOf(device.urls[i]) >= 0 || device.urls[i].indexOf(activeUrl) >= 0) {
+      if (device.urls[i] === activeUrl) {
         return true;
       }
     }

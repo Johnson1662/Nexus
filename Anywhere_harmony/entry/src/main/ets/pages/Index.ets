@@ -306,9 +306,14 @@ struct Index {
     // 等待设备列表加载
     for (let retry: number = 0; retry < 10; retry++) {
       if (HostStore.devices.length > 0) break;
+      hilog.info(DOMAIN, TAG, `warmup: waiting for devices (${retry + 1}/10), count=${HostStore.devices.length}`);
       await new Promise<void>((resolve) => setTimeout(resolve, 300));
     }
-    if (HostStore.devices.length === 0) return;
+    if (HostStore.devices.length === 0) {
+      hilog.error(DOMAIN, TAG, 'warmup: no devices loaded after 3s, abort');
+      return;
+    }
+    hilog.info(DOMAIN, TAG, `warmup: ${HostStore.devices.length} devices loaded, probing...`);
 
     // Step 1: 并发探测所有设备 → 缓存最佳 URL + 更新 HostRuntimeStore
     await this.probeAllHosts();
@@ -344,11 +349,12 @@ struct Index {
       }
     }
     if (bestResult !== null) {
-      // 缓存最佳 URL 供 tryAutoConnect 使用（避免重复 probe）
+      // 只缓存 probe 结果，不标 CONNECTING
+      // CONNECTING 由实际连接操作（connectSelected/doConnect）设置
+      // 非目标设备保持 UNKNOWN（灰色），避免卡在橙色
       this.probeResults.set(hostKey, bestResult.url);
-      // 标橙 —— 真正标绿由 handleServerInfo 负责
-      HostRuntimeStore.markConnecting(hostKey, bestResult.url);
     } else {
+      // probe 全失败 → 标离线
       HostRuntimeStore.markOffline(hostKey, 'startup probe failed');
     }
   }

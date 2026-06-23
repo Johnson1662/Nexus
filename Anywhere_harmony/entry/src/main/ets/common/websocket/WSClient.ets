@@ -336,6 +336,7 @@ export class WSClient {
       this.lastUrl = nextUrl;
       this.everConnected = false;
       HostRuntimeStore.markConnecting(this.targetHostKey, nextUrl);
+      this.notifyState(false, reason);
       this.doConnect(nextUrl);
       return;
     }
@@ -641,6 +642,8 @@ export class WSClient {
     }
     ChatStore.reconnectAttempt = this.reconnectAttempts;
     HostRuntimeStore.markReconnecting(this.targetHostKey, this.reconnectAttempts, reason);
+    // notifyState 触发 onStateChange → bumpHostStatusRevision → UI 刷新
+    this.notifyState(false, reason);
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       this.currentCandidateIndex = 0;
@@ -654,8 +657,9 @@ export class WSClient {
     let bestUrl: string = await this.pickBestCandidate(candidates, this.targetHostKey, 'reconnect');
     if (this.intentionalClose) return;
     if (bestUrl.length === 0) {
-      hilog.info(DOMAIN, TAG, 'reconnect: all probes failed, marking offline');
+      hilog.info(DOMAIN, TAG, `reconnect: all probes failed, marking offline hostKey=${this.targetHostKey}`);
       HostRuntimeStore.markOffline(this.targetHostKey, 'all probes failed');
+      this.notifyState(false, 'all probes failed');
       return;
     }
     this.currentCandidateIndex = candidates.indexOf(bestUrl);
