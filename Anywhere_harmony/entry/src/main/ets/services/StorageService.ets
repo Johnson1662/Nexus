@@ -287,7 +287,11 @@ export async function loadWorkspaces(serverUrl: string, hostKey: string = ''): P
     workspaces.push(ws);
   }
   WorkspaceStore.workspaces = workspaces;
-  WorkspaceStore.currentIndex = parseInt(indexStr, 10) || -1;
+  let parsedIndex: number = parseInt(indexStr, 10);
+  WorkspaceStore.currentIndex = parsedIndex >= 0 ? parsedIndex : -1;
+  if (WorkspaceStore.currentIndex < 0 && workspaces.length > 0) {
+    WorkspaceStore.currentIndex = 0;
+  }
   if (data.length > 0 && loadedScope !== scopes[0]) {
     await saveWorkspaces(serverUrl, hostKey);
   }

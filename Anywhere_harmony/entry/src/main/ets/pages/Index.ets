@@ -8,8 +8,9 @@ import { WorkspaceListView } from '../feature/workspace/WorkspaceListView';
 import { Colors, FontSize, Spacing, Radius, Duration } from '../constants/DesignTokens';
 import { ChatStore, trimMessages } from '../common/model/ChatState';
 import { WorkspaceStore, ServerSession, HostStore, DeviceEntry, WorkspaceInfo } from '../common/model/WorkspaceInfo';
+import { HostRuntimeStore } from '../common/model/HostState';
 import { MessageData } from '../common/model/MessageData';
-import { WSClient } from '../common/websocket/WSClient';
+import { WSClient, ProbeCandidateResult } from '../common/websocket/WSClient';
 import { ClientMessage, AcpUpdate } from '../common/websocket/WSProtocol';
 import { scanBarcode, scanCore } from '@kit.ScanKit';
 import { common } from '@kit.AbilityKit';
@@ -288,25 +289,74 @@ struct Index {
     this.hostStatusRevision += 1;
   }
 
+  /** probe 结果缓存：hostKey → bestUrl，避免 connectBest 重复 probe */
+  private probeResults: Map<string, string> = new Map();
+  private hostsLoaded: boolean = false;
+
   scheduleAutoConnect(): void {
     if (this.autoConnectAttempted || ChatStore.connected) {
       return;
     }
     this.autoConnectAttempted = true;
+    // 等 HostStore.devices 加载完成（避免启动竞态）
+    this.warmupAndConnect();
+  }
+
+  private async warmupAndConnect(): Promise<void> {
+    // 等待设备列表加载
+    for (let retry: number = 0; retry < 10; retry++) {
+      if (HostStore.devices.length > 0) break;
+      await new Promise<void>((resolve) => setTimeout(resolve, 300));
+    }
+    if (HostStore.devices.length === 0) return;
+
+    // Step 1: 并发探测所有设备 → 缓存最佳 URL + 更新 HostRuntimeStore
+    await this.probeAllHosts();
+
+    // Step 2: 连接目标设备（用 probe 结果，不重复探测）
     this.tryAutoConnect();
   }
 
-  tryAutoConnect(): void {
-    if (ChatStore.connected) {
-      return;
+  private async probeAllHosts(): Promise<void> {
+    let probes: Promise<void>[] = [];
+    for (let i: number = 0; i < HostStore.devices.length; i++) {
+      probes.push(this.probeOneDevice(HostStore.devices[i]));
     }
-    if (HostStore.devices.length === 0) {
-      if (this.autoConnectRetryCount < 6) {
-        this.autoConnectRetryCount += 1;
-        setTimeout(() => { this.tryAutoConnect(); }, 400);
+    await Promise.all(probes);
+    this.bumpHostStatusRevision();
+  }
+
+  private async probeOneDevice(device: DeviceEntry): Promise<void> {
+    let hostKey: string = device.hostId || device.name;
+    if (hostKey.length === 0) return;
+    let candidates: string[] = this.getConnectCandidates(device, '');
+    if (candidates.length === 0) return;
+    // 并发探测所有候选地址，取最快成功的
+    let bestResult: ProbeCandidateResult | null = null;
+    let results: Promise<ProbeCandidateResult>[] = [];
+    for (let j: number = 0; j < candidates.length; j++) {
+      results.push(this.ws.probeCandidate(candidates[j], hostKey));
+    }
+    let settled: ProbeCandidateResult[] = await Promise.all(results);
+    for (let j: number = 0; j < settled.length; j++) {
+      if (settled[j].ok && (bestResult === null || settled[j].latencyMs < bestResult.latencyMs)) {
+        bestResult = settled[j];
       }
-      return;
     }
+    if (bestResult !== null) {
+      // 缓存最佳 URL 供 tryAutoConnect 使用（避免重复 probe）
+      this.probeResults.set(hostKey, bestResult.url);
+      // 标橙 —— 真正标绿由 handleServerInfo 负责
+      HostRuntimeStore.markConnecting(hostKey, bestResult.url);
+    } else {
+      HostRuntimeStore.markOffline(hostKey, 'startup probe failed');
+    }
+  }
+
+  tryAutoConnect(): void {
+    if (ChatStore.connected) return;
+    if (HostStore.devices.length === 0) return;
+
     let serverUrl: string = AppStorage.get<string>('serverUrl') || '';
     let targetDevice: DeviceEntry | null = null;
     if (serverUrl.length > 0) {
@@ -320,16 +370,15 @@ struct Index {
     if (targetDevice === null && HostStore.devices.length > 0) {
       targetDevice = HostStore.devices[0];
     }
-    if (targetDevice === null) {
-      return;
-    }
-    let candidates: string[] = this.getConnectCandidates(targetDevice, serverUrl);
+    if (targetDevice === null) return;
+
     let hostKey: string = targetDevice.hostId || targetDevice.name;
-    if (candidates.length > 1) {
-      this.ws.connectBest(candidates, hostKey);
-    } else if (candidates.length === 1) {
-      this.ws.connect(candidates[0], hostKey);
+    // 只用 probe 成功的 URL；probe 失败的候选不再尝试（probeAllHosts 已标 offline）
+    let bestUrl: string | undefined = this.probeResults.get(hostKey);
+    if (bestUrl && bestUrl.length > 0) {
+      this.ws.connectWithCandidates(bestUrl, [bestUrl], hostKey);
     }
+    // else: probeAllHosts 已 markOffline，不再调 connectBest 重复探测
   }
 
   getConnectCandidates(device: DeviceEntry, preferredUrl: string): string[] {
@@ -566,10 +615,9 @@ struct Index {
     ChatStore.sessions = [];
     AppStorage.setOrCreate('loadingWorkspaces', true);
     WorkspaceStore.workspaces = [];
-    if (candidates.length > 1) {
+    if (candidates.length > 0) {
+      // 始终走 connectBest 确保 relay 连接前通过 probe 验证主机在线
       this.ws.connectBest(candidates, hostKey);
-    } else if (candidates.length === 1) {
-      this.ws.connect(candidates[0], hostKey);
     } else {
       hilog.error(DOMAIN, TAG, 'connectSavedHost: no candidates for ' + hostKey);
     }
@@ -653,12 +701,16 @@ struct Index {
     this.selectedWorkspaceIndex = workspaceIndex;
     let hostKey: string = this.getCurrentHostKey();
     let workspacePath: string = this.getWorkspacePath(workspaceIndex);
+    hilog.info(DOMAIN, TAG, 'prepareWorkspace: index=' + workspaceIndex + ' path=' + workspacePath + ' force=' + forceNetwork +
+      ' connected=' + ChatStore.connected + ' agentType=' + ChatStore.agentType);
     loadWorkspaceSessionCache(hostKey, workspacePath).then((cached) => {
+      hilog.info(DOMAIN, TAG, 'prepareWorkspace cache: present=' + (cached !== null) + ' count=' + ((cached !== null) ? cached.sessions.length : 0));
       if (!forceNetwork && cached !== null && cached.sessions.length > 0) {
         ChatStore.sessions = this.normalizeSessionTimes(cached.sessions);
       }
     });
     loadLastAgentSelection(hostKey, workspacePath).then((agentName: string) => {
+      hilog.info(DOMAIN, TAG, 'loadLastAgentSelection: agent=' + (agentName.length > 0 ? agentName : '(empty)'));
       if (agentName.length > 0) {
         this.selectAgent(agentName, false);
       }
@@ -667,6 +719,7 @@ struct Index {
   }
 
   selectAgent(agentName: string, forceRefreshModels: boolean): void {
+    hilog.info(DOMAIN, TAG, 'selectAgent: agent=' + agentName + ' forceModels=' + forceRefreshModels);
     ChatStore.selectedAgentName = agentName;
     ChatStore.agentType = agentName;
     AppStorage.setOrCreate<string>('lastAgent', agentName);
@@ -691,7 +744,8 @@ struct Index {
         });
       }
       this.refreshModels(forceRefreshModels);
-      this.refreshSessionsForWorkspace(WorkspaceStore.currentIndex, false);
+      // Agent 切换后始终从服务端拉取最新 session，不依赖缓存
+      this.refreshSessionsForWorkspace(WorkspaceStore.currentIndex, true);
     });
   }
 
@@ -737,23 +791,32 @@ struct Index {
     if (!forceNetwork) {
       loadWorkspaceSessionCache(hostKey, workspacePath).then((cached) => {
         if (cached !== null && cached.sessions.length > 0) {
+          hilog.info(DOMAIN, TAG, 'refreshSessions: using cache count=' + cached.sessions.length);
           ChatStore.sessions = this.normalizeSessionTimes(cached.sessions);
         } else if (ChatStore.connected && ChatStore.agentType.length > 0) {
+          hilog.info(DOMAIN, TAG, 'refreshSessions: sending list_sessions agent=' + ChatStore.agentType);
           this.ws.send({
             type: 'list_sessions',
             cwd: workspacePath,
             agent: ChatStore.agentType
           } as ClientMessage);
+        } else {
+          hilog.info(DOMAIN, TAG, 'refreshSessions: cache miss, cannot fetch connected=' + ChatStore.connected +
+            ' agentType="' + ChatStore.agentType + '"');
         }
       });
       return;
     }
     if (ChatStore.connected && ChatStore.agentType.length > 0) {
+      hilog.info(DOMAIN, TAG, 'refreshSessions(force): sending list_sessions agent=' + ChatStore.agentType);
       this.ws.send({
         type: 'list_sessions',
         cwd: workspacePath,
         agent: ChatStore.agentType
       } as ClientMessage);
+    } else {
+      hilog.info(DOMAIN, TAG, 'refreshSessions(force): cannot fetch connected=' + ChatStore.connected +
+        ' agentType="' + ChatStore.agentType + '"');
     }
   }
 

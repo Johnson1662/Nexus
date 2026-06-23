@@ -1,5 +1,8 @@
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { existsSync, mkdirSync } from "node:fs";
+import { join } from "node:path";
+import { homedir } from "node:os";
 import { AcpClient } from "../acp/client.mjs";
 import { getAgentLaunchArgs } from "../discovery/agents.mjs";
 import { getLastModel } from "../prefs.mjs";
@@ -35,8 +38,11 @@ export async function handleStart(
   cleanupWsSessions(ws);
 
   const args = getAgentLaunchArgs(agent);
+  const ANYWHERE_DIR = join(homedir(), '.anywhere');
+  mkdirSync(ANYWHERE_DIR, { recursive: true });
+  const resolvedCwd = cwd && existsSync(cwd) ? cwd : ANYWHERE_DIR;
   const proc = spawn(agent, args, {
-    cwd: cwd || process.cwd(),
+    cwd: resolvedCwd,
     env: { ...process.env, FORCE_COLOR: "0", NO_COLOR: "1" },
     stdio: ["pipe", "pipe", "pipe"],
     shell: true,
@@ -187,17 +193,22 @@ export async function handleStart(
     if (prompt) {
       if (effectiveModel) {
         try {
-          console.log(`[server] setting model to ${effectiveModel}`);
-          await client.setSessionModel(acpSessionId, effectiveModel);
-        } catch (err: unknown) {
-          const msg = err instanceof Error ? err.message : String(err);
-          console.log(`[server] set initial model failed: ${msg}`);
+          console.log(`[server] setting model to ${effectiveModel} via configOption`);
+          await client.setSessionConfigOption(acpSessionId, "model", effectiveModel);
+        } catch (_) {
           try {
-            bufferAgentEvent(sessionId, { type: "agent_event", sessionId, event: { sessionUpdate: "turn_ended", stopReason: "error" } });
-            sess.ws?.send(JSON.stringify({ type: "turn_ended", sessionId, stopReason: "error" }));
-            sess.ws?.send(JSON.stringify({ type: "error", sessionId, text: `model setup failed: ${msg}` }));
-          } catch {}
-          return;
+            console.log(`[server] configOption failed, trying setSessionModel`);
+            await client.setSessionModel(acpSessionId, effectiveModel);
+          } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : String(err);
+            console.log(`[server] set initial model failed: ${msg}`);
+            try {
+              bufferAgentEvent(sessionId, { type: "agent_event", sessionId, event: { sessionUpdate: "turn_ended", stopReason: "error" } });
+              sess.ws?.send(JSON.stringify({ type: "turn_ended", sessionId, stopReason: "error" }));
+              sess.ws?.send(JSON.stringify({ type: "error", sessionId, text: `model setup failed: ${msg}` }));
+            } catch {}
+            return;
+          }
         }
       }
       // Keep WS alive while agent processes (mobile carrier NAT timeout workaround)
@@ -234,11 +245,13 @@ export async function handleStart(
       );
     } else if (effectiveModel) {
       console.log(`[server] restoring model to ${effectiveModel}`);
-      client.setSessionModel(acpSessionId, effectiveModel).catch((err: Error) => {
-        console.log(`[server] restore model failed: ${err.message}`);
-        try {
-          sess.ws?.send(JSON.stringify({ type: "error", sessionId, text: `model restore failed: ${err.message}` }));
-        } catch {}
+      client.setSessionConfigOption(acpSessionId, "model", effectiveModel).catch(() => {
+        client.setSessionModel(acpSessionId, effectiveModel).catch((err: Error) => {
+          console.log(`[server] restore model failed: ${err.message}`);
+          try {
+            sess.ws?.send(JSON.stringify({ type: "error", sessionId, text: `model restore failed: ${err.message}` }));
+          } catch {}
+        });
       });
     }
   } catch (err: unknown) {

@@ -329,7 +329,7 @@ export struct HomeView {
             .fontColor(Colors.foreground)
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
-          Text(session.cwd || session.agent || 'Agent')
+          Text((session.agent ? session.agent + ' · ' : '') + (session.cwd || ''))
             .fontSize(FontSize.xs)
             .fontColor(Colors.foregroundMuted)
             .margin({ top: Spacing.xxs })

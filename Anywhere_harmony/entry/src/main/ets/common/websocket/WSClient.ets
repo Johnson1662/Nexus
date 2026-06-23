@@ -42,7 +42,7 @@ const DOMAIN: number = 0x0000;
 const TAG: string = 'WSClient';
 const PROBE_TIMEOUT_MS: number = 1200;
 
-interface ProbeCandidateResult {
+export interface ProbeCandidateResult {
   url: string;
   probeUrl: string;
   ok: boolean;
@@ -285,6 +285,8 @@ export class WSClient {
   private hostEverOnline: boolean = false;
   private targetHostKey: string = '';
   private reconnectCandidates: string[] = [];
+  private currentCandidateIndex: number = 0;
+  private readonly MAX_RECONNECT_ATTEMPTS: number = 5;
   private waitingHostTimer: number | null = null;
   private _e2eeReady: boolean = false;
   private _e2eeClientId: string = '';
@@ -293,10 +295,19 @@ export class WSClient {
   private lastHeartbeatReceived: number = 0;
   private heartbeatWatchdog: number | null = null;
   private heartbeatSender: number | null = null;
-  private readonly HEARTBEAT_WATCHDOG_MS: number = 45_000;  // 45s no heartbeat → disconnect
+  private readonly HEARTBEAT_WATCHDOG_MS: number = 15_000;  // 15s no heartbeat → disconnect
 
   connect(url: string, hostKey: string = ''): void {
     this.reconnectCandidates = this.normalizeCandidateUrls([url]);
+    this.currentCandidateIndex = 0;
+    this.connectSelected(url, hostKey);
+  }
+
+  /** 连接到指定 URL，但保留全部候选地址用于失败后轮转 */
+  connectWithCandidates(url: string, allCandidates: string[], hostKey: string = ''): void {
+    this.reconnectCandidates = this.normalizeCandidateUrls(allCandidates);
+    this.currentCandidateIndex = this.reconnectCandidates.indexOf(url);
+    if (this.currentCandidateIndex < 0) this.currentCandidateIndex = 0;
     this.connectSelected(url, hostKey);
   }
 
@@ -305,7 +316,7 @@ export class WSClient {
     this.cancelWaitingHostTimer();
     this.lastUrl = url;
     this.targetHostKey = this.resolveHostKey(url, hostKey);
-    this.hostEverOnline = HostRuntimeStore.hasEverOnline(this.targetHostKey) || this.reconnectCandidates.length > 1;
+    this.hostEverOnline = HostRuntimeStore.hasEverOnline(this.targetHostKey);
     this.intentionalClose = false;
     this.reconnectAttempts = 0;
     this.everConnected = false;
@@ -313,6 +324,29 @@ export class WSClient {
     ChatStore.connected = false;
     ChatStore.currentDeviceId = '';
     this.doConnect(url);
+  }
+
+  /** 当前候选失败后，尝试下一个候选地址；全部用尽则重连或标离线 */
+  private tryNextCandidate(reason: string): void {
+    if (this.intentionalClose) return;
+    this.currentCandidateIndex++;
+    if (this.currentCandidateIndex < this.reconnectCandidates.length) {
+      let nextUrl: string = this.reconnectCandidates[this.currentCandidateIndex];
+      hilog.info(DOMAIN, TAG, `trying candidate [${this.currentCandidateIndex + 1}/${this.reconnectCandidates.length}]: ${nextUrl}`);
+      this.lastUrl = nextUrl;
+      this.everConnected = false;
+      HostRuntimeStore.markConnecting(this.targetHostKey, nextUrl);
+      this.doConnect(nextUrl);
+      return;
+    }
+    // 全部候选地址用尽
+    if (this.hostEverOnline && this.reconnectAttempts < this.MAX_RECONNECT_ATTEMPTS) {
+      this.scheduleReconnect(reason);
+    } else {
+      ChatStore.reconnectPhase = '';
+      HostRuntimeStore.markOffline(this.targetHostKey, reason);
+      this.notifyState(false, reason);
+    }
   }
 
   private normalizeCandidateUrls(urls: string[]): string[] {
@@ -418,13 +452,21 @@ export class WSClient {
       return;
     }
     this.reconnectCandidates = candidates;
+    this.currentCandidateIndex = 0;
     HostRuntimeStore.markConnecting(resolvedHostKey, candidates[0]);
     let bestUrl: string = await this.pickBestCandidate(candidates, resolvedHostKey, 'connectBest');
+    if (bestUrl.length === 0) {
+      hilog.info(DOMAIN, TAG, 'connectBest: all probes failed, marking offline');
+      HostRuntimeStore.markOffline(resolvedHostKey, 'all probes failed');
+      return;
+    }
+    this.currentCandidateIndex = candidates.indexOf(bestUrl);
+    if (this.currentCandidateIndex < 0) this.currentCandidateIndex = 0;
     this.connectSelected(bestUrl, resolvedHostKey);
   }
 
   private async pickBestCandidate(urls: string[], resolvedHostKey: string, source: string): Promise<string> {
-    let bestUrl: string = urls[0];
+    let bestUrl: string = '';
     let bestLatency: number = -1;
     let bestPriority: number = 999;
     let results: Promise<ProbeCandidateResult>[] = [];
@@ -443,8 +485,8 @@ export class WSClient {
       }
     }
     if (bestLatency < 0) {
-      hilog.error(DOMAIN, TAG, source + ': all probes failed, trying first candidate');
-      return this.pickFallbackCandidate(urls);
+      hilog.error(DOMAIN, TAG, source + ': all probes failed');
+      return '';
     }
     hilog.info(DOMAIN, TAG, source + `: selected ${bestUrl} via probe (${bestLatency}ms)`);
     return bestUrl;
@@ -454,17 +496,6 @@ export class WSClient {
     let hostEd25519PubKey: string = AppStorage.get<string>('hostEd25519PublicKey') || '';
     let hostId: string = AppStorage.get<string>('hostId') || '';
     return hostEd25519PubKey.length > 0 && hostId.length > 0;
-  }
-
-  private pickFallbackCandidate(urls: string[]): string {
-    if (!this.hasRelayCredentials()) {
-      for (let i: number = 0; i < urls.length; i++) {
-        if (!isRelayClientUrl(urls[i])) {
-          return urls[i];
-        }
-      }
-    }
-    return urls[0];
   }
 
   private doConnect(url: string): void {
@@ -487,12 +518,7 @@ export class WSClient {
       ChatStore.connected = false;
       ChatStore.currentDeviceId = '';
       this.notifyState(false, detail);
-      if (!this.intentionalClose && this.hostEverOnline) {
-        this.scheduleReconnect(detail);
-      } else {
-        ChatStore.reconnectPhase = '';
-        HostRuntimeStore.markOffline(this.targetHostKey, detail);
-      }
+      this.tryNextCandidate(detail);
     };
 
     this.ws.on('open', () => {
@@ -548,12 +574,7 @@ export class WSClient {
         ChatStore.connected = false;
         ChatStore.currentDeviceId = '';
         this.notifyState(false, 'Connection closed before host confirmation');
-        if (!this.intentionalClose && this.hostEverOnline) {
-          this.scheduleReconnect('Connection closed before host confirmation');
-        } else {
-          ChatStore.reconnectPhase = '';
-          HostRuntimeStore.markOffline(this.targetHostKey, 'Connection closed before host confirmation');
-        }
+        this.tryNextCandidate('Connection closed before host confirmation');
         return;
       }
       this.everConnected = false;
@@ -588,12 +609,7 @@ export class WSClient {
         ChatStore.connected = false;
         ChatStore.currentDeviceId = '';
         this.notifyState(false, detail);
-        if (!this.intentionalClose && this.hostEverOnline) {
-          this.scheduleReconnect(detail);
-        } else {
-          ChatStore.reconnectPhase = '';
-          HostRuntimeStore.markOffline(this.targetHostKey, detail);
-        }
+        this.tryNextCandidate(detail);
         return;
       }
       onConnectFailure('Connection error: ' + JSON.stringify(err));
@@ -609,6 +625,13 @@ export class WSClient {
 
   private scheduleReconnect(reason: string = ''): void {
     if (this.intentionalClose || !this.lastUrl) return;
+    if (this.reconnectAttempts >= this.MAX_RECONNECT_ATTEMPTS) {
+      hilog.info(DOMAIN, TAG, `max reconnect attempts (${this.MAX_RECONNECT_ATTEMPTS}) reached, giving up`);
+      ChatStore.reconnectPhase = '';
+      HostRuntimeStore.markOffline(this.targetHostKey, 'max reconnect attempts reached');
+      this.notifyState(false, 'max reconnect attempts reached');
+      return;
+    }
     this.cancelReconnect();
     this.reconnectAttempts++;
     const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts - 1), 30000);
@@ -620,6 +643,7 @@ export class WSClient {
     HostRuntimeStore.markReconnecting(this.targetHostKey, this.reconnectAttempts, reason);
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
+      this.currentCandidateIndex = 0;
       this.reconnectUsingBestCandidate();
     }, delay);
   }
@@ -629,6 +653,13 @@ export class WSClient {
     let candidates: string[] = this.reconnectCandidates.length > 0 ? this.reconnectCandidates : [this.lastUrl];
     let bestUrl: string = await this.pickBestCandidate(candidates, this.targetHostKey, 'reconnect');
     if (this.intentionalClose) return;
+    if (bestUrl.length === 0) {
+      hilog.info(DOMAIN, TAG, 'reconnect: all probes failed, marking offline');
+      HostRuntimeStore.markOffline(this.targetHostKey, 'all probes failed');
+      return;
+    }
+    this.currentCandidateIndex = candidates.indexOf(bestUrl);
+    if (this.currentCandidateIndex < 0) this.currentCandidateIndex = 0;
     this.lastUrl = bestUrl;
     this.doConnect(bestUrl);
   }
@@ -645,10 +676,9 @@ export class WSClient {
     this.waitingHostTimer = setTimeout(() => {
       this.waitingHostTimer = null;
       if (!this.everConnected && !ChatStore.connected) {
-        hilog.info(DOMAIN, TAG, 'target host did not respond');
-        ChatStore.reconnectPhase = '';
-        HostRuntimeStore.markOffline(this.targetHostKey, 'target host did not respond');
-        this.notifyState(false, 'target host did not respond');
+        hilog.info(DOMAIN, TAG, 'target host did not respond, trying next candidate');
+        this.disconnectInternal();
+        this.tryNextCandidate('target host did not respond');
       }
     }, 10000);
   }
@@ -990,7 +1020,7 @@ export class WSClient {
     this.stopHeartbeatWatchdog();
     this.heartbeatWatchdog = setInterval(() => {
       if (Date.now() - this.lastHeartbeatReceived > this.HEARTBEAT_WATCHDOG_MS) {
-        hilog.error(DOMAIN, TAG, 'Heartbeat timeout (45s), disconnecting');
+        hilog.error(DOMAIN, TAG, `Heartbeat timeout (${this.HEARTBEAT_WATCHDOG_MS / 1000}s), disconnecting`);
         this.intentionalClose = false;
         this.disconnectInternal();
         if (ChatStore.bridgeSessionId.length > 0) {
@@ -1008,6 +1038,11 @@ export class WSClient {
         this.sendControl('heartbeat', hbPayload);
       }
     }, 15_000);
+
+    // Send first heartbeat immediately so the server responds before the first watchdog tick
+    let firstHb: Record<string, Object> = {};
+    firstHb['ts'] = Date.now();
+    this.sendControl('heartbeat', firstHb);
   }
 
   private stopHeartbeatWatchdog(): void {
@@ -1231,6 +1266,7 @@ export class WSClient {
         }
         break;
       case 'session_list':
+        hilog.info(DOMAIN, TAG, 'session_list received: count=' + ((msg.sessions || []).length));
         let sessions: ServerSession[] = msg.sessions || [];
         let now: number = Date.now();
         if (rawSessions) {

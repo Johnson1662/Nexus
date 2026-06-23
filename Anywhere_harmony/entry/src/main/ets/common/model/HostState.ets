@@ -147,9 +147,6 @@ export class HostRuntimeStoreModel {
     if (name.length > 0 && this.isOnline(name)) {
       return this.getPhase(name);
     }
-    if (this.isOnline(this.activeHostKey) && this.matchesDevice(device, this.activeHostKey)) {
-      return this.getPhase(this.activeHostKey);
-    }
     if (hostId.length > 0) {
       let hostPhase: string = this.getPhase(hostId);
       if (hostPhase !== HostPhase.UNKNOWN) return hostPhase;

@@ -10,7 +10,6 @@ interface AgentEntry {
 }
 
 const ACP_AGENTS: AgentEntry[] = [
-  { binary: "pi", title: "Pi", args: ["--mode", "rpc"] },
   { binary: "opencode", title: "OpenCode", args: ["acp"] },
   { binary: "claude-agent-acp", title: "Claude Agent (ACP)", args: [] },
   { binary: "gemini", title: "Gemini CLI", args: ["--acp"] },
@@ -41,8 +40,7 @@ const ACP_AGENTS: AgentEntry[] = [
   { binary: "junie", title: "Junie", args: ["--acp=true"] },
   { binary: "copilot", title: "GitHub Copilot", args: ["--acp"] },
   { binary: "docker-cagent", title: "Docker cagent", args: ["acp"] },
-  { binary: "pi", title: "pi coding agent", args: ["acp"] },
-  { binary: "pi-acp", title: "pi ACP", args: [] },
+  { binary: "pi-acp", title: "Pi (ACP)", args: [] },
   { binary: "factory-droid", title: "Factory Droid", args: ["acp"] },
   { binary: "openhands", title: "OpenHands", args: ["acp"] },
   { binary: "agoragentic", title: "Agoragentic", args: ["--acp"] },

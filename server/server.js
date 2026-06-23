@@ -4,6 +4,15 @@ const fs = require("fs");
 const path = require("path");
 const os = require("os");
 
+function expandCwd(cwd) {
+  if (!cwd) return process.cwd();
+  let expanded = cwd.trim();
+  if (expanded.startsWith("~")) {
+    expanded = path.join(os.homedir(), expanded.slice(1));
+  }
+  return path.resolve(expanded);
+}
+
 const PORT = 12138;
 
 const wss = new WebSocketServer({ port: PORT });
@@ -582,7 +591,8 @@ function handleListAgents(ws, msg) {
 const DEFAULT_MODEL = "opencode/minimax-m2.5-free";
 
 async function handleStart(ws, msg) {
-  const { agent = "opencode", prompt, cwd, model } = msg;
+  const { agent = "opencode", prompt, cwd: rawCwd, model } = msg;
+  const cwd = expandCwd(rawCwd);
 
   // ACP is agent-agnostic — accept any agent type
   console.log(`[server] starting agent: ${agent}`);
@@ -594,7 +604,7 @@ async function handleStart(ws, msg) {
   const args = getAgentLaunchArgs(agent);
   
   const proc = spawn(agent, args, {
-    cwd: cwd || process.cwd(),
+    cwd,
     env: { ...process.env, FORCE_COLOR: "0", NO_COLOR: "1" },
     stdio: ["pipe", "pipe", "pipe"],
     shell: true 
@@ -652,7 +662,7 @@ async function handleStart(ws, msg) {
 
     // Create session WITHOUT MCP servers (fast path - MCP loads in background later)
     const sessionResult = await sendRpc(proc, "session/new", {
-      cwd: cwd || process.cwd(),
+      cwd,
       mcpServers: [],
     });
     const acpSessionId = sessionResult.sessionId;
@@ -811,7 +821,7 @@ async function handleListModels(ws, msg) {
 const sessionListCache = new Map(); // ws -> { sessions, timestamp }
 
 async function handleListSessions(ws, msg) {
-  const { cwd } = msg;
+  const cwd = msg.cwd ? expandCwd(msg.cwd) : undefined;
   const sess = findSessionForWs(ws);
   if (!sess) {
     ws.send(JSON.stringify({ type: "session_list", sessions: [] }));
@@ -896,7 +906,8 @@ async function handleSwitchModel(ws, msg) {
 }
 
 async function handleLoadSession(ws, msg) {
-  const { sessionId, cwd } = msg;
+  const { sessionId, cwd: rawCwd } = msg;
+  const cwd = expandCwd(rawCwd);
   if (!sessionId) {
     ws.send(JSON.stringify({ type: "error", text: "sessionId is required" }));
     return;
@@ -914,7 +925,7 @@ async function handleLoadSession(ws, msg) {
   const agent = msg.agent || "opencode";
   const args = getAgentLaunchArgs(agent);
   const proc = spawn(agent, args, {
-    cwd: cwd || process.cwd(),
+    cwd,
     env: { ...process.env, FORCE_COLOR: "0", NO_COLOR: "1" },
     stdio: ["pipe", "pipe", "pipe"],
     shell: true,
@@ -963,7 +974,7 @@ async function handleLoadSession(ws, msg) {
     console.log(`[server] loading session ${sessionId}`);
     await sendRpc(proc, "session/load", {
       sessionId: sessionId,
-      cwd: cwd || process.cwd(),
+      cwd,
       mcpServers: loadMcpConfig(cwd),
     });
 
