@@ -40,7 +40,7 @@ function repairRelayJson(raw: string): string {
 
 const DOMAIN: number = 0x0000;
 const TAG: string = 'WSClient';
-const PROBE_TIMEOUT_MS: number = 1200;
+const PROBE_TIMEOUT_MS: number = 5000;
 
 export interface ProbeCandidateResult {
   url: string;
@@ -415,7 +415,9 @@ export class WSClient {
       let hostname: string = getStringField(data, 'hostname');
       let ok: boolean = getBooleanField(data, 'ok') && matchesExpectedHost(data, expectedHostKey);
       if (kind === 'relay') {
-        ok = ok && getBooleanField(data, 'hostOnline') && getBooleanField(data, 'pong') && this.hasRelayCredentials();
+        // probe 只检查 relay 可达 + host 在线，不检查 E2EE 凭据
+        // E2EE 凭据在实际连接时才需要（initiateE2EE）
+        ok = ok && getBooleanField(data, 'hostOnline') && getBooleanField(data, 'pong');
       }
       return {
         url,

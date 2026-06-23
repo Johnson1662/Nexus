@@ -306,16 +306,11 @@ struct Index {
     // 等待设备列表加载
     for (let retry: number = 0; retry < 10; retry++) {
       if (HostStore.devices.length > 0) break;
-      hilog.info(DOMAIN, TAG, `warmup: waiting for devices (${retry + 1}/10), count=${HostStore.devices.length}`);
       await new Promise<void>((resolve) => setTimeout(resolve, 300));
     }
-    if (HostStore.devices.length === 0) {
-      hilog.error(DOMAIN, TAG, 'warmup: no devices loaded after 3s, abort');
-      return;
-    }
-    hilog.info(DOMAIN, TAG, `warmup: ${HostStore.devices.length} devices loaded, probing...`);
+    if (HostStore.devices.length === 0) return;
 
-    // Step 1: 并发探测所有设备 → 缓存最佳 URL + 更新 HostRuntimeStore
+    // Step 1: 串行探测所有设备 → 缓存最佳 URL + 更新 HostRuntimeStore
     await this.probeAllHosts();
 
     // Step 2: 连接目标设备（用 probe 结果，不重复探测）
@@ -323,11 +318,10 @@ struct Index {
   }
 
   private async probeAllHosts(): Promise<void> {
-    let probes: Promise<void>[] = [];
+    // 串行探测避免 HTTP 并发连接数超限（HarmonyOS http.createHttp 有上限）
     for (let i: number = 0; i < HostStore.devices.length; i++) {
-      probes.push(this.probeOneDevice(HostStore.devices[i]));
+      await this.probeOneDevice(HostStore.devices[i]);
     }
-    await Promise.all(probes);
     this.bumpHostStatusRevision();
   }
 
@@ -349,12 +343,14 @@ struct Index {
       }
     }
     if (bestResult !== null) {
-      // 只缓存 probe 结果，不标 CONNECTING
-      // CONNECTING 由实际连接操作（connectSelected/doConnect）设置
-      // 非目标设备保持 UNKNOWN（灰色），避免卡在橙色
+      // probe 成功 = relay 可达 + host 连着 relay → 标 ONLINE（绿）
+      // 非目标设备不需要建立 WebSocket 连接，probe 通过就足以判断在线
+      hilog.info(DOMAIN, TAG, `probeOneDevice: ${hostKey} OK url=${bestResult.url} latency=${bestResult.latencyMs}ms kind=${bestResult.kind}`);
       this.probeResults.set(hostKey, bestResult.url);
+      HostRuntimeStore.markOnline(hostKey, bestResult.url, bestResult.latencyMs);
     } else {
       // probe 全失败 → 标离线
+      hilog.info(DOMAIN, TAG, `probeOneDevice: ${hostKey} FAILED (all candidates)`);
       HostRuntimeStore.markOffline(hostKey, 'startup probe failed');
     }
   }
@@ -404,8 +400,18 @@ struct Index {
       return;
     }
     if (url.length > 0 && urls.indexOf(url) < 0) {
+      // 按 host:port 去重（去掉 query string），避免同一台机器的多个 URL 变体
+      let stripped: string = this.stripQueryFromUrl(url);
+      for (let i: number = 0; i < urls.length; i++) {
+        if (this.stripQueryFromUrl(urls[i]) === stripped) return;
+      }
       urls.push(url);
     }
+  }
+
+  stripQueryFromUrl(url: string): string {
+    let qIdx: number = url.indexOf('?');
+    return qIdx >= 0 ? url.substring(0, qIdx) : url;
   }
 
   isAutoDirectIpv6Url(url: string): boolean {
