@@ -1,4 +1,4 @@
-import { Colors, FontSize, Spacing, Radius } from '../../constants/DesignTokens';
+import { Colors, FontSize, Spacing, Radius, Shadow } from '../../constants/DesignTokens';
 import { ThinkingSection } from './ThinkingSection';
 import { ToolCallCard } from './ToolCallCard';
 import { MarkdownRender } from './MarkdownRender';
@@ -68,7 +68,6 @@ export struct MessageCard {
   @State parsedDataUri: string = '';
   @State parsedRestText: string = '';
 
-
   aboutToAppear(): void {
     this.parseFilePrefixInternal();
   }
@@ -94,8 +93,6 @@ export struct MessageCard {
     this.parseFilePrefixInternal();
   }
 
-
-  // When @Prop values change, re-parse file prefix
   onMsgContentChange(): void {
     this.parseFilePrefixInternal();
   }
@@ -108,7 +105,7 @@ export struct MessageCard {
     this.parsedRestText = info.restText;
   }
 
-  copyContent() {
+  copyContent(): void {
     try {
       let pasteData = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, this.msgContent);
       let systemPasteboard = pasteboard.getSystemPasteboard();
@@ -116,6 +113,50 @@ export struct MessageCard {
         (this.getUIContext()).getPromptAction().showToast({ message: getContext(this).resourceManager.getStringSync($r('app.string.chat_copy_confirm').id) });
       })
     } catch (_e) { /* silently handled */ }
+  }
+
+  private doRetry(): void {
+    if (this.onRetry !== undefined) {
+      this.onRetry(this.msgId, this.msgContent);
+    }
+  }
+
+  @Builder
+  ContextMenuBuilder() {
+    Menu() {
+      MenuItem({ content: 'Copy' })
+        .onClick(() => { this.copyContent() })
+      if (this.isUser && this.onRetry !== undefined) {
+        MenuItem({ content: 'Retry' })
+          .onClick(() => { this.doRetry() })
+      }
+    }
+  }
+
+  @Builder
+  SendStatusIcon() {
+    if (this.msgSendStatus === 'sending') {
+      SymbolGlyph($r('sys.symbol.circle'))
+        .fontSize(6)
+        .fontColor([Colors.foregroundMuted])
+        .margin({ right: Spacing.xs })
+    } else if (this.msgSendStatus === 'sent') {
+      SymbolGlyph($r('sys.symbol.checkmark'))
+        .fontSize(10)
+        .fontColor([Colors.foregroundMuted])
+        .margin({ right: Spacing.xs })
+    } else if (this.msgSendStatus === 'failed') {
+      Button() {
+        SymbolGlyph($r('sys.symbol.xmark_circle'))
+          .fontSize(10)
+          .fontColor([Colors.error])
+      }
+      .type(ButtonType.Normal)
+      .backgroundColor(Color.Transparent)
+      .padding(0)
+      .margin({ right: Spacing.xs })
+      .onClick(() => { if (this.onRetry !== undefined) this.onRetry(this.msgId, this.msgContent) })
+    }
   }
 
   build() {
@@ -126,6 +167,30 @@ export struct MessageCard {
 
       Column() {
         if (!this.isUser) {
+          // AI message header
+          if (this.time.length > 0 || this.status.length > 0) {
+            Row() {
+              Text('Assistant')
+                .fontSize(FontSize.xs)
+                .fontColor(Colors.foregroundMuted)
+                .fontWeight(FontWeight.Medium)
+              if (this.time.length > 0) {
+                Text(this.time)
+                  .fontSize(FontSize.xs)
+                  .fontColor(Colors.foregroundMuted)
+                  .margin({ left: Spacing.sm })
+              }
+              if (this.status.length > 0) {
+                Text(this.status)
+                  .fontSize(FontSize.xs)
+                  .fontColor(Colors.warning)
+                  .margin({ left: Spacing.sm })
+              }
+            }
+            .width('100%')
+            .margin({ bottom: Spacing.xs })
+          }
+
           Column() {
             if (this.msgType === 'thinking') {
               ThinkingSection({ thinking: this.msgContent, isStreaming: this.streaming })
@@ -152,7 +217,7 @@ export struct MessageCard {
           })
           .alignItems(HorizontalAlign.Start)
           .width('100%')
-          .gesture(LongPressGesture().onAction(() => { this.copyContent() }))
+          .bindContextMenu(this.ContextMenuBuilder(), ResponseType.LongPress)
 
         } else {
           // User message bubble
@@ -163,6 +228,7 @@ export struct MessageCard {
                 .aspectRatio(1)
                 .objectFit(ImageFit.Contain)
                 .borderRadius(Radius.md)
+                .shadow(Shadow.sm)
                 .margin({ bottom: Spacing.sm })
               Text(this.parsedFileName)
                 .fontSize(FontSize.sm).fontColor(Colors.foregroundMuted)
@@ -200,43 +266,40 @@ export struct MessageCard {
             }
           }
           .padding({
-            top: Spacing.md,
-            bottom: Spacing.md,
+            top: Spacing.lg,
+            bottom: Spacing.lg,
             left: Spacing.lg,
             right: Spacing.lg
           })
           .backgroundColor(Colors.surface1)
-          .borderRadius(Radius.lg)
+          .borderRadius(Radius.xl)
+          .shadow(Shadow.xs)
           .alignItems(HorizontalAlign.Start)
-          .gesture(LongPressGesture().onAction(() => { this.copyContent() }))
 
-          if (this.msgSendStatus === 'failed') {
-            Button() {
-              SymbolGlyph($r('sys.symbol.xmark_circle'))
-                .fontSize(16)
-                .fontColor([Colors.error])
+          // Time & send status
+          Row() {
+            this.SendStatusIcon()
+            if (this.time.length > 0) {
+              Text(this.time)
+                .fontSize(FontSize.xs)
+                .fontColor(Colors.foregroundMuted)
             }
-            .type(ButtonType.Normal)
-            .backgroundColor(Color.Transparent)
-            .padding(0)
-            .margin({ top: Spacing.xs })
-            .stateStyles({
-              pressed: { .backgroundColor(Colors.surface1) },
-              normal: { .backgroundColor(Color.Transparent) }
-            })
-            .onClick(() => { if (this.onRetry) this.onRetry(this.msgId, this.msgContent) })
           }
+          .width('100%')
+          .justifyContent(FlexAlign.End)
+          .margin({ top: Spacing.xs })
+          .bindContextMenu(this.ContextMenuBuilder(), ResponseType.LongPress)
         }
       }
       .layoutWeight(this.isUser ? 0 : 1)
-      .constraintSize(this.isUser ? { maxWidth: '85%' } : { maxWidth: '100%' })
+      .constraintSize(this.isUser ? { maxWidth: '80%' } : { maxWidth: '100%' })
     }
     .width('100%')
     .padding({
       left: Spacing.xl,
       right: Spacing.xl,
-      top: (this.msgType === 'thinking' || this.msgType === 'tool_call') ? 0 : Spacing.xs,
-      bottom: (this.msgType === 'thinking' || this.msgType === 'tool_call') ? 0 : Spacing.xs
+      top: (this.msgType === 'thinking' || this.msgType === 'tool_call') ? 0 : Spacing.sm,
+      bottom: (this.msgType === 'thinking' || this.msgType === 'tool_call') ? 0 : Spacing.sm
     })
     .transition(TransitionEffect.OPACITY)
   }

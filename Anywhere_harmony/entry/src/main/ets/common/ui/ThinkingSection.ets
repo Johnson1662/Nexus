@@ -1,4 +1,5 @@
 import { Colors, FontSize, Spacing, Radius, Duration, getLocalizedString } from '../../constants/DesignTokens';
+
 @Component
 export struct ThinkingSection {
   @Prop thinking: string = '';
@@ -94,9 +95,9 @@ export struct ThinkingSection {
             .width('100%')
         }
         .width('100%')
-        .padding({ left: 22, top: Spacing.sm, bottom: Spacing.sm })
-        .margin({ left: Spacing.md })
-        .border({ width: { left: 1 }, color: { left: Colors.border } })
+        .padding({ left: 16, top: Spacing.md, bottom: Spacing.md })
+        .margin({ left: Spacing.sm, top: Spacing.sm, bottom: Spacing.sm })
+        .border({ width: { left: 2 }, color: { left: Colors.accent } })
         .transition(TransitionEffect.OPACITY.animation({ duration: 150, curve: Curve.EaseOut }))
       }
     }

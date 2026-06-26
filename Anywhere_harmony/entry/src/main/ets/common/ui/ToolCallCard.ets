@@ -1,4 +1,5 @@
 import { Colors, FontSize, Spacing, Duration, Radius } from '../../constants/DesignTokens';
+
 @Component
 export struct ToolCallCard {
   @Prop name: string = '';
@@ -25,7 +26,6 @@ export struct ToolCallCard {
     }
   }
 
-
   getFormattedName(): string {
     if (!this.name) return getContext(this).resourceManager.getStringSync($r('app.string.tool_default_name').id);
     let formatted = this.name.replace(/_/g, ' ');
@@ -40,7 +40,6 @@ export struct ToolCallCard {
       return $r('sys.symbol.magnifyingglass');
     }
 
-    // Command Line / Shell / Tools
     if (n.includes('bash') || n.includes('cmd') || n.includes('shell') || n.includes('terminal') ||
         n.includes('tool') || n.includes('exec') || n.includes('run') || n.includes('deploy')) {
       return $r('sys.symbol.gearshape');
@@ -50,27 +49,22 @@ export struct ToolCallCard {
       return $r('sys.symbol.pencil_waveform');
     }
 
-    // Read / View
     if (n.includes('read') || n.includes('cat')) {
       return $r('sys.symbol.doc_text');
     }
 
-    // Create / New
     if (n.includes('create') || n.includes('new') || n.includes('add') || n.includes('make')) {
       return $r('sys.symbol.folder_badge_plus');
     }
 
-    // Delete / Remove
     if (n.includes('delete') || n.includes('remove') || n.includes('rm')) {
       return $r('sys.symbol.trash');
     }
 
-    // Folders / Directory
     if (n.includes('folder') || n.includes('dir') || n.includes('ls')) {
       return $r('sys.symbol.folder');
     }
 
-    // Fallback
     return $r('sys.symbol.paperclip');
   }
 
@@ -101,7 +95,7 @@ export struct ToolCallCard {
     }
 
     let suffix = 0;
-    while (suffix < oldLines.length - prefix && suffix < newLines.length - prefix && 
+    while (suffix < oldLines.length - prefix && suffix < newLines.length - prefix &&
            oldLines[oldLines.length - 1 - suffix] === newLines[newLines.length - 1 - suffix]) {
       suffix++;
     }
@@ -216,7 +210,7 @@ export struct ToolCallCard {
           }
           .width('100%')
           .clip(true)
-          .backgroundColor(Colors.surface1)
+          .backgroundColor(Colors.surface2)
           .borderRadius(Radius.sm)
         }
         .layoutWeight(1)
@@ -231,7 +225,7 @@ export struct ToolCallCard {
       }
       .layoutWeight(1)
       .padding(Spacing.sm)
-      .backgroundColor(Colors.surface1)
+      .backgroundColor(Colors.surface2)
       .borderRadius(Radius.sm)
     } else {
       Text(this.content)
@@ -252,10 +246,54 @@ export struct ToolCallCard {
             .fontColor([Colors.foregroundMuted])
             .margin({ right: Spacing.sm })
 
-          Text(this.getFormattedName())
-            .fontSize(FontSize.sm)
-            .fontColor(Colors.foregroundMuted)
-            .fontWeight(FontWeight.Medium)
+          Column() {
+            Text(this.getFormattedName())
+              .fontSize(FontSize.sm)
+              .fontColor(Colors.foregroundMuted)
+              .fontWeight(FontWeight.Medium)
+              .lineHeight(18)
+
+            Row({ space: Spacing.xs }) {
+              if (this.status === 'in_progress') {
+                LoadingProgress()
+                  .width(12)
+                  .height(12)
+                  .color(Colors.foregroundMuted)
+                Text(getContext(this).resourceManager.getStringSync($r('app.string.common_running').id))
+                  .fontSize(FontSize.xs)
+                  .fontColor(Colors.foregroundMuted)
+              } else if (this.status === 'completed' || this.status === 'success') {
+                SymbolGlyph($r('sys.symbol.checkmark'))
+                  .fontSize(10)
+                  .fontColor([Colors.foregroundMuted])
+                Text(getContext(this).resourceManager.getStringSync($r('app.string.common_done').id))
+                  .fontSize(FontSize.xs)
+                  .fontColor(Colors.foregroundMuted)
+              } else if (this.status === 'failed' || this.status === 'error') {
+                SymbolGlyph($r('sys.symbol.xmark_circle'))
+                  .fontSize(10)
+                  .fontColor([Colors.error])
+                Text(getContext(this).resourceManager.getStringSync($r('app.string.common_failed').id))
+                  .fontSize(FontSize.xs)
+                  .fontColor(Colors.error)
+              }
+
+              if (this.path.length > 0) {
+                Text('·')
+                  .fontSize(FontSize.xs)
+                  .fontColor(Colors.foregroundMuted)
+                Text(this.getPathLabel())
+                  .fontSize(FontSize.xs)
+                  .fontColor(Colors.foregroundMuted)
+                  .maxLines(1)
+                  .textOverflow({ overflow: TextOverflow.Ellipsis })
+              }
+            }
+            .width('100%')
+            .alignItems(VerticalAlign.Center)
+          }
+          .layoutWeight(1)
+          .alignItems(HorizontalAlign.Start)
 
           Blank()
 
@@ -269,34 +307,12 @@ export struct ToolCallCard {
               .fontSize(FontSize.md)
               .fontColor([Colors.foregroundMuted])
               .rotate({ angle: this.expanded ? 180 : 0 })
-              .animation({ duration: Duration.fast, curve: Curve.EaseOut })
-          }
-
-          if (this.status === 'in_progress') {
-            SymbolGlyph($r('sys.symbol.arrow_clockwise'))
-              .fontSize(FontSize.md)
-              .fontColor([Colors.foregroundMuted])
-              .opacity(this.breathFlag ? 0.3 : 1.0)
-              .rotate({ angle: this.breathFlag ? 360 : 0 })
-              .animation({
-                duration: 1500,
-                curve: Curve.Linear,
-                playMode: PlayMode.Normal,
-                iterations: -1
-              })
-          } else if (this.status === 'completed' || this.status === 'success') {
-            SymbolGlyph($r('sys.symbol.checkmark'))
-              .fontSize(FontSize.md)
-              .fontColor([Colors.foregroundMuted])
-          } else if (this.status === 'failed' || this.status === 'error') {
-            SymbolGlyph($r('sys.symbol.xmark_circle'))
-              .fontSize(FontSize.md)
-              .fontColor([Colors.error])
+              .animation({ duration: Duration.normal, curve: Curve.EaseInOut })
           }
         }
         .width('100%')
-        .padding({ left: Spacing.sm, right: Spacing.md, top: Spacing.sm, bottom: Spacing.sm })
-        .alignItems(VerticalAlign.Center)
+        .padding({ left: Spacing.md, right: Spacing.md, top: Spacing.md, bottom: Spacing.md })
+        .alignItems(VerticalAlign.Top)
       }
       .type(ButtonType.Normal)
       .width('100%')
@@ -304,7 +320,7 @@ export struct ToolCallCard {
       .padding(0)
       .enabled(this.hasDetail())
       .stateStyles({
-        pressed: { .backgroundColor(Colors.surface1) },
+        pressed: { .backgroundColor(Colors.surface2) },
         normal: { .backgroundColor(Color.Transparent) }
       })
       .onClick(() => {
@@ -314,18 +330,17 @@ export struct ToolCallCard {
       })
 
       if (this.expanded && this.hasDetail()) {
-        Row() {
-          Column().width(Spacing.xxxl) // offset to match icon + margin
-
+        Column() {
           this.DetailContent()
         }
         .width('100%')
-        .padding({ bottom: Spacing.xs })
+        .padding({ left: Spacing.xxl, right: Spacing.md, bottom: Spacing.md })
         .transition(TransitionEffect.OPACITY)
       }
     }
     .width('100%')
-    .padding({ left: 0, right: 0 })
-    .animation({ duration: Duration.fast, curve: Curve.EaseOut })
+    .backgroundColor(Colors.surface1)
+    .borderRadius(Radius.md)
+    .animation({ duration: Duration.normal, curve: Curve.EaseOut })
   }
 }

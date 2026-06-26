@@ -7,35 +7,36 @@ import { PlanView } from '../../common/ui/PlanView';
 import { ChatInputBar } from './ChatInputBar';
 import { MessageDataSource } from '../../common/ui/MessageDataSource';
 
+interface MessageMargin {
+  top: number;
+  bottom: number;
+}
+
 @Component
 struct PulsingDots {
-  @State opacities: number[] = [0.3, 0.3, 0.3];
+  @State phase: number = 0;
+  private timer: number = 0;
 
   aboutToAppear(): void {
-    (this.getUIContext())?.animateTo({ duration: 600, curve: Curve.EaseInOut, delay: 0, iterations: -1, playMode: PlayMode.Alternate }, () => {
-      this.opacities[0] = 1.0;
-    });
-    (this.getUIContext())?.animateTo({ duration: 600, curve: Curve.EaseInOut, delay: 200, iterations: -1, playMode: PlayMode.Alternate }, () => {
-      this.opacities[1] = 1.0;
-    });
-    (this.getUIContext())?.animateTo({ duration: 600, curve: Curve.EaseInOut, delay: 400, iterations: -1, playMode: PlayMode.Alternate }, () => {
-      this.opacities[2] = 1.0;
-    });
+    this.timer = setInterval((): void => {
+      this.phase = (this.phase + 1) % 3;
+    }, 250);
   }
 
   aboutToDisappear(): void {
-    // Stop infinite animations by resetting to static values
-    this.opacities = [0.3, 0.3, 0.3];
+    clearInterval(this.timer);
   }
 
   build() {
-    Row({ space: 4 }) {
-      Circle().width(5).height(5).fill(Colors.foregroundMuted)
-        .opacity(this.opacities[0])
-      Circle().width(5).height(5).fill(Colors.foregroundMuted)
-        .opacity(this.opacities[1])
-      Circle().width(5).height(5).fill(Colors.foregroundMuted)
-        .opacity(this.opacities[2])
+    Row({ space: 5 }) {
+      ForEach([0, 1, 2], (idx: number) => {
+        Circle()
+          .width(4)
+          .height(4)
+          .fill(Colors.accent)
+          .opacity(this.phase === idx ? 1.0 : 0.3)
+          .animation({ duration: 150, curve: Curve.EaseOut })
+      }, (idx: number) => idx.toString())
     }
   }
 }
@@ -51,8 +52,9 @@ export struct ChatPage {
   private dataSource: MessageDataSource = new MessageDataSource([]);
 
   @State iconScale: number = 1.0;
-  @State followsOutput: boolean = true;   // Stage 2: scroll anchoring
-  @State showJumpButton: boolean = false; // Stage 2: floating jump-to-bottom
+  @State followsOutput: boolean = true;
+  @State showJumpButton: boolean = false;
+  @State messageMargins: Array<MessageMargin> = [];
 
   localize(res: Resource, ...args: Array<string | number>): string {
     let context = this.getUIContext().getHostContext();
@@ -60,8 +62,27 @@ export struct ChatPage {
     return getLocalizedString(context, res, ...args);
   }
 
+  private computeMessageMargins(): Array<MessageMargin> {
+    let margins: Array<MessageMargin> = [];
+    for (let i = 0; i < this.messages.length; i++) {
+      let top = Spacing.sm;
+      let bottom = Spacing.sm;
+      if (i === 0) {
+        top = Spacing.md;
+      } else if (this.messages[i - 1].role !== this.messages[i].role) {
+        top = Spacing.xl;
+      }
+      if (i === this.messages.length - 1) {
+        bottom = Spacing.xl;
+      }
+      margins.push({ top: top, bottom: bottom });
+    }
+    return margins;
+  }
+
   aboutToAppear(): void {
     this.dataSource = new MessageDataSource(this.messages);
+    this.messageMargins = this.computeMessageMargins();
     setTimeout(() => {
       this.iconScale = 1.08;
     }, 100);
@@ -69,6 +90,7 @@ export struct ChatPage {
 
   onMessagesChange(): void {
     this.dataSource.updateData(this.messages);
+    this.messageMargins = this.computeMessageMargins();
     if (this.followsOutput) {
       setTimeout(() => { this.scroller.scrollEdge(Edge.Bottom); }, 50);
     }
@@ -79,6 +101,7 @@ export struct ChatPage {
       setTimeout(() => { this.scroller.scrollEdge(Edge.Bottom); }, 50);
     }
   }
+
   getReconnectBannerText(): string {
     let phase: string = ChatStore.reconnectPhase;
     if (phase === 'disconnected') {
@@ -93,6 +116,36 @@ export struct ChatPage {
 
   hasSelectedAgent(): boolean {
     return (ChatStore.selectedAgentName || ChatStore.agentType).length > 0;
+  }
+
+  private isSameDay(ts1: number, ts2: number): boolean {
+    if (!ts1 || !ts2) return false;
+    let d1 = new Date(ts1);
+    let d2 = new Date(ts2);
+    return d1.getFullYear() === d2.getFullYear() && d1.getMonth() === d2.getMonth() && d1.getDate() === d2.getDate();
+  }
+
+  private formatDateDivider(ts: number): string {
+    if (!ts) return '';
+    let now = new Date();
+    let d = new Date(ts);
+    let diffDays = Math.floor((now.getTime() - d.getTime()) / 86400000);
+    if (diffDays === 0) return '今天';
+    if (diffDays === 1) return '昨天';
+    return (d.getMonth() + 1) + '月' + d.getDate() + '日';
+  }
+
+  @Builder
+  DateDivider(ts: number) {
+    Row() {
+      Text(this.formatDateDivider(ts))
+        .fontSize(FontSize.xs)
+        .fontColor(Colors.foregroundMuted)
+        .fontWeight(FontWeight.Medium)
+    }
+    .width('100%')
+    .justifyContent(FlexAlign.Center)
+    .padding({ top: Spacing.lg, bottom: Spacing.sm })
   }
 
   build() {
@@ -129,67 +182,84 @@ export struct ChatPage {
       }
 
       if (this.messages.length === 0) {
-          Column() {
-            if (ChatStore.turnActive) {
-              Column() {
-                LoadingProgress().width(20).height(20).color(Colors.accent)
-                Text($r('app.string.chat_waiting_response'))
-                  .fontSize(FontSize.sm).fontColor(Colors.foregroundLight)
-                  .margin({ top: Spacing.sm })
-              }
-              .alignItems(HorizontalAlign.Center)
-              .transition(TransitionEffect.OPACITY)
-              .animation({ duration: Duration.fast, curve: Curve.EaseInOut })
-            } else {
-              Column()
-                .alignItems(HorizontalAlign.Start)
-                .transition(TransitionEffect.OPACITY)
-                .animation({ duration: Duration.normal, curve: Curve.EaseOut })
+        Column() {
+          if (ChatStore.turnActive) {
+            Column() {
+              LoadingProgress().width(20).height(20).color(Colors.accent)
+              Text($r('app.string.chat_waiting_response'))
+                .fontSize(FontSize.sm).fontColor(Colors.foregroundLight)
+                .margin({ top: Spacing.sm })
             }
+            .alignItems(HorizontalAlign.Center)
+            .transition(TransitionEffect.OPACITY)
+            .animation({ duration: Duration.fast, curve: Curve.EaseInOut })
+          } else {
+            Column() {
+              SymbolGlyph($r('sys.symbol.ellipsis_message'))
+                .fontSize(40)
+                .fontColor([Colors.foregroundMuted])
+                .opacity(0.25)
+                .margin({ bottom: Spacing.lg })
+              Text($r('app.string.chat_empty_title'))
+                .fontSize(FontSize.headingLg)
+                .fontWeight(FontWeight.Bold)
+                .fontColor(Colors.foreground)
+              Text($r('app.string.chat_empty_subtitle'))
+                .fontSize(FontSize.lg)
+                .fontColor(Colors.foregroundMuted)
+                .margin({ top: Spacing.sm })
+            }
+            .alignItems(HorizontalAlign.Center)
+            .transition(TransitionEffect.OPACITY)
+            .animation({ duration: Duration.normal, curve: Curve.EaseOut })
           }
+        }
         .width('100%').layoutWeight(1)
-        .justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Start)
-        .padding({ left: Spacing.lg, right: Spacing.lg, top: Spacing.xxxl, bottom: Spacing.xxxl })
+        .justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center)
+        .padding({ left: Spacing.xl, right: Spacing.xl, top: Spacing.xxl, bottom: Spacing.xxl })
       } else {
         List({ scroller: this.scroller }) {
-          LazyForEach(this.dataSource, (msg: MessageData) => {
+          LazyForEach(this.dataSource, (msg: MessageData, index: number) => {
             ListItem() {
-              if (msg.type === 'plan') {
-                PlanView({ entries: ChatStore.planEntries })
-                  .width('100%')
-                  .padding({ left: Spacing.lg, right: Spacing.lg, top: Spacing.xs, bottom: Spacing.xs })
-                  .margin({ bottom: Spacing.xl })
-              } else {
-                MessageCard({
-                  isUser: msg.role === 'user',
-                  msgId: msg.id,
-                  msgSendStatus: msg.sendStatus,
-                  time: this.formatTime(msg.timestamp),
-                  status: (msg.role === 'assistant' && msg.type === 'text'
-                    && ChatStore.turnActive) ? this.localize($r('app.string.common_running')) : '',
-                  msgContent: msg.content,
-                  msgType: msg.type,
-                  msgToolName: msg.toolName,
-                  msgToolStatus: msg.toolStatus,
-                  msgToolKind: msg.toolKind,
-                  msgToolContent: msg.toolContent,
-                  msgToolContentType: msg.toolContentType,
-                  msgToolPath: msg.toolPath,
-                  msgToolOldText: msg.toolOldText,
-                  msgToolNewText: msg.toolNewText,
-                  msgToolTerminalId: msg.toolTerminalId,
-                  streaming: ChatStore.turnActive && msg.role === 'assistant' && msg.id === ChatStore.messages[ChatStore.messages.length - 1]?.id,
-                  onRetry: (id: string, content: string) => { if (this.onRetry) this.onRetry(id, content) }
-                })
-                  .margin({ bottom: Spacing.xl })
+              Column() {
+                if (index > 0 && !this.isSameDay(this.dataSource.getData(index - 1).timestamp, msg.timestamp)) {
+                  this.DateDivider(msg.timestamp)
+                }
+
+                if (msg.type === 'plan') {
+                  PlanView({ entries: ChatStore.planEntries })
+                    .width('100%')
+                    .padding({ left: Spacing.lg, right: Spacing.lg, top: Spacing.xs, bottom: Spacing.xs })
+                } else {
+                  MessageCard({
+                    isUser: msg.role === 'user',
+                    msgId: msg.id,
+                    msgSendStatus: msg.sendStatus,
+                    time: this.formatTime(msg.timestamp),
+                    status: (msg.role === 'assistant' && msg.type === 'text'
+                      && ChatStore.turnActive) ? this.localize($r('app.string.common_running')) : '',
+                    msgContent: msg.content,
+                    msgType: msg.type,
+                    msgToolName: msg.toolName,
+                    msgToolStatus: msg.toolStatus,
+                    msgToolKind: msg.toolKind,
+                    msgToolContent: msg.toolContent,
+                    msgToolContentType: msg.toolContentType,
+                    msgToolPath: msg.toolPath,
+                    msgToolOldText: msg.toolOldText,
+                    msgToolNewText: msg.toolNewText,
+                    msgToolTerminalId: msg.toolTerminalId,
+                    streaming: ChatStore.turnActive && msg.role === 'assistant' && msg.id === ChatStore.messages[ChatStore.messages.length - 1]?.id,
+                    onRetry: (id: string, content: string) => { if (this.onRetry !== undefined) this.onRetry(id, content) }
+                  })
+                }
               }
             }
             .height('auto')
-            // Key includes tool payload changes so tool cards re-render on output/diff updates
+            .margin(this.messageMargins[index])
           }, (msg: MessageData) => msg.id + ':' + msg.content.length + ':' + msg.toolContent.length + ':' +
             msg.toolContentType + ':' + msg.toolOldText.length + ':' + msg.toolNewText.length + ':' + msg.toolStatus)
 
-          // Streaming thinking section (outside LazyForEach — no key changes on chunks)
           if (ChatStore.streamingThinking.length > 0 && ChatStore.turnActive) {
             ListItem() {
               ThinkingSection({ thinking: ChatStore.streamingThinking, isStreaming: true })
@@ -197,7 +267,7 @@ export struct ChatPage {
                 .padding({ left: Spacing.lg, right: Spacing.lg })
             }
             .height('auto')
-            .margin({ bottom: Spacing.md })
+            .margin({ top: Spacing.sm, bottom: Spacing.md })
           }
 
           if (ChatStore.turnActive) {
@@ -205,23 +275,23 @@ export struct ChatPage {
               PulsingDots()
                 .padding({ left: Spacing.lg, top: Spacing.xs, bottom: Spacing.xs })
             }
-            .margin({ bottom: Spacing.md })
+            .margin({ top: Spacing.sm, bottom: Spacing.md })
             .transition(TransitionEffect.OPACITY)
           }
 
           if (!ChatStore.turnActive && ChatStore.lastUsage !== null && this.messages.length > 0) {
             ListItem() {
               Row() {
-                SymbolGlyph($r('sys.symbol.checkmark')).fontSize(14).fontColor([Colors.foregroundMuted]).margin({ right: Spacing.sm })
+                SymbolGlyph($r('sys.symbol.checkmark')).fontSize(12).fontColor([Colors.foregroundMuted]).margin({ right: Spacing.xs })
                 Text(this.localize($r('app.string.chat_tokens_usage'), ChatStore.lastUsage!.totalTokens))
-                  .fontSize(FontSize.xs).fontColor(Colors.foregroundMuted)
+                  .fontSize(FontSize.xs).fontColor(Colors.foregroundMuted).fontWeight(FontWeight.Medium)
                 Blank()
                 Text($r('app.string.chat_done')).fontSize(FontSize.xs).fontColor(Colors.foregroundMuted)
               }
               .width('100%')
               .padding({ left: Spacing.lg, right: Spacing.lg, top: Spacing.sm, bottom: Spacing.md })
             }
-            .margin({ bottom: Spacing.md })
+            .margin({ top: Spacing.sm, bottom: Spacing.md })
             .transition(TransitionEffect.OPACITY)
           }
         }
@@ -236,7 +306,6 @@ export struct ChatPage {
         })
       }
 
-      // Jump-to-bottom button when user has scrolled up during turn
       if (this.showJumpButton && ChatStore.turnActive) {
         Button() {
           Row({ space: Spacing.xs }) {
@@ -260,6 +329,8 @@ export struct ChatPage {
         })
         .animation({ duration: 150, curve: Curve.EaseOut })
         .transition(TransitionEffect.OPACITY.animation({ duration: 150, curve: Curve.EaseOut }))
+        .alignSelf(ItemAlign.End)
+        .margin({ right: Spacing.xl, bottom: Spacing.lg })
         .onClick(() => {
           this.scroller.scrollEdge(Edge.Bottom);
           this.followsOutput = true;
