@@ -49,7 +49,7 @@ export struct WorkspaceDrawer {
         .justifyContent(FlexAlign.Start).alignItems(HorizontalAlign.Start)
         .padding({ left: Spacing.lg, right: Spacing.lg, top: Spacing.md })
       } else {
-        List({ space: Spacing.sm }) {
+        List({ space: 0 }) {
         ForEach(this.workspaces, (ws: WorkspaceInfo, index: number) => {
           ListItem() {
             Row() {
@@ -65,7 +65,6 @@ export struct WorkspaceDrawer {
                   .fontColor(index === this.currentIndex ? Colors.accent : Colors.foreground)
                   .maxLines(1)
                   .textOverflow({ overflow: TextOverflow.Ellipsis })
-                  .margin({ bottom: Spacing.xs })
                 Text(ws.path)
                   .fontSize(FontSize.sm)
                   .fontColor(Colors.foregroundMuted)
@@ -86,7 +85,7 @@ export struct WorkspaceDrawer {
               }
             }
             .width('100%')
-            .padding({ left: Spacing.lg, right: Spacing.lg, top: Spacing.lg, bottom: Spacing.lg })
+            .padding({ left: Spacing.md, right: Spacing.md, top: Spacing.lg, bottom: Spacing.lg })
             .onClick(() => { if (this.onSelect) this.onSelect(index) })
             .transition(TransitionEffect.OPACITY)
             .stateStyles({

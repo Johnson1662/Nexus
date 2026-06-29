@@ -277,6 +277,12 @@ export struct SettingsPage {
     return value.substring(0, head) + '...' + value.substring(value.length - tail);
   }
 
+  stripWsPrefix(url: string): string {
+    if (url.startsWith('ws://')) return url.substring(5);
+    if (url.startsWith('wss://')) return url.substring(6);
+    return url;
+  }
+
   getDirectUrls(device: DeviceEntry): string[] {
     let urls: string[] = [];
     for (let i: number = 0; i < device.urls.length; i++) {
@@ -366,7 +372,7 @@ export struct SettingsPage {
       Blank()
     }
     .width(Layout.contentWidth)
-    .padding({ top: Spacing.xl, bottom: Spacing.sm })
+    .padding({ top: Spacing.xl, bottom: Spacing.md })
   }
 
   @Builder
@@ -449,18 +455,51 @@ export struct SettingsPage {
 
   @Builder
   HostRow(device: DeviceEntry, index: number) {
-    Row() {
-      Circle({ width: 7, height: 7 })
-        .fill(this.getPhaseColor(this.getHostPhase(device)))
-        .margin({ right: Spacing.md })
+    Column() {
+      Row() {
+        Circle({ width: 7, height: 7 })
+          .fill(this.getPhaseColor(this.getHostPhase(device)))
+          .margin({ right: Spacing.md })
 
-      Column() {
         Text(device.name)
           .fontSize(FontSize.base)
           .fontColor(Colors.foreground)
           .fontWeight(FontWeight.Medium)
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .layoutWeight(1)
+
+        if (this.isCurrentHost(device) || this.isBusy(device)) {
+          Text(this.getActionText(device))
+            .fontSize(FontSize.sm)
+            .fontColor(Colors.foregroundMuted)
+            .margin({ left: Spacing.sm })
+        } else {
+          Button(this.getActionText(device))
+            .height(30)
+            .padding({ left: Spacing.sm, right: Spacing.sm })
+            .fontSize(FontSize.sm)
+            .fontColor(Colors.accent)
+            .backgroundColor(Colors.transparent)
+            .borderRadius(Radius.md)
+            .stateStyles({
+              pressed: { .backgroundColor(Colors.surface1) },
+              normal: { .backgroundColor(Colors.transparent) }
+            })
+            .onClick(() => { this.connectHost(index, device); })
+        }
+
+        SymbolGlyph($r('sys.symbol.chevron_right'))
+          .fontSize(16)
+          .fontColor([Colors.foregroundMuted])
+          .rotate({ angle: this.expandedHostKey === this.getHostKey(device) ? 90 : 0 })
+          .margin({ left: Spacing.xs })
+      }
+      .width('100%')
+      .alignItems(VerticalAlign.Center)
+
+      Row() {
+        Circle({ width: 7, height: 7 }).fill(Color.Transparent).margin({ right: Spacing.md })
         Row({ space: Spacing.xs }) {
           Text(this.getPhaseLabel(this.getHostPhase(device)))
             .fontSize(FontSize.xs)
@@ -474,45 +513,19 @@ export struct SettingsPage {
           Text('·')
             .fontSize(FontSize.xs)
             .fontColor(Colors.foregroundMuted)
-          Text(this.shortText(this.getPrimaryDisplayUrl(device), 22, 0))
+          Text(this.stripWsPrefix(this.shortText(this.getPrimaryDisplayUrl(device), 22, 0)))
             .fontSize(FontSize.xs)
             .fontColor(Colors.foregroundMuted)
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
         }
-        .margin({ top: Spacing.xxs })
+        .width('100%')
       }
-      .alignItems(HorizontalAlign.Start)
-      .layoutWeight(1)
-
-      if (this.isCurrentHost(device) || this.isBusy(device)) {
-        Text(this.getActionText(device))
-          .fontSize(FontSize.sm)
-          .fontColor(Colors.foregroundMuted)
-          .margin({ left: Spacing.sm })
-      } else {
-        Button(this.getActionText(device))
-          .height(30)
-          .padding({ left: Spacing.sm, right: Spacing.sm })
-          .fontSize(FontSize.sm)
-          .fontColor(Colors.accent)
-          .backgroundColor(Colors.transparent)
-          .borderRadius(Radius.sm)
-          .stateStyles({
-            pressed: { .backgroundColor(Colors.surface1) },
-            normal: { .backgroundColor(Colors.transparent) }
-          })
-          .onClick(() => { this.connectHost(index, device); })
-      }
-
-      SymbolGlyph($r('sys.symbol.chevron_right'))
-        .fontSize(16)
-        .fontColor([Colors.foregroundMuted])
-        .rotate({ angle: this.expandedHostKey === this.getHostKey(device) ? 90 : 0 })
-        .margin({ left: Spacing.xs })
+      .width('100%')
+      .margin({ top: Spacing.xxs })
     }
     .width('100%')
-    .padding({ left: Spacing.md, right: Spacing.md, top: Spacing.md, bottom: Spacing.md })
+    .padding({ left: Spacing.md, right: Spacing.md, top: Spacing.lg, bottom: Spacing.lg })
     .stateStyles({
       pressed: { .backgroundColor(Colors.surface2) },
       normal: { .backgroundColor(Colors.transparent) }
@@ -703,11 +716,11 @@ export struct SettingsPage {
       .layoutWeight(1)
 
       Toggle({ type: ToggleType.Switch, isOn })
-        .selectedColor(Colors.foreground)
+        .selectedColor(Colors.accent)
         .onChange(onChange)
     }
     .width('100%')
-    .height(62)
+    .height(66)
     .padding({ left: Spacing.md, right: Spacing.md, top: Spacing.sm, bottom: Spacing.sm })
     .backgroundColor(Colors.transparent)
     .stateStyles({
@@ -875,7 +888,7 @@ export struct SettingsPage {
           }
           .width(Layout.contentWidth)
           .backgroundColor(Colors.surfaceElevated)
-          .borderRadius(Radius.xxl)
+          .borderRadius(Radius.xl)
           .clip(true)
 
           this.SectionTitleResource($r('app.string.settings_display_section'))
@@ -911,7 +924,7 @@ export struct SettingsPage {
           }
           .width(Layout.contentWidth)
           .backgroundColor(Colors.surfaceElevated)
-          .borderRadius(Radius.xxl)
+          .borderRadius(Radius.xl)
           .clip(true)
 
           this.SectionTitleResource($r('app.string.settings_preferences_section'))
@@ -939,7 +952,7 @@ export struct SettingsPage {
           }
           .width(Layout.contentWidth)
           .backgroundColor(Colors.surfaceElevated)
-          .borderRadius(Radius.xxl)
+          .borderRadius(Radius.xl)
           .clip(true)
         }
         .width('100%')

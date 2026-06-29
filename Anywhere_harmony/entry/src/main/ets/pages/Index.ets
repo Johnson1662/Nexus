@@ -91,7 +91,7 @@ struct Index {
           .width('100%')
           .alignItems(HorizontalAlign.Start)
           .backgroundColor(Colors.surface0)
-          .padding({ top: 15, bottom: 18 })
+          .padding({ top: 16, bottom: 20 })
           HomeView({
             onNavigateToAgentDetail: (index: number) => {
               AppStorage.setOrCreate('selectedDeviceIndex', index);
@@ -122,7 +122,7 @@ struct Index {
         }
           .width('100%')
           .height('100%')
-          .padding({ top: 42 })
+          .padding({ top: 44 })
       }
       .hideBackButton(true)
       .titleBar({

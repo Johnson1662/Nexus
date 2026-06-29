@@ -52,14 +52,15 @@ export class Spacing {
   static readonly sm: number = 8;
   static readonly md: number = 12;
   static readonly lg: number = 16;
-  static readonly xl: number = 20;
-  static readonly xxl: number = 24;
-  static readonly xxxl: number = 32;
+  static readonly xlg: number = 20; // lg→xl 之间平滑过渡
+  static readonly xl: number = 24;
+  static readonly xxl: number = 32;
+  static readonly xxxl: number = 40;
 }
 
 export class Layout {
-  static readonly pageGutter: number = 20;
-  static readonly contentWidth: string = 'calc(100% - 40vp)';
+  static readonly pageGutter: number = 24;
+  static readonly contentWidth: string = 'calc(100% - 48vp)';
 }
 
 export class Radius {
@@ -81,8 +82,10 @@ export class FontSize {
   static readonly lg: number = 16;
   static readonly xl: number = 18;
   static readonly xxl: number = 20;
-  static readonly xxxl: number = 24;
+  static readonly xxxl: number = 22;
   static readonly xxxxl: number = 28;
+  static readonly headingLg: number = 26;
+  static readonly headingXl: number = 30;
 }
 
 export interface ShadowStyle {
@@ -92,9 +95,10 @@ export interface ShadowStyle {
 }
 
 export class Shadow {
-  static readonly sm: ShadowStyle = { radius: 4, color: Colors.shadow, offsetY: 2 };
-  static readonly md: ShadowStyle = { radius: 8, color: Colors.shadow, offsetY: 4 };
-  static readonly lg: ShadowStyle = { radius: 16, color: Colors.shadow, offsetY: 8 };
+  static readonly xs: ShadowStyle = { radius: 3, color: Colors.shadow, offsetY: 1 };
+  static readonly sm: ShadowStyle = { radius: 6, color: Colors.shadow, offsetY: 1 };
+  static readonly md: ShadowStyle = { radius: 12, color: Colors.shadow, offsetY: 3 };
+  static readonly lg: ShadowStyle = { radius: 20, color: Colors.shadow, offsetY: 6 };
 }
 
 export class Duration {

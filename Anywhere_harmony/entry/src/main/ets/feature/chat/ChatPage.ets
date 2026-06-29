@@ -4,7 +4,6 @@ import { MessageData } from '../../common/model/MessageData';
 import { MessageCard } from '../../common/ui/MessageCard';
 import { ThinkingSection } from '../../common/ui/ThinkingSection';
 import { PlanView } from '../../common/ui/PlanView';
-import { ChatInputBar } from './ChatInputBar';
 import { MessageDataSource } from '../../common/ui/MessageDataSource';
 
 interface MessageMargin {

@@ -218,7 +218,7 @@ export struct ChatInputBar {
         .height(this.getDropdownHeight())
         .backgroundColor(Colors.surfaceElevated)
         .borderRadius(Radius.lg)
-        .shadow(Shadow.md)
+        .shadow(Shadow.lg)
         .margin({ bottom: Spacing.sm })
         .transition(TransitionEffect.OPACITY.animation({ duration: 150, curve: Curve.EaseOut }))
         .animation({ duration: 200, curve: Curve.EaseOut })
@@ -324,7 +324,7 @@ export struct ChatInputBar {
                   .fontSize(12)
                   .fontColor([Colors.foregroundMuted])
                 Text(this.getModelName().length > 0 ? this.stripProvider(this.getModelName()) : this.localize($r('app.string.config_model')))
-                  .fontSize(FontSize.sm)
+                  .fontSize(FontSize.md)
                   .fontColor(Colors.foreground)
                   .fontWeight(FontWeight.Medium)
                   .maxLines(1)
@@ -334,7 +334,7 @@ export struct ChatInputBar {
                   .margin({ left: Spacing.xxs })
               }
             }
-            .height(30)
+            .height(32)
             .padding({ left: Spacing.md, right: Spacing.md })
             .backgroundColor(Colors.surface1)
             .borderRadius(Radius.full)
@@ -352,7 +352,7 @@ export struct ChatInputBar {
           if (this.showCancel) {
             Button() {
               SymbolGlyph($r('sys.symbol.xmark_circle'))
-                .fontSize(28)
+                .fontSize(30)
                 .fontColor([Colors.error])
             }
             .backgroundColor(Colors.transparent)
@@ -368,7 +368,7 @@ export struct ChatInputBar {
             Button() {
               SymbolGlyph($r('sys.symbol.arrow_up_circle_fill'))
                 .fontColor([Colors.accent])
-                .fontSize(28)
+                .fontSize(30)
             }
             .backgroundColor(Colors.transparent)
             .stateStyles({
@@ -383,7 +383,7 @@ export struct ChatInputBar {
             Button() {
               SymbolGlyph($r('sys.symbol.arrow_up_circle_fill'))
                 .fontColor([Colors.borderLight])
-                .fontSize(28)
+                .fontSize(30)
             }
             .backgroundColor(Colors.transparent)
             .enabled(false)
@@ -396,14 +396,14 @@ export struct ChatInputBar {
         .alignItems(VerticalAlign.Center)
       }
       .backgroundColor(Colors.surfaceElevated)
-      .borderRadius(Radius.xxl)
+      .borderRadius(Radius.xl)
       .border({ width: 0 })
       .shadow(Shadow.md)
       .width(Layout.contentWidth)
     }
     .width('100%')
     .alignItems(HorizontalAlign.Center)
-    .padding({ top: Spacing.md, bottom: Spacing.xl })
+    .padding({ top: Spacing.sm, bottom: Spacing.xl })
     .backgroundColor(Colors.surface0)
     .accessibilityGroup(true)
     .bindSheet($$this.showSheet, this.ConfigPanel(), {

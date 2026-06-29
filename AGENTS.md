@@ -29,18 +29,13 @@ Anywhere 是一个 HarmonyOS App，通过 Relay 中继连接到 PC 端 Bridge Se
 
 1. 用户输入
 2. 分析用户输入，使用codegraph MCP获取上下文，分析代码
-3. 充分计划，然后将任务拆分为多个子任务，调用子代理处理
-4. 收集并review子代理的结果，构建项目，进行修正，整合为最终结果，然后部署到手机端测试
+3. 充分计划，然后将任务拆分为多个子任务，调用子代理处理，子代理编写完代码后要让他们用deveco-mcp自己检查是否有arkts语法错误
+4. 收集并review子代理的结果，先使用deveco-mcp检查arkts语法，然后再使用devecocli构建项目，进行修正，整合为最终结果，然后用devecocli部署到手机端测试
 5. 测试无误后进行git提交
 
-| 规则 | 说明 |
-|------|------|
-| **Git 提交** | 每次成功改动后执行 `git commit`，只 stage 本次改动的文件 |
-| **语言** | 永远用中文回答；需要解释时给出简要思路与结论，不输出隐藏思考链 |
-| **设计参考** | 原型图在 `prototype_picture/`，实机截图在 `app_test_picture/`。无视觉能力的模型用 `vision_analyze` 分析截图 |
-| **查文档 无限调试 连接手机部署** | 用 `deveco-cli` skill 查鸿蒙官方文档、连接手机，部署项目。不确定就查文档！ |
-
-Codegraph MCP 用于理解代码结构。当前 MCP server 带 watcher，通常会自动 sync；若怀疑索引过期，用 `node D:/Development/codegraph-arkts/dist/bin/codegraph.js status .` 确认，必要时再手动 `sync .`，不再要求每次提交后固定执行 `index .`。
+## 关键工具
+1. 用 `deveco-cli` skill 查鸿蒙官方文档、连接手机，部署项目。不确定就查文档！
+2. Codegraph MCP 用于理解代码结构。当前 MCP server 带 watcher，通常会自动 sync；若怀疑索引过期，用 `node D:/Development/codegraph-arkts/dist/bin/codegraph.js status .` 确认，必要时再手动 `sync .`，不再要求每次提交后固定执行 `index .`。
 
 ---
 
@@ -487,8 +482,6 @@ Anywhere/                             # 项目根（PC 端 + 手机端合一）
 ### 网络排查
 
 - Server 监听：`netstat -an | findstr "12138"` → 确认 `0.0.0.0:[::]` 双栈
-- 防火墙：nvmw4 管理 Node（`D:\nvm4w\nodejs\node.exe`），不是 DevEco Studio 的 Node
-- Clash：全局模式 → 关掉，或 bypass `192.168.0.0/16`、`10.0.0.0/8`
 - Tailscale：手机热点 WiFi → IPv4/IPv6 均通；移动数据 → 仅 IPv4。始终用 IPv4 地址
 - 排查链路：本机 WS 测试 → `hdc shell ping` → 防火墙 → 关 Clash
 - 添加主机时 IPv6 URL 必须保留 `[ ]` 自动包能力

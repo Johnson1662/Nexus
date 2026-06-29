@@ -217,7 +217,6 @@ export struct MessageCard {
           })
           .alignItems(HorizontalAlign.Start)
           .width('100%')
-          .bindContextMenu(this.ContextMenuBuilder(), ResponseType.LongPress)
 
         } else {
           // User message bubble
@@ -276,7 +275,7 @@ export struct MessageCard {
           .shadow(Shadow.xs)
           .alignItems(HorizontalAlign.Start)
 
-          // Time & send status
+          // Time & send status — right-aligned without stretching parent Column
           Row() {
             this.SendStatusIcon()
             if (this.time.length > 0) {
@@ -285,12 +284,11 @@ export struct MessageCard {
                 .fontColor(Colors.foregroundMuted)
             }
           }
-          .width('100%')
-          .justifyContent(FlexAlign.End)
+          .alignSelf(ItemAlign.End)
           .margin({ top: Spacing.xs })
-          .bindContextMenu(this.ContextMenuBuilder(), ResponseType.LongPress)
         }
       }
+      .bindContextMenu(this.ContextMenuBuilder(), ResponseType.LongPress)
       .layoutWeight(this.isUser ? 0 : 1)
       .constraintSize(this.isUser ? { maxWidth: '80%' } : { maxWidth: '100%' })
     }

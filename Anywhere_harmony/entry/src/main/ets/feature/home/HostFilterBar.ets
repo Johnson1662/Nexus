@@ -12,7 +12,7 @@ export struct HostFilterBar {
 
   build() {
     Scroll() {
-      Row({ space: Spacing.sm }) {
+      Row({ space: Spacing.md }) {
         ForEach(this.devices, (device: DeviceEntry) => {
           this.Chip(
             this.getHostLabel(device),
@@ -48,18 +48,18 @@ export struct HostFilterBar {
   Chip(label: string, key: string, phase: string) {
     Button() {
       Row() {
-        Circle({ width: 6, height: 6 })
+        Circle({ width: 7, height: 7 })
           .fill(this.getPhaseColor(phase))
           .margin({ right: Spacing.xs })
         Text(label)
           .fontSize(FontSize.md)
-          .fontWeight(this.selectedKey === key ? FontWeight.Medium : FontWeight.Normal)
+          .fontWeight(this.selectedKey === key ? FontWeight.Bold : FontWeight.Normal)
           .fontColor(this.selectedKey === key ? Colors.surface0 : Colors.foreground)
           .maxLines(1)
       }
     }
-    .height(34)
-    .padding({ left: Spacing.lg, right: Spacing.lg })
+    .height(36)
+    .padding({ left: Spacing.xl, right: Spacing.xl })
     .backgroundColor(this.selectedKey === key ? Colors.foreground : Colors.surface1)
     .stateStyles({
       pressed: { .backgroundColor(Colors.surface0) }
@@ -67,7 +67,7 @@ export struct HostFilterBar {
 
     .border({ width: 0 })
     .borderRadius(Radius.full)
-    .animation({ duration: 150, curve: Curve.EaseOut })
+    .animation({ duration: 200, curve: Curve.EaseOut })
 
     .onClick(() => { if (this.onSelect) this.onSelect(key); })
   }

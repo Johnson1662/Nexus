@@ -85,6 +85,14 @@
       "value": "新会话"
     },
     {
+      "name": "chat_empty_title",
+      "value": "开始对话"
+    },
+    {
+      "name": "chat_empty_subtitle",
+      "value": "在下方输入开始提问"
+    },
+    {
       "name": "chat_no_session",
       "value": "无会话"
     },
@@ -565,6 +573,14 @@
       "value": "运行中"
     },
     {
+      "name": "common_done",
+      "value": "完成"
+    },
+    {
+      "name": "common_failed",
+      "value": "失败"
+    },
+    {
       "name": "common_idle",
       "value": "空闲"
     },
@@ -611,6 +627,10 @@
     {
       "name": "home_no_projects",
       "value": "还没有项目。从菜单添加主机或进入聊天后添加工作区。"
+    },
+    {
+      "name": "home_no_recent",
+      "value": "暂无会话，点击聊天开始。"
     },
     {
       "name": "home_workspace_updated",
