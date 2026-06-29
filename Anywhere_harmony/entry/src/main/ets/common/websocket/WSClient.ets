@@ -41,6 +41,26 @@ function repairRelayJson(raw: string): string {
 const DOMAIN: number = 0x0000;
 const TAG: string = 'WSClient';
 const PROBE_TIMEOUT_MS: number = 5000;
+const RECONNECT_BASE_DELAY_MS: number = 1000;
+const RECONNECT_MAX_DELAY_MS: number = 30_000;
+const HEARTBEAT_SEND_INTERVAL_MS: number = 20_000;
+const HEARTBEAT_IDLE_TIMEOUT_MS: number = 45_000;
+const HEARTBEAT_WATCHDOG_TICK_MS: number = 5_000;
+
+function reconnectBackoffDelayMs(attempt: number): number {
+  if (attempt <= 0) {
+    return RECONNECT_BASE_DELAY_MS;
+  }
+  let exponent: number = attempt - 1;
+  let delay: number = RECONNECT_BASE_DELAY_MS;
+  for (let i: number = 0; i < exponent; i++) {
+    delay = delay * 2;
+    if (delay >= RECONNECT_MAX_DELAY_MS) {
+      return RECONNECT_MAX_DELAY_MS;
+    }
+  }
+  return Math.min(delay, RECONNECT_MAX_DELAY_MS);
+}
 
 export interface ProbeCandidateResult {
   url: string;
@@ -286,7 +306,7 @@ export class WSClient {
   private targetHostKey: string = '';
   private reconnectCandidates: string[] = [];
   private currentCandidateIndex: number = 0;
-  private readonly MAX_RECONNECT_ATTEMPTS: number = 5;
+  private readonly MAX_RECONNECT_ATTEMPTS: number = 12;
   private waitingHostTimer: number | null = null;
   private _e2eeReady: boolean = false;
   private _e2eeClientId: string = '';
@@ -295,7 +315,7 @@ export class WSClient {
   private lastHeartbeatReceived: number = 0;
   private heartbeatWatchdog: number | null = null;
   private heartbeatSender: number | null = null;
-  private readonly HEARTBEAT_WATCHDOG_MS: number = 15_000;  // 15s no heartbeat → disconnect
+  private readonly HEARTBEAT_WATCHDOG_MS: number = HEARTBEAT_IDLE_TIMEOUT_MS;
 
   connect(url: string, hostKey: string = ''): void {
     this.reconnectCandidates = this.normalizeCandidateUrls([url]);
@@ -637,8 +657,9 @@ export class WSClient {
     }
     this.cancelReconnect();
     this.reconnectAttempts++;
-    const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts - 1), 30000);
-    hilog.info(DOMAIN, TAG, 'reconnect in ' + delay.toString() + 'ms (attempt ' + this.reconnectAttempts.toString() + ')');
+    let delay: number = reconnectBackoffDelayMs(this.reconnectAttempts);
+    hilog.info(DOMAIN, TAG, 'reconnect in ' + delay.toString() + 'ms (attempt ' + this.reconnectAttempts.toString() +
+      '/' + this.MAX_RECONNECT_ATTEMPTS.toString() + ')');
     if (ChatStore.bridgeSessionId.length > 0) {
       ChatStore.reconnectPhase = 'reconnecting';
     }
@@ -659,9 +680,13 @@ export class WSClient {
     let bestUrl: string = await this.pickBestCandidate(candidates, this.targetHostKey, 'reconnect');
     if (this.intentionalClose) return;
     if (bestUrl.length === 0) {
-      hilog.info(DOMAIN, TAG, `reconnect: all probes failed, marking offline hostKey=${this.targetHostKey}`);
-      HostRuntimeStore.markOffline(this.targetHostKey, 'all probes failed');
-      this.notifyState(false, 'all probes failed');
+      hilog.info(DOMAIN, TAG, 'reconnect: all probes failed hostKey=' + this.targetHostKey);
+      if (this.hostEverOnline && this.reconnectAttempts < this.MAX_RECONNECT_ATTEMPTS) {
+        this.scheduleReconnect('all probes failed');
+      } else {
+        HostRuntimeStore.markOffline(this.targetHostKey, 'all probes failed');
+        this.notifyState(false, 'all probes failed');
+      }
       return;
     }
     this.currentCandidateIndex = candidates.indexOf(bestUrl);
@@ -1025,25 +1050,26 @@ export class WSClient {
     this.lastHeartbeatReceived = Date.now();
     this.stopHeartbeatWatchdog();
     this.heartbeatWatchdog = setInterval(() => {
-      if (Date.now() - this.lastHeartbeatReceived > this.HEARTBEAT_WATCHDOG_MS) {
-        hilog.error(DOMAIN, TAG, `Heartbeat timeout (${this.HEARTBEAT_WATCHDOG_MS / 1000}s), disconnecting`);
+      let idleMs: number = Date.now() - this.lastHeartbeatReceived;
+      if (idleMs > this.HEARTBEAT_WATCHDOG_MS) {
+        hilog.error(DOMAIN, TAG, 'Heartbeat idle timeout (' + (this.HEARTBEAT_WATCHDOG_MS / 1000).toString() +
+          's, idle=' + idleMs.toString() + 'ms), disconnecting');
         this.intentionalClose = false;
         this.disconnectInternal();
         if (ChatStore.bridgeSessionId.length > 0) {
           ChatStore.reconnectPhase = 'disconnected';
         }
-        this.scheduleReconnect('Heartbeat timeout');
+        this.scheduleReconnect('Heartbeat idle timeout');
       }
-    }, 15_000);
+    }, HEARTBEAT_WATCHDOG_TICK_MS);
 
-    // Active heartbeat sender (every 15s) - keep the connection alive
     this.heartbeatSender = setInterval(() => {
       if (ChatStore.connected) {
         let hbPayload: Record<string, Object> = {};
         hbPayload['ts'] = Date.now();
         this.sendControl('heartbeat', hbPayload);
       }
-    }, 15_000);
+    }, HEARTBEAT_SEND_INTERVAL_MS);
 
     // Send first heartbeat immediately so the server responds before the first watchdog tick
     let firstHb: Record<string, Object> = {};

@@ -209,9 +209,8 @@ function appendText(msgs: MessageData[], t: string): MessageData[] {
   if (msgs.length > 0) {
     let last = msgs[msgs.length - 1];
     if (last.role === 'assistant' && last.type === 'text') {
-      let u = new MessageData('assistant', last.content + t, 'text');
-      u.id = last.id; u.timestamp = last.timestamp;
-      let r = [...msgs]; r[r.length - 1] = u; return r;
+      last.content = last.content + t;
+      return [...msgs];
     }
   }
   let cleaned = t.replace(/^\n+/, '');

@@ -4,7 +4,7 @@ import { MessageData } from '../../common/model/MessageData';
 import { MessageCard } from '../../common/ui/MessageCard';
 import { ThinkingSection } from '../../common/ui/ThinkingSection';
 import { PlanView } from '../../common/ui/PlanView';
-import { MessageDataSource } from '../../common/ui/MessageDataSource';
+import { MessageDataSource, messageLazyKey } from '../../common/ui/MessageDataSource';
 
 interface MessageMargin {
   top: number;
@@ -54,6 +54,7 @@ export struct ChatPage {
   @State followsOutput: boolean = true;
   @State showJumpButton: boolean = false;
   @State messageMargins: Array<MessageMargin> = [];
+  @State streamingTailMsgId: string = '';
 
   localize(res: Resource, ...args: Array<string | number>): string {
     let context = this.getUIContext().getHostContext();
@@ -61,35 +62,86 @@ export struct ChatPage {
     return getLocalizedString(context, res, ...args);
   }
 
+  private marginForIndex(index: number): MessageMargin {
+    let top = Spacing.sm;
+    let bottom = Spacing.sm;
+    if (index === 0) {
+      top = Spacing.md;
+    } else if (this.messages[index - 1].role !== this.messages[index].role) {
+      top = Spacing.xl;
+    }
+    if (index === this.messages.length - 1) {
+      bottom = Spacing.xl;
+    }
+    return { top: top, bottom: bottom };
+  }
+
   private computeMessageMargins(): Array<MessageMargin> {
     let margins: Array<MessageMargin> = [];
     for (let i = 0; i < this.messages.length; i++) {
-      let top = Spacing.sm;
-      let bottom = Spacing.sm;
-      if (i === 0) {
-        top = Spacing.md;
-      } else if (this.messages[i - 1].role !== this.messages[i].role) {
-        top = Spacing.xl;
-      }
-      if (i === this.messages.length - 1) {
-        bottom = Spacing.xl;
-      }
-      margins.push({ top: top, bottom: bottom });
+      margins.push(this.marginForIndex(i));
     }
     return margins;
+  }
+
+  private refreshStreamingTailId(): void {
+    this.streamingTailMsgId = '';
+    for (let i = this.messages.length - 1; i >= 0; i--) {
+      if (this.messages[i].role === 'assistant') {
+        this.streamingTailMsgId = this.messages[i].id;
+        return;
+      }
+    }
+  }
+
+  private syncMessageMargins(prevLen: number): void {
+    const nextLen: number = this.messages.length;
+    if (nextLen === 0) {
+      this.messageMargins = [];
+      return;
+    }
+    if (this.messageMargins.length !== prevLen) {
+      this.messageMargins = this.computeMessageMargins();
+      return;
+    }
+    if (nextLen > prevLen) {
+      for (let i = prevLen; i < nextLen; i++) {
+        this.messageMargins.push(this.marginForIndex(i));
+      }
+      if (prevLen > 0) {
+        const prevLast: number = prevLen - 1;
+        this.messageMargins[prevLast] = this.marginForIndex(prevLast);
+      }
+      return;
+    }
+    if (nextLen < prevLen) {
+      this.messageMargins = this.messageMargins.slice(0, nextLen);
+      if (nextLen > 0) {
+        this.messageMargins[nextLen - 1] = this.marginForIndex(nextLen - 1);
+      }
+      return;
+    }
+    const last: number = nextLen - 1;
+    this.messageMargins[last] = this.marginForIndex(last);
+    if (last > 0 && this.messages[last - 1].role !== this.messages[last].role) {
+      this.messageMargins[last - 1] = this.marginForIndex(last - 1);
+    }
   }
 
   aboutToAppear(): void {
     this.dataSource = new MessageDataSource(this.messages);
     this.messageMargins = this.computeMessageMargins();
+    this.refreshStreamingTailId();
     setTimeout(() => {
       this.iconScale = 1.08;
     }, 100);
   }
 
   onMessagesChange(): void {
+    const prevLen: number = this.dataSource.totalCount();
     this.dataSource.updateData(this.messages);
-    this.messageMargins = this.computeMessageMargins();
+    this.syncMessageMargins(prevLen);
+    this.refreshStreamingTailId();
     if (this.followsOutput) {
       setTimeout(() => { this.scroller.scrollEdge(Edge.Bottom); }, 50);
     }
@@ -248,7 +300,7 @@ export struct ChatPage {
                     msgToolOldText: msg.toolOldText,
                     msgToolNewText: msg.toolNewText,
                     msgToolTerminalId: msg.toolTerminalId,
-                    streaming: ChatStore.turnActive && msg.role === 'assistant' && msg.id === ChatStore.messages[ChatStore.messages.length - 1]?.id,
+                    streaming: ChatStore.turnActive && msg.role === 'assistant' && msg.id === this.streamingTailMsgId,
                     onRetry: (id: string, content: string) => { if (this.onRetry !== undefined) this.onRetry(id, content) }
                   })
                 }
@@ -256,12 +308,11 @@ export struct ChatPage {
             }
             .height('auto')
             .margin(this.messageMargins[index])
-          }, (msg: MessageData) => msg.id + ':' + msg.content.length + ':' + msg.toolContent.length + ':' +
-            msg.toolContentType + ':' + msg.toolOldText.length + ':' + msg.toolNewText.length + ':' + msg.toolStatus)
+          }, (msg: MessageData) => messageLazyKey(msg))
 
-          if (ChatStore.streamingThinking.length > 0 && ChatStore.turnActive) {
+          if (this.streamingThinking.length > 0 && ChatStore.turnActive) {
             ListItem() {
-              ThinkingSection({ thinking: ChatStore.streamingThinking, isStreaming: true })
+              ThinkingSection({ thinking: this.streamingThinking, isStreaming: true })
                 .width('100%')
                 .padding({ left: Spacing.lg, right: Spacing.lg })
             }

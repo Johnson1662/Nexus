@@ -1,5 +1,18 @@
 import { MessageData } from '../model/MessageData';
 
+/** Stable LazyForEach identity — content updates go through notifyDataChange, not key churn. */
+export function messageLazyKey(msg: MessageData): string {
+  return msg.id;
+}
+
+/** Fingerprint for detecting per-row visual/state changes without full list reload. */
+export function messageRenderFingerprint(msg: MessageData): string {
+  return msg.id + '|' + msg.role + '|' + msg.type + '|' + msg.sendStatus + '|' +
+    msg.content.length + '|' + msg.toolCallId + '|' + msg.toolStatus + '|' +
+    msg.toolContent.length + '|' + msg.toolContentType + '|' + msg.toolPath + '|' +
+    msg.toolOldText.length + '|' + msg.toolNewText.length + '|' + String(msg.timestamp);
+}
+
 export class MessageDataSource implements IDataSource {
   private messages: MessageData[] = [];
   private listeners: DataChangeListener[] = [];
@@ -9,8 +22,47 @@ export class MessageDataSource implements IDataSource {
   }
 
   updateData(messages: MessageData[]): void {
+    const prev: MessageData[] = this.messages;
+    const prevLen: number = prev.length;
+    const nextLen: number = messages.length;
+
+    if (prevLen === 0 && nextLen === 0) {
+      this.messages = messages;
+      return;
+    }
+
+    if (prevLen === 0 || nextLen === 0 || prev[0].id !== messages[0].id) {
+      this.messages = messages;
+      this.notifyDataReload();
+      return;
+    }
+
+    const overlap: number = Math.min(prevLen, nextLen);
+    for (let i: number = 0; i < overlap; i++) {
+      if (prev[i].id !== messages[i].id) {
+        this.messages = messages;
+        this.notifyDataReload();
+        return;
+      }
+    }
+
     this.messages = messages;
-    this.notifyDataReload();
+
+    for (let i: number = 0; i < overlap; i++) {
+      if (messageRenderFingerprint(prev[i]) !== messageRenderFingerprint(messages[i])) {
+        this.notifyDataChange(i);
+      }
+    }
+
+    if (nextLen > prevLen) {
+      for (let i: number = prevLen; i < nextLen; i++) {
+        this.notifyDataAdd(i);
+      }
+    } else if (nextLen < prevLen) {
+      for (let i: number = prevLen - 1; i >= nextLen; i--) {
+        this.notifyDataDelete(i);
+      }
+    }
   }
 
   totalCount(): number {
@@ -22,19 +74,39 @@ export class MessageDataSource implements IDataSource {
   }
 
   registerDataChangeListener(listener: DataChangeListener): void {
-    this.listeners.push(listener);
+    if (this.listeners.indexOf(listener) < 0) {
+      this.listeners.push(listener);
+    }
   }
 
   unregisterDataChangeListener(listener: DataChangeListener): void {
-    let idx = this.listeners.indexOf(listener);
+    const idx: number = this.listeners.indexOf(listener);
     if (idx >= 0) {
       this.listeners.splice(idx, 1);
     }
   }
 
   private notifyDataReload(): void {
-    for (let i = 0; i < this.listeners.length; i++) {
+    for (let i: number = 0; i < this.listeners.length; i++) {
       this.listeners[i].onDataReloaded();
+    }
+  }
+
+  private notifyDataAdd(index: number): void {
+    for (let i: number = 0; i < this.listeners.length; i++) {
+      this.listeners[i].onDataAdd(index);
+    }
+  }
+
+  private notifyDataChange(index: number): void {
+    for (let i: number = 0; i < this.listeners.length; i++) {
+      this.listeners[i].onDataChange(index);
+    }
+  }
+
+  private notifyDataDelete(index: number): void {
+    for (let i: number = 0; i < this.listeners.length; i++) {
+      this.listeners[i].onDataDelete(index);
     }
   }
 }
