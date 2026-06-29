@@ -24,6 +24,7 @@
     ],
     "deliveryWithInstall": true,
     "installationFree": false,
+    "compressNativeLibs": false,
     "pages": "$profile:main_pages",
     "abilities": [
       {
