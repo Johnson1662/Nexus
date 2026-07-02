@@ -1,5 +1,6 @@
 import { resourceManager } from '@kit.LocalizationKit';
 import { common } from '@kit.AbilityKit';
+import { curves } from '@kit.ArkUI';
 
 export class Colors {
   // Surfaces
@@ -99,6 +100,8 @@ export class Shadow {
   static readonly sm: ShadowStyle = { radius: 6, color: Colors.shadow, offsetY: 1 };
   static readonly md: ShadowStyle = { radius: 12, color: Colors.shadow, offsetY: 3 };
   static readonly lg: ShadowStyle = { radius: 20, color: Colors.shadow, offsetY: 6 };
+  /** Subtle capsule shadow for floating input bar */
+  static readonly capsule: ShadowStyle = { radius: 8, color: Colors.shadow, offsetY: 2 };
 }
 
 export class Duration {
@@ -108,7 +111,15 @@ export class Duration {
   static readonly springCurve: Curve = Curve.Friction; // 类型与其它字段（number）不同，故用不同命名
 }
 
-/** Get localized string via UIContext-host context (non-deprecated path). */
+/** Animation transition presets */
+export class AnimationPresets {
+  /** Fade in with spring curve */
+  static readonly fadeIn: TransitionEffect = TransitionEffect.OPACITY
+    .animation({ curve: curves.springMotion(0.6, 0.85) });
+
+  /** Spring motion curve for property animations */
+  static readonly spring: ICurve = curves.springMotion(0.6, 0.85);
+}
 export function getLocalizedString(context: common.Context, res: Resource, ...args: Array<string | number>): string {
   try {
     if (args.length === 0) {

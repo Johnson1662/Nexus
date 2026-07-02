@@ -1,0 +1,967 @@
+{
+  "version": 1,
+  "agents": [
+    {
+      "id": "opencode",
+      "name": "OpenCode",
+      "description": "ACP-compatible coding agent",
+      "version": "latest",
+      "distribution": {
+        "direct": {
+          "cmd": "opencode",
+          "args": [
+            "acp"
+          ]
+        }
+      }
+    },
+    {
+      "id": "claude-agent-acp",
+      "name": "Claude Agent (ACP)",
+      "description": "ACP-compatible coding agent",
+      "version": "latest",
+      "distribution": {
+        "direct": {
+          "cmd": "claude-agent-acp",
+          "args": []
+        }
+      }
+    },
+    {
+      "id": "gemini",
+      "name": "Gemini CLI",
+      "description": "ACP-compatible coding agent",
+      "version": "latest",
+      "distribution": {
+        "direct": {
+          "cmd": "gemini",
+          "args": [
+            "--acp"
+          ]
+        }
+      }
+    },
+    {
+      "id": "cline",
+      "name": "Cline",
+      "description": "ACP-compatible coding agent",
+      "version": "latest",
+      "distribution": {
+        "direct": {
+          "cmd": "cline",
+          "args": [
+            "--acp"
+          ]
+        }
+      }
+    },
+    {
+      "id": "kimi",
+      "name": "Kimi CLI",
+      "description": "ACP-compatible coding agent",
+      "version": "latest",
+      "distribution": {
+        "direct": {
+          "cmd": "kimi",
+          "args": [
+            "acp"
+          ]
+        }
+      }
+    },
+    {
+      "id": "qwen-code",
+      "name": "Qwen Code",
+      "description": "ACP-compatible coding agent",
+      "version": "latest",
+      "distribution": {
+        "direct": {
+          "cmd": "qwen-code",
+          "args": [
+            "--acp",
+            "--experimental-skills"
+          ]
+        }
+      }
+    },
+    {
+      "id": "mistral-vibe",
+      "name": "Mistral Vibe",
+      "description": "ACP-compatible coding agent",
+      "version": "latest",
+      "distribution": {
+        "direct": {
+          "cmd": "mistral-vibe",
+          "args": [
+            "acp"
+          ]
+        }
+      }
+    },
+    {
+      "id": "goose",
+      "name": "Goose",
+      "description": "ACP-compatible coding agent",
+      "version": "latest",
+      "distribution": {
+        "direct": {
+          "cmd": "goose",
+          "args": [
+            "acp"
+          ]
+        }
+      }
+    },
+    {
+      "id": "minion-code",
+      "name": "Minion Code",
+      "description": "ACP-compatible coding agent",
+      "version": "latest",
+      "distribution": {
+        "direct": {
+          "cmd": "minion-code",
+          "args": [
+            "acp"
+          ]
+        }
+      }
+    },
+    {
+      "id": "openclaw",
+      "name": "OpenClaw",
+      "description": "ACP-compatible coding agent",
+      "version": "latest",
+      "distribution": {
+        "direct": {
+          "cmd": "openclaw",
+          "args": [
+            "acp"
+          ]
+        }
+      }
+    },
+    {
+      "id": "qoder",
+      "name": "Qoder CLI",
+      "description": "ACP-compatible coding agent",
+      "version": "latest",
+      "distribution": {
+        "direct": {
+          "cmd": "qoder",
+          "args": [
+            "--acp"
+          ]
+        }
+      }
+    },
+    {
+      "id": "vtcode",
+      "name": "VT Code",
+      "description": "ACP-compatible coding agent",
+      "version": "latest",
+      "distribution": {
+        "direct": {
+          "cmd": "vtcode",
+          "args": [
+            "acp"
+          ]
+        }
+      }
+    },
+    {
+      "id": "crow",
+      "name": "crow-cli",
+      "description": "ACP-compatible coding agent",
+      "version": "latest",
+      "distribution": {
+        "direct": {
+          "cmd": "crow",
+          "args": [
+            "acp"
+          ]
+        }
+      }
+    },
+    {
+      "id": "codex-acp",
+      "name": "Codex CLI",
+      "description": "ACP-compatible coding agent",
+      "version": "latest",
+      "distribution": {
+        "direct": {
+          "cmd": "codex-acp",
+          "args": []
+        }
+      }
+    },
+    {
+      "id": "code-assistant",
+      "name": "Code Assistant",
+      "description": "ACP-compatible coding agent",
+      "version": "latest",
+      "distribution": {
+        "direct": {
+          "cmd": "code-assistant",
+          "args": [
+            "acp"
+          ]
+        }
+      }
+    },
+    {
+      "id": "stakpak",
+      "name": "Stakpak",
+      "description": "ACP-compatible coding agent",
+      "version": "latest",
+      "distribution": {
+        "direct": {
+          "cmd": "stakpak",
+          "args": [
+            "acp"
+          ]
+        }
+      }
+    },
+    {
+      "id": "poolside",
+      "name": "Poolside",
+      "description": "ACP-compatible coding agent",
+      "version": "latest",
+      "distribution": {
+        "direct": {
+          "cmd": "poolside",
+          "args": [
+            "acp"
+          ]
+        }
+      }
+    },
+    {
+      "id": "cursor",
+      "name": "Cursor",
+      "description": "ACP-compatible coding agent",
+      "version": "latest",
+      "distribution": {
+        "direct": {
+          "cmd": "cursor",
+          "args": [
+            "acp"
+          ]
+        }
+      }
+    },
+    {
+      "id": "cursor-agent",
+      "name": "Cursor",
+      "description": "ACP-compatible coding agent",
+      "version": "latest",
+      "distribution": {
+        "direct": {
+          "cmd": "cursor-agent",
+          "args": [
+            "acp"
+          ]
+        }
+      }
+    },
+    {
+      "id": "auggie",
+      "name": "Augment Code",
+      "description": "ACP-compatible coding agent",
+      "version": "latest",
+      "distribution": {
+        "direct": {
+          "cmd": "auggie",
+          "args": [
+            "--acp"
+          ]
+        }
+      }
+    },
+    {
+      "id": "augment-code",
+      "name": "Augment Code",
+      "description": "ACP-compatible coding agent",
+      "version": "latest",
+      "distribution": {
+        "direct": {
+          "cmd": "augment-code",
+          "args": [
+            "--acp"
+          ]
+        }
+      }
+    },
+    {
+      "id": "blackbox",
+      "name": "Blackbox AI",
+      "description": "ACP-compatible coding agent",
+      "version": "latest",
+      "distribution": {
+        "direct": {
+          "cmd": "blackbox",
+          "args": [
+            "acp"
+          ]
+        }
+      }
+    },
+    {
+      "id": "fast-agent",
+      "name": "fast-agent",
+      "description": "ACP-compatible coding agent",
+      "version": "latest",
+      "distribution": {
+        "direct": {
+          "cmd": "fast-agent",
+          "args": [
+            "acp"
+          ]
+        }
+      }
+    },
+    {
+      "id": "fount",
+      "name": "fount",
+      "description": "ACP-compatible coding agent",
+      "version": "latest",
+      "distribution": {
+        "direct": {
+          "cmd": "fount",
+          "args": [
+            "acp"
+          ]
+        }
+      }
+    },
+    {
+      "id": "hermes",
+      "name": "Hermes Agent",
+      "description": "ACP-compatible coding agent",
+      "version": "latest",
+      "distribution": {
+        "direct": {
+          "cmd": "hermes",
+          "args": [
+            "acp"
+          ]
+        }
+      }
+    },
+    {
+      "id": "kiro",
+      "name": "Kiro CLI",
+      "description": "ACP-compatible coding agent",
+      "version": "latest",
+      "distribution": {
+        "direct": {
+          "cmd": "kiro",
+          "args": [
+            "acp"
+          ]
+        }
+      }
+    },
+    {
+      "id": "kiro-cli",
+      "name": "Kiro CLI",
+      "description": "ACP-compatible coding agent",
+      "version": "latest",
+      "distribution": {
+        "direct": {
+          "cmd": "kiro-cli",
+          "args": [
+            "acp"
+          ]
+        }
+      }
+    },
+    {
+      "id": "junie",
+      "name": "Junie",
+      "description": "ACP-compatible coding agent",
+      "version": "latest",
+      "distribution": {
+        "direct": {
+          "cmd": "junie",
+          "args": [
+            "--acp=true"
+          ]
+        }
+      }
+    },
+    {
+      "id": "copilot",
+      "name": "GitHub Copilot",
+      "description": "ACP-compatible coding agent",
+      "version": "latest",
+      "distribution": {
+        "direct": {
+          "cmd": "copilot",
+          "args": [
+            "--acp"
+          ]
+        }
+      }
+    },
+    {
+      "id": "docker-cagent",
+      "name": "Docker cagent",
+      "description": "ACP-compatible coding agent",
+      "version": "latest",
+      "distribution": {
+        "direct": {
+          "cmd": "docker-cagent",
+          "args": [
+            "acp"
+          ]
+        }
+      }
+    },
+    {
+      "id": "pi-acp",
+      "name": "Pi (ACP)",
+      "description": "ACP-compatible coding agent",
+      "version": "latest",
+      "distribution": {
+        "direct": {
+          "cmd": "pi-acp",
+          "args": []
+        }
+      }
+    },
+    {
+      "id": "factory-droid",
+      "name": "Factory Droid",
+      "description": "ACP-compatible coding agent",
+      "version": "latest",
+      "distribution": {
+        "direct": {
+          "cmd": "factory-droid",
+          "args": [
+            "acp"
+          ]
+        }
+      }
+    },
+    {
+      "id": "openhands",
+      "name": "OpenHands",
+      "description": "ACP-compatible coding agent",
+      "version": "latest",
+      "distribution": {
+        "direct": {
+          "cmd": "openhands",
+          "args": [
+            "acp"
+          ]
+        }
+      }
+    },
+    {
+      "id": "agoragentic",
+      "name": "Agoragentic",
+      "description": "ACP-compatible coding agent",
+      "version": "latest",
+      "distribution": {
+        "direct": {
+          "cmd": "agoragentic",
+          "args": [
+            "--acp"
+          ]
+        }
+      }
+    },
+    {
+      "id": "amp",
+      "name": "Amp",
+      "description": "ACP-compatible coding agent",
+      "version": "latest",
+      "distribution": {
+        "direct": {
+          "cmd": "amp",
+          "args": [
+            "acp"
+          ]
+        }
+      }
+    },
+    {
+      "id": "amp-acp",
+      "name": "Amp",
+      "description": "ACP-compatible coding agent",
+      "version": "latest",
+      "distribution": {
+        "direct": {
+          "cmd": "amp-acp",
+          "args": []
+        }
+      }
+    },
+    {
+      "id": "autohand-code",
+      "name": "Autohand Code",
+      "description": "ACP-compatible coding agent",
+      "version": "latest",
+      "distribution": {
+        "direct": {
+          "cmd": "autohand-code",
+          "args": []
+        }
+      }
+    },
+    {
+      "id": "codebuddy",
+      "name": "Codebuddy Code",
+      "description": "ACP-compatible coding agent",
+      "version": "latest",
+      "distribution": {
+        "direct": {
+          "cmd": "codebuddy",
+          "args": [
+            "--acp"
+          ]
+        }
+      }
+    },
+    {
+      "id": "cortex-code",
+      "name": "Cortex Code",
+      "description": "ACP-compatible coding agent",
+      "version": "latest",
+      "distribution": {
+        "direct": {
+          "cmd": "cortex-code",
+          "args": [
+            "acp",
+            "serve"
+          ]
+        }
+      }
+    },
+    {
+      "id": "corust-agent-acp",
+      "name": "Corust Agent",
+      "description": "ACP-compatible coding agent",
+      "version": "latest",
+      "distribution": {
+        "direct": {
+          "cmd": "corust-agent-acp",
+          "args": []
+        }
+      }
+    },
+    {
+      "id": "deepagents",
+      "name": "DeepAgents",
+      "description": "ACP-compatible coding agent",
+      "version": "latest",
+      "distribution": {
+        "direct": {
+          "cmd": "deepagents",
+          "args": []
+        }
+      }
+    },
+    {
+      "id": "dimcode",
+      "name": "DimCode",
+      "description": "ACP-compatible coding agent",
+      "version": "latest",
+      "distribution": {
+        "direct": {
+          "cmd": "dimcode",
+          "args": [
+            "acp"
+          ]
+        }
+      }
+    },
+    {
+      "id": "dirac",
+      "name": "Dirac",
+      "description": "ACP-compatible coding agent",
+      "version": "latest",
+      "distribution": {
+        "direct": {
+          "cmd": "dirac",
+          "args": [
+            "--acp"
+          ]
+        }
+      }
+    },
+    {
+      "id": "kilo",
+      "name": "Kilo",
+      "description": "ACP-compatible coding agent",
+      "version": "latest",
+      "distribution": {
+        "direct": {
+          "cmd": "kilo",
+          "args": [
+            "acp"
+          ]
+        }
+      }
+    },
+    {
+      "id": "nova",
+      "name": "Nova",
+      "description": "ACP-compatible coding agent",
+      "version": "latest",
+      "distribution": {
+        "direct": {
+          "cmd": "nova",
+          "args": [
+            "acp"
+          ]
+        }
+      }
+    },
+    {
+      "id": "sigit",
+      "name": "siGit Code",
+      "description": "ACP-compatible coding agent",
+      "version": "latest",
+      "distribution": {
+        "direct": {
+          "cmd": "sigit",
+          "args": []
+        }
+      }
+    },
+    {
+      "id": "sigit-code",
+      "name": "siGit Code",
+      "description": "ACP-compatible coding agent",
+      "version": "latest",
+      "distribution": {
+        "direct": {
+          "cmd": "sigit-code",
+          "args": []
+        }
+      }
+    },
+    {
+      "id": "glm-agent",
+      "name": "GLM Agent",
+      "description": "ACP-compatible coding agent",
+      "version": "latest",
+      "distribution": {
+        "direct": {
+          "cmd": "glm-agent",
+          "args": []
+        }
+      }
+    },
+    {
+      "id": "rayclaw",
+      "name": "RayClaw",
+      "description": "ACP-compatible coding agent",
+      "version": "latest",
+      "distribution": {
+        "direct": {
+          "cmd": "rayclaw",
+          "args": [
+            "acp"
+          ]
+        }
+      }
+    },
+    {
+      "id": "stdio-bus",
+      "name": "stdio Bus",
+      "description": "ACP-compatible coding agent",
+      "version": "latest",
+      "distribution": {
+        "direct": {
+          "cmd": "stdio-bus",
+          "args": [
+            "acp"
+          ]
+        }
+      }
+    },
+    {
+      "id": "iflow-cli",
+      "name": "iflow-cli",
+      "description": "ACP-compatible coding agent",
+      "version": "latest",
+      "distribution": {
+        "direct": {
+          "cmd": "iflow-cli",
+          "args": [
+            "acp"
+          ]
+        }
+      }
+    },
+    {
+      "id": "lody",
+      "name": "Lody",
+      "description": "ACP-compatible coding agent",
+      "version": "latest",
+      "distribution": {
+        "direct": {
+          "cmd": "lody",
+          "args": [
+            "acp"
+          ]
+        }
+      }
+    },
+    {
+      "id": "toad",
+      "name": "Toad",
+      "description": "ACP-compatible coding agent",
+      "version": "latest",
+      "distribution": {
+        "direct": {
+          "cmd": "toad",
+          "args": [
+            "acp"
+          ]
+        }
+      }
+    },
+    {
+      "id": "pixi",
+      "name": "pixi",
+      "description": "ACP-compatible coding agent",
+      "version": "latest",
+      "distribution": {
+        "direct": {
+          "cmd": "pixi",
+          "args": [
+            "acp"
+          ]
+        }
+      }
+    },
+    {
+      "id": "tidewave",
+      "name": "Tidewave",
+      "description": "ACP-compatible coding agent",
+      "version": "latest",
+      "distribution": {
+        "direct": {
+          "cmd": "tidewave",
+          "args": [
+            "acp"
+          ]
+        }
+      }
+    },
+    {
+      "id": "mitto",
+      "name": "Mitto",
+      "description": "ACP-compatible coding agent",
+      "version": "latest",
+      "distribution": {
+        "direct": {
+          "cmd": "mitto",
+          "args": [
+            "acp"
+          ]
+        }
+      }
+    },
+    {
+      "id": "nori-cli",
+      "name": "Nori CLI",
+      "description": "ACP-compatible coding agent",
+      "version": "latest",
+      "distribution": {
+        "direct": {
+          "cmd": "nori-cli",
+          "args": [
+            "acp"
+          ]
+        }
+      }
+    },
+    {
+      "id": "ngent",
+      "name": "Ngent",
+      "description": "ACP-compatible coding agent",
+      "version": "latest",
+      "distribution": {
+        "direct": {
+          "cmd": "ngent",
+          "args": [
+            "acp"
+          ]
+        }
+      }
+    },
+    {
+      "id": "rlm-code",
+      "name": "RLM Code",
+      "description": "ACP-compatible coding agent",
+      "version": "latest",
+      "distribution": {
+        "direct": {
+          "cmd": "rlm-code",
+          "args": [
+            "acp"
+          ]
+        }
+      }
+    },
+    {
+      "id": "happy",
+      "name": "Happy",
+      "description": "ACP-compatible coding agent",
+      "version": "latest",
+      "distribution": {
+        "direct": {
+          "cmd": "happy",
+          "args": [
+            "acp"
+          ]
+        }
+      }
+    },
+    {
+      "id": "jockey",
+      "name": "Jockey",
+      "description": "ACP-compatible coding agent",
+      "version": "latest",
+      "distribution": {
+        "direct": {
+          "cmd": "jockey",
+          "args": [
+            "acp"
+          ]
+        }
+      }
+    },
+    {
+      "id": "agente",
+      "name": "Agmente",
+      "description": "ACP-compatible coding agent",
+      "version": "latest",
+      "distribution": {
+        "direct": {
+          "cmd": "agente",
+          "args": [
+            "acp"
+          ]
+        }
+      }
+    },
+    {
+      "id": "ferngeist",
+      "name": "Ferngeist",
+      "description": "ACP-compatible coding agent",
+      "version": "latest",
+      "distribution": {
+        "direct": {
+          "cmd": "ferngeist",
+          "args": [
+            "acp"
+          ]
+        }
+      }
+    },
+    {
+      "id": "mobvibe",
+      "name": "Mobvibe",
+      "description": "ACP-compatible coding agent",
+      "version": "latest",
+      "distribution": {
+        "direct": {
+          "cmd": "mobvibe",
+          "args": [
+            "acp"
+          ]
+        }
+      }
+    },
+    {
+      "id": "omp",
+      "name": "oh-my-pi",
+      "description": "ACP-compatible coding agent",
+      "version": "latest",
+      "distribution": {
+        "direct": {
+          "cmd": "omp",
+          "args": [
+            "acp"
+          ]
+        }
+      }
+    },
+    {
+      "id": "mcp-openai",
+      "name": "MCP OpenAI",
+      "description": "ACP-compatible coding agent",
+      "version": "latest",
+      "distribution": {
+        "direct": {
+          "cmd": "mcp-openai",
+          "args": [
+            "acp"
+          ]
+        }
+      }
+    },
+    {
+      "id": "cline-code",
+      "name": "Cline Code",
+      "description": "ACP-compatible coding agent",
+      "version": "latest",
+      "distribution": {
+        "direct": {
+          "cmd": "cline-code",
+          "args": [
+            "--acp"
+          ]
+        }
+      }
+    },
+    {
+      "id": "claude",
+      "name": "Claude CLI",
+      "description": "ACP-compatible coding agent",
+      "version": "latest",
+      "distribution": {
+        "direct": {
+          "cmd": "claude",
+          "args": [
+            "acp"
+          ]
+        }
+      }
+    },
+    {
+      "id": "windsurf",
+      "name": "Windsurf",
+      "description": "ACP-compatible coding agent",
+      "version": "latest",
+      "distribution": {
+        "direct": {
+          "cmd": "windsurf",
+          "args": [
+            "acp"
+          ]
+        }
+      }
+    },
+    {
+      "id": "tabby",
+      "name": "Tabby",
+      "description": "ACP-compatible coding agent",
+      "version": "latest",
+      "distribution": {
+        "direct": {
+          "cmd": "tabby",
+          "args": [
+            "acp"
+          ]
+        }
+      }
+    }
+  ]
+}

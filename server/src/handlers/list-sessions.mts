@@ -4,6 +4,8 @@ import { findSessionForWs } from "../session.mjs";
 import { createTempClient } from "../temp-client.mjs";
 import { isValidAgent } from "../discovery/agents.mjs";
 
+export const sessionTitleOverrides = new Map<string, string>();
+
 const sessionListCache = new Map<WebSocket, { sessions: any[]; timestamp: number; cwd?: string }>();
 const LIST_TIMEOUT = 10000;
 
@@ -51,6 +53,11 @@ async function doListSessions(
 ): Promise<void> {
   const cached = sessionListCache.get(ws);
   if (cached && cached.cwd === cwd && Date.now() - cached.timestamp < 30000) {
+    for (const s of cached.sessions) {
+      if (sessionTitleOverrides.has(s.sessionId)) {
+        s.title = sessionTitleOverrides.get(s.sessionId);
+      }
+    }
     ws.send(JSON.stringify({ type: "session_list", sessions: cached.sessions }));
     return;
   }
@@ -62,6 +69,11 @@ async function doListSessions(
     ),
   ]);
   const sessions = (result as any).sessions || [];
+  for (const s of sessions) {
+    if (sessionTitleOverrides.has(s.sessionId)) {
+      s.title = sessionTitleOverrides.get(s.sessionId);
+    }
+  }
   sessionListCache.set(ws, { sessions, timestamp: Date.now(), cwd });
   ws.send(JSON.stringify({ type: "session_list", sessions }));
 }

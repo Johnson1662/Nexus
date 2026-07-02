@@ -1,4 +1,4 @@
-import { Colors, FontSize, Spacing, Radius, Shadow } from '../../constants/DesignTokens';
+import { Colors, FontSize, Spacing, Radius, Shadow, AnimationPresets } from '../../constants/DesignTokens';
 import { ThinkingSection } from './ThinkingSection';
 import { ToolCallCard } from './ToolCallCard';
 import { MarkdownRender } from './MarkdownRender';
@@ -167,25 +167,11 @@ export struct MessageCard {
 
       Column() {
         if (!this.isUser) {
-          // AI message header
-          if (this.time.length > 0 || this.status.length > 0) {
+          if (this.status.length > 0) {
             Row() {
-              Text('Assistant')
+              Text(this.status)
                 .fontSize(FontSize.xs)
                 .fontColor(Colors.foregroundMuted)
-                .fontWeight(FontWeight.Medium)
-              if (this.time.length > 0) {
-                Text(this.time)
-                  .fontSize(FontSize.xs)
-                  .fontColor(Colors.foregroundMuted)
-                  .margin({ left: Spacing.sm })
-              }
-              if (this.status.length > 0) {
-                Text(this.status)
-                  .fontSize(FontSize.xs)
-                  .fontColor(Colors.warning)
-                  .margin({ left: Spacing.sm })
-              }
             }
             .width('100%')
             .margin({ bottom: Spacing.xs })
@@ -202,40 +188,34 @@ export struct MessageCard {
               if (this.msgContent.length > 0) {
                 if (this.streaming) {
                   Text(this.msgContent)
-                    .fontSize(FontSize.lg)
+                    .fontSize(15)
                     .fontColor(Colors.foreground)
-                    .lineHeight(26)
+                    .lineHeight(24)
                 } else {
                   MarkdownRender({ text: this.msgContent, streaming: false })
                 }
               }
             }
           }
-          .padding({
-            top: (this.msgType === 'thinking' || this.msgType === 'tool_call') ? 0 : Spacing.xs,
-            bottom: (this.msgType === 'thinking' || this.msgType === 'tool_call') ? 0 : Spacing.xs
-          })
           .alignItems(HorizontalAlign.Start)
           .width('100%')
 
         } else {
-          // User message bubble
           Column() {
             if (this.parsedFileType === 'image' && this.parsedDataUri.length > 0) {
               Image(this.parsedDataUri)
                 .width('100%')
                 .aspectRatio(1)
                 .objectFit(ImageFit.Contain)
-                .borderRadius(Radius.md)
-                .shadow(Shadow.sm)
+                .borderRadius(Radius.sm)
                 .margin({ bottom: Spacing.sm })
               Text(this.parsedFileName)
-                .fontSize(FontSize.sm).fontColor(Colors.foregroundMuted)
-                .fontWeight(FontWeight.Medium)
+                .fontSize(FontSize.sm).fontColor(Colors.foregroundLight)
+                .fontWeight(FontWeight.Regular)
                 .margin({ bottom: Spacing.xs })
               if (this.parsedRestText.length > 0) {
                 Text(this.parsedRestText)
-                  .fontSize(FontSize.lg).fontColor(Colors.foreground).lineHeight(26)
+                  .fontSize(15).fontColor(Colors.foreground).lineHeight(24)
               }
             } else if (this.parsedFileType === 'file') {
               Row() {
@@ -243,8 +223,8 @@ export struct MessageCard {
                   .fontSize(16).fontColor([Colors.foregroundMuted])
                   .margin({ right: Spacing.sm })
                 Text(this.parsedFileName)
-                  .fontSize(FontSize.lg).fontColor(Colors.foreground)
-                  .fontWeight(FontWeight.Medium)
+                  .fontSize(15).fontColor(Colors.foreground)
+                  .fontWeight(FontWeight.Regular)
                   .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
                   .layoutWeight(1)
               }
@@ -252,37 +232,27 @@ export struct MessageCard {
               .padding({ top: Spacing.xs, bottom: Spacing.xs })
               if (this.parsedRestText.length > 0) {
                 Text(this.parsedRestText)
-                  .fontSize(FontSize.lg).fontColor(Colors.foreground).lineHeight(26)
+                  .fontSize(15).fontColor(Colors.foreground).lineHeight(24)
                   .margin({ top: Spacing.sm })
               }
             } else {
               if (this.msgContent.length > 0) {
-                Text(this.msgContent)
-                  .fontSize(FontSize.lg)
-                  .fontColor(Colors.foreground)
-                  .lineHeight(26)
+                MarkdownRender({ text: this.msgContent, streaming: false })
               }
             }
           }
           .padding({
-            top: Spacing.lg,
-            bottom: Spacing.lg,
-            left: Spacing.lg,
-            right: Spacing.lg
+            top: 10,
+            bottom: 10,
+            left: 14,
+            right: 14
           })
-          .backgroundColor(Colors.surface1)
-          .borderRadius(Radius.xl)
-          .shadow(Shadow.xs)
+          .backgroundColor(Colors.surface2)
+          .borderRadius(16)
           .alignItems(HorizontalAlign.Start)
 
-          // Time & send status — right-aligned without stretching parent Column
           Row() {
             this.SendStatusIcon()
-            if (this.time.length > 0) {
-              Text(this.time)
-                .fontSize(FontSize.xs)
-                .fontColor(Colors.foregroundMuted)
-            }
           }
           .alignSelf(ItemAlign.End)
           .margin({ top: Spacing.xs })
@@ -299,6 +269,6 @@ export struct MessageCard {
       top: (this.msgType === 'thinking' || this.msgType === 'tool_call') ? 0 : Spacing.sm,
       bottom: (this.msgType === 'thinking' || this.msgType === 'tool_call') ? 0 : Spacing.sm
     })
-    .transition(TransitionEffect.OPACITY)
+    .transition(AnimationPresets.fadeIn)
   }
 }

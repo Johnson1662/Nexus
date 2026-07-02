@@ -1,4 +1,4 @@
-import { Colors, FontSize, Spacing, Radius, Duration, Layout, Shadow, getLocalizedString } from '../../constants/DesignTokens';
+import { Colors, FontSize, Spacing, Radius, Duration, Layout, Shadow, getLocalizedString, AnimationPresets } from '../../constants/DesignTokens';
 import { ChatStore, PendingPermission, PermissionOption } from '../../common/model/ChatState';
 import { WorkspaceStore, WorkspaceInfo, HostStore, DeviceEntry } from '../../common/model/WorkspaceInfo';
 import { DeviceAgentStore } from '../../common/model/DeviceAgentStore';
@@ -6,18 +6,13 @@ import { HostRuntimeStore } from '../../common/model/HostState';
 import { StorageService, saveWorkspaces } from '../../services/StorageService';
 import { ChatPage } from './ChatPage';
 import { ChatInputBar } from './ChatInputBar';
-import { WorkspaceDrawer } from '../workspace/WorkspaceDrawer';
-
 @Component
 export struct ChatView {
-  @State showDrawer: boolean = false;
   @State showPathInput: boolean = false;
   @State newPath: string = '';
   @State showPicker: boolean = false;
   @State pickerTitle: string = '';
   @State pickerMode: number = -1;
-  @State showRename: boolean = false;
-  @State renameText: string = '';
   @State showWorkspacePicker: boolean = false;
   @State pickerShowPathInput: boolean = false;
   onSendMessage?: (text: string) => void;
@@ -91,16 +86,28 @@ export struct ChatView {
       parts.push(WorkspaceStore.workspaces[WorkspaceStore.currentIndex].name);
     }
     let hostKey: string = HostRuntimeStore.activeHostKey;
-    if (hostKey.length > 0 && HostRuntimeStore.isOnline(hostKey)) {
+    if (hostKey.length === 0 && ChatStore.currentDeviceId.length > 0) {
+      hostKey = ChatStore.currentDeviceId;
+    }
+    if (hostKey.length > 0) {
+      let hostName: string = '';
       for (let i: number = 0; i < HostStore.devices.length; i++) {
         let device: DeviceEntry = HostStore.devices[i];
         if (device.hostId === hostKey || device.name === hostKey) {
-          parts.push(device.name);
+          hostName = device.name;
           break;
         }
       }
+      if (hostName.length === 0) {
+        hostName = hostKey;
+      }
+      if (parts.length === 0 || parts[parts.length - 1] !== hostName) {
+        parts.push(hostName);
+      }
     }
-    if (parts.length === 0) return '';
+    if (parts.length === 0) {
+      return '';
+    }
     return parts.join(' · ');
   }
 
@@ -123,20 +130,6 @@ export struct ChatView {
     return ws;
   }
 
-  doRename(): void {
-    this.showRename = false;
-    let newTitle = this.renameText.trim();
-    if (newTitle.length === 0) return;
-    ChatStore.sessionTitle = newTitle;
-    // Update local sessions array
-    let targetId = ChatStore.acpSessionId || ChatStore.bridgeSessionId;
-    for (let i = 0; i < ChatStore.sessions.length; i++) {
-      if (ChatStore.sessions[i].sessionId === targetId) {
-        ChatStore.sessions[i].title = newTitle;
-        break;
-      }
-    }
-  }
   openPicker(mode: number): void {
     if (mode === 0) {
       this.pickerTitle = this.text($r('app.string.picker_sessions'));
@@ -209,28 +202,7 @@ export struct ChatView {
   build() {
     NavDestination() {
       Stack() {
-        SideBarContainer(SideBarContainerType.Overlay) {
-          WorkspaceDrawer({
-            workspaces: WorkspaceStore.workspaces,
-            currentIndex: WorkspaceStore.currentIndex,
-            onSelect: (i: number) => {
-              WorkspaceStore.currentIndex = i;
-              (this.getUIContext())?.animateTo({ duration: 150 }, () => { this.showDrawer = false });
-              if (this.onWorkspaceSelect) this.onWorkspaceSelect(i);
-            },
-            onDelete: (i: number) => {
-              this.showDeleteConfirmDialog(i);
-            },
-            onClose: () => { (this.getUIContext())?.animateTo({ duration: 150 }, () => { this.showDrawer = false }) },
-            onAddWorkspace: (p: string) => {
-              this.addWorkspace(p);
-              (this.getUIContext())?.animateTo({ duration: 150 }, () => { this.showDrawer = false });
-              if (this.onWorkspaceSelect) this.onWorkspaceSelect(WorkspaceStore.workspaces.length - 1);
-            },
-
-          })
-
-          Column() {
+        Column() {
             if (this.showPathInput) {
               Row() {
                 TextInput({ placeholder: $r('app.string.ws_path_placeholder'), text: this.newPath })
@@ -252,10 +224,11 @@ export struct ChatView {
                   })
               }
               .width(Layout.contentWidth)
+              .margin({ left: Spacing.xl, right: Spacing.xl })
               .padding({ top: Spacing.xs, bottom: Spacing.xs })
               .backgroundColor(Colors.surfaceElevated)
               .borderRadius(Radius.md)
-              .transition(TransitionEffect.OPACITY)
+              .transition(AnimationPresets.fadeIn)
             }
 
             ChatPage({
@@ -276,15 +249,10 @@ export struct ChatView {
               onRefreshAgents: () => { if (this.onRefreshAgents) this.onRefreshAgents(); },
               onRefreshModels: () => { if (this.onRefreshModels) this.onRefreshModels(); }
             })
+            .margin({ bottom: 10 })
           }
           .width('100%').height('100%')
           .alignItems(HorizontalAlign.Center)
-        }
-        .showSideBar(this.showDrawer)
-        .showControlButton(false)
-        .sideBarWidth('100%')
-        .maxSideBarWidth('100%')
-        .width('100%').height('100%')
 
         // Workspace picker overlay — centered card
         Stack({ alignContent: Alignment.Center }) {
@@ -372,12 +340,12 @@ export struct ChatView {
         .width('100%')
         .height('100%')
         .visibility(this.showWorkspacePicker ? Visibility.Visible : Visibility.Hidden)
-        .transition(TransitionEffect.OPACITY.animation({ duration: 150, curve: Curve.EaseOut }))
+        .transition(AnimationPresets.fadeIn)
 
       }
       .width('100%').height('100%')
     }
-    .title({ main: this.getSessionTitle(), sub: this.getWorkspaceHostLabel() })
+    .title(this.ChatTitle())
     .bindSheet($$this.showPicker, this.PickerSheetBuilder(), {
       height: SheetSize.MEDIUM,
       dragBar: true,
@@ -395,9 +363,43 @@ export struct ChatView {
         }
       }
     })
-    .transition(TransitionEffect.OPACITY.animation({ duration: 150, curve: Curve.EaseOut }))
+    .transition(AnimationPresets.fadeIn)
     .width('100%').height('100%')
-    .backgroundColor(Colors.surface0)
+    .backgroundColor(Colors.surface1)
+  }
+
+  @Builder
+  ChatTitle() {
+    Column({ space: 0 }) {
+      Text(this.getSessionTitle())
+        .fontSize(16)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(Colors.foreground)
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .textAlign(TextAlign.Center)
+      
+      Row({ space: 4 }) {
+        // 在线状态指示器：根据连接状态展示小绿点
+        Circle()
+          .width(6)
+          .height(6)
+          .fill(ChatStore.connected ? Colors.success : Colors.foregroundLight)
+        Text(this.getWorkspaceHostLabel())
+          .fontSize(10)
+          .fontColor(Colors.foregroundMuted)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+      }
+      .alignItems(VerticalAlign.Center)
+      .margin({ top: 3 })
+      .padding({ left: 10, right: 10, top: 2, bottom: 2 })
+      .backgroundColor(Colors.surface2)
+      .borderRadius(Radius.full)
+      .visibility(this.getWorkspaceHostLabel().length > 0 ? Visibility.Visible : Visibility.None)
+    }
+    .alignItems(HorizontalAlign.Center)
+    .constraintSize({ maxWidth: '65%' })
   }
 
   @Builder
@@ -417,7 +419,7 @@ export struct ChatView {
         .backgroundColor(Colors.surface1)
       }
     })
-    .animation({ duration: 150, curve: Curve.EaseOut })
+    .animation({ duration: 150, curve: AnimationPresets.spring })
     .onClick(action)
   }
 
@@ -502,7 +504,7 @@ struct PermissionSheet {
                 pressed: { .backgroundColor(Colors.surface2) },
                 normal: { .backgroundColor(Colors.surface1) }
               })
-              .animation({ duration: Duration.fast, curve: Curve.EaseOut })
+              .animation({ duration: Duration.fast, curve: AnimationPresets.spring })
               .onClick(() => {
                 if (this.onSelect) this.onSelect(opt.optionId);
               })
@@ -519,7 +521,7 @@ struct PermissionSheet {
     .padding({ bottom: Spacing.xxxl })
     .backgroundColor(Colors.surface0)
     .borderRadius({ topLeft: Radius.xl, topRight: Radius.xl })
-    .transition(TransitionEffect.OPACITY.animation({ duration: 150, curve: Curve.EaseOut }))
+    .transition(AnimationPresets.fadeIn)
   }
 }
 
@@ -578,7 +580,7 @@ struct PickerSheet {
                 pressed: { .backgroundColor(index === this.getCurrentIndex() ? Colors.accentLight : Colors.surface2) },
                 normal: { .backgroundColor(index === this.getCurrentIndex() ? Colors.accentLight : Colors.surface1) }
               })
-              .animation({ duration: Duration.fast, curve: Curve.EaseOut })
+              .animation({ duration: Duration.fast, curve: AnimationPresets.spring })
               .accessibilityText(index === this.getCurrentIndex() ?
                 this.text($r('app.string.accessibility_selected_item'), item) : item)
               .onClick(() => {
@@ -597,7 +599,7 @@ struct PickerSheet {
     .padding({ bottom: Spacing.xxxl })
     .backgroundColor(Colors.surface0)
     .borderRadius({ topLeft: Radius.xl, topRight: Radius.xl })
-    .transition(TransitionEffect.OPACITY.animation({ duration: 150, curve: Curve.EaseOut }))
+    .transition(AnimationPresets.fadeIn)
   }
 
   getItems(): string[] {

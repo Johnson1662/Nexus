@@ -2,10 +2,11 @@ import { HdsNavDestination, hdsMaterial } from '@kit.UIDesignKit';
 import { HomeView } from '../feature/home/HomeView';
 import { HostFilterBar } from '../feature/home/HostFilterBar';
 import { AgentDetailView } from '../feature/agent/AgentDetailView';
+import { AgentManageView } from '../feature/agent/AgentManageView';
 import { SessionDetailView } from '../feature/session/SessionDetailView';
 import { WorkspaceDetailView } from '../feature/workspace/WorkspaceDetailView';
 import { WorkspaceListView } from '../feature/workspace/WorkspaceListView';
-import { Colors, FontSize, Spacing, Radius, Duration } from '../constants/DesignTokens';
+import { Colors, FontSize, Spacing, Radius, Duration, AnimationPresets } from '../constants/DesignTokens';
 import { ChatStore, trimMessages } from '../common/model/ChatState';
 import { WorkspaceStore, ServerSession, HostStore, DeviceEntry, WorkspaceInfo } from '../common/model/WorkspaceInfo';
 import { HostRuntimeStore } from '../common/model/HostState';
@@ -31,6 +32,7 @@ import { handleAcpUpdate } from '../common/model/MessageHandler';
 import { DeviceAgentStore } from '../common/model/DeviceAgentStore';
 import { getOrCreateClientKeyPair } from '../common/websocket/CryptoHelper';
 import { hilog } from '@kit.PerformanceAnalysisKit';
+import { AgentManageParam } from '../common/model/NavParams';
 
 const TAG: string = 'Index';
 const DOMAIN: number = 0x0000;
@@ -51,11 +53,14 @@ struct Index {
   @State autoConnectAttempted: boolean = false;
   @State autoConnectRetryCount: number = 0;
   @State hostStatusRevision: number = 0;
+  @State agentManageDeviceIndex: number = 0;
 
   aboutToAppear(): void {
     AppStorage.setOrCreate('pref_thinking_expanded', true);
     AppStorage.setOrCreate('pref_toolcall_expanded', true);
     AppStorage.setOrCreate('selectedDeviceIndex', 0);
+    AppStorage.setOrCreate('registryAgents', '');
+    AppStorage.setOrCreate('installedAgents', '');
     this.ws.onAcpUpdate((update: AcpUpdate) => { handleAcpUpdate(update); });
     this.bindWsCallbacks();
     this.ensureHomeRoute();
@@ -153,7 +158,7 @@ struct Index {
         }
       })
       .mode(NavDestinationMode.STANDARD)
-      .transition(TransitionEffect.OPACITY.animation({ duration: 150, curve: Curve.EaseOut }))
+      .transition(AnimationPresets.fadeIn)
     } else if (name === 'workspaceDetail') {
       WorkspaceDetailView({
         workspaceIndex: this.selectedWorkspaceIndex,
@@ -178,6 +183,17 @@ struct Index {
       })
     } else if (name === 'agentDetail') {
       AgentDetailView({ deviceIndex: this.getSelectedDeviceIndex(), onBack: () => { this.navStack.pop(); } })
+    } else if (name === 'agentManage') {
+      AgentManageView({
+        deviceIndex: this.agentManageDeviceIndex,
+        onBack: () => { this.navStack.pop(); },
+        onRefreshRegistry: () => { this.ws.sendListRegistryAgents(); },
+        onInstallAgent: (agentId: string) => { this.ws.sendInstallAgent(agentId); },
+        onUninstallAgent: (agentId: string) => { this.ws.sendUninstallAgent(agentId); },
+        onInstallCustomAgent: (command: string, args: string[], name: string) => {
+          this.ws.sendInstallCustomAgent(command, args, name);
+        },
+      })
     } else if (name === 'sessionDetail') {
       SessionDetailView({
         session: this.selectedSession,
@@ -207,7 +223,13 @@ struct Index {
           HostStore.removeDevice(index);
           saveHosts();
         },
-        onScan: () => { this.scanAndConnectHost(); }
+        onScan: () => { this.scanAndConnectHost(); },
+        onNavigateToAgentManage: (deviceIndex: number) => {
+          this.agentManageDeviceIndex = deviceIndex;
+          let params = new AgentManageParam();
+          params.deviceIndex = deviceIndex;
+          this.navStack.pushPath({ name: 'agentManage', param: params });
+        }
       })
     }
   }
@@ -267,7 +289,8 @@ struct Index {
         this.prepareWorkspace(WorkspaceStore.currentIndex, false);
       }
     });
-    this.ws.onAgentList((_agents) => {
+    this.ws.onAgentList((agents) => {
+      AppStorage.setOrCreate('installedAgents', JSON.stringify(agents));
       let workspacePath: string = this.getWorkspacePath(WorkspaceStore.currentIndex);
       if ((ChatStore.selectedAgentName || ChatStore.agentType).length === 0 && workspacePath.length > 0) {
         loadLastAgentSelection(this.getCurrentHostKey(), workspacePath).then((agentName: string) => {
@@ -281,6 +304,15 @@ struct Index {
       ChatStore.turnActive = false;
       let m = new MessageData('assistant', 'Error: ' + text, 'text');
       ChatStore.messages = [...ChatStore.messages, m];
+    });
+    this.ws.onRegistryAgentList((agents) => {
+      AppStorage.setOrCreate('registryAgents', JSON.stringify(agents));
+    });
+    this.ws.onInstallResult((_result) => {
+      // Re-fetch agent list to update installed tab
+      if (ChatStore.currentDeviceId.length > 0) {
+        this.ws.send({ type: 'list_agents' } as ClientMessage);
+      }
     });
     this.wsCallbacksBound = true;
   }

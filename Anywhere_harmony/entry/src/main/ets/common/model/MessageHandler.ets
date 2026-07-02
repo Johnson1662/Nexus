@@ -141,6 +141,25 @@ export function handleAcpUpdate(u: AcpUpdate): void {
       ChatStore.messages = [...ChatStore.messages, new MessageData('assistant', ChatStore.streamingThinking, 'thinking')];
       ChatStore.streamingThinking = '';
     }
+    // Mark any still-pending/in_progress tool calls as completed
+    let msgs = [...ChatStore.messages];
+    let anyChanged: boolean = false;
+    for (let i = 0; i < msgs.length; i++) {
+      if (msgs[i].type === 'tool_call' && (msgs[i].toolStatus === 'pending' || msgs[i].toolStatus === 'in_progress')) {
+        let u = new MessageData(msgs[i].role, msgs[i].content, msgs[i].type);
+        u.id = msgs[i].id; u.timestamp = msgs[i].timestamp;
+        u.toolName = msgs[i].toolName; u.toolStatus = 'completed'; u.toolCallId = msgs[i].toolCallId;
+        u.toolKind = msgs[i].toolKind;
+        u.toolContent = msgs[i].toolContent; u.toolContentType = msgs[i].toolContentType;
+        u.toolPath = msgs[i].toolPath; u.toolOldText = msgs[i].toolOldText;
+        u.toolNewText = msgs[i].toolNewText; u.toolTerminalId = msgs[i].toolTerminalId;
+        msgs[i] = u;
+        anyChanged = true;
+      }
+    }
+    if (anyChanged) {
+      ChatStore.messages = msgs;
+    }
     ChatStore.turnActive = false;
   }
   trimMessages();
@@ -209,8 +228,10 @@ function appendText(msgs: MessageData[], t: string): MessageData[] {
   if (msgs.length > 0) {
     let last = msgs[msgs.length - 1];
     if (last.role === 'assistant' && last.type === 'text') {
-      last.content = last.content + t;
-      return [...msgs];
+      let u = new MessageData(last.role, last.content + t, last.type);
+      u.id = last.id;
+      u.timestamp = last.timestamp;
+      return [...msgs.slice(0, -1), u];
     }
   }
   let cleaned = t.replace(/^\n+/, '');

@@ -6,11 +6,13 @@ import { getOrCreateHostId, getOrCreateHostIdentity } from "./host-identity.mjs"
 import { EncryptedChannel } from "./encrypted-channel.mjs";
 import { RelayHost } from "./relay.mjs";
 import { discoverAgents } from "./discovery/agents.mjs";
+import { loadRegistry, listRegistryAgents } from "./registry/registry.mjs";
+import { getInstalledAgents, installAgent, uninstallAgent } from "./agents-store.mjs";
 import { handleStart } from "./handlers/start.mjs";
 import { handleInput } from "./handlers/input.mjs";
 import { handleCancel } from "./handlers/cancel.mjs";
 import { handleListModels } from "./handlers/list-models.mjs";
-import { handleListSessions, clearSessionListCache } from "./handlers/list-sessions.mjs";
+import { handleListSessions, clearSessionListCache, sessionTitleOverrides } from "./handlers/list-sessions.mjs";
 import { handleSetMode } from "./handlers/set-mode.mjs";
 import { handleSwitchModel } from "./handlers/switch-model.mjs";
 import { handleLoadSession } from "./handlers/load-session.mjs";
@@ -358,6 +360,63 @@ function handleIncomingConnection(transport: any, isRelay: boolean = false) {
         }
         console.log(`[server] → agent_list (${agents.length} agents)`);
         transport.send(JSON.stringify({ type: "agent_list", agents }));
+        break;
+      }
+
+      case "list_registry_agents": {
+        try {
+          loadRegistry();
+          const regAgents = listRegistryAgents();
+          console.log(`[server] → registry_agents_list (${regAgents.length} agents)`);
+          transport.send(JSON.stringify({ type: "registry_agents_list", agents: regAgents }));
+        } catch (e: any) {
+          console.log(`[server] list_registry_agents error: ${e}`);
+          transport.send(JSON.stringify({ type: "registry_agents_list", agents: [] }));
+        }
+        break;
+      }
+
+      case "install_agent": {
+        const agentId = String(msg.agentId || "");
+        console.log(`[server] install_agent: ${agentId}`);
+        try {
+          if (!agentId) throw new Error("missing agentId");
+          installAgent(agentId, "registry");
+          transport.send(JSON.stringify({ type: "install_agent_done", agentId, ok: true }));
+        } catch (e: any) {
+          console.log(`[server] install_agent error: ${e.message}`);
+          transport.send(JSON.stringify({ type: "install_agent_done", agentId, ok: false, error: e.message }));
+        }
+        break;
+      }
+
+      case "uninstall_agent": {
+        const agentId = String(msg.agentId || "");
+        console.log(`[server] uninstall_agent: ${agentId}`);
+        try {
+          if (!agentId) throw new Error("missing agentId");
+          const removed = uninstallAgent(agentId);
+          transport.send(JSON.stringify({ type: "uninstall_agent_done", agentId, ok: removed }));
+        } catch (e: any) {
+          console.log(`[server] uninstall_agent error: ${e.message}`);
+          transport.send(JSON.stringify({ type: "uninstall_agent_done", agentId, ok: false, error: e.message }));
+        }
+        break;
+      }
+
+      case "install_custom_agent": {
+        const command = String(msg.command || "");
+        const args = Array.isArray(msg.args) ? msg.args as string[] : [];
+        const name = String(msg.name || command.split(/[\\/]/).pop() || "custom-agent");
+        console.log(`[server] install_custom_agent: ${name} cmd=${command}`);
+        try {
+          if (!command) throw new Error("missing command");
+          installAgent(name, "custom", { command, args });
+          transport.send(JSON.stringify({ type: "install_agent_done", agentId: name, ok: true }));
+        } catch (e: any) {
+          console.log(`[server] install_custom_agent error: ${e.message}`);
+          transport.send(JSON.stringify({ type: "install_agent_done", agentId: name, ok: false, error: e.message }));
+        }
         break;
       }
 

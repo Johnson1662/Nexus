@@ -319,28 +319,24 @@ export struct ChatInputBar {
 
             // Model name chip → opens config bindsheet
             Button() {
-              Row({ space: Spacing.xxs }) {
-                SymbolGlyph($r('sys.symbol.externaldrive'))
-                  .fontSize(12)
-                  .fontColor([Colors.foregroundMuted])
+              Row({ space: Spacing.xs }) {
                 Text(this.getModelName().length > 0 ? this.stripProvider(this.getModelName()) : this.localize($r('app.string.config_model')))
-                  .fontSize(FontSize.md)
-                  .fontColor(Colors.foreground)
+                  .fontSize(FontSize.sm)
+                  .fontColor(Colors.foregroundMuted)
                   .fontWeight(FontWeight.Medium)
                   .maxLines(1)
                 SymbolGlyph($r('sys.symbol.chevron_down'))
-                  .fontSize(10)
+                  .fontSize(9)
                   .fontColor([Colors.foregroundMuted])
-                  .margin({ left: Spacing.xxs })
               }
             }
             .height(32)
             .padding({ left: Spacing.md, right: Spacing.md })
-            .backgroundColor(Colors.surface1)
+            .backgroundColor(Colors.surface2)
             .borderRadius(Radius.full)
             .stateStyles({
-              pressed: { .backgroundColor(Colors.surface2) },
-              normal: { .backgroundColor(Colors.surface1) }
+              pressed: { .backgroundColor(Colors.border) },
+              normal: { .backgroundColor(Colors.surface2) }
             })
             .animation({ duration: Duration.fast, curve: Curve.EaseOut })
             .onClick(() => { this.openSheet('summary') })
@@ -397,15 +393,13 @@ export struct ChatInputBar {
       }
       .backgroundColor(Colors.surfaceElevated)
       .borderRadius(Radius.xl)
-      .border({ width: 0 })
-      .shadow(Shadow.md)
+      .shadow(Shadow.capsule)
       .width(Layout.contentWidth)
     }
     .width('100%')
     .alignItems(HorizontalAlign.Center)
-    .padding({ top: Spacing.sm, bottom: Spacing.xl })
-    .backgroundColor(Colors.surface0)
-    .accessibilityGroup(true)
+    .padding({ top: Spacing.sm, bottom: Spacing.lg })
+    .backgroundColor(Color.Transparent)
     .bindSheet($$this.showSheet, this.ConfigPanel(), {
       detents: [SheetSize.FIT_CONTENT, SheetSize.LARGE],
       dragBar: true,

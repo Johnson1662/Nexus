@@ -6,7 +6,7 @@ import { TreeNode } from '../../vendor/lv-md/enhance/model/TreeNode';
 import { MarkdownPlugin, toPluginSyntaxManifestList } from '../../vendor/lv-md/enhance/model/MarkdownPlugin';
 import { parseMarkdown } from '../../vendor/lv-md/enhance/utils/ast';
 import { generateRandomString } from '../../vendor/lv-md/enhance/utils/RandomString';
-import { Colors, FontSize, Spacing, Radius } from '../../constants/DesignTokens';
+import { Colors, FontSize, Spacing, Radius, AnimationPresets } from '../../constants/DesignTokens';
 
 /**
  * Self-contained markdown renderer with streaming optimizations.
@@ -37,23 +37,23 @@ export struct MarkdownRender {
 
   aboutToAppear(): void {
     this.controller.setTextColor(Colors.foreground);
-    this.controller.setTextSize(16);
-    this.controller.setTextLineHeight(26);
+    this.controller.setTextSize(15);
+    this.controller.setTextLineHeight(24);
     this.controller.setTitleColor(Colors.foreground);
     this.controller.setCodeBlockTheme('light');
     this.controller.setCodeBlockIdxState(false);
-    this.controller.setCodeBlockBorderRadius(8);
-    this.controller.setInlineCodeBackgroundColor('rgba(110, 118, 129, 0.2)');
-    this.controller.setInlineCodeBackgroundRadius(4);
+    this.controller.setCodeBlockBorderRadius(12);
+    this.controller.setInlineCodeBackgroundColor('rgba(110, 118, 129, 0.12)');
+    this.controller.setInlineCodeBackgroundRadius(6);
     this.controller.setTableBackgroundColor('transparent');
     this.controller.setTableInterleaveBackgroundColor('transparent');
-    this.controller.setTableBorderRadius(8);
+    this.controller.setTableBorderRadius(12);
     this.controller.setQuoteBackgroundColor('transparent');
     this.controller.setQuoteBorderColor(Colors.accent);
     this.controller.setHyperlinkTextColor(Colors.accent);
     this.controller.setHyperlinkUnderlineState(false);
     this.controller.setThreadRenderEnable(false);
-    this.controller.setBlockSpacing(16);
+    this.controller.setBlockSpacing(12);
 
     this.markdownUnion = this.controller.getUnion();
     this.pluginUnion = generateRandomString();
@@ -142,7 +142,7 @@ export struct MarkdownRender {
         .padding({ left: Spacing.lg, top: Spacing.sm, bottom: Spacing.sm })
         .backgroundColor(Colors.surface1)
         .borderRadius(Radius.sm)
-        .transition(TransitionEffect.OPACITY)
+        .transition(AnimationPresets.fadeIn)
       }
     }
     .width('100%')

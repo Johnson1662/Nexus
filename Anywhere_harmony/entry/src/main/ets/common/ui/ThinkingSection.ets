@@ -1,4 +1,4 @@
-import { Colors, FontSize, Spacing, Radius, Duration, getLocalizedString } from '../../constants/DesignTokens';
+import { Colors, FontSize, Spacing, Radius, Duration, getLocalizedString, AnimationPresets } from '../../constants/DesignTokens';
 
 @Component
 export struct ThinkingSection {
@@ -33,26 +33,26 @@ export struct ThinkingSection {
         Row() {
           if (this.isStreaming) {
             SymbolGlyph($r('sys.symbol.lightbulb'))
-              .fontSize(FontSize.md)
-              .fontColor([Colors.foregroundMuted])
-              .margin({ right: Spacing.sm })
-              .transition(TransitionEffect.OPACITY.animation({ duration: 150, curve: Curve.EaseOut }))
+              .fontSize(FontSize.sm)
+              .fontColor([Colors.accent])
+              .margin({ right: Spacing.xs })
+              .transition(AnimationPresets.fadeIn)
           } else {
-            SymbolGlyph($r('sys.symbol.checkmark_circle'))
-              .fontSize(FontSize.md)
-              .fontColor([Colors.foregroundMuted])
-              .margin({ right: Spacing.sm })
-              .transition(TransitionEffect.OPACITY.animation({ duration: 150, curve: Curve.EaseOut }))
+            SymbolGlyph($r('sys.symbol.checkmark'))
+              .fontSize(FontSize.sm)
+              .fontColor([Colors.success])
+              .margin({ right: Spacing.xs })
+              .transition(AnimationPresets.fadeIn)
           }
 
           if (this.isStreaming) {
             Text($r('app.string.thinking_label'))
-              .fontSize(FontSize.sm)
+              .fontSize(FontSize.xs)
               .fontColor(Colors.foregroundMuted)
               .fontWeight(FontWeight.Medium)
           } else {
             Text($r('app.string.thinking_done_label'))
-              .fontSize(FontSize.sm)
+              .fontSize(FontSize.xs)
               .fontColor(Colors.foregroundMuted)
               .fontWeight(FontWeight.Medium)
           }
@@ -60,28 +60,27 @@ export struct ThinkingSection {
           Blank()
 
           SymbolGlyph($r('sys.symbol.chevron_down'))
-            .fontSize(FontSize.md)
+            .fontSize(FontSize.sm)
             .fontColor([Colors.foregroundMuted])
             .accessibilityText(this.expanded ? this.text($r('app.string.thinking_collapse')) : this.text($r('app.string.thinking_expand')))
             .rotate({ z: 1, angle: this.expanded ? 0 : -90 })
-            .animation({ duration: Duration.normal, curve: Curve.EaseInOut })
+            .animation({ duration: Duration.normal, curve: AnimationPresets.spring })
         }
         .width('100%')
-        .height(36)
-        .padding({ left: Spacing.sm })
+        .height(34)
+        .padding({ left: Spacing.md, right: Spacing.md })
         .alignItems(VerticalAlign.Center)
       }
       .type(ButtonType.Normal)
       .width('100%')
-      .backgroundColor(Color.Transparent)
-      .padding(0)
-      .borderRadius(Radius.md)
+      .backgroundColor(Colors.surface2)
+      .borderRadius(12)
       .stateStyles({
-        pressed: { .backgroundColor(Colors.surface1) },
-        normal: { .backgroundColor(Colors.transparent) }
+        pressed: { .backgroundColor(Colors.border) },
+        normal: { .backgroundColor(Colors.surface2) }
       })
       .onClick(() => {
-        this.getUIContext()?.animateTo({ duration: Duration.normal, curve: Curve.EaseInOut }, () => {
+        this.getUIContext()?.animateTo({ duration: Duration.normal, curve: AnimationPresets.spring }, () => {
           this.expanded = !this.expanded;
         });
       })
@@ -95,15 +94,17 @@ export struct ThinkingSection {
             .width('100%')
         }
         .width('100%')
-        .padding({ left: 16, top: Spacing.md, bottom: Spacing.md })
-        .margin({ left: Spacing.sm, top: Spacing.sm, bottom: Spacing.sm })
-        .border({ width: { left: 2 }, color: { left: Colors.accent } })
-        .transition(TransitionEffect.OPACITY.animation({ duration: 150, curve: Curve.EaseOut }))
+        .padding({ left: Spacing.md, right: Spacing.md, top: Spacing.md, bottom: Spacing.md })
+        .margin({ top: Spacing.xs, bottom: Spacing.xs })
+        .borderRadius(12)
+        .backgroundColor(Colors.surface2)
+        .border({ width: { left: 3 }, color: { left: Colors.accentTransparent } })
+        .transition(AnimationPresets.fadeIn)
       }
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
     .margin(0)
-    .transition(TransitionEffect.OPACITY)
+    .transition(AnimationPresets.fadeIn)
   }
 }

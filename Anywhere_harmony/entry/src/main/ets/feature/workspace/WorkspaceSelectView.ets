@@ -1,4 +1,4 @@
-import { Colors, FontSize, Spacing, Radius, Layout } from '../../constants/DesignTokens';
+import { Colors, FontSize, Spacing, Radius, Layout, AnimationPresets } from '../../constants/DesignTokens';
 import { WorkspaceStore, WorkspaceInfo } from '../../common/model/WorkspaceInfo';
 
 @Component
@@ -124,7 +124,7 @@ export struct WorkspaceSelectView {
             }
             .width('100%')
             .padding({ bottom: Spacing.xl, top: Spacing.sm })
-            .transition(TransitionEffect.OPACITY)
+            .transition(AnimationPresets.fadeIn)
           } else {
             Row() {
               SymbolGlyph($r('sys.symbol.plus'))

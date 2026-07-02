@@ -36,6 +36,10 @@ export interface AcpContent {
 export interface ClientMessage {
   type: string;
   agent?: string;
+  agentId?: string;
+  command?: string;
+  args?: string[];
+  name?: string;
   sessionId?: string;
   text?: string;
   cwd?: string;
@@ -108,4 +112,21 @@ export interface AgentInfo {
   binaryPath?: string;
   installed: boolean;
   configPath?: string;
+}
+
+export interface RegistryAgentInfo {
+  id: string;
+  name: string;
+  description: string;
+  version: string;
+  repository?: string;
+  icon?: string;
+  distribution: object;
+}
+
+export interface InstallResultMessage {
+  type: string;
+  agentId: string;
+  ok: boolean;
+  error?: string;
 }

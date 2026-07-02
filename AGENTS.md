@@ -97,9 +97,9 @@ configOptions                       — Agent 配置项
 - **消息气泡**：用户消息灰底黑字（`Colors.surface1` + `Colors.foreground`），Agent 消息全宽无背景
 - **字体**：正文 HarmonyOS Sans，品牌标题衬线体（`fontFamily('serif')`）
 - **空状态**：左对齐纯文本（`FontSize.sm` + `Colors.foregroundMuted`），无图标/无按钮
-- **动画**：极简淡入淡出 — `TransitionEffect.OPACITY`，150ms，`Curve.EaseOut`。无 translation/spring/staggered delay
-  - 页面切换：`TransitionEffect.OPACITY`
-  - 消息卡片：`TransitionEffect.OPACITY`
+### 动画：淡入淡出 — `TransitionEffect.OPACITY` + `springMotion(0.6, 0.85)`。无 translation/spring 过冲/staggered delay。
+  - 页面切换：`TransitionEffect.OPACITY` + springMotion
+  - 消息卡片：`TransitionEffect.OPACITY` + springMotion
 - **按压反馈**：背景色浮现 — `stateStyles({ pressed: { .backgroundColor(Colors.surface1) }, normal: { .backgroundColor(Color.Transparent) } })`，不再用 `scale(0.97)`
 - **输入框**：悬浮胶囊（Floating Pills）— 圆角 + 阴影，不贴底部边缘
 - **代码块**：柔和表面（浅灰 `surface1`/`surface2` 背景 + 深色文字，无边框）
@@ -162,13 +162,56 @@ opencode ACP 返回 session 时使用 `updatedAt`（ISO 8601 字符串）而非 
 
 **自动重连**：指数退避（1s → 2s → 4s → ... → 30s 上限）。后台恢复依赖快速重连 + `sync_request`/消息游标补齐，不宣称普通 UIAbility 能长期后台保活。
 
-### 缓存结构与刷新策略
+## ACP Agent 注册表与管理
+
+### 架构变更（Registry + Installed Agents）
+
+从 PATH 扫描模式迁移到 **Registry + Installed Agents** 模式，参考 Zed 的 `agent_registry_store` + `agent_server_store` 设计。
+
+### 核心概念
+
+| 组件 | 文件 | 说明 |
+|------|------|------|
+| Registry | `server/src/registry/agents.json` | 内置 agent 列表（~70 个），含 ID、名称、启动命令和参数 |
+| Registry 加载器 | `server/src/registry/registry.mts` | 加载 registry、按 ID 查 agent、解析启动命令 |
+| Installed Store | `server/src/agents-store.mts` | 管理 `~/.anywhere/installed-agents.json`，记录用户显式安装的 agent |
+| Agent 发现 | `server/src/discovery/agents.mts` | **已重写** — 从 installed store + registry 返回 agent 列表，不再扫 PATH |
+| Agent 管理页 | `feature/agent/AgentManageView.ets` | 客户端 UI，分"商店"和"已安装"两 Tab |
+
+### 数据流
 
 ```
-层级: host → workspace → agent → provider → model/mode/session
+┌─────────────────────────────────────────────────────┐
+│  Server                                              │
+│                                                      │
+│  registry/agents.json  ─→ registry.mts              │
+│       (内置 70 个 agent)     │                       │
+│                              ▼                       │
+│  agents-store.mts  ──────────────────→ installed     │
+│       (~/.anywhere/installed-agents.json)   agents   │
+│                              │                       │
+│                              ▼                       │
+│  discovery/agents.mts  ─── list_agents ──→ 客户端   │
+│       (从 installed + registry 组装)                 │
+│                                                      │
+│  server.mts ─── list_registry_agents ──→ 客户端     │
+│              ─── install_agent / uninstall_agent     │
+│              ─── install_custom_agent                │
+└─────────────────────────────────────────────────────┘
 ```
 
-- **Agent 列表**：每天启动时对已配对主机请求一次，之后读 `DeviceAgentStore` / preferences 缓存；支持手动刷新
+### 安装流程
+
+1. 用户在设置页 → 主机详情 → **管理 Agent**
+2. **商店 Tab**：浏览 registry 中所有可用 agent，点击 [安装]
+3. **已安装 Tab**：查看已安装 agent，可卸载或添加自定义 agent
+4. 安装后，server 的 `list_agents` 返回该 agent，用户可在聊天中选择使用
+
+### Registry JSON 格式
+
+```json
+{
+  "version
 - **Model / Mode 列表**：与 workspace + agent 绑定，首次进入工作区并选定 agent 时请求；切换 agent 后才能切换 model
 - **Session 列表**：与 workspace 绑定，首次打开工作区请求并缓存；除非新建/加载会话、手动刷新或后端推送变化，不重复加载
 - 启动时自动向已配对主机发起连接，失败只进入重连/手动刷新状态，不阻塞首页渲染
@@ -248,8 +291,14 @@ opencode ACP 返回 session 时使用 `updatedAt`（ISO 8601 字符串）而非 
 
 | 方向 | 消息 |
 |------|------|
-| 客户端 → 服务端 | `list_agents`、`start`、`input`、`list_models`、`list_sessions`、`switch_model`、`set_mode`、`load_session`、`cancel`、`permission_response` |
-| 服务端 → 客户端 | `server_info`、`session_started`、`agent_event`、`turn_ended`、`agent_list`、`model_list`、`session_list`、`permission_request`、`session_closed` |
+| 客户端 → 服务端 | `list_agents`、`list_registry_agents`、`install_agent`、`uninstall_agent`、`install_custom_agent`、`start`、`input`、`list_models`、`list_sessions`、`switch_model`、`set_mode`、`load_session`、`cancel`、`permission_response` |
+| 服务端 → 客户端 | `server_info`、`session_started`、`agent_event`、`turn_ended`、`agent_list`、`registry_agents_list`、`install_agent_done`、`uninstall_agent_done`、`model_list`、`session_list`、`permission_request`、`session_closed` |
+
+**Agent 管理消息**：
+- `list_registry_agents` → server 返回 `registry_agents_list`（含所有 registry agent 元数据）
+- `install_agent { agentId }` → server 写入 installed 配置，返回 `install_agent_done { agentId, ok }`
+- `uninstall_agent { agentId }` → server 从 installed 移除，返回 `uninstall_agent_done { agentId, ok }`
+- `install_custom_agent { command, args, name }` → 安装自定义 agent（不在 registry 中的命令）
 
 `AcpUpdate.sessionUpdate` 渲染类型：`agent_message_chunk`、`agent_thought_chunk`、`tool_call`、`tool_call_update`、`plan`、`user_message_chunk`。
 
@@ -308,6 +357,13 @@ hdc -t "<IP>:<PORT>" shell uitest uiInput inputText <x> <y> <字符串> # 点击
 hdc -t "<IP>:<PORT>" shell uitest uiInput keyEvent Back             # 返回键
 hdc -t "<IP>:<PORT>" shell uitest screenCap -p /data/local/tmp/shot.jpeg  # 截图
 ```
+
+### 设备发现（热点模式）
+
+当手机连接 PC 热点（`192.168.137.1`）时：
+- `arp -a -N 192.168.137.1` 查看动态条目，唯一动态 IP 即为手机
+- 常用无线调试端口：`46715`（多次连接未变）
+- 完整连接命令：`hdc tconn 192.168.137.159:46715`
 
 屏幕分辨率：1260×2844。设备 UDID：`2NP0224627054426`
 

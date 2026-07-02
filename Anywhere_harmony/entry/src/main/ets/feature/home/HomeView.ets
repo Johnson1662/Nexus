@@ -1,4 +1,4 @@
-import { Colors, FontSize, Spacing, Radius, Shadow, Layout, Duration, getLocalizedString } from '../../constants/DesignTokens';
+import { Colors, FontSize, Spacing, Radius, Shadow, Layout, Duration, AnimationPresets, getLocalizedString } from '../../constants/DesignTokens';
 import { ChatStore } from '../../common/model/ChatState';
 import { HostStore, DeviceEntry, WorkspaceStore, WorkspaceInfo, ServerSession } from '../../common/model/WorkspaceInfo';
 import { DeviceAgentStore } from '../../common/model/DeviceAgentStore';
@@ -33,7 +33,7 @@ export struct HomeView {
       WorkspaceStore.currentIndex = 0;
     }
     setTimeout(() => {
-      (this.getUIContext())?.animateTo({ duration: 150, curve: Curve.EaseOut }, () => {
+      (this.getUIContext())?.animateTo({ duration: 150, curve: AnimationPresets.spring }, () => {
         this.entered = true;
       });
     }, 30);
@@ -232,9 +232,9 @@ export struct HomeView {
       }
     }
     .width(Layout.contentWidth)
-    .padding({ top: 0, bottom: Spacing.xxl })
+    .padding({ top: 0, bottom: Spacing.xlg })
     .opacity(this.entered ? 1 : 0)
-    .animation({ duration: 200, curve: Curve.EaseOut })
+    .animation({ duration: 200, curve: AnimationPresets.spring })
   }
 
 @Builder
@@ -247,12 +247,20 @@ export struct HomeView {
           .margin({ right: Spacing.lg, left: Spacing.xs })
 
         Column() {
-          Text(workspace.name)
-            .fontSize(FontSize.md)
-            .fontWeight(FontWeight.Bold)
-            .fontColor(Colors.foreground)
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
+          Row() {
+            Text(workspace.name)
+              .fontSize(FontSize.md)
+              .fontWeight(FontWeight.Bold)
+              .fontColor(Colors.foreground)
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+            if (this.isWorkspaceRunning(workspace)) {
+              Circle({ width: 5, height: 5 })
+                .fill(Colors.success)
+                .margin({ left: Spacing.sm })
+            }
+          }
+          .alignItems(VerticalAlign.Center)
           Text(this.text($r('app.string.home_workspace_updated'), this.getWorkspaceTime(workspace)))
             .fontSize(FontSize.sm)
             .fontColor(Colors.foregroundMuted)
@@ -261,18 +269,6 @@ export struct HomeView {
         }
         .alignItems(HorizontalAlign.Start)
         .layoutWeight(1)
-
-        Row() {
-          Circle({ width: 6, height: 6 })
-            .fill(this.isWorkspaceRunning(workspace) ? Colors.success : Colors.foregroundMuted)
-            .margin({ right: Spacing.xs })
-          Text(this.isWorkspaceRunning(workspace) ? this.text($r('app.string.common_running')) : this.text($r('app.string.common_idle')))
-            .fontSize(FontSize.sm)
-            .fontColor(Colors.foregroundMuted)
-        }
-        .padding({ left: Spacing.sm, right: Spacing.sm, top: Spacing.xs, bottom: Spacing.xs })
-        .backgroundColor(Colors.surface1)
-        .borderRadius(Radius.full)
       }
       .width('100%')
     }
@@ -284,7 +280,7 @@ export struct HomeView {
     })
     .border({ width: 0 })
     .borderRadius(Radius.md)
-    .animation({ duration: 200, curve: Curve.EaseOut })
+    .animation({ duration: 200, curve: AnimationPresets.spring })
     .onClick(() => { this.onOpenWorkspace?.(index); })
   }
 
@@ -314,33 +310,26 @@ export struct HomeView {
       }
     }
     .width(Layout.contentWidth)
-    .padding({ bottom: Spacing.xxl })
+    .padding({ bottom: Spacing.xl })
     .opacity(this.entered ? 1 : 0)
-    .animation({ duration: 200, curve: Curve.EaseOut })
+    .animation({ duration: 200, curve: AnimationPresets.spring })
   }
 
 @Builder
   RecentChatRow(session: ServerSession) {
     Button() {
       Row() {
-        SymbolGlyph($r('sys.symbol.message'))
-          .fontSize(22)
-          .fontColor([Colors.foreground])
-          .margin({ right: Spacing.lg, left: Spacing.xs })
-
         Column() {
           Text(session.title || this.text($r('app.string.common_untitled')))
             .fontSize(FontSize.md)
             .fontWeight(FontWeight.Bold)
             .fontColor(Colors.foreground)
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-          Text((session.agent ? session.agent + ' · ' : '') + (session.cwd || ''))
+            .width('100%')
+          Text(session.agent ? session.agent : '')
             .fontSize(FontSize.sm)
             .fontColor(Colors.foregroundMuted)
             .margin({ top: Spacing.xxs })
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .width('100%')
         }
         .alignItems(HorizontalAlign.Start)
         .layoutWeight(1)
@@ -360,7 +349,7 @@ export struct HomeView {
     })
     .border({ width: 0 })
     .borderRadius(Radius.md)
-    .animation({ duration: 200, curve: Curve.EaseOut })
+    .animation({ duration: 200, curve: AnimationPresets.spring })
     .onClick(() => { this.onNavigateToSession?.(session); })
   }
 
@@ -390,7 +379,7 @@ export struct HomeView {
         pressed: { .backgroundColor(Colors.surface2) },
         normal: { .backgroundColor(Colors.surface1) }
       })
-      .animation({ duration: 200, curve: Curve.EaseOut })
+      .animation({ duration: 200, curve: AnimationPresets.spring })
       .onClick(() => {
         this.onOpenChat?.(WorkspaceStore.currentIndex);
       })
@@ -416,7 +405,7 @@ export struct HomeView {
         pressed: { .backgroundColor(Colors.accentDark) },
         normal: { .backgroundColor(Colors.foreground) }
       })
-      .animation({ duration: 200, curve: Curve.EaseOut })
+      .animation({ duration: 200, curve: AnimationPresets.spring })
       .onClick(() => {
         this.onNewChat?.();
       })
@@ -462,7 +451,7 @@ export struct HomeView {
             pressed: { .opacity(0.8) },
             normal: { .opacity(1.0) }
           })
-          .animation({ duration: 150, curve: Curve.EaseOut })
+          .animation({ duration: 150, curve: AnimationPresets.spring })
           .onClick(() => {
             let url: string = this.manualHostUrl.trim();
             this.showManualHostForm = false;
@@ -476,7 +465,7 @@ export struct HomeView {
       .borderRadius(Radius.xl)
       .shadow(Shadow.md)
       .margin({ top: 4, right: Spacing.xl })
-      .transition(TransitionEffect.OPACITY.animation({ duration: 150, curve: Curve.EaseOut }))
+      .transition(AnimationPresets.fadeIn)
     }
     .width('100%')
     .height('100%')

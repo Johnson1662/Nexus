@@ -29,11 +29,13 @@ Thumbs.db
 # Temp
 tmpfix/
 .codegraph/
+.agent/
+.omp/
+.deveco/
+.opencode/
 /layout.json
-app_test_picture/*.jpeg
-app_test_picture/*.jpg
-app_test_picture/*.png
-app_test_picture/*.json
+app_test_picture/
+prototype_picture/
 
 # ArkTS logs
 .arkts/

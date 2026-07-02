@@ -1,4 +1,4 @@
-import { Colors, FontSize, Spacing, Duration, Radius } from '../../constants/DesignTokens';
+import { Colors, FontSize, Spacing, Duration, Radius, AnimationPresets } from '../../constants/DesignTokens';
 
 @Component
 export struct ToolCallCard {
@@ -242,14 +242,14 @@ export struct ToolCallCard {
       Button() {
         Row() {
           SymbolGlyph(this.getIconResource())
-            .fontSize(FontSize.md)
+            .fontSize(FontSize.sm)
             .fontColor([Colors.foregroundMuted])
             .margin({ right: Spacing.sm })
 
           Column() {
             Text(this.getFormattedName())
               .fontSize(FontSize.sm)
-              .fontColor(Colors.foregroundMuted)
+              .fontColor(Colors.foreground)
               .fontWeight(FontWeight.Medium)
               .lineHeight(18)
 
@@ -258,19 +258,19 @@ export struct ToolCallCard {
                 LoadingProgress()
                   .width(12)
                   .height(12)
-                  .color(Colors.foregroundMuted)
+                  .color(Colors.accent)
                 Text(getContext(this).resourceManager.getStringSync($r('app.string.common_running').id))
                   .fontSize(FontSize.xs)
                   .fontColor(Colors.foregroundMuted)
               } else if (this.status === 'completed' || this.status === 'success') {
                 SymbolGlyph($r('sys.symbol.checkmark'))
                   .fontSize(10)
-                  .fontColor([Colors.foregroundMuted])
+                  .fontColor([Colors.success])
                 Text(getContext(this).resourceManager.getStringSync($r('app.string.common_done').id))
                   .fontSize(FontSize.xs)
-                  .fontColor(Colors.foregroundMuted)
+                  .fontColor(Colors.success)
               } else if (this.status === 'failed' || this.status === 'error') {
-                SymbolGlyph($r('sys.symbol.xmark_circle'))
+                SymbolGlyph($r('sys.symbol.xmark'))
                   .fontSize(10)
                   .fontColor([Colors.error])
                 Text(getContext(this).resourceManager.getStringSync($r('app.string.common_failed').id))
@@ -281,7 +281,7 @@ export struct ToolCallCard {
               if (this.path.length > 0) {
                 Text('·')
                   .fontSize(FontSize.xs)
-                  .fontColor(Colors.foregroundMuted)
+                  .fontColor(Colors.foregroundLight)
                 Text(this.getPathLabel())
                   .fontSize(FontSize.xs)
                   .fontColor(Colors.foregroundMuted)
@@ -298,21 +298,16 @@ export struct ToolCallCard {
           Blank()
 
           if (this.hasDetail()) {
-            Text(getContext(this).resourceManager.getStringSync(this.expanded ? $r('app.string.tool_hide_detail').id : $r('app.string.tool_show_detail').id))
-              .fontSize(FontSize.xs)
-              .fontColor(Colors.foregroundLight)
-              .margin({ right: Spacing.xs })
-
             SymbolGlyph($r('sys.symbol.chevron_down'))
-              .fontSize(FontSize.md)
+              .fontSize(FontSize.sm)
               .fontColor([Colors.foregroundMuted])
               .rotate({ angle: this.expanded ? 180 : 0 })
-              .animation({ duration: Duration.normal, curve: Curve.EaseInOut })
+              .animation({ duration: Duration.normal, curve: AnimationPresets.spring })
           }
         }
         .width('100%')
-        .padding({ left: Spacing.md, right: Spacing.md, top: Spacing.md, bottom: Spacing.md })
-        .alignItems(VerticalAlign.Top)
+        .padding({ left: Spacing.lg, right: Spacing.lg, top: Spacing.md, bottom: Spacing.md })
+        .alignItems(VerticalAlign.Center)
       }
       .type(ButtonType.Normal)
       .width('100%')
@@ -334,13 +329,14 @@ export struct ToolCallCard {
           this.DetailContent()
         }
         .width('100%')
-        .padding({ left: Spacing.xxl, right: Spacing.md, bottom: Spacing.md })
-        .transition(TransitionEffect.OPACITY)
+        .padding({ left: Spacing.xl, right: Spacing.lg, bottom: Spacing.md })
+        .transition(AnimationPresets.fadeIn)
       }
     }
     .width('100%')
     .backgroundColor(Colors.surface1)
-    .borderRadius(Radius.md)
-    .animation({ duration: Duration.normal, curve: Curve.EaseOut })
+    .borderRadius(12)
+    .border({ width: 0 })
+    .animation({ duration: Duration.normal, curve: AnimationPresets.spring })
   }
 }

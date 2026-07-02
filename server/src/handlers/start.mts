@@ -19,6 +19,7 @@ import type { SessionState } from "../acp/types.mjs";
 import type { WebSocket } from "ws";
 import { extractModelList, setCachedModelList } from "../model-list.mjs";
 import { recordToolCallIds } from "../tool-call-map.mjs";
+import { sessionTitleOverrides, clearSessionListCache } from "./list-sessions.mjs";
 
 interface StartParams {
   agent?: string;
@@ -176,7 +177,11 @@ export async function handleStart(
     }
 
     try {
-      const sessionTitle = prompt ? prompt.slice(0, 50) + (prompt.length > 50 ? "\u2026" : "") : "New Session";
+      const sessionTitle = prompt ? prompt.slice(0, 50) + (prompt.length > 50 ? "…" : "") : "New Session";
+      if (acpSessionId) {
+        sessionTitleOverrides.set(acpSessionId, sessionTitle);
+        clearSessionListCache(ws);
+      }
       sess.ws?.send(
         JSON.stringify({
           type: "session_started",

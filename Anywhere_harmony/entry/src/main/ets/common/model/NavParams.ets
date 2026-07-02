@@ -16,3 +16,7 @@ export class ChatParam {
 export class OnboardingParam {
   // 预留扩展
 }
+
+export class AgentManageParam {
+  deviceIndex: number = 0;
+}

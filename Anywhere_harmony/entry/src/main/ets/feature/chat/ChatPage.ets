@@ -1,4 +1,4 @@
-import { Colors, FontSize, Spacing, Radius, Duration, Shadow, Layout, getLocalizedString } from '../../constants/DesignTokens';
+import { Colors, FontSize, Spacing, Radius, Duration, Shadow, Layout, getLocalizedString, AnimationPresets } from '../../constants/DesignTokens';
 import { ChatStore } from '../../common/model/ChatState';
 import { MessageData } from '../../common/model/MessageData';
 import { MessageCard } from '../../common/ui/MessageCard';
@@ -34,7 +34,7 @@ struct PulsingDots {
           .height(4)
           .fill(Colors.accent)
           .opacity(this.phase === idx ? 1.0 : 0.3)
-          .animation({ duration: 150, curve: Curve.EaseOut })
+          .animation({ duration: 150, curve: AnimationPresets.spring })
       }, (idx: number) => idx.toString())
     }
   }
@@ -66,9 +66,9 @@ export struct ChatPage {
     let top = Spacing.sm;
     let bottom = Spacing.sm;
     if (index === 0) {
-      top = Spacing.md;
+      top = Spacing.lg;
     } else if (this.messages[index - 1].role !== this.messages[index].role) {
-      top = Spacing.xl;
+      top = Spacing.xxl; // 大留白分隔
     }
     if (index === this.messages.length - 1) {
       bottom = Spacing.xl;
@@ -191,12 +191,12 @@ export struct ChatPage {
     Row() {
       Text(this.formatDateDivider(ts))
         .fontSize(FontSize.xs)
-        .fontColor(Colors.foregroundMuted)
-        .fontWeight(FontWeight.Medium)
+        .fontColor(Colors.foregroundLight)
+        .fontWeight(FontWeight.Regular)
     }
     .width('100%')
     .justifyContent(FlexAlign.Center)
-    .padding({ top: Spacing.lg, bottom: Spacing.sm })
+    .padding({ top: Spacing.md, bottom: Spacing.xs })
   }
 
   build() {
@@ -228,7 +228,7 @@ export struct ChatPage {
         .width(Layout.contentWidth)
         .padding({ left: Spacing.lg, right: Spacing.lg, top: Spacing.sm, bottom: Spacing.sm })
         .margin({ top: Spacing.xs, bottom: Spacing.xs })
-        .transition(TransitionEffect.OPACITY)
+        .transition(AnimationPresets.fadeIn)
         .accessibilityText(this.localize($r('app.string.chat_loading_session')))
       }
 
@@ -242,32 +242,28 @@ export struct ChatPage {
                 .margin({ top: Spacing.sm })
             }
             .alignItems(HorizontalAlign.Center)
-            .transition(TransitionEffect.OPACITY)
-            .animation({ duration: Duration.fast, curve: Curve.EaseInOut })
+            .transition(AnimationPresets.fadeIn)
+            .animation({ duration: Duration.fast, curve: AnimationPresets.spring })
           } else {
-            Column() {
-              SymbolGlyph($r('sys.symbol.ellipsis_message'))
-                .fontSize(40)
-                .fontColor([Colors.foregroundMuted])
-                .opacity(0.25)
-                .margin({ bottom: Spacing.lg })
+            Column({ space: Spacing.sm }) {
               Text($r('app.string.chat_empty_title'))
                 .fontSize(FontSize.headingLg)
                 .fontWeight(FontWeight.Bold)
                 .fontColor(Colors.foreground)
               Text($r('app.string.chat_empty_subtitle'))
-                .fontSize(FontSize.lg)
+                .fontSize(FontSize.base)
                 .fontColor(Colors.foregroundMuted)
-                .margin({ top: Spacing.sm })
+                .lineHeight(22)
             }
             .alignItems(HorizontalAlign.Center)
-            .transition(TransitionEffect.OPACITY)
-            .animation({ duration: Duration.normal, curve: Curve.EaseOut })
+            .margin({ bottom: 4 })
+            .transition(AnimationPresets.fadeIn)
+            .animation({ duration: Duration.normal, curve: AnimationPresets.spring })
           }
         }
         .width('100%').layoutWeight(1)
         .justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center)
-        .padding({ left: Spacing.xl, right: Spacing.xl, top: Spacing.xxl, bottom: Spacing.xxl })
+        .padding({ left: Spacing.xl, right: Spacing.xl, bottom: Spacing.xxxl * 2 })
       } else {
         List({ scroller: this.scroller }) {
           LazyForEach(this.dataSource, (msg: MessageData, index: number) => {
@@ -326,23 +322,22 @@ export struct ChatPage {
                 .padding({ left: Spacing.lg, top: Spacing.xs, bottom: Spacing.xs })
             }
             .margin({ top: Spacing.sm, bottom: Spacing.md })
-            .transition(TransitionEffect.OPACITY)
+            .transition(AnimationPresets.fadeIn)
           }
 
           if (!ChatStore.turnActive && ChatStore.lastUsage !== null && this.messages.length > 0) {
             ListItem() {
               Row() {
-                SymbolGlyph($r('sys.symbol.checkmark')).fontSize(12).fontColor([Colors.foregroundMuted]).margin({ right: Spacing.xs })
                 Text(this.localize($r('app.string.chat_tokens_usage'), ChatStore.lastUsage!.totalTokens))
-                  .fontSize(FontSize.xs).fontColor(Colors.foregroundMuted).fontWeight(FontWeight.Medium)
+                  .fontSize(FontSize.xs).fontColor(Colors.foregroundMuted).fontWeight(FontWeight.Regular)
                 Blank()
                 Text($r('app.string.chat_done')).fontSize(FontSize.xs).fontColor(Colors.foregroundMuted)
               }
               .width('100%')
-              .padding({ left: Spacing.lg, right: Spacing.lg, top: Spacing.sm, bottom: Spacing.md })
+              .padding({ left: Spacing.xl, right: Spacing.xl, top: Spacing.xs, bottom: Spacing.lg })
             }
             .margin({ top: Spacing.sm, bottom: Spacing.md })
-            .transition(TransitionEffect.OPACITY)
+            .transition(AnimationPresets.fadeIn)
           }
         }
         .layoutWeight(1)
@@ -377,8 +372,8 @@ export struct ChatPage {
           pressed: { .backgroundColor(Colors.surface1) },
           normal: { .backgroundColor(Colors.surfaceElevated) }
         })
-        .animation({ duration: 150, curve: Curve.EaseOut })
-        .transition(TransitionEffect.OPACITY.animation({ duration: 150, curve: Curve.EaseOut }))
+        .animation({ duration: 150, curve: AnimationPresets.spring })
+        .transition(AnimationPresets.fadeIn)
         .alignSelf(ItemAlign.End)
         .margin({ right: Spacing.xl, bottom: Spacing.lg })
         .onClick(() => {
@@ -390,7 +385,7 @@ export struct ChatPage {
     }
     .width('100%').height('100%')
     .alignItems(HorizontalAlign.Center)
-    .backgroundColor(Colors.surface0)
+    .backgroundColor(Colors.surface1)
   }
 
   formatTime(ts: number): string {

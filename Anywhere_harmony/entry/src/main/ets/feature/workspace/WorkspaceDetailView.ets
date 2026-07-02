@@ -1,4 +1,4 @@
-import { Colors, FontSize, Spacing, Radius, Layout, getLocalizedString } from '../../constants/DesignTokens';
+import { Colors, FontSize, Spacing, Radius, Layout, getLocalizedString, AnimationPresets } from '../../constants/DesignTokens';
 import { WorkspaceStore, WorkspaceInfo, ServerSession } from '../../common/model/WorkspaceInfo';
 import { ChatStore } from '../../common/model/ChatState';
 
@@ -113,7 +113,7 @@ export struct WorkspaceDetailView {
       pressed: { .backgroundColor(Colors.accentDark) },
       normal: { .backgroundColor(Colors.foreground) }
     })
-    .animation({ duration: 150, curve: Curve.EaseOut })
+    .animation({ duration: 150, curve: AnimationPresets.spring })
     .onClick(() => { this.onNewSession?.(this.workspaceIndex); })
   }
 

@@ -1,8 +1,10 @@
 import { MessageData } from '../model/MessageData';
 
-/** Stable LazyForEach identity — content updates go through notifyDataChange, not key churn. */
+/** LazyForEach key — include length fields so streaming content changes force UI update. */
 export function messageLazyKey(msg: MessageData): string {
-  return msg.id;
+  return msg.id + ':' + msg.content.length + ':' + msg.toolContent.length + ':' +
+    msg.toolContentType + ':' + msg.toolOldText.length + ':' + msg.toolNewText.length + ':' +
+    msg.toolStatus;
 }
 
 /** Fingerprint for detecting per-row visual/state changes without full list reload. */

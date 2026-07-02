@@ -1,4 +1,4 @@
-import { Colors, FontSize, Spacing, Radius } from '../../constants/DesignTokens';
+import { Colors, FontSize, Spacing, Radius, AnimationPresets } from '../../constants/DesignTokens';
 import { DeviceEntry } from '../../common/model/WorkspaceInfo';
 import { HostPhase, HostRuntimeStore } from '../../common/model/HostState';
 
@@ -67,7 +67,7 @@ export struct HostFilterBar {
 
     .border({ width: 0 })
     .borderRadius(Radius.full)
-    .animation({ duration: 200, curve: Curve.EaseOut })
+    .animation({ duration: 200, curve: AnimationPresets.spring })
 
     .onClick(() => { if (this.onSelect) this.onSelect(key); })
   }

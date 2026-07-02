@@ -17,7 +17,7 @@ import {
   loadLastModelSelection
 } from '../../services/StorageService';
 import { WorkspaceStore } from '../model/WorkspaceInfo';
-import { ClientMessage, ServerMessage, AcpUpdate, AgentInfo, ServerInfoMessage, SyncResponseMessage, SyncResponseEntry } from './WSProtocol';
+import { ClientMessage, ServerMessage, AcpUpdate, AgentInfo, RegistryAgentInfo, ServerInfoMessage, SyncResponseMessage, SyncResponseEntry } from './WSProtocol';
 import { getOrCreateClientKeyPair, signWithClientKey, generateEphemeralKeyPair } from './CryptoHelper';
 import { PhoneEncryptedChannel } from './PhoneEncryptedChannel';
 import { DeviceAgentStore } from '../model/DeviceAgentStore';
@@ -282,6 +282,13 @@ export type ModelListCallback = (models: ModelItem[], modes: ModeItem[]) => void
 export type SessionListCallback = (sessions: ServerSession[]) => void;
 export type AcpUpdateCallback = (update: AcpUpdate) => void;
 export type AgentListCallback = (agents: AgentInfo[]) => void;
+export type RegistryAgentListCallback = (agents: RegistryAgentInfo[]) => void;
+export interface InstallResult {
+  agentId: string;
+  ok: boolean;
+  error: string;
+}
+export type InstallResultCallback = (result: InstallResult) => void;
 export type ErrorCallback = (text: string) => void;
 export type EmptyCallback = () => void;
 
@@ -292,6 +299,8 @@ export class WSClient {
   private sessionListeners: SessionListCallback[] = [];
   private updateListeners: AcpUpdateCallback[] = [];
   private agentListListeners: AgentListCallback[] = [];
+  private registryAgentListListeners: RegistryAgentListCallback[] = [];
+  private installResultListeners: InstallResultCallback[] = [];
   private errorListeners: ErrorCallback[] = [];
   private sessionStartedListeners: EmptyCallback[] = [];
   private serverInfoListeners: EmptyCallback[] = [];
@@ -578,6 +587,15 @@ export class WSClient {
             this.handleMessage(plainStr);
           }).catch((err: Error) => {
             hilog.error(DOMAIN, TAG, 'decrypt failed: ' + JSON.stringify(err));
+            // E2EE channel broken — fall back to plaintext and re-initiate
+            this._e2eeReady = false;
+            this.channel = new PhoneEncryptedChannel();
+            // Try as plaintext (relay may wrap JSON in binary frame)
+            try {
+              let decoder2: util.TextDecoder = new util.TextDecoder('utf-8', { ignoreBOM: true });
+              let raw2: string = decoder2.decodeToString(bytes);
+              this.handleMessage(raw2);
+            } catch {}
           });
         } else {
           // Before E2EE handshake, relay sends all frames as binary (opcode 0x02)
@@ -751,6 +769,10 @@ export class WSClient {
           this.ws?.send(frame);
         }).catch((err: Error) => {
           hilog.error(DOMAIN, TAG, 'encrypt failed: ' + JSON.stringify(err));
+          // E2EE broken — fall back to plaintext
+          this._e2eeReady = false;
+          this.channel = new PhoneEncryptedChannel();
+          this.ws?.send(JSON.stringify(msg));
         });
       } else {
         this.ws.send(JSON.stringify(msg));
@@ -779,6 +801,9 @@ export class WSClient {
     }
   }
   private async initiateE2EE(url: string, gen: number): Promise<void> {
+    // Reset stale E2EE state before fresh handshake
+    this._e2eeReady = false;
+    this.channel = new PhoneEncryptedChannel();
     try {
       const hostEd25519PubKey: string = AppStorage.get<string>('hostEd25519PublicKey') || '';
       const hostId: string = AppStorage.get<string>('hostId') || '';
@@ -832,6 +857,8 @@ export class WSClient {
     ChatStore.currentDeviceId = '';
     this.cancelWaitingHostTimer();
     this.stopHeartbeatWatchdog();
+    this._e2eeReady = false;
+    this.channel = new PhoneEncryptedChannel();
   }
 
   onStateChange(cb: StateChangeCallback): void {
@@ -865,6 +892,8 @@ export class WSClient {
     this.modelListeners = [];
     this.sessionListeners = [];
     this.agentListListeners = [];
+    this.registryAgentListListeners = [];
+    this.installResultListeners = [];
     this.errorListeners = [];
     this.sessionStartedListeners = [];
     this.serverInfoListeners = [];
@@ -882,6 +911,30 @@ export class WSClient {
       optionId: optionId,
     } as ClientMessage);
     ChatStore.pendingPermission = null;
+  }
+
+  sendListRegistryAgents(): void {
+    this.send({ type: 'list_registry_agents' } as ClientMessage);
+  }
+
+  sendInstallAgent(agentId: string): void {
+    this.send({ type: 'install_agent', agentId: agentId } as ClientMessage);
+  }
+
+  sendUninstallAgent(agentId: string): void {
+    this.send({ type: 'uninstall_agent', agentId: agentId } as ClientMessage);
+  }
+
+  sendInstallCustomAgent(command: string, args: string[], name: string): void {
+    this.send({ type: 'install_custom_agent', command: command, args: args, name: name } as ClientMessage);
+  }
+
+  onRegistryAgentList(cb: RegistryAgentListCallback): void {
+    this.registryAgentListListeners.push(cb);
+  }
+
+  onInstallResult(cb: InstallResultCallback): void {
+    this.installResultListeners.push(cb);
   }
 
   private parsePermissionOptions(raw: Object | undefined): import('../model/ChatState').PermissionOption[] {
@@ -1139,6 +1192,7 @@ export class WSClient {
         rawSessions = sessionsRaw as Record<string, Object>[];
       }
     } catch {
+      hilog.warn(DOMAIN, TAG, 'handleMessage: JSON parse failed, raw len=' + raw.length);
       return;
     }
     switch (msg.type) {
@@ -1342,6 +1396,28 @@ export class WSClient {
           cb(msg.agents || []);
         }
         break;
+      case 'registry_agents_list':
+        if (msg.agents) {
+          let raw: Object = msg.agents;
+          let regAgents: RegistryAgentInfo[] = raw as RegistryAgentInfo[];
+          for (let cb of this.registryAgentListListeners) {
+            cb(regAgents);
+          }
+        }
+        break;
+      case 'install_agent_done': {
+        let raw: Object = msg;
+        let data: Record<string, Object> = raw as Record<string, Object>;
+        let result: InstallResult = {
+          agentId: getStringField(data, 'agentId'),
+          ok: getBooleanField(data, 'ok'),
+          error: getStringField(data, 'error')
+        };
+        for (let cb of this.installResultListeners) {
+          cb(result);
+        }
+        break;
+      }
       case 'error':
         for (let cb of this.errorListeners) {
           cb(String(msg.text || 'Unknown error'));

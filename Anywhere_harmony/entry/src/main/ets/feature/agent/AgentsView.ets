@@ -1,4 +1,4 @@
-import { Colors, FontSize, Spacing, Radius, Layout, getLocalizedString } from '../../constants/DesignTokens';
+import { Colors, FontSize, Spacing, Radius, Layout, AnimationPresets, getLocalizedString } from '../../constants/DesignTokens';
 import { HostStore, DeviceEntry } from '../../common/model/WorkspaceInfo';
 import { HostPhase, HostRuntimeStore } from '../../common/model/HostState';
 
@@ -164,6 +164,6 @@ export struct AgentsView {
       pressed: { .backgroundColor(Colors.surface1) },
       normal: { .backgroundColor(Colors.transparent) }
     })
-    .transition(TransitionEffect.OPACITY.animation({ duration: 150, curve: Curve.EaseOut }))
+    .transition(AnimationPresets.fadeIn)
   }
 }

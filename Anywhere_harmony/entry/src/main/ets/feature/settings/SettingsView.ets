@@ -26,6 +26,7 @@ export struct SettingsPage {
   onConnectHost?: (index: number) => void;
   onDeleteHost?: (index: number) => void;
   onScan?: () => void;
+  onNavigateToAgentManage?: (deviceIndex: number) => void;
 
   text(res: Resource, ...args: Array<string | number>): string {
     if (this.localeRevision < 0) return '';
@@ -570,6 +571,11 @@ export struct SettingsPage {
 
       this.HostDetailActionRow(this.text($r('app.string.settings_reconnect')), Colors.accent, () => { this.connectHost(index, device); })
       this.HostDetailActionRow(this.text($r('app.string.settings_rescan')), Colors.foreground, () => { if (this.onScan) this.onScan(); })
+      this.HostDetailActionRow('管理 Agent', Colors.foreground, () => {
+        if (this.onNavigateToAgentManage) {
+          this.onNavigateToAgentManage(index);
+        }
+      })
       this.HostDetailActionRow(this.text($r('app.string.settings_delete_host_action')), Colors.error, () => { this.showDeleteConfirmDialog(index); })
     }
     .width('100%')
