@@ -54,9 +54,14 @@ async function doListSessions(
 ): Promise<void> {
   const cached = sessionListCache.get(ws);
   if (cached && cached.cwd === cwd && Date.now() - cached.timestamp < 30000) {
+    const localStatuses = await scanLocalSessionStatuses();
+    const statusMap = new Map(localStatuses.map((ls) => [ls.sessionId, ls.status]));
     for (const s of cached.sessions) {
       if (sessionTitleOverrides.has(s.sessionId)) {
         s.title = sessionTitleOverrides.get(s.sessionId);
+      }
+      if (statusMap.has(s.sessionId)) {
+        s.status = statusMap.get(s.sessionId);
       }
     }
     ws.send(JSON.stringify({ type: "session_list", sessions: cached.sessions }));
@@ -70,7 +75,7 @@ async function doListSessions(
     ),
   ]);
   const sessions = (result as any).sessions || [];
-  const localStatuses = scanLocalSessionStatuses();
+  const localStatuses = await scanLocalSessionStatuses();
   const statusMap = new Map(localStatuses.map((ls) => [ls.sessionId, ls.status]));
 
   for (const s of sessions) {

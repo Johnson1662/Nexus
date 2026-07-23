@@ -1,6 +1,7 @@
 import os from "os";
 import path from "path";
-import fs from "fs";
+import fs from "fs/promises";
+import { existsSync } from "fs";
 
 export interface ActiveSessionStatus {
   sessionId: string;
@@ -11,8 +12,7 @@ export interface ActiveSessionStatus {
 }
 
 /**
- * Discovers and checks local active sessions from OpenCode, Claude Code, and Codex.
- * Dual-channel fallback: scans local FS logs when ACP API doesn't report active state.
+ * Discovers and checks local active session locations for OpenCode, Claude Code, and Codex.
  */
 export function getLocalAgentLocations(): Record<string, string[]> {
   const home = os.homedir();
@@ -36,29 +36,54 @@ export function getLocalAgentLocations(): Record<string, string[]> {
   };
 }
 
-export function scanLocalSessionStatuses(): ActiveSessionStatus[] {
+/**
+ * Scans local session directories asynchronously and enriches status.
+ */
+export async function scanLocalSessionStatuses(): Promise<ActiveSessionStatus[]> {
   const results: ActiveSessionStatus[] = [];
-  const home = os.homedir();
+  const locations = getLocalAgentLocations();
 
   // Scan Claude Code session directory
-  const claudeDir = path.join(home, ".claude", "sessions");
-  if (fs.existsSync(claudeDir)) {
-    try {
-      const files = fs.readdirSync(claudeDir);
-      for (const f of files) {
-        if (f.endsWith(".json")) {
-          const fp = path.join(claudeDir, f);
-          const stat = fs.statSync(fp);
-          const isRunning = Date.now() - stat.mtimeMs < 15000;
-          results.push({
-            sessionId: f.replace(".json", ""),
-            agentName: "claude-code",
-            status: isRunning ? "running" : "idle",
-            lastActivity: stat.mtimeMs,
-          });
+  for (const claudeDir of locations.claude) {
+    if (existsSync(claudeDir)) {
+      try {
+        const files = await fs.readdir(claudeDir);
+        for (const f of files) {
+          if (f.endsWith(".json")) {
+            const fp = path.join(claudeDir, f);
+            const stat = await fs.stat(fp);
+            const isRunning = Date.now() - stat.mtimeMs < 15000;
+            results.push({
+              sessionId: f.replace(".json", ""),
+              agentName: "claude-code",
+              status: isRunning ? "running" : "idle",
+              lastActivity: stat.mtimeMs,
+            });
+          }
         }
+      } catch (err: any) {
+        console.warn(`[session-watcher] Error scanning claude dir ${claudeDir}:`, err.message);
       }
-    } catch (_) {}
+    }
+  }
+
+  // Scan OpenCode database / session files
+  for (const dbPath of locations.opencode) {
+    if (existsSync(dbPath)) {
+      try {
+        const stat = await fs.stat(dbPath);
+        const isRunning = Date.now() - stat.mtimeMs < 15000;
+        results.push({
+          sessionId: "opencode_active",
+          agentName: "opencode",
+          status: isRunning ? "running" : "idle",
+          lastActivity: stat.mtimeMs,
+        });
+        break;
+      } catch (err: any) {
+        console.warn(`[session-watcher] Error checking opencode db ${dbPath}:`, err.message);
+      }
+    }
   }
 
   return results;
