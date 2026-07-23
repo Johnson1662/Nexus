@@ -3,6 +3,7 @@ import type { AcpClient } from "../acp/client.mjs";
 import { findSessionForWs } from "../session.mjs";
 import { createTempClient } from "../temp-client.mjs";
 import { isValidAgent } from "../discovery/agents.mjs";
+import { scanLocalSessionStatuses } from "../discovery/session-watcher.mjs";
 
 export const sessionTitleOverrides = new Map<string, string>();
 
@@ -69,9 +70,17 @@ async function doListSessions(
     ),
   ]);
   const sessions = (result as any).sessions || [];
+  const localStatuses = scanLocalSessionStatuses();
+  const statusMap = new Map(localStatuses.map((ls) => [ls.sessionId, ls.status]));
+
   for (const s of sessions) {
     if (sessionTitleOverrides.has(s.sessionId)) {
       s.title = sessionTitleOverrides.get(s.sessionId);
+    }
+    if (statusMap.has(s.sessionId)) {
+      s.status = statusMap.get(s.sessionId);
+    } else if (!s.status) {
+      s.status = "idle";
     }
   }
   sessionListCache.set(ws, { sessions, timestamp: Date.now(), cwd });

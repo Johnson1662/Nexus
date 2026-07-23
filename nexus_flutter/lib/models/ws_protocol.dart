@@ -336,6 +336,7 @@ class ServerSessionData {
   final String? agent;
   final String? cwd;
   final int createdAt;
+  final String? status;
 
   ServerSessionData({
     required this.sessionId,
@@ -343,6 +344,7 @@ class ServerSessionData {
     this.agent,
     this.cwd,
     this.createdAt = 0,
+    this.status,
   });
 
   factory ServerSessionData.fromJson(Map<String, dynamic> json) => ServerSessionData(
@@ -351,6 +353,7 @@ class ServerSessionData {
         agent: json['agent'] as String?,
         cwd: json['cwd'] as String?,
         createdAt: json['createdAt'] as int? ?? DateTime.now().millisecondsSinceEpoch,
+        status: json['status'] as String?,
       );
 }
 
