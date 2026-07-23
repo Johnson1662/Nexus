@@ -259,19 +259,54 @@ class _HomePageState extends State<HomePage> {
     WorkspaceProvider workspaceProvider,
   ) {
     final fg = AppColors.foregroundCtx(context);
+    final muted = AppColors.foregroundMutedCtx(context);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
           padding: const EdgeInsets.only(bottom: AppSpacing.md),
-          child: Text(
-            '项目',
-            style: TextStyle(
-              fontSize: AppFontSize.lg,
-              fontWeight: FontWeight.w600,
-              color: fg,
-            ),
+          child: Row(
+            children: [
+              Text(
+                '项目',
+                style: TextStyle(
+                  fontSize: AppFontSize.lg,
+                  fontWeight: FontWeight.w600,
+                  color: fg,
+                ),
+              ),
+              const Spacer(),
+              InkWell(
+                onTap: () => Navigator.pushNamed(context, '/workspace-list'),
+                borderRadius: BorderRadius.circular(AppRadius.sm),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.xs,
+                    vertical: AppSpacing.xxs,
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '查看全部',
+                        style: TextStyle(
+                          fontSize: AppFontSize.xs,
+                          color: muted,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(width: 2),
+                      Icon(
+                        Icons.chevron_right_rounded,
+                        size: 16,
+                        color: muted,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
         // Item 1: Quick Chat entry (matches home1.jpg)
@@ -397,7 +432,7 @@ class _HomePageState extends State<HomePage> {
       context,
       icon: Icons.folder_outlined,
       title: name.isNotEmpty ? name : '未命名',
-      onTap: () => Navigator.pushNamed(context, '/workspace-list'),
+      onTap: () => Navigator.pushNamed(context, '/workspace-detail', arguments: name),
     );
   }
 

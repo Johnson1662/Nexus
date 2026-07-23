@@ -248,9 +248,11 @@ class _WorkspaceListPageState extends State<WorkspaceListPage> {
           // Workspace list
           Expanded(
             child: filtered.isEmpty
-                ? _buildEmptyState('暂无工作区\n点击右上角 + 新建')
+                ? _buildEmptyState('暂无工作区\n点击右下角 + 添加工作区')
                 : ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+                    padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.lg, 0, AppSpacing.lg, 80,
+                    ),
                     itemCount: filtered.length,
                     itemBuilder: (context, index) {
                       return _buildWorkspaceCard(context, filtered[index]);
@@ -258,6 +260,18 @@ class _WorkspaceListPageState extends State<WorkspaceListPage> {
                   ),
           ),
         ],
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _showNewWorkspaceDialog,
+        backgroundColor: dark ? Colors.white : Colors.black,
+        icon: Icon(Icons.add_rounded, color: dark ? Colors.black : Colors.white),
+        label: Text(
+          '添加工作区',
+          style: TextStyle(
+            color: dark ? Colors.black : Colors.white,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
       ),
     );
   }
