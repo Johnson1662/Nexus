@@ -1,8 +1,8 @@
 {
-  "name": "@anywhere/bridge",
+  "name": "@nexus/bridge",
   "version": "0.1.0",
   "bin": {
-    "anywhere": "./dist/cli.mjs"
+    "nexus": "./dist/cli.mjs"
   },
   "dependencies": {
     "@agentclientprotocol/sdk": "^1.2.1"

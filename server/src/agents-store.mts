@@ -21,7 +21,7 @@ interface InstalledAgentsFile {
 
 // ── State ─────────────────────────────────────────────────────────────
 
-const STORE_DIR = path.join(homedir(), ".anywhere");
+const STORE_DIR = path.join(homedir(), ".nexus");
 const STORE_FILE = path.join(STORE_DIR, "installed-agents.json");
 
 let installed: InstalledAgent[] | null = null;

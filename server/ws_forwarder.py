@@ -3,7 +3,7 @@
 import asyncio
 import websockets
 
-CF_WORKER_URL = "wss://anywhere-relay.zcly12138.workers.dev/ws"
+CF_WORKER_URL = "wss://nexus-relay.zcly12138.workers.dev/ws"
 
 async def forward(src, dst, label):
     try:

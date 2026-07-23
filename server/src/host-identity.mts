@@ -11,11 +11,11 @@ export interface HostIdentityData {
   ed25519PrivateKeyHex?: string;
 }
 
-const ANYWHERE_DIR = path.join(homedir(), '.anywhere');
+const ANYWHERE_DIR = path.join(homedir(), '.nexus');
 const IDENTITY_PATH = path.join(ANYWHERE_DIR, 'host-identity.json');
-const OLD_IDENTITY_PATH = path.resolve(process.cwd(), '.anywhere-host.json');
+const OLD_IDENTITY_PATH = path.resolve(process.cwd(), '.nexus-host.json');
 
-// Migration from old location (project root) to ~/.anywhere/
+// Migration from old location (project root) to ~/.nexus/
 try {
   if (fs.existsSync(OLD_IDENTITY_PATH) && !fs.existsSync(IDENTITY_PATH)) {
     fs.mkdirSync(ANYWHERE_DIR, { recursive: true });
@@ -57,8 +57,8 @@ function generateKeyPair() {
 }
 
 export function getOrCreateHostIdentity(): HostIdentityData {
-  // Phase 2b: Key rotation via ANYWHERE_ROTATE_KEYS=1
-  if (process.env.ANYWHERE_ROTATE_KEYS === '1') {
+  // Phase 2b: Key rotation via NEXUS_ROTATE_KEYS=1
+  if (process.env.NEXUS_ROTATE_KEYS === '1') {
     try {
       fs.unlinkSync(IDENTITY_PATH);
       console.log('[host-identity] Key rotation: deleted existing identity file');

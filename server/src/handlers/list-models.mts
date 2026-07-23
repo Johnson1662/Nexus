@@ -40,7 +40,7 @@ export async function handleListModels(
     return;
   }
 
-  const cwd = join(homedir(), ".anywhere");
+  const cwd = join(homedir(), ".nexus");
   try {
     const list = await queryModelListOnce(agent, cwd, refresh, async () => {
       console.log(`[server] list_models: creating temp client for agent="${agent}"`);

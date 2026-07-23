@@ -16,7 +16,7 @@ export async function createTempClient(
 ): Promise<{ client: AcpClient; destroy: () => void }> {
   const args = getAgentLaunchArgs(agent);
   // cwd must exist, otherwise spawn with shell:true throws misleading ENOENT on cmd.exe
-  const ANYWHERE_DIR = join(homedir(), '.anywhere');
+  const ANYWHERE_DIR = join(homedir(), '.nexus');
   mkdirSync(ANYWHERE_DIR, { recursive: true });
   const resolvedCwd = cwd && existsSync(cwd) ? cwd : ANYWHERE_DIR;
   const proc = spawn(agent, args, {

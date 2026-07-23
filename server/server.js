@@ -656,7 +656,7 @@ async function handleStart(ws, msg) {
         fs: { readTextFile: true, writeTextFile: true },
         terminal: true,
       },
-      clientInfo: { name: agent, title: "Anywhere Bridge", version: "0.2.0" },
+      clientInfo: { name: agent, title: "Nexus Bridge", version: "0.2.0" },
     });
     console.log(`[server] ACP initialized, agent: ${initResult?.agentInfo?.name}`);
 
@@ -968,7 +968,7 @@ async function handleLoadSession(ws, msg) {
         fs: { readTextFile: true, writeTextFile: true },
         terminal: true,
       },
-      clientInfo: { name: msg.agent || "opencode", title: "Anywhere Bridge", version: "0.2.0" },
+      clientInfo: { name: msg.agent || "opencode", title: "Nexus Bridge", version: "0.2.0" },
     });
 
     console.log(`[server] loading session ${sessionId}`);

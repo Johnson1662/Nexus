@@ -6,17 +6,17 @@ yarn-error.log*
 
 # Build outputs
 server/dist/
-Anywhere_harmony/**/build/
-Anywhere_harmony/**/oh_modules/
-Anywhere_harmony/**/.hvigor/
-Anywhere_harmony/entry/build/
+nexus_harmony/**/build/
+nexus_harmony/**/oh_modules/
+nexus_harmony/**/.hvigor/
+nexus_harmony/entry/build/
 .hvigor/
 
 # IDE
 .idea/
 *.iml
 .vscode/
-Anywhere_harmony/local.properties
+nexus_harmony/local.properties
 
 # OS
 .DS_Store
@@ -35,6 +35,7 @@ tmpfix/
 .workbuddy/
 docs/handoff-*.md
 .omp/
+nul
 .deveco/
 .opencode/
 /layout.json
@@ -43,13 +44,13 @@ prototype_picture/
 
 # ArkTS logs
 .arkts/
-Anywhere_harmony/**/.preview/
+nexus_harmony/**/.preview/
 *.pyc
 __pycache__/
 relay/relay.mjs
-relay/anywhere-relay*
+relay/nexus-relay*
 *.log
-.anywhere-host.json
+.nexus-host.json
 qr.png
 qr-display.html
 start-bridge.cmd

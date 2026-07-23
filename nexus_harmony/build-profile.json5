@@ -1,0 +1,56 @@
+{
+  "app": {
+    "products": [
+      {
+        "name": "default",
+        "signingConfig": "default",
+        "compileSdkVersion": "6.1.1(24)",
+        "targetSdkVersion": "6.1.1(24)",
+        "compatibleSdkVersion": "5.0.0(12)",
+        "runtimeOS": "HarmonyOS",
+        "buildOption": {
+          "strictMode": {
+            "useNormalizedOHMUrl": true
+          }
+        }
+      }
+    ],
+    "buildModeSet": [
+      {
+        "name": "debug"
+      },
+      {
+        "name": "release"
+      }
+    ],
+    "signingConfigs": [
+      {
+        "name": "default",
+        "type": "HarmonyOS",
+        "material": {
+          "certpath": "C:/Users/lneoo/.ohos/config/default_nexus_harmony__K2hEDVvx3YH9ivOlUK2aHeEfcHnf7OjAuJxFMOj-Tg=.cer",
+          "keyAlias": "debugKey",
+          "keyPassword": "0000001A1D2F912C6A9ADC1F531622BF37CB578BA9D6649860B9F8E2CE3C30C78459F1C148DB79A47570",
+          "profile": "C:/Users/lneoo/.ohos/config/default_nexus_harmony__K2hEDVvx3YH9ivOlUK2aHeEfcHnf7OjAuJxFMOj-Tg=.p7b",
+          "signAlg": "SHA256withECDSA",
+          "storeFile": "C:/Users/lneoo/.ohos/config/default_nexus_harmony__K2hEDVvx3YH9ivOlUK2aHeEfcHnf7OjAuJxFMOj-Tg=.p12",
+          "storePassword": "0000001A5A9A4458CE6C1CEC35018C938844FBA113658A46CBD88CF77D29F9FA40B78289D7EFE97495E2"
+        }
+      }
+    ]
+  },
+  "modules": [
+    {
+      "name": "entry",
+      "srcPath": "./entry",
+      "targets": [
+        {
+          "name": "default",
+          "applyToProducts": [
+            "default"
+          ]
+        }
+      ]
+    }
+  ]
+}

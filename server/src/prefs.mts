@@ -5,7 +5,7 @@ interface AgentPrefs {
   lastModel?: string;
 }
 
-const PREFS_DIR = join(process.env.HOME || process.env.USERPROFILE || ".", ".anywhere");
+const PREFS_DIR = join(process.env.HOME || process.env.USERPROFILE || ".", ".nexus");
 const PREFS_FILE = join(PREFS_DIR, "agent-prefs.json");
 let cachedPrefs: Record<string, AgentPrefs> | null = null;
 

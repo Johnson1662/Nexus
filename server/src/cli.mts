@@ -7,7 +7,7 @@ import { homedir } from 'os';
 import { startDaemon, stopDaemon, getDaemonStatus } from './daemon/bootstrap.mjs';
 
 function printUsage(): void {
-  console.log(`Usage: anywhere <command> [options]
+  console.log(`Usage: nexus <command> [options]
 
 Commands:
   start   [--port=N] [--foreground]  Start the daemon (default: background, port 12138)
@@ -28,7 +28,7 @@ function parsePortFromArgs(args: string[]): number {
       if (!isNaN(port) && port > 0 && port <= 65535) {
         return port;
       }
-      console.error(`[anywhere] Invalid port: ${value}`);
+      console.error(`[nexus] Invalid port: ${value}`);
       process.exit(1);
     }
   }
@@ -48,7 +48,7 @@ async function main(): Promise<void> {
         await startDaemon({ port });
       } else {
         // Fork to background
-        const logDir = join(homedir(), '.anywhere');
+        const logDir = join(homedir(), '.nexus');
         const logFile = join(logDir, 'daemon.log');
         mkdirSync(logDir, { recursive: true });
         const fd = openSync(logFile, 'a');
@@ -61,7 +61,7 @@ async function main(): Promise<void> {
           windowsHide: true,
         });
         child.unref();
-        console.log(`[anywhere] Daemon started in background (pid: ${child.pid})`);
+        console.log(`[nexus] Daemon started in background (pid: ${child.pid})`);
         process.exit(0);
       }
       break;
@@ -97,7 +97,7 @@ async function main(): Promise<void> {
         }
       }
       // Fork to background (same as start)
-      const logDir = join(homedir(), '.anywhere');
+      const logDir = join(homedir(), '.nexus');
       const logFile = join(logDir, 'daemon.log');
       mkdirSync(logDir, { recursive: true });
       const fd = openSync(logFile, 'a');
@@ -109,7 +109,7 @@ async function main(): Promise<void> {
         windowsHide: true,
       });
       child.unref();
-      console.log(`[anywhere] Daemon restarted (pid: ${child.pid})`);
+      console.log(`[nexus] Daemon restarted (pid: ${child.pid})`);
       process.exit(0);
       break;
     }
@@ -122,6 +122,6 @@ async function main(): Promise<void> {
 }
 
 main().catch((err: unknown) => {
-  console.error('[anywhere] Fatal error:', err);
+  console.error('[nexus] Fatal error:', err);
   process.exit(1);
 });

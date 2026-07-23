@@ -1,20 +1,20 @@
-# Anywhere Phase 2: 安全架构与持久化连接实现计划
+# Nexus Phase 2: 安全架构与持久化连接实现计划
 
-> 以 Paseo 为参考，结合 Anywhere 自身特点（自建 Python Relay、HarmonyOS 原生、Node.js Bridge Server）重新设计。
+> 以 Paseo 为参考，结合 Nexus 自身特点（自建 Python Relay、HarmonyOS 原生、Node.js Bridge Server）重新设计。
 
 ## 核心目标
-将 Anywhere 从当前的"信任优先/明文中继"模型，平滑升级为**零信任、抗弱网、端到端加密**的稳定生产力工具。通过带外扫码 (OOB) 实现"一眼配对，绝对安全"。
+将 Nexus 从当前的"信任优先/明文中继"模型，平滑升级为**零信任、抗弱网、端到端加密**的稳定生产力工具。通过带外扫码 (OOB) 实现"一眼配对，绝对安全"。
 
 ---
 
 ## 设计原则：与 Paseo 的对比
 
-Anywhere 与 Paseo 共享相同的核心架构模式——Phone ↔ Relay ↔ PC Bridge——但基础设施栈完全不同：
+Nexus 与 Paseo 共享相同的核心架构模式——Phone ↔ Relay ↔ PC Bridge——但基础设施栈完全不同：
 
-| 维度 | Paseo | Anywhere | 影响 |
+| 维度 | Paseo | Nexus | 影响 |
 |---|---|---|---|
-| Relay 平台 | Cloudflare Workers + Durable Objects | 自建 Python 3 VPS (1GB RAM) | Anywhere 无法使用 DO 的自动弹性/WebSocket hibernation |
-| 移动端 | React Native (跨平台) | HarmonyOS ArkTS | Anywhere 必须依赖 HarmonyOS 原生加密 API |
+| Relay 平台 | Cloudflare Workers + Durable Objects | 自建 Python 3 VPS (1GB RAM) | Nexus 无法使用 DO 的自动弹性/WebSocket hibernation |
+| 移动端 | React Native (跨平台) | HarmonyOS ArkTS | Nexus 必须依赖 HarmonyOS 原生加密 API |
 | 服务端 | Daemon (Node.js) | Bridge Server (TypeScript/Node.js) | 架构相似，可以直接借鉴设计 |
 | 网络条件 | 始终公网 | 手机局域网 + 中继 | 离线和切换场景更频繁 |
 
@@ -117,11 +117,11 @@ QR 码是唯一的信任锚点。`#offer=<base64url>` 格式，fragment 永不�
 **Relay 层无访问控制**：知道 `hostId` 即可通过 Relay 向 Host 发起连接。这不是安全漏洞——E2EE 握手前 Host 不处理任何业务请求，非法客户端无法完成 ECDH 签名验证。如果攻击者只是建立裸 WS 连接但不完成握手，每秒最多 5 次握手尝试的限流可以缓解 DoS。
 
 ### C5. 前向保密 (Perfect Forward Secrecy, PFS)
-**与 Paseo 不同：Paseo 明确放弃了 PFS。Anywhere 要求 PFS。**
+**与 Paseo 不同：Paseo 明确放弃了 PFS。Nexus 要求 PFS。**
 
 每次连接生成 Ephemeral KeyPair，连接断开即销毁。增加一次握手往返时间，但必要性高于 Paseo：
 - Paseo 的 DO 端点由 Cloudflare 保护，私钥泄露概率极低。
-- Anywhere 的 `.anywhere-host.json` 在用户的 PC 上，Windows 桌面普通用户环境下泄露风险更高。
+- Nexus 的 `.nexus-host.json` 在用户的 PC 上，Windows 桌面普通用户环境下泄露风险更高。
 
 ### C6. 会话生命周期隔离
 WebSocket 断线后不立即 kill 会话。引入 orphaned 状态 + 5 分钟存活窗口。最多同时保留 10 个 orphan session，超出时淘汰最旧的。
@@ -158,7 +158,7 @@ Server receives:
 ## 阶段一：扫码配对与长效信任链 (OOB QR-Pairing)
 
 ### 身份与公钥生成
-- PC 端（Bridge Server）：`.anywhere-host.json` 持久化以下结构：
+- PC 端（Bridge Server）：`.nexus-host.json` 持久化以下结构：
 
 ```json
 {
@@ -190,7 +190,7 @@ const offer = {
   relayUrl: "ws://host:port"
 };
 const encoded = Buffer.from(JSON.stringify(offer)).toString("base64url");
-const url = `anywhere://pair/#offer=${encoded}`;
+const url = `nexus://pair/#offer=${encoded}`;
 ```
 
 **优势**：
@@ -223,7 +223,7 @@ const url = `anywhere://pair/#offer=${encoded}`;
 
 ### 加密选型
 
-| 组件 | Paseo（参考） | Anywhere（采用） | 原因 |
+| 组件 | Paseo（参考） | Nexus（采用） | 原因 |
 |---|---|---|---|
 | 密钥交换 | Curve25519 ECDH | Curve25519 ECDH | 两者相同 |
 | 认证加密 | XSalsa20-Poly1305 | AES-256-GCM | HarmonyOS `@kit.CryptoArchitectureKit` 原生支持 GCM |
@@ -280,7 +280,7 @@ Client                              Host (Bridge)
   │    error: "version_too_old" }        │
   │                                       │
   │  ECDH(clientEphemeral, hostEphemeral) → sharedSecret (32B)
-  │  HKDF-SHA256(sharedSecret, salt=clientEphemeral[0:16], info="anywhere-e2ee-v1") → AES-256-GCM key
+  │  HKDF-SHA256(sharedSecret, salt=clientEphemeral[0:16], info="nexus-e2ee-v1") → AES-256-GCM key
   │                                       │
   │  ── [binary frame] 加密消息 ────────→│  AES-256-GCM
   │  ←─ [binary frame] 加密消息 ──────── │
@@ -334,7 +334,7 @@ relay.py: pendingFrames[hostId] → list[bytes], max 200
 
 当 Client 连接时，如果 `hosts[hostId]` 尚不存在（Host 还没连上来），缓冲消息。Host 连上后立即 flush。
 
-**关于多 Client 交织**：当前 Anywhere 的 relay 中 Host 全量广播给所有 Client，因此多个 Client 的帧被缓冲到同一个 `pendingFrames[hostId]` 是可以接受的——它们本来就是全部发给 Host 的。Host 侧根据消息内容（如 `sessionId`）自行分发到对应的 ACP session。
+**关于多 Client 交织**：当前 Nexus 的 relay 中 Host 全量广播给所有 Client，因此多个 Client 的帧被缓冲到同一个 `pendingFrames[hostId]` 是可以接受的——它们本来就是全部发给 Host 的。Host 侧根据消息内容（如 `sessionId`）自行分发到对应的 ACP session。
 
 ### 间接 WebSocket 引用
 
@@ -392,16 +392,16 @@ Bridge → SyncResponse: { entries: BufferEntry[] }
 
 | 密钥 | 生成方式 | 持久化 | 更换时机 |
 |---|---|---|---|
-| Host ECDH KeyPair | `host-identity.mts` x25519 | `.anywhere-host.json` | 删除文件后重启 |
-| Host Ed25519 KeyPair | `host-identity.mts` ed25519 | 同 `.anywhere-host.json` | 删除文件后重启 |
+| Host ECDH KeyPair | `host-identity.mts` x25519 | `.nexus-host.json` | 删除文件后重启 |
+| Host Ed25519 KeyPair | `host-identity.mts` ed25519 | 同 `.nexus-host.json` | 删除文件后重启 |
 | Client KeyPair | HUKS（优先）/ 软件（降级） | HUKS / AppStorage | 清除 App 数据 |
 | Ephemeral KeyPair | 每次握手时生成 | 不持久化 | 每次新连接 |
 | AES Session Key | HKDF 派生 | 不持久化（内存，断开销毁） | 每次新连接 |
 
 ### 密钥泄露恢复
-- **Host 私钥泄露**：删除 `.anywhere-host.json` → 重启 → 重新扫码配对。PFS 保证过去会话安全。
+- **Host 私钥泄露**：删除 `.nexus-host.json` → 重启 → 重新扫码配对。PFS 保证过去会话安全。
 - **Client 私钥泄露**：清除 App 数据 → 重新扫码配对。Host 端的旧 clientId 缓存会过期。
-- **密钥轮换**：手动重置即可。长期增加 `ANYWHERE_ROTATE_KEYS=1` 开机自轮换。
+- **密钥轮换**：手动重置即可。长期增加 `NEXUS_ROTATE_KEYS=1` 开机自轮换。
 
 ---
 

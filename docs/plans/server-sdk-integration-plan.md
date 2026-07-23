@@ -27,7 +27,7 @@
 ### 第 1 步：安装依赖 + 准备 TypeScript 环境
 
 ```bash
-cd Anywhere
+cd Nexus
 npm install @agentclientprotocol/sdk
 npm install -D typescript @types/node
 npx tsc --init

@@ -8,7 +8,7 @@ product
 开发者和工程师。他们需要通过 HarmonyOS 手机随时随地访问 PC 端的 AI 编程代理（如 OpenCode, Claude Code）。使用场景多为移动办公、碎片化时间或远程协作，需要快速、稳定、清晰地与代码 Agent 进行交互。
 
 ## Product Purpose
-Anywhere 是一个 HarmonyOS App，作为手机上的移动开发工作区。通过混合中继架构连接 PC 端 Bridge Server，利用 ACP 协议与 AI 编程代理通信。成功的产品应该在移动端提供无缝、高响应、可靠且类似终端的专业聊天体验。
+Nexus 是一个 HarmonyOS App，作为手机上的移动开发工作区。通过混合中继架构连接 PC 端 Bridge Server，利用 ACP 协议与 AI 编程代理通信。成功的产品应该在移动端提供无缝、高响应、可靠且类似终端的专业聊天体验。
 
 ## Brand Personality
 专注、极简、平静、专业。高信噪比。采用类似 ChatGPT 的黑白灰单色调风格（#202123, #F4F4F4, #6B7280），体现工具的纯粹感和技术感。

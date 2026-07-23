@@ -39,7 +39,7 @@ export async function handleStart(
   cleanupWsSessions(ws);
 
   const args = getAgentLaunchArgs(agent);
-  const ANYWHERE_DIR = join(homedir(), '.anywhere');
+  const ANYWHERE_DIR = join(homedir(), '.nexus');
   mkdirSync(ANYWHERE_DIR, { recursive: true });
   const resolvedCwd = cwd && existsSync(cwd) ? cwd : ANYWHERE_DIR;
   const proc = spawn(agent, args, {

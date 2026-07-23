@@ -1,6 +1,6 @@
-# Anywhere Markdown + 数学公式渲染集成计划
+# Nexus Markdown + 数学公式渲染集成计划
 
-> **目标：** 在 Anywhere HarmomyOS App 中，将 Agent 响应的纯文本渲染升级为完整的 Markdown 渲染，支持表格、代码块、LaTeX 数学公式等，保持流式更新的兼容性和终端风格的视觉一致性。
+> **目标：** 在 Nexus HarmomyOS App 中，将 Agent 响应的纯文本渲染升级为完整的 Markdown 渲染，支持表格、代码块、LaTeX 数学公式等，保持流式更新的兼容性和终端风格的视觉一致性。
 
 ---
 
@@ -39,7 +39,7 @@ Agent (ACP) → WebSocket → AppState.appendToLastAssistantText()
 
 ### Step 1：安装依赖
 
-在 `Anywhere_harmony` 项目根目录执行：
+在 `nexus_harmony` 项目根目录执行：
 
 ```bash
 cd entry

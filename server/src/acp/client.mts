@@ -161,7 +161,7 @@ export class AcpClient {
         terminal: true,
       },
       clientInfo: {
-        name: "anywhere-bridge",
+        name: "nexus-bridge",
         version: "0.3.0",
       },
     });

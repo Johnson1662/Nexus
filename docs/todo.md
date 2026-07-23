@@ -26,7 +26,7 @@
 
 ### 背景
 
-首页底部已有 `Search chats` 入口，但当前更像占位入口。Anywhere 的核心信息分散在 host、workspace、session、message、tool call、plan 等多层结构中，用户在手机上很难快速找回某次任务、某条回答或某个工作区。
+首页底部已有 `Search chats` 入口，但当前更像占位入口。Nexus 的核心信息分散在 host、workspace、session、message、tool call、plan 等多层结构中，用户在手机上很难快速找回某次任务、某条回答或某个工作区。
 
 ### 目标
 
@@ -50,7 +50,7 @@
 
 ### 背景
 
-Anywhere 已经能列出和加载 session，但会话生命周期管理还偏基础。远程编程场景里，用户经常需要区分活跃任务、历史任务、重要任务和可以清理的任务。
+Nexus 已经能列出和加载 session，但会话生命周期管理还偏基础。远程编程场景里，用户经常需要区分活跃任务、历史任务、重要任务和可以清理的任务。
 
 ### 目标
 
@@ -123,11 +123,11 @@ Anywhere 已经能列出和加载 session，但会话生命周期管理还偏基
 
 ### 背景
 
-Anywhere 目前依赖手机端 WebSocket 与 Bridge / Relay 保持连接。App 不在前台、进程被挂起或被系统回收后，手机端无法继续通过 WebSocket 接收 `permission_request`、`turn_ended`、`error` 等事件，也就无法自行发布本地通知。
+Nexus 目前依赖手机端 WebSocket 与 Bridge / Relay 保持连接。App 不在前台、进程被挂起或被系统回收后，手机端无法继续通过 WebSocket 接收 `permission_request`、`turn_ended`、`error` 等事件，也就无法自行发布本地通知。
 
 ### 目标
 
-接入 HarmonyOS Push Kit，让系统推送通道在 App 不运行时也能提醒用户。通知点击后拉起 Anywhere，App 再重连 Relay / Bridge，并通过 `sync_request` 补齐会话状态。
+接入 HarmonyOS Push Kit，让系统推送通道在 App 不运行时也能提醒用户。通知点击后拉起 Nexus，App 再重连 Relay / Bridge，并通过 `sync_request` 补齐会话状态。
 
 ### 推荐链路
 
@@ -138,7 +138,7 @@ Bridge / Relay 发现重要事件
         ↓
 HarmonyOS 系统推送服务下发通知
         ↓
-用户点击通知打开 Anywhere
+用户点击通知打开 Nexus
         ↓
 App 根据通知 data 进入对应 host / workspace / session
         ↓
@@ -176,11 +176,11 @@ WSClient 重连并 sync_request 补齐消息和权限状态
 
 ### 背景
 
-鸿蒙高校创新赛（C4-AI，国赛）要求作品基于 HarmonyOS 6+ 且至少调用 3 个创新 Kit 能力（安全隐私保护、全场景一体协同、AI 智能化体验、3D 空间化）。当前 Anywhere 未使用任何鸿蒙特有 SDK，需要在不破坏现有架构的前提下，增加几个鸿蒙原生体验功能凑齐 Kit 分。
+鸿蒙高校创新赛（C4-AI，国赛）要求作品基于 HarmonyOS 6+ 且至少调用 3 个创新 Kit 能力（安全隐私保护、全场景一体协同、AI 智能化体验、3D 空间化）。当前 Nexus 未使用任何鸿蒙特有 SDK，需要在不破坏现有架构的前提下，增加几个鸿蒙原生体验功能凑齐 Kit 分。
 
 ### 整体定位
 
-> **Anywhere — 你电脑上所有 AI Agent 的指挥中心，藏在手机里。**
+> **Nexus — 你电脑上所有 AI Agent 的指挥中心，藏在手机里。**
 
 产品本质已是"手机统一控制 PC 多 Agent"，不需要改定位。需要做的是找到"鸿蒙手机能做而 PC/其他平台做不到"的交互增量。
 
@@ -221,7 +221,7 @@ WSClient 重连并 sync_request 补齐消息和权限状态
 
 **目标：** Agent 请求 `permission_request` 时，通知上直接展示上下文和操作按钮，用户无需打开 App 即可完成审批。
 
-**现状痛点：** 当前流程：收到通知 → 解锁 → 打开 Anywhere → 找到权限请求 → 点 Allow。来回切 App 体验割裂。
+**现状痛点：** 当前流程：收到通知 → 解锁 → 打开 Nexus → 找到权限请求 → 点 Allow。来回切 App 体验割裂。
 
 **样式：**
 

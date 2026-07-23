@@ -1,10 +1,10 @@
 /**
- * Daemon bootstrap — managed daemon lifecycle for Anywhere Bridge.
+ * Daemon bootstrap — managed daemon lifecycle for Nexus Bridge.
  *
  * Usage (via cli.mjs):
- *   anywhere start   → startDaemon({ port })
- *   anywhere stop    → stopDaemon()
- *   anywhere status  → getDaemonStatus()
+ *   nexus start   → startDaemon({ port })
+ *   nexus stop    → stopDaemon()
+ *   nexus status  → getDaemonStatus()
  */
 
 import { homedir } from "os";
@@ -25,7 +25,7 @@ import type { DaemonLockPayload } from "./pid-lock.mjs";
 
 // ── Paths ─────────────────────────────────────────────────────────
 
-const DATA_DIR = join(homedir(), ".anywhere");
+const DATA_DIR = join(homedir(), ".nexus");
 const LOCK_FILE = join(DATA_DIR, "daemon.lock");
 const PORT_FILE = join(DATA_DIR, "daemon.port");
 const TOKEN_FILE = join(DATA_DIR, "daemon.token");
@@ -60,9 +60,9 @@ export async function startDaemon(config: DaemonStartConfig): Promise<void> {
   if (!acquired) {
     const existing = await readDaemonLock(LOCK_FILE);
     if (existing) {
-      console.log(`[anywhere] Daemon already running (pid: ${existing.pid}, port: ${existing.port})`);
+      console.log(`[nexus] Daemon already running (pid: ${existing.pid}, port: ${existing.port})`);
     } else {
-      console.log("[anywhere] Daemon already running (lock held)");
+      console.log("[nexus] Daemon already running (lock held)");
     }
     process.exit(0);
   }
@@ -75,15 +75,15 @@ export async function startDaemon(config: DaemonStartConfig): Promise<void> {
   import('fs/promises').then(fs => fs.writeFile(TOKEN_FILE, daemonToken, 'utf-8')).catch(() => {});
 
   // 3. Create bridge server (HTTP + WebSocket)
-  console.log(`[anywhere] Starting bridge server on port ${config.port}...`);
+  console.log(`[nexus] Starting bridge server on port ${config.port}...`);
   const app = createBridgeServer({ port: config.port });
 
   // 4. Start IPC control server on 127.0.0.1:random
-  console.log("[anywhere] Starting control server...");
+  console.log("[nexus] Starting control server...");
   const ctrl = await startControlServer({
     daemonToken,
     requestShutdown: (source: string) => {
-      console.log(`[anywhere] Shutdown requested via ${source}`);
+      console.log(`[nexus] Shutdown requested via ${source}`);
       shutdown.requestShutdown(source);
     },
     getStatus: () => ({
@@ -101,26 +101,26 @@ export async function startDaemon(config: DaemonStartConfig): Promise<void> {
 
   // 6. Register cleanup tasks
   shutdown.registerCleanupTask(async () => {
-    console.log("[anywhere] Stopping bridge server...");
+    console.log("[nexus] Stopping bridge server...");
     await app.stop();
   });
   shutdown.registerCleanupTask(async () => {
-    console.log("[anywhere] Releasing PID lock...");
+    console.log("[nexus] Releasing PID lock...");
     await releaseDaemonLock(LOCK_FILE);
   });
 
   // 6. Log success
-  console.log(`[anywhere] Daemon started (pid: ${process.pid})`);
-  console.log(`[anywhere] Bridge listening on ws://0.0.0.0:${config.port}`);
-  console.log(`[anywhere] Control server on 127.0.0.1:${ctrl.port}`);
+  console.log(`[nexus] Daemon started (pid: ${process.pid})`);
+  console.log(`[nexus] Bridge listening on ws://0.0.0.0:${config.port}`);
+  console.log(`[nexus] Control server on 127.0.0.1:${ctrl.port}`);
 
   // 7. Wait for shutdown signal
   const reason = await shutdown.resolvesWhenShutdownRequested;
-  console.log(`[anywhere] Shutting down (reason: ${reason})...`);
+  console.log(`[nexus] Shutting down (reason: ${reason})...`);
 
   // 8. Execute cleanup with 5s timeout
   await shutdown.executeCleanup(5000);
-  console.log("[anywhere] Daemon stopped");
+  console.log("[nexus] Daemon stopped");
 }
 
 // ── stopDaemon — send stop signal to running daemon via control server ──
@@ -143,7 +143,7 @@ export async function stopDaemon(port?: number): Promise<void> {
     if (lock) {
       controlPort = lock.port;
     } else {
-      console.log('[anywhere] No running daemon found');
+      console.log('[nexus] No running daemon found');
       return;
     }
   }
@@ -173,14 +173,14 @@ export async function stopDaemon(port?: number): Promise<void> {
   return new Promise<void>((resolve) => {
     const req = http.request(options, (res) => {
       if (res.statusCode === 200 || res.statusCode === 401) {
-        console.log("[anywhere] Stop signal sent");
+        console.log("[nexus] Stop signal sent");
       } else {
-        console.log(`[anywhere] Unexpected response: ${res.statusCode}`);
+        console.log(`[nexus] Unexpected response: ${res.statusCode}`);
       }
       resolve();
     });
     req.on("error", (err) => {
-      console.error(`[anywhere] Failed to send stop: ${err.message}`);
+      console.error(`[nexus] Failed to send stop: ${err.message}`);
       resolve();
     });
     req.end("{}");

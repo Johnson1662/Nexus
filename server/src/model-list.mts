@@ -23,7 +23,7 @@ interface CacheEntry {
 }
 
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
-const ANYWHERE_DIR = path.join(homedir(), ".anywhere");
+const ANYWHERE_DIR = path.join(homedir(), ".nexus");
 const modelCache = new Map<string, CacheEntry>();
 const inflightQueries = new Map<string, Promise<ModelList>>();
 

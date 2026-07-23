@@ -140,7 +140,7 @@ async function testSuccessfulHandshake() {
 
           // Derive AES key (client side)
           const salt = Buffer.from(eph.publicKey, "hex").subarray(0, 16);
-          const aesKey = hkdfExpand(sharedSecret, salt, "anywhere-e2ee-v1");
+          const aesKey = hkdfExpand(sharedSecret, salt, "nexus-e2ee-v1");
 
           console.log(`Shared secret: ${sharedSecret.toString("hex").slice(0, 16)}...`);
           console.log(`AES key: ${aesKey.toString("hex").slice(0, 16)}...`);
@@ -155,7 +155,7 @@ async function testSuccessfulHandshake() {
           hostEcdh.setPrivateKey(Buffer.from(hostEph.privateKey, "hex"));
           const hostSharedSecret = hostEcdh.computeSecret(Buffer.from(eph.publicKey, "hex"));
           const hostSalt = Buffer.from(eph.publicKey, "hex").subarray(0, 16);
-          const hostAesKey = hkdfExpand(hostSharedSecret, hostSalt, "anywhere-e2ee-v1");
+          const hostAesKey = hkdfExpand(hostSharedSecret, hostSalt, "nexus-e2ee-v1");
 
           // These should NOT match because hostEph is not the real bridge's ephemeral key
           // In a real test against the actual Bridge, msg.ephemeralKey would be the real one

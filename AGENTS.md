@@ -2,15 +2,15 @@
 
 ## 项目概述
 
-Nexus（原 Anywhere）是一个 HarmonyOS App，通过 WebSocket 连接到 PC 端 Bridge Server，Bridge Server 再通过 ACP (Agent Client Protocol) 协议与 AI 编程 Agent 通信。
+Nexus（原 Nexus）是一个 HarmonyOS App，通过 WebSocket 连接到 PC 端 Bridge Server，Bridge Server 再通过 ACP (Agent Client Protocol) 协议与 AI 编程 Agent 通信。
 
-> 手机端有**两套实现并存**：`Anywhere_harmony/`（ArkTS，参考实现）与 `anywhere_flutter/`（Flutter，A 路线 `flutter build hap`，当前活跃开发与视觉重构主战场）。PC 端 Bridge Server 共用 `server/`。软件官方名称已全面更新为 **Nexus**。
+> 手机端有**两套实现并存**：`nexus_harmony/`（ArkTS，参考实现）与 `nexus_flutter/`（Flutter，A 路线 `flutter build hap`，当前活跃开发与视觉重构主战场）。PC 端 Bridge Server 共用 `server/`。软件官方名称已全面更新为 **Nexus**。
 
 ### 连接方式
 
 **默认：直连（LAN / 热点）** — 手机和 PC 在同一局域网或手机连接 PC 热点时。无需中继。
 
-**可选：Relay 中继** — 通过设置环境变量 `ANYWHERE_RELAY_URL` 启用。适合远程访问场景。中继服务器参考 `relay/` 目录。
+**可选：Relay 中继** — 通过设置环境变量 `NEXUS_RELAY_URL` 启用。适合远程访问场景。中继服务器参考 `relay/` 目录。
 
 ```
 手机 (HarmonyOS / Nexus App)                   PC (Node.js Bridge)
@@ -26,7 +26,7 @@ Nexus（原 Anywhere）是一个 HarmonyOS App，通过 WebSocket 连接到 PC �
                                                 │ ...            │
                                                 └───────────────┘
 ```
-（可选 Relay 模式）：手机 → Relay Server → Bridge，当 `ANYWHERE_RELAY_URL` 已设置时使用。
+（可选 Relay 模式）：手机 → Relay Server → Bridge，当 `NEXUS_RELAY_URL` 已设置时使用。
 ```
 
 ---
@@ -180,7 +180,7 @@ opencode ACP 返回 session 时使用 `updatedAt`（ISO 8601 字符串）而非 
 |------|------|------|
 | Registry | `server/src/registry/agents.json` | 内置 agent 列表（~70 个），含 ID、名称、启动命令和参数 |
 | Registry 加载器 | `server/src/registry/registry.mts` | 加载 registry、按 ID 查 agent、解析启动命令 |
-| Installed Store | `server/src/agents-store.mts` | 管理 `~/.anywhere/installed-agents.json`，记录用户显式安装的 agent |
+| Installed Store | `server/src/agents-store.mts` | 管理 `~/.nexus/installed-agents.json`，记录用户显式安装的 agent |
 | Agent 发现 | `server/src/discovery/agents.mts` | **已重写** — 从 installed store + registry 返回 agent 列表，不再扫 PATH |
 | Agent 管理页 | `feature/agent/AgentManageView.ets` | 客户端 UI，分"商店"和"已安装"两 Tab |
 
@@ -194,7 +194,7 @@ opencode ACP 返回 session 时使用 `updatedAt`（ISO 8601 字符串）而非 
 │       (内置 70 个 agent)     │                       │
 │                              ▼                       │
 │  agents-store.mts  ──────────────────→ installed     │
-│       (~/.anywhere/installed-agents.json)   agents   │
+│       (~/.nexus/installed-agents.json)   agents   │
 │                              │                       │
 │                              ▼                       │
 │  discovery/agents.mts  ─── list_agents ──→ 客户端   │
@@ -328,7 +328,7 @@ Bridge 收到 `{ type: "heartbeat" }` 必须回包；手机端收到任意服务
 
 ```powershell
 # 构建 HAP
-cd Anywhere_harmony
+cd nexus_harmony
 node "D:\DevEco Studio\tools\hvigor\bin\hvigorw.js" --mode module -p module=entry@default -p product=default assembleHap
 
 # 连接设备（IP:端口每次不同）
@@ -338,7 +338,7 @@ hdc tconn <IP>:<PORT>
 hdc -t "<IP>:<PORT>" install "entry/build/default/outputs/default/entry-default-signed.hap"
 
 # 启动
-hdc -t "<IP>:<PORT>" shell aa start -a EntryAbility -b com.anywhere.app
+hdc -t "<IP>:<PORT>" shell aa start -a EntryAbility -b com.nexus.app
 ```
 
 **诊断命令**：
@@ -349,11 +349,11 @@ hdc -t "<IP>:<PORT>" shell hilog -x | Select-String -Pattern "WSClient|Heartbeat
 
 # 截图
 hdc -t "<IP>:<PORT>" shell snapshot_display -f /data/local/tmp/shot.jpeg
-hdc -t "<IP>:<PORT>" file recv /data/local/tmp/shot.jpeg "D:\Development\Anywhere\app_test_picture\<name>.jpeg"
+hdc -t "<IP>:<PORT>" file recv /data/local/tmp/shot.jpeg "D:\Development\Nexus\app_test_picture\<name>.jpeg"
 
 # UI 布局树（含 bounds）
 hdc -t "<IP>:<PORT>" shell uitest dumpLayout -p /data/local/tmp/layout.json
-hdc -t "<IP>:<PORT>" file recv /data/local/tmp/layout.json "D:\Development\Anywhere\app_test_picture"
+hdc -t "<IP>:<PORT>" file recv /data/local/tmp/layout.json "D:\Development\Nexus\app_test_picture"
 
 # UI 交互（替代不存在的 hdc shell input）
 hdc -t "<IP>:<PORT>" shell uitest uiInput click <x> <y>            # 点击
@@ -376,7 +376,7 @@ hdc -t "<IP>:<PORT>" shell uitest screenCap -p /data/local/tmp/shot.jpeg  # 截�
 ### Bridge Server
 
 ```powershell
-cd Anywhere
+cd Nexus
 npm run build   # 编译 TypeScript → server/dist/
 npm start       # 启动 server/dist/server.mjs
 ```
@@ -385,16 +385,16 @@ Bridge Server 监听 `:12138`，不指定 host（自动 IPv4+IPv6 双栈）。**
 
 ---
 
-## Flutter OHOS 客户端（anywhere_flutter/）
+## Flutter OHOS 客户端（nexus_flutter/）
 
-除 ArkTS 版 `Anywhere_harmony/` 外，另有 **Flutter 重写的鸿蒙客户端** `anywhere_flutter/`（A 路线：`flutter build hap`）。当前活跃开发集中在此目录。ArkTS 版仅作参考实现（如 resume 渲染、ConfigPanel 行为可对照 `Anywhere_harmony/`）。
+除 ArkTS 版 `nexus_harmony/` 外，另有 **Flutter 重写的鸿蒙客户端** `nexus_flutter/`（A 路线：`flutter build hap`）。当前活跃开发集中在此目录。ArkTS 版仅作参考实现（如 resume 渲染、ConfigPanel 行为可对照 `nexus_harmony/`）。
 
 ### 工具链
 
 | 项 | 值 |
 |----|----|
 | Flutter SDK | `D:\Development\flutter_flutter`（带 ohos 支持的 fork，Dart 3.6.2+） |
-| 工程根 | `anywhere_flutter/`；OHOS 工程子目录 `anywhere_flutter/ohos/` |
+| 工程根 | `nexus_flutter/`；OHOS 工程子目录 `nexus_flutter/ohos/` |
 | DevEco | `D:\DevEco Studio`（提供 hdc / ohpm / hvigor 引擎） |
 | 调试设备 | HUAWEI Pura 70 Pro，UDID `2NP0224627054426`，屏幕 1260×2844 |
 
@@ -410,7 +410,7 @@ Bridge Server 监听 `:12138`，不指定 host（自动 IPv4+IPv6 双栈）。**
 
 ```powershell
 # NODE_OPTIONS="" 是必须的！WorkBuddy 的 --use-system-ca 与 DevEco 自带旧 Node 冲突
-Set-Location "D:\Development\Anywhere\anywhere_flutter\ohos"
+Set-Location "D:\Development\Nexus\nexus_flutter\ohos"
 $env:NODE_OPTIONS=""
 devecocli build --build-mode debug
 # 产物：ohos/entry/build/default/outputs/default/entry-default-signed.hap
@@ -419,7 +419,7 @@ devecocli build --build-mode debug
 
 Bash 等效：
 ```bash
-cd "D:/Development/Anywhere/anywhere_flutter/ohos"
+cd "D:/Development/Nexus/nexus_flutter/ohos"
 NODE_OPTIONS="" devecocli build --build-mode debug
 ```
 
@@ -433,7 +433,7 @@ Error Message: ohpm install failed.
 或 `Recursion Count=234, Stack Usage=90%`（BATCH RECURSION）。这不是代码问题，是 ohpm 缓存状态损坏导致的**偶发**故障。按以下顺序复位即可，**不要改代码**：
 
 ```bash
-cd "D:/Development/Anywhere/anywhere_flutter/ohos"
+cd "D:/Development/Nexus/nexus_flutter/ohos"
 # 1. 先手动跑一次 ohpm install，把依赖装好（这一步通常能成功）
 "D:/DevEco Studio/tools/ohpm/bin/ohpm" install --all
 # 2. 清理 hvigor/依赖缓存，重置异常状态
@@ -448,7 +448,7 @@ NODE_OPTIONS="" devecocli build --build-mode debug
 
 ```powershell
 # devecocli 必须在 ohos/ 下执行（查找 build-profile.json5）
-Set-Location "D:\Development\Anywhere\anywhere_flutter\ohos"
+Set-Location "D:\Development\Nexus\nexus_flutter\ohos"
 $env:NODE_OPTIONS=""
 devecocli run --device "2NP0224627054426" --skip-build
 # 首次安装 / 签名变更时加 --uninstall
@@ -458,7 +458,7 @@ devecocli run --device "2NP0224627054426" --skip-build
 
 ```powershell
 # 崩溃 / 错误日志
-hdc -t "2NP0224627054426" shell hilog -x | Select-String "FATAL|com.anywhere.app"
+hdc -t "2NP0224627054426" shell hilog -x | Select-String "FATAL|com.nexus.app"
 # 启动后只会有无害的 vsync voting 警告
 ```
 
@@ -468,7 +468,7 @@ hdc -t "2NP0224627054426" shell hilog -x | Select-String "FATAL|com.anywhere.app
 - **UI**：`lib/widgets/tool_call_card.dart`（可折叠工具卡片，运行中自动展开）、`lib/widgets/message_bubble.dart`、`lib/pages/chat_page.dart`（ListView 加 `key: ValueKey(msg.id)`）、`lib/pages/home_page.dart`、`lib/pages/workspace_detail_page.dart`。
 - **聊天顶栏（`chat_page.dart` `_buildTopBar`）**：三个独立圆角胶囊、固定高度 42 —— ① 返回键 `<`（单独胶囊）；② 对话标题 + 状态点 + 主机名 + 工作区名（Expanded 胶囊，左对齐）；③ 历史记录（时钟）+ 文件（`···`）两个图标（一个胶囊）。历史记录点击弹底部 sheet 占位；文件点击从右侧滑出文件管理器面板（功能待实现）。右侧图标功能均未实现，仅 UI 壳。
 - **文件管理器面板**：**不用 `Scaffold.endDrawer`**（见下方踩坑），改为 `body: Stack` 内的 `_buildFileOverlay`（遮罩 `AnimatedOpacity` + 面板 `AnimatedPositioned` 右滑）由 `setState(_fileDrawerOpen)` 控制开关。
-- **连接/持久化**：`lib/services/ws_client.dart`（WS + ACP 调试 dump 到沙箱 `anywhere_acp_debug.jsonl`）、`lib/services/storage_service.dart`（**OHOS 沙箱绝对路径** `/data/storage/el2/base/haps/entry/files/.anywhere_store.json`，不用 `path_provider`——OHOS 未实现且当前目录无写权限）、`lib/main.dart`（`_probeAllHosts()` 启动时探测已配对主机并自动连接首个在线主机）。
+- **连接/持久化**：`lib/services/ws_client.dart`（WS + ACP 调试 dump 到沙箱 `nexus_acp_debug.jsonl`）、`lib/services/storage_service.dart`（**OHOS 沙箱绝对路径** `/data/storage/el2/base/haps/entry/files/.nexus_store.json`，不用 `path_provider`——OHOS 未实现且当前目录无写权限）、`lib/main.dart`（`_probeAllHosts()` 启动时探测已配对主机并自动连接首个在线主机）。
 - **ACP 渲染类型**：`user_message_chunk` / `agent_message_chunk` / `tool_call` / `tool_call_update` / `session_started` / `turn_ended`。
 
 ### 已知坑（Flutter 版）
@@ -478,7 +478,7 @@ hdc -t "2NP0224627054426" shell hilog -x | Select-String "FATAL|com.anywhere.app
 - **resume 走 `session_started`**（非 `resumed_session`），且 `resumed_session` 时 `turnActive=false` 走 `input`。
 - **`list_sessions` 必须带 `agent` + `cwd` 参数**，否则返回空。
 - **服务器不发 `tool_call_end`**：turn 结束时 `_finishRunningTools()` 兜底把 `running`/`in_progress` 标记 `completed`，避免卡片卡转圈。
-- **更名与中英文资源**：软件全面更名为 **Nexus**。桌面应用图标 Label 在 HarmonyOS 中由 `AppScope/resources/base/element/string.json` 中的 `app_name` 与 `entry/.../zh_CN/element/string.json` 及 `en_US/.../string.json` 中的 `EntryAbility_label` 共同控制。覆盖安装时系统桌面存在强缓存，需先 `hdc uninstall com.anywhere.app` 才能刷出最新的桌面名称 **Nexus**。
+- **更名与中英文资源**：软件全面更名为 **Nexus**。桌面应用图标 Label 在 HarmonyOS 中由 `AppScope/resources/base/element/string.json` 中的 `app_name` 与 `entry/.../zh_CN/element/string.json` 及 `en_US/.../string.json` 中的 `EntryAbility_label` 共同控制。覆盖安装时系统桌面存在强缓存，需先 `hdc uninstall com.nexus.app` 才能刷出最新的桌面名称 **Nexus**。
 - **品牌 Icon**：采用纯白 Squircle 底座 + 3D 立体斜切面 ASCII 字符终端艺术 **Block N** 图腾，兼具黑白极简与硬核 Console 代码范。矢量资源保存在 `entry/src/main/resources/base/media/nexus_3d_ascii_n.svg`。
 - **主机名优先**：全量界面（Chat/Home/FilterBar/Settings/Workspaces）隐去技术性 `host_...` UUID 字符串，优先渲染 Friendly 主机名 `device.name`。
 - **非阻塞启动与防崩溃**：`main.dart` 启动时 `runApp()` 立即执行，避免 `await _probeAllHosts` 阻塞首帧渲染导致白屏；`SettingsPage` 中 `Dismissible` Key 增加 `index` 锚定防 DuplicateKey 崩溃。
@@ -489,7 +489,7 @@ hdc -t "2NP0224627054426" shell hilog -x | Select-String "FATAL|com.anywhere.app
 ## 文件结构
 
 ```
-Anywhere/                             # 项目根（PC 端 + 手机端合一）
+Nexus/                             # 项目根（PC 端 + 手机端合一）
 ├── AGENTS.md                         # 开发指南
 ├── README.md
 ├── package.json                      # PC 端 Node.js 项目（Bridge Server）
@@ -532,8 +532,8 @@ Anywhere/                             # 项目根（PC 端 + 手机端合一）
 │   ├── relay.py                      # Python 中继（备用）
 │   ├── server.ts                     # TypeScript 源
 │   ├── go.mod
-│   ├── anywhere-relay                # Go 编译中继（Linux）
-│   └── anywhere-relay.exe            # Go 编译中继（Windows）
+│   ├── nexus-relay                # Go 编译中继（Linux）
+│   └── nexus-relay.exe            # Go 编译中继（Windows）
 ├── wstest/                           # WebSocket 测试工具
 │   ├── test-relay.cjs
 │   └── package.json
@@ -549,7 +549,7 @@ Anywhere/                             # 项目根（PC 端 + 手机端合一）
 ├── docs/                             # 文档
 │   ├── harmonyos-symbol-reference.md
 │   └── ...
-├── anywhere_flutter/                 # Flutter OHOS 客户端（手机端，A 路线 flutter build hap）
+├── nexus_flutter/                 # Flutter OHOS 客户端（手机端，A 路线 flutter build hap）
 │   ├── lib/
 │   │   ├── main.dart                 # 入口 + _probeAllHosts 启动探测已配对主机
 │   │   ├── providers/chat_provider.dart   # ACP 事件中枢 _handleAgentEvent
@@ -561,7 +561,7 @@ Anywhere/                             # 项目根（PC 端 + 手机端合一）
 │   │   └── services/ws_client.dart / storage_service.dart
 │   ├── ohos/                         # OHOS 工程（hvigorw 由 ohpm install 生成）
 │   └── ohos/entry/build/default/outputs/default/entry-default-signed.hap  # devecocli 构建产物
-└── Anywhere_harmony/                 # HarmonyOS App（手机端，ArkTS 参考实现）
+└── nexus_harmony/                 # HarmonyOS App（手机端，ArkTS 参考实现）
     ├── entry/
     │   ├── src/main/ets/
     │   │   ├── pages/
@@ -671,7 +671,7 @@ WorkBuddy 设置了 `NODE_OPTIONS=--require="..." --use-system-ca`，DevEco Stud
 
 ### Flutter OHOS 构建必须设置 OHPM_HOME
 
-`flutter build hap`（A 路线）内部执行 `ohpm install` 来拉取 hvigor 引擎并生成 `anywhere_flutter/ohos/hvigorw`。若 `OHPM_HOME` 未指向 DevEco 的 ohpm（`D:\DevEco Studio\tools\ohpm`），`ohpm install` 静默失败 → 找不到 hvigorw/引擎 → 构建卡在 `Running Hvigor task assembleHap...` 后无输出或直接失败。**任何 Flutter OHOS 构建命令前务必先设好 `OHPM_HOME`**（PowerShell：`$env:OHPM_HOME="D:\DevEco Studio\tools\ohpm"`；Bash：`export OHPM_HOME="D:\DevEco Studio\tools\ohpm"`）。**注意**：当前已改用 `devecocli build`（不需 OHPM_HOME），但若将来恢复 `flutter build hap`，此条依然适用。
+`flutter build hap`（A 路线）内部执行 `ohpm install` 来拉取 hvigor 引擎并生成 `nexus_flutter/ohos/hvigorw`。若 `OHPM_HOME` 未指向 DevEco 的 ohpm（`D:\DevEco Studio\tools\ohpm`），`ohpm install` 静默失败 → 找不到 hvigorw/引擎 → 构建卡在 `Running Hvigor task assembleHap...` 后无输出或直接失败。**任何 Flutter OHOS 构建命令前务必先设好 `OHPM_HOME`**（PowerShell：`$env:OHPM_HOME="D:\DevEco Studio\tools\ohpm"`；Bash：`export OHPM_HOME="D:\DevEco Studio\tools\ohpm"`）。**注意**：当前已改用 `devecocli build`（不需 OHPM_HOME），但若将来恢复 `flutter build hap`，此条依然适用。
 
 ### @ohos/hypium 导致 ohpm 递归崩溃
 
@@ -679,7 +679,7 @@ WorkBuddy 设置了 `NODE_OPTIONS=--require="..." --use-system-ca`，DevEco Stud
 
 ### devecocli 必须在 ohos/ 目录执行
 
-`devecocli run` 会查找 `build-profile.json5`，必须在 `anywhere_flutter/ohos/`（或 B 路线的 `harmonyos/<module>/.ohos`）目录下运行，否则报 `Not in a valid project directory`。
+`devecocli run` 会查找 `build-profile.json5`，必须在 `nexus_flutter/ohos/`（或 B 路线的 `harmonyos/<module>/.ohos`）目录下运行，否则报 `Not in a valid project directory`。
 
 ### devecocli build 偶发 ohpm 00306053 失败
 
@@ -694,4 +694,4 @@ WorkBuddy 设置了 `NODE_OPTIONS=--require="..." --use-system-ca`，DevEco Stud
 
 ### ArkTS 与 Flutter 双客户端并存
 
-项目有两套手机端实现：`Anywhere_harmony/`（ArkTS，参考实现）与 `anywhere_flutter/`（Flutter，当前活跃开发）。改 Flutter 端时如需对照 resume 渲染、ConfigPanel、状态管理等行为，参考 `Anywhere_harmony/`；但两者代码互不直接共享，改动需分别落地。
+项目有两套手机端实现：`nexus_harmony/`（ArkTS，参考实现）与 `nexus_flutter/`（Flutter，当前活跃开发）。改 Flutter 端时如需对照 resume 渲染、ConfigPanel、状态管理等行为，参考 `nexus_harmony/`；但两者代码互不直接共享，改动需分别落地。

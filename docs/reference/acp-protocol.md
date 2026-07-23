@@ -133,8 +133,8 @@ Client **必须**在创建任何会话之前先调用 `initialize` 方法。
       "terminal": true
     },
     "clientInfo": {
-      "name": "anywhere",
-      "title": "Anywhere Bridge",
+      "name": "nexus",
+      "title": "Nexus Bridge",
       "version": "0.2.0"
     }
   }
