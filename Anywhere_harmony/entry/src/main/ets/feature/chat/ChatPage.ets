@@ -235,35 +235,23 @@ export struct ChatPage {
       if (this.messages.length === 0) {
         Column() {
           if (ChatStore.turnActive) {
-            Column() {
+            Row() {
               LoadingProgress().width(20).height(20).color(Colors.accent)
               Text($r('app.string.chat_waiting_response'))
                 .fontSize(FontSize.sm).fontColor(Colors.foregroundLight)
-                .margin({ top: Spacing.sm })
+                .margin({ left: Spacing.sm })
             }
-            .alignItems(HorizontalAlign.Center)
             .transition(AnimationPresets.fadeIn)
-            .animation({ duration: Duration.fast, curve: AnimationPresets.spring })
           } else {
-            Column({ space: Spacing.sm }) {
-              Text($r('app.string.chat_empty_title'))
-                .fontSize(FontSize.headingLg)
-                .fontWeight(FontWeight.Bold)
-                .fontColor(Colors.foreground)
-              Text($r('app.string.chat_empty_subtitle'))
-                .fontSize(FontSize.base)
-                .fontColor(Colors.foregroundMuted)
-                .lineHeight(22)
-            }
-            .alignItems(HorizontalAlign.Center)
-            .margin({ bottom: 4 })
-            .transition(AnimationPresets.fadeIn)
-            .animation({ duration: Duration.normal, curve: AnimationPresets.spring })
+            Text($r('app.string.chat_empty_title'))
+              .fontSize(FontSize.sm)
+              .fontColor(Colors.foregroundMuted)
+              .transition(AnimationPresets.fadeIn)
           }
         }
         .width('100%').layoutWeight(1)
-        .justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center)
-        .padding({ left: Spacing.xl, right: Spacing.xl, bottom: Spacing.xxxl * 2 })
+        .justifyContent(FlexAlign.Start).alignItems(HorizontalAlign.Start)
+        .padding({ left: Spacing.xl, right: Spacing.xl, top: Spacing.xxl })
       } else {
         List({ scroller: this.scroller }) {
           LazyForEach(this.dataSource, (msg: MessageData, index: number) => {

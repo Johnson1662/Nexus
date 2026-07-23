@@ -23,6 +23,10 @@ export class Colors {
   // Semantic
   static readonly success: Resource = $r('app.color.success');
   static readonly successLight: Resource = $r('app.color.success_light');
+  static readonly diffAddition: Resource = $r('app.color.diff_addition');
+  static readonly diffDeletion: Resource = $r('app.color.diff_deletion');
+  static readonly diffAdditionBg: Resource = $r('app.color.diff_addition_bg');
+  static readonly diffDeletionBg: Resource = $r('app.color.diff_deletion_bg');
   static readonly warning: Resource = $r('app.color.warning');
   static readonly warningLight: Resource = $r('app.color.warning_light');
   static readonly warningFgDark: Resource = $r('app.color.warning_fg_dark');
@@ -77,9 +81,9 @@ export class Radius {
 export class FontSize {
   static readonly xxs: number = 8;
   static readonly xs: number = 10;
-  static readonly sm: number = 12;
+  static readonly sm: number = 13;
   static readonly md: number = 14;
-  static readonly base: number = 15;
+  static readonly base: number = 16;
   static readonly lg: number = 16;
   static readonly xl: number = 18;
   static readonly xxl: number = 20;

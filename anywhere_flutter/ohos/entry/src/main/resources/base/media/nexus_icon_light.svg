@@ -1,0 +1,15 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect x="6" y="6" width="500" height="500" rx="112" fill="#FFFFFF" stroke="black" stroke-opacity="0.08" stroke-width="2"/>
+  <circle cx="256" cy="256" r="176" fill="#F0F2F6" fill-opacity="0.5" filter="blur(30px)"/>
+  
+  <!-- Left Stem -->
+  <polygon points="125,125 185,125 185,395 125,395" fill="#141416"/>
+  <!-- Right Stem -->
+  <polygon points="327,125 387,125 387,395 327,395" fill="#202023"/>
+  <!-- Diagonal Bridge -->
+  <polygon points="125,125 185,125 387,395 327,395" fill="#3E4148"/>
+  <line x1="185" y1="125" x2="327" y2="395" stroke="white" stroke-opacity="0.4" stroke-width="2"/>
+
+  <!-- AI Sparkle -->
+  <path d="M400 81 L401.8 99.2 L420 105 L401.8 110.8 L400 129 L398.2 110.8 L380 105 L398.2 99.2 Z" fill="#101012"/>
+</svg>

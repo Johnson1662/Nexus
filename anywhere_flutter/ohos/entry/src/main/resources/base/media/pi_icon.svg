@@ -1,0 +1,11 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect x="6" y="6" width="500" height="500" rx="112" fill="#FFFFFF" stroke="black" stroke-opacity="0.08" stroke-width="2"/>
+  
+  <!-- Block P -->
+  <rect x="130" y="130" width="50" height="252" rx="4" fill="#121214"/>
+  <rect x="180" y="130" width="125" height="145" rx="28" fill="#121214"/>
+  <rect x="218" y="168" width="49" height="69" rx="14" fill="#FFFFFF"/>
+  
+  <!-- Block I -->
+  <rect x="335" y="130" width="50" height="252" rx="4" fill="#121214"/>
+</svg>

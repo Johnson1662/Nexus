@@ -62,7 +62,6 @@ export struct ChatInputBar {
   @State sheetView: string = 'summary';
   @State selectedProvider: string = '';
   @State isRefreshing: boolean = false;
-  private pendingSheetView: string | null = null;
   onSend?: (text: string) => void;
   onCancel?: () => void;
   onSelectAgent?: (index: number) => void;
@@ -147,6 +146,8 @@ export struct ChatInputBar {
       this.pendingFileType = 'text';
       this.pendingFileBase64 = '';
       this.pendingFileMime = '';
+      this.pendingFileName = fileName;
+      this.pendingFileContent = content;
     } catch (err) {
       hilog.error(DOMAIN, TAG, `readTextFile failed: ${err}`);
     }
@@ -332,11 +333,11 @@ export struct ChatInputBar {
             }
             .height(32)
             .padding({ left: Spacing.md, right: Spacing.md })
-            .backgroundColor(Colors.surface2)
+            .backgroundColor(Color.Transparent)
             .borderRadius(Radius.full)
             .stateStyles({
               pressed: { .backgroundColor(Colors.border) },
-              normal: { .backgroundColor(Colors.surface2) }
+              normal: { .backgroundColor(Color.Transparent) }
             })
             .animation({ duration: Duration.fast, curve: Curve.EaseOut })
             .onClick(() => { this.openSheet('summary') })
@@ -407,11 +408,7 @@ export struct ChatInputBar {
       showClose: false,
       preferType: SheetType.BOTTOM,
       onDisappear: () => {
-        if (this.pendingSheetView !== null) {
-          this.sheetView = this.pendingSheetView;
-          this.pendingSheetView = null;
-          this.showSheet = true;
-        }
+        // View switching done inline — no close/reopen needed
       }
     })
   }
@@ -542,7 +539,7 @@ export struct ChatInputBar {
       .width(32).height(32)
       .backgroundColor(Colors.transparent)
       .borderRadius(Radius.full)
-      .onClick(() => { this.pendingSheetView = null; this.showSheet = false })
+      .onClick(() => { this.showSheet = false })
     }
     .width('100%')
     .padding({ left: Spacing.md, right: Spacing.md, top: Spacing.xs, bottom: Spacing.sm })
@@ -553,141 +550,147 @@ export struct ChatInputBar {
     Stack({ alignContent: Alignment.Top }) {
       Column() {
         if (this.sheetView === 'summary') {
-          // ── 摘要视图 ──
-          this.PanelHeader(this.localize($r('app.string.config_panel_title')))
+          Column() {
+            // ── 摘要视图 ──
+            this.PanelHeader(this.localize($r('app.string.config_panel_title')))
 
-          Scroll() {
-            Column() {
+            Scroll() {
               Column() {
-                this.SummaryRow(this.localize($r('app.string.config_agent')),
-                  this.getAgentDisplayName(),
-                  () => { this.switchView('agents') })
+                Column() {
+                  this.SummaryRow(this.localize($r('app.string.config_agent')),
+                    this.getAgentDisplayName(),
+                    () => { this.switchView('agents') })
 
-                Divider().height(0.5).color(Colors.borderLight).margin({ left: Spacing.lg, right: Spacing.lg })
+                  Divider().height(0.5).color(Colors.borderLight).margin({ left: Spacing.lg, right: Spacing.lg })
 
-                this.SummaryRow(this.localize($r('app.string.config_model')),
-                  this.getModelName().length > 0 ? this.getModelName() : this.localize($r('app.string.common_not_selected')),
-                  () => { this.switchView('providers') })
+                  this.SummaryRow(this.localize($r('app.string.config_model')),
+                    this.getModelName().length > 0 ? this.getModelName() : this.localize($r('app.string.common_not_selected')),
+                    () => { this.switchView('providers') })
 
-                Divider().height(0.5).color(Colors.borderLight).margin({ left: Spacing.lg, right: Spacing.lg })
+                  Divider().height(0.5).color(Colors.borderLight).margin({ left: Spacing.lg, right: Spacing.lg })
 
-                this.SummaryRow(this.localize($r('app.string.config_mode')),
-                  this.getModeName().length > 0 ? this.getModeName() : this.localize($r('app.string.common_not_selected')),
-                  () => { this.switchView('modes') })
+                  this.SummaryRow(this.localize($r('app.string.config_mode')),
+                    this.getModeName().length > 0 ? this.getModeName() : this.localize($r('app.string.common_not_selected')),
+                    () => { this.switchView('modes') })
+                }
+                .backgroundColor(Colors.surface1)
+                .borderRadius(Radius.xl)
+                .margin({ left: Spacing.lg, right: Spacing.lg, bottom: Spacing.lg })
+                .shadow(Shadow.sm)
+                .clip(true)
               }
-              .backgroundColor(Colors.surface1)
-              .borderRadius(Radius.xl)
-              .margin({ left: Spacing.lg, right: Spacing.lg, bottom: Spacing.lg })
-              .shadow(Shadow.sm)
-              .clip(true)
+              .width('100%')
             }
             .width('100%')
           }
-          .width('100%')
+          .transition(TransitionEffect.OPACITY)
         } else {
-          // ── 选择列表 ──
-          this.PanelHeader(this.getPanelTitle(), this.sheetView === 'models', true)
+          Column() {
+            // ── 选择列表 ──
+            this.PanelHeader(this.getPanelTitle(), this.sheetView === 'models', true)
 
-          Scroll() {
-            Column() {
-              if (this.sheetView === 'agents') {
-                if (this.getAgentNames().length === 0) {
-                  this.EmptyRow(this.localize($r('app.string.config_no_agent_refresh')))
-                } else {
-                  ForEach(this.getAgentNames(), (name: string, idx: number) => {
-                    Column() {
-                      this.SelectableRow({
-                        label: name,
-                        selected: idx === this.getCurrentAgentIndex(),
-                        onClick: () => {
-                          this.showSheet = false;
-                          if (this.onSelectAgent) this.onSelectAgent(idx + 1);
-                        }
-                      })
-                      Divider().height(0.5).color(Colors.borderLight).margin({ left: Spacing.lg })
-                    }
-      }, (name: string) => name)
-      }
-    } else if (this.sheetView === 'providers') {
-                if (ChatStore.loadingModels) {
-                  this.LoadingRow()
-                } else if (ChatStore.models.length === 0) {
-                  this.EmptyRow(this.localize($r('app.string.config_no_model_refresh')))
-                } else if (this.getProviders().length <= 1) {
-                  ForEach(ChatStore.models, (model: ModelItem, idx: number) => {
-                    Column() {
-                      this.SelectableRow({
-                        label: model.name,
-                        selected: idx === ChatStore.modelIndex,
-                        onClick: () => {
-                          this.showSheet = false;
-                          if (this.onSwitchModel) this.onSwitchModel(idx + 1);
-                        }
-                      })
-                      Divider().height(0.5).color(Colors.borderLight).margin({ left: Spacing.lg })
-                    }
-                  }, (model: ModelItem) => model.modelId)
-                } else {
-                  ForEach(this.getProviders(), (provider: string) => {
-                    this.ProviderRow(provider)
-                  }, (provider: string) => provider)
-                }
-              } else if (this.sheetView === 'models') {
-                if (this.selectedProvider.length > 0 && ChatStore.loadingModels) {
-                  this.LoadingRow()
-                } else if (this.selectedProvider.length > 0) {
-                  if (this.getModelsForProvider(this.selectedProvider).length === 0) {
-                    this.EmptyRow(this.localize($r('app.string.config_no_model')))
+            Scroll() {
+              Column() {
+                if (this.sheetView === 'agents') {
+                  if (this.getAgentNames().length === 0) {
+                    this.EmptyRow(this.localize($r('app.string.config_no_agent_refresh')))
                   } else {
-                    ForEach(this.getModelsForProvider(this.selectedProvider), (model: ModelItem) => {
+                    ForEach(this.getAgentNames(), (name: string, idx: number) => {
                       Column() {
                         this.SelectableRow({
-                          label: this.stripProvider(model.name || model.modelId),
-                          selected: model.modelId === ChatStore.models[ChatStore.modelIndex]?.modelId,
+                          label: name,
+                          selected: idx === this.getCurrentAgentIndex(),
                           onClick: () => {
                             this.showSheet = false;
-                            for (let i: number = 0; i < ChatStore.models.length; i++) {
-                              if (ChatStore.models[i].modelId === model.modelId) {
-                                if (this.onSwitchModel) this.onSwitchModel(i + 1);
-                                break;
-                              }
-                            }
+                            if (this.onSelectAgent) this.onSelectAgent(idx + 1);
+                          }
+                        })
+                        Divider().height(0.5).color(Colors.borderLight).margin({ left: Spacing.lg })
+                      }
+                    }, (name: string) => name)
+                  }
+                } else if (this.sheetView === 'providers') {
+                  if (ChatStore.loadingModels) {
+                    this.LoadingRow()
+                  } else if (ChatStore.models.length === 0) {
+                    this.EmptyRow(this.localize($r('app.string.config_no_model_refresh')))
+                  } else if (this.getProviders().length <= 1) {
+                    ForEach(ChatStore.models, (model: ModelItem, idx: number) => {
+                      Column() {
+                        this.SelectableRow({
+                          label: model.name,
+                          selected: idx === ChatStore.modelIndex,
+                          onClick: () => {
+                            this.showSheet = false;
+                            if (this.onSwitchModel) this.onSwitchModel(idx + 1);
                           }
                         })
                         Divider().height(0.5).color(Colors.borderLight).margin({ left: Spacing.lg })
                       }
                     }, (model: ModelItem) => model.modelId)
+                  } else {
+                    ForEach(this.getProviders(), (provider: string) => {
+                      this.ProviderRow(provider)
+                    }, (provider: string) => provider)
+                  }
+                } else if (this.sheetView === 'models') {
+                  if (this.selectedProvider.length > 0 && ChatStore.loadingModels) {
+                    this.LoadingRow()
+                  } else if (this.selectedProvider.length > 0) {
+                    if (this.getModelsForProvider(this.selectedProvider).length === 0) {
+                      this.EmptyRow(this.localize($r('app.string.config_no_model')))
+                    } else {
+                      ForEach(this.getModelsForProvider(this.selectedProvider), (model: ModelItem) => {
+                        Column() {
+                          this.SelectableRow({
+                            label: this.stripProvider(model.name || model.modelId),
+                            selected: model.modelId === ChatStore.models[ChatStore.modelIndex]?.modelId,
+                            onClick: () => {
+                              this.showSheet = false;
+                              for (let i: number = 0; i < ChatStore.models.length; i++) {
+                                if (ChatStore.models[i].modelId === model.modelId) {
+                                  if (this.onSwitchModel) this.onSwitchModel(i + 1);
+                                  break;
+                                }
+                              }
+                            }
+                          })
+                          Divider().height(0.5).color(Colors.borderLight).margin({ left: Spacing.lg })
+                        }
+                      }, (model: ModelItem) => model.modelId)
+                    }
+                  }
+                } else if (this.sheetView === 'modes') {
+                  if (ChatStore.loadingModels) {
+                    this.LoadingRow()
+                  } else if (ChatStore.modes.length === 0) {
+                    this.EmptyRow(this.localize($r('app.string.config_no_mode')))
+                  } else {
+                    ForEach(ChatStore.modes, (mode: ModeItem, idx: number) => {
+                      Column() {
+                        this.SelectableRow({
+                          label: mode.name,
+                          selected: idx === ChatStore.modeIndex,
+                          onClick: () => {
+                            this.showSheet = false;
+                            if (this.onSwitchMode) this.onSwitchMode(idx + 1);
+                          }
+                        })
+                        Divider().height(0.5).color(Colors.borderLight).margin({ left: Spacing.lg })
+                      }
+                    }, (mode: ModeItem) => mode.value)
                   }
                 }
-              } else if (this.sheetView === 'modes') {
-                if (ChatStore.loadingModels) {
-                  this.LoadingRow()
-                } else if (ChatStore.modes.length === 0) {
-                  this.EmptyRow(this.localize($r('app.string.config_no_mode')))
-                } else {
-                  ForEach(ChatStore.modes, (mode: ModeItem, idx: number) => {
-                    Column() {
-                      this.SelectableRow({
-                        label: mode.name,
-                        selected: idx === ChatStore.modeIndex,
-                        onClick: () => {
-                          this.showSheet = false;
-                          if (this.onSwitchMode) this.onSwitchMode(idx + 1);
-                        }
-                      })
-                      Divider().height(0.5).color(Colors.borderLight).margin({ left: Spacing.lg })
-                    }
-                  }, (mode: ModeItem) => mode.value)
-                }
-              }
 
-              Column().height(Spacing.xxxl)
+                Column().height(Spacing.xxxl)
+              }
+              .width('100%')
+              .alignItems(HorizontalAlign.Start)
+              .padding({ left: Spacing.lg, right: Spacing.lg })
             }
             .width('100%')
-            .alignItems(HorizontalAlign.Start)
-            .padding({ left: Spacing.lg, right: Spacing.lg })
           }
-          .width('100%')
+          .transition(TransitionEffect.OPACITY)
         }
       }
       .width('100%')
@@ -697,21 +700,15 @@ export struct ChatInputBar {
     .borderRadius({ topLeft: Radius.xl, topRight: Radius.xl })
   }
 
-  /** 切换 sheet 内容：关闭 → onDidDisappear 自动重开 */
+  /** 切换 sheet 内容：保持打开，只更新视图 */
   switchView(view: string): void {
-    this.pendingSheetView = view;
-    this.showSheet = false;
+    this.sheetView = view;
   }
 
   /** 打开 sheet */
   openSheet(view: string): void {
-    if (this.showSheet) {
-      // 已打开 → 切换内容
-      this.pendingSheetView = view;
-      this.showSheet = false;
-    } else {
-      // 直接打开
-      this.sheetView = view;
+    this.sheetView = view;
+    if (!this.showSheet) {
       this.showSheet = true;
     }
   }
@@ -800,7 +797,7 @@ export struct ChatInputBar {
       Row() {
         Column() {
           Text(label)
-            .fontSize(11)
+            .fontSize(FontSize.xs)
             .fontColor(Colors.foregroundMuted)
             .fontWeight(FontWeight.Regular)
             .width('100%')
@@ -843,7 +840,9 @@ export struct ChatInputBar {
             .fontWeight(FontWeight.Medium)
             .fontColor(Colors.foreground)
             .width('100%')
-          Text(this.localize($r('app.string.config_models_count'), this.getModelsForProvider(provider).length))
+          Text(this.getModelsForProvider(provider).length === 0 && ChatStore.loadingModels ?
+            this.localize($r('app.string.config_loading_models')) :
+            this.localize($r('app.string.config_models_count'), this.getModelsForProvider(provider).length))
             .fontSize(FontSize.sm)
             .fontColor(Colors.foregroundMuted)
             .width('100%')

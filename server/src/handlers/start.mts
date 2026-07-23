@@ -46,6 +46,7 @@ export async function handleStart(
     cwd: resolvedCwd,
     env: { ...process.env, FORCE_COLOR: "0", NO_COLOR: "1" },
     stdio: ["pipe", "pipe", "pipe"],
+    windowsHide: true,
     shell: true,
   });
 
@@ -151,8 +152,8 @@ export async function handleStart(
     const acpSessionId = sessionResult.sessionId;
     sess.acpSessionId = acpSessionId;
     console.log(`[server] ACP session created: ${acpSessionId}`);
-    if (sessionResult.models) {
-      console.log(`[server] default model: ${sessionResult.models.currentModelId || "not set"}`);
+    if (sessionResult.modes) {
+      console.log(`[server] default mode: ${sessionResult.modes.currentModeId || "not set"}`);
     }
     if (sessionResult.configOptions) {
       const modelOpt = sessionResult.configOptions.find((o: any) => o.id === "model" || o.category === "model");

@@ -53,7 +53,7 @@
     {"name": "ws_path_placeholder", "value": "/path/to/project"},
     {"name": "ws_cancel", "value": "Cancel"},
     {"name": "ws_add", "value": "Add"},
-    {"name": "ws_empty_prompt", "value": "No Workspaces"},
+    {"name": "ws_empty_prompt", "value": "No workspaces yet. Tap + to add your first workspace."},
     {"name": "ws_empty_subtitle", "value": "Add a project path to get started"},
     {"name": "ws_host_manage", "value": "Host Management"},
     {"name": "ws_settings", "value": "Settings"},
@@ -285,6 +285,23 @@
     {"name": "tool_diff_truncated", "value": "@@ … @@"},
     {"name": "error_rate_limited", "value": "rate_limited"},
     {"name": "error_timeout", "value": "timeout"},
-    {"name": "disconnected_message_dropped", "value": "Not connected. Message was not sent."}
+    {"name": "disconnected_message_dropped", "value": "Not connected. Message was not sent."},
+    {"name": "agent_manage_title", "value": "Agent Management"},
+    {"name": "agent_installed", "value": "Installed"},
+    {"name": "agent_store", "value": "Store"},
+    {"name": "agent_uninstall_title", "value": "Uninstall Agent"},
+    {"name": "agent_uninstall", "value": "Uninstall"},
+    {"name": "agent_install", "value": "Install"},
+    {"name": "agent_search_placeholder", "value": "Search Agent"},
+    {"name": "agent_loading", "value": "Loading\u2026"},
+    {"name": "agent_none_available", "value": "No Agent available"},
+    {"name": "agent_update_hint", "value": "Make sure the PC Anywhere Server is updated to the latest version"},
+    {"name": "agent_no_match", "value": "No matching Agent"},
+    {"name": "agent_not_installed", "value": "No Agent installed yet"},
+    {"name": "agent_go_to_store", "value": "Go to Store"},
+    {"name": "agent_add_custom", "value": "Add Custom Agent"},
+    {"name": "agent_command_path", "value": "Command path"},
+    {"name": "agent_command_args", "value": "Arguments (space-separated)"},
+    {"name": "agent_custom_name", "value": "Name"}
   ]
 }

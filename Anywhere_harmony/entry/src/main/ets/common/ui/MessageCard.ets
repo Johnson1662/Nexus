@@ -178,8 +178,8 @@ export struct MessageCard {
           }
 
           Column() {
-            if (this.msgType === 'thinking') {
-              ThinkingSection({ thinking: this.msgContent, isStreaming: this.streaming })
+            if (this.msgType === 'thinking' && !this.streaming) {
+              ThinkingSection({ thinking: this.msgContent, isStreaming: false })
             } else if (this.msgType === 'tool_call') {
               ToolCallCard({ name: this.msgToolName, status: this.msgToolStatus, kind: this.msgToolKind, content: this.msgToolContent,
                 contentType: this.msgToolContentType, path: this.msgToolPath, oldText: this.msgToolOldText,
@@ -187,10 +187,7 @@ export struct MessageCard {
             } else {
               if (this.msgContent.length > 0) {
                 if (this.streaming) {
-                  Text(this.msgContent)
-                    .fontSize(15)
-                    .fontColor(Colors.foreground)
-                    .lineHeight(24)
+                  MarkdownRender({ text: this.msgContent, streaming: true })
                 } else {
                   MarkdownRender({ text: this.msgContent, streaming: false })
                 }
@@ -242,13 +239,13 @@ export struct MessageCard {
             }
           }
           .padding({
-            top: 10,
-            bottom: 10,
-            left: 14,
-            right: 14
+            top: Spacing.sm + 2,
+            bottom: Spacing.sm + 2,
+            left: Spacing.md + 2,
+            right: Spacing.md + 2
           })
-          .backgroundColor(Colors.surface2)
-          .borderRadius(16)
+          .backgroundColor(Colors.surface1)
+          .borderRadius(Radius.sm)
           .alignItems(HorizontalAlign.Start)
 
           Row() {

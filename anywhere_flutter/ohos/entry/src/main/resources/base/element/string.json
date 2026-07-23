@@ -1,0 +1,20 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "module description"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "description"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "Nexus"
+    },
+    {
+      "name": "camera_reason",
+      "value": "扫码连接 PC 主机需要相机权限"
+    }
+  ]
+}

@@ -65,6 +65,22 @@
       "value": "#D1FAE5"
     },
     {
+      "name": "diff_addition",
+      "value": "#1a7f37"
+    },
+    {
+      "name": "diff_deletion",
+      "value": "#cf222e"
+    },
+    {
+      "name": "diff_addition_bg",
+      "value": "#dafbe1"
+    },
+    {
+      "name": "diff_deletion_bg",
+      "value": "#ffebe9"
+    },
+    {
       "name": "warning",
       "value": "#F59E0B"
     },

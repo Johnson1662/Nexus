@@ -23,6 +23,7 @@ export async function createTempClient(
     cwd: resolvedCwd,
     env: { ...process.env, FORCE_COLOR: "0", NO_COLOR: "1" },
     stdio: ["pipe", "pipe", "pipe"],
+    windowsHide: true,
     shell: true,
   });
 

@@ -196,7 +196,7 @@ export function createAcpCallbacks(config: AcpCallbacksConfig): {
         ? { ...process.env, ...Object.fromEntries(params.env.map((e: { name: string; value: string }) => [e.name, e.value])) }
         : { ...process.env },
       stdio: ["pipe", "pipe", "pipe"],
-      shell: true,
+      windowsHide: true,
     });
 
     terminal.process = termProc;

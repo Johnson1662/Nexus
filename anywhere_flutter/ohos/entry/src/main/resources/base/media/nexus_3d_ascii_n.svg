@@ -1,0 +1,21 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect x="6" y="6" width="500" height="500" rx="112" fill="#FFFFFF" stroke="black" stroke-opacity="0.08" stroke-width="2"/>
+  
+  <!-- 3D Extrusion Side Panels -->
+  <polygon points="189,139 189,399 165,375 165,115" fill="#373A41"/>
+  <polygon points="134,399 189,399 165,375 110,375" fill="#373A41"/>
+  <polygon points="394,139 394,399 370,375 370,115" fill="#373A41"/>
+  <polygon points="339,399 394,399 370,375 315,375" fill="#373A41"/>
+  <polygon points="189,139 394,399 370,375 165,115" fill="#555A64"/>
+  
+  <!-- Front N Block -->
+  <rect x="110" y="115" width="55" height="260" rx="3" fill="#121214"/>
+  <rect x="315" y="115" width="55" height="260" rx="3" fill="#121214"/>
+  <polygon points="110,115 165,115 370,375 315,375" fill="#121214"/>
+  
+  <!-- ASCII Terminal Wireframe Double-Lines -->
+  <rect x="116" y="121" width="43" height="248" fill="none" stroke="white" stroke-width="2"/>
+  <rect x="321" y="121" width="43" height="248" fill="none" stroke="white" stroke-width="2"/>
+  <line x1="132" y1="137" x2="337" y2="353" stroke="white" stroke-width="3"/>
+  <line x1="150" y1="121" x2="355" y2="337" stroke="white" stroke-width="2"/>
+</svg>

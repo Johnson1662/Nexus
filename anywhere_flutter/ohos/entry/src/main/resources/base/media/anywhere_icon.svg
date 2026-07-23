@@ -1,0 +1,14 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect x="6" y="6" width="500" height="500" rx="112" fill="#101012" stroke="white" stroke-opacity="0.12" stroke-width="2"/>
+  <circle cx="256" cy="256" r="166" fill="white" fill-opacity="0.05" filter="blur(40px)"/>
+  
+  <!-- Outer Wing -->
+  <path d="M256 110 L110 390 L256 308 L402 390 Z" fill="#DEE1E6"/>
+  
+  <!-- Inner Facets -->
+  <path d="M256 202 L170 338 L256 292 Z" fill="#FFFFFF"/>
+  <path d="M256 202 L256 292 L342 338 Z" fill="#E6E9EE"/>
+  
+  <!-- AI Sparkle -->
+  <path d="M366 106 L367.8 126.2 L388 132 L367.8 137.8 L366 158 L364.2 137.8 L344 132 L364.2 126.2 Z" fill="white"/>
+</svg>

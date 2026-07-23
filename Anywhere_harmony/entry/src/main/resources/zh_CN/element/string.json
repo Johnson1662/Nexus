@@ -214,7 +214,7 @@
     },
     {
       "name": "ws_empty_prompt",
-      "value": "暂无工作区"
+      "value": "暂无工作区，点击 + 添加"
     },
     {
       "name": "ws_empty_subtitle",

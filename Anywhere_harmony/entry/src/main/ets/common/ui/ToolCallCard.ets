@@ -12,15 +12,9 @@ export struct ToolCallCard {
   @Prop newText: string = '';
   @Prop terminalId: string = '';
   @StorageLink('pref_toolcall_expanded') prefToolcallExpanded: boolean = true;
-  @State breathFlag: boolean = false;
   @State expanded: boolean = false;
 
   aboutToAppear(): void {
-    if (this.status === 'in_progress') {
-      setTimeout(() => {
-        this.breathFlag = true;
-      }, 50);
-    }
     if (this.hasDetail()) {
       this.expanded = this.prefToolcallExpanded;
     }
@@ -133,15 +127,15 @@ export struct ToolCallCard {
   }
 
   getDiffColor(line: string): Resource {
-    if (line.startsWith('+') && !line.startsWith('+++')) return Colors.success;
-    if (line.startsWith('-') && !line.startsWith('---')) return Colors.error;
+    if (line.startsWith('+') && !line.startsWith('+++')) return Colors.diffAddition;
+    if (line.startsWith('-') && !line.startsWith('---')) return Colors.diffDeletion;
     if (line.startsWith('@@')) return Colors.foregroundLight;
     return Colors.foregroundMuted;
   }
 
   getDiffBgColor(line: string): ResourceStr {
-    if (line.startsWith('+') && !line.startsWith('+++')) return Colors.successLight;
-    if (line.startsWith('-') && !line.startsWith('---')) return Colors.errorLight;
+    if (line.startsWith('+') && !line.startsWith('+++')) return Colors.diffAdditionBg;
+    if (line.startsWith('-') && !line.startsWith('---')) return Colors.diffDeletionBg;
     return 'transparent';
   }
 
@@ -159,6 +153,7 @@ export struct ToolCallCard {
           .fontFamily('monospace')
           .lineHeight(18)
       }
+      .width('100%')
       .layoutWeight(1)
       .padding(Spacing.sm)
       .backgroundColor(Colors.terminalBg)
@@ -209,10 +204,12 @@ export struct ToolCallCard {
             .alignItems(HorizontalAlign.Start)
           }
           .width('100%')
-          .clip(true)
-          .backgroundColor(Colors.surface2)
-          .borderRadius(Radius.sm)
+      .width('100%')
+      .clip(true)
+      .backgroundColor('transparent')
+      .borderRadius(Radius.sm)
         }
+        .width('100%')
         .layoutWeight(1)
         .alignItems(HorizontalAlign.Start)
     } else if (this.contentType === 'content') {
@@ -223,9 +220,10 @@ export struct ToolCallCard {
           .fontFamily('monospace')
           .lineHeight(18)
       }
+      .width('100%')
       .layoutWeight(1)
       .padding(Spacing.sm)
-      .backgroundColor(Colors.surface2)
+      .backgroundColor('transparent')
       .borderRadius(Radius.sm)
     } else {
       Text(this.content)
@@ -262,6 +260,13 @@ export struct ToolCallCard {
                 Text(getContext(this).resourceManager.getStringSync($r('app.string.common_running').id))
                   .fontSize(FontSize.xs)
                   .fontColor(Colors.foregroundMuted)
+                  .animation({
+                    duration: 800,
+                    curve: Curve.EaseInOut,
+                    iterations: -1,
+                    playMode: PlayMode.Alternate,
+                  })
+                  .opacity(this.status === 'in_progress' ? 0.5 : 1.0)
               } else if (this.status === 'completed' || this.status === 'success') {
                 SymbolGlyph($r('sys.symbol.checkmark'))
                   .fontSize(10)
@@ -320,6 +325,7 @@ export struct ToolCallCard {
       })
       .onClick(() => {
         if (this.hasDetail()) {
+          this.prefToolcallExpanded = !this.prefToolcallExpanded;
           this.expanded = !this.expanded;
         }
       })
@@ -329,14 +335,15 @@ export struct ToolCallCard {
           this.DetailContent()
         }
         .width('100%')
+        .alignItems(HorizontalAlign.Start)
         .padding({ left: Spacing.xl, right: Spacing.lg, bottom: Spacing.md })
         .transition(AnimationPresets.fadeIn)
       }
     }
     .width('100%')
-    .backgroundColor(Colors.surface1)
     .borderRadius(12)
-    .border({ width: 0 })
+
     .animation({ duration: Duration.normal, curve: AnimationPresets.spring })
+    .transition(AnimationPresets.fadeIn)
   }
 }

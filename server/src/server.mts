@@ -1,10 +1,21 @@
-import qrcode from 'qrcode-terminal';
 import { WebSocketServer, type WebSocket } from "ws";
 import http, { type IncomingMessage, type ServerResponse } from "node:http";
 import os from "os";
 import { getOrCreateHostId, getOrCreateHostIdentity } from "./host-identity.mjs";
-import { EncryptedChannel } from "./encrypted-channel.mjs";
-import { RelayHost } from "./relay.mjs";
+// ── Protocol layering: transport vs session messages ──────────
+//
+// Transport-level messages deal with connection lifecycle:
+//   ping / pong / heartbeat / hello / server_info
+//
+// Session-level messages deal with ACP agent sessions:
+//   start / input / cancel / switch_model / list_models / list_sessions
+//   set_mode / set_config / load_session / resume_session / close_session
+//   permission_response / authenticate / sync_request / show_qr / list_agents
+//   etc.
+//
+// Incoming messages are unstructured JSON; the router below first checks for
+// transport-level types, then routes everything else to the session dispatch.
+
 import { discoverAgents } from "./discovery/agents.mjs";
 import { loadRegistry, listRegistryAgents } from "./registry/registry.mjs";
 import { getInstalledAgents, installAgent, uninstallAgent } from "./agents-store.mjs";
@@ -21,118 +32,96 @@ import { handleCloseSession } from "./handlers/close-session.mjs";
 import { handleSetConfig } from "./handlers/set-config.mjs";
 import { handlePermissionResponse } from "./handlers/permission.mjs";
 import { handleAuth } from "./handlers/auth.mjs";
-import { cleanupWsSessions, enqueueWsOp, getSession, getBufferedAfter, reclaimOrphanedSession } from "./session.mjs";
+import { cleanupWsSessions, enqueueWsOp, getSession, getBufferedAfter, reclaimOrphanedSession, killSessionProcess, getAllSessions } from "./session.mjs";
 
 const PORT = parseInt(process.env.PORT || "", 10) || 12138;
-const RELAY_URL = process.env.ANYWHERE_RELAY_URL || "ws://relay.anywhere12138.lat:12138";
-const PHONE_RELAY_URL = process.env.ANYWHERE_PHONE_RELAY_URL || "ws://relay.anywhere12138.lat:12138";
 const HOST_ID = getOrCreateHostId();
 
-const httpServer = http.createServer((req: IncomingMessage, res: ServerResponse) => {
-  handleHttpRequest(req, res);
-});
-const wss = new WebSocketServer({ server: httpServer });
-httpServer.listen(PORT, () => {
-  console.log(`[server] listening on ws://0.0.0.0:${PORT} and IPv6 if available`);
-});
+// ── createBridgeServer — 供 daemon/bootstrap.ts 调用 ──────────
+// 创建一个独立的 HTTP+WSS 服务器，返回控制接口.
+// 与模块级 legacy 路径共享 handleIncomingConnection 等处理函数.
 
-// WebSocket keep-alive: ping all connected clients every 15s
-const pingInterval = setInterval(() => {
-  wss.clients.forEach((sock: WebSocket) => {
-    if ((sock as any).isDead) return;
-    try { sock.ping(); } catch {}
-  });
-}, 15000);
-wss.on('connection', (sock: WebSocket) => {
-  (sock as any).isDead = false;
-  sock.on('pong', () => { (sock as any).isDead = false; });
-  sock.on('close', () => { (sock as any).isDead = true; });
-});
-
-// The relay message handler is wired directly into handleIncomingConnection
-// via a shared callback, bypassing the EventEmitter indirection which has
-// proven unreliable for message delivery ordering.
-let handleRelayMessage: ((raw: string) => void) | null = null;
-
-const relay = new RelayHost(RELAY_URL, HOST_ID, (raw: string) => {
-  if (handleRelayProbe(raw)) {
-    return;
-  }
-  console.log(`[relay] received ${raw.slice(0, 120)}`);
-  if (handleRelayMessage) {
-    handleRelayMessage(raw);
-  }
-});
-
-// Shared relay transport — messages delivered directly (no EventEmitter)
-
-class RelayTransport {
-  private msgCb: ((raw: string) => void) | null = null;
-  private closeCb: (() => void) | null = null;
-  private _closed = false;
-
-  onMessage(cb: (raw: string) => void): void { this.msgCb = cb; }
-  onClose(cb: () => void): void { this.closeCb = cb; }
-  send(data: string | Buffer): void {
-    relay.send(typeof data === 'string' ? data : data.toString('utf-8'));
-  }
-  close(): void {
-    if (this._closed) return;
-    this._closed = true;
-    if (this.closeCb) this.closeCb();
-  }
-  get readyState(): number { return relay.isReady() ? 1 : 3; }
-  deliver(raw: string): void { if (this.msgCb) this.msgCb(raw); }
+export interface BridgeConfig {
+  port: number;
+  hostId?: string;
 }
 
-let relayTransport = new RelayTransport();
+export interface BridgeApp {
+  httpServer: http.Server;
+  wss: WebSocketServer;
+  port: number;
+  stop: () => Promise<void>;
+}
 
-handleRelayMessage = (raw: string) => { relayTransport.deliver(raw); };
+export function createBridgeServer(config: BridgeConfig): BridgeApp {
+  const port = config.port;
+  const hostId = config.hostId || HOST_ID;
 
-relay.onDisconnect(() => {
-  console.log("[server] Relay disconnected, cleaning up relay sessions");
-  relayTransport.close();
-});
+  const httpServer = http.createServer((req: IncomingMessage, res: ServerResponse) => {
+    handleHttpRequest(req, res);
+  });
+  const wss = new WebSocketServer({ server: httpServer });
+  httpServer.listen(port, () => {
+    console.log(`[server] listening on ws://0.0.0.0:${port} and IPv6 if available`);
+  });
 
-// Print QR code after relay connects
-const relayHostIdentity = getOrCreateHostIdentity();
-relay.connect();
+  // WebSocket keep-alive: ping all connected clients every 15s
+  const pingInterval = setInterval(() => {
+    wss.clients.forEach((sock: WebSocket) => {
+      if ((sock as any).isDead) return;
+      try { sock.ping(); } catch {}
+    });
+  }, 15000);
+  wss.on('connection', (sock: WebSocket) => {
+    (sock as any).isDead = false;
+    sock.on('pong', () => { (sock as any).isDead = false; });
+    sock.on('close', () => { (sock as any).isDead = true; });
+  });
 
-function printQR(): void {
-  const offer = {
-    v: 1,
-    hostId: relayHostIdentity.hostId,
-    ecdhPublicKeyHex: relayHostIdentity.publicKeyHex,
-    ed25519PublicKeyHex: relayHostIdentity.ed25519PublicKeyHex,
-    relayUrl: PHONE_RELAY_URL,
+  // Wire up connections to message handlers
+  wss.on("connection", (ws: WebSocket) => {
+    handleIncomingConnection(ws);
+  });
+
+  return {
+    httpServer,
+    wss,
+    port,
+    stop: async () => {
+      clearInterval(pingInterval);
+      // Kill all agent subprocesses before closing
+      for (const [, sess] of getAllSessions()) {
+        try { killSessionProcess(sess); } catch {}
+      }
+      wss.clients.forEach(client => { try { client.close(); } catch {} });
+      await new Promise<void>(resolve => wss.close(() => resolve()));
+      await new Promise<void>(resolve => httpServer.close(() => resolve()));
+    },
   };
-  const encoded = Buffer.from(JSON.stringify(offer)).toString('base64url');
-  const qrData = `anywhere://pair/#offer=${encoded}`;
-  console.log('\n[QR] Scan this code in Anywhere App to connect:\n');
-  qrcode.generate(qrData, { small: true });
 }
 
-setTimeout(printQR, 1000);
+// ── Backward compat: direct script execution ──────────────────
+// When `node server.mjs` is run directly, the code below
+// starts a server with QR support.
+// When imported as a module (by bootstrap.ts), createBridgeServer
+// above is used instead.
+const isMainModule = process.argv[1] && (
+  process.argv[1].replace(/\\/g, '/').endsWith('server.mjs')
+);
 
-// Phase 3b: stdin listener — type any line + Enter to reprint QR
-if (process.stdin.isTTY) {
-  process.stdin.setEncoding('utf-8');
-  process.stdin.on('data', () => {
-    printQR();
-  });
-  console.log('[server] stdin: press Enter to re-display QR code');
-}
-// Phase 3b: environment variable — ANYWHERE_SHOW_QR=1 triggers reprint
-if (process.env.ANYWHERE_SHOW_QR === '1') {
-  printQR();
-}
-
+// ── Pure functions (hoisted so createBridgeServer can call them) ──
 function collectHostIps(): string[] {
   const nets = os.networkInterfaces();
   const ips: string[] = [];
   for (const name of Object.keys(nets)) {
+    // Skip virtual Ethernet (Hyper-V, Docker, WSL)
+    if (name.startsWith('vEthernet') || name.startsWith('VirtualBox') ||
+        name.startsWith('VMware') || name.startsWith('Bluetooth') ||
+        name.includes('Loopback') || name.includes('lo')) {
+      continue;
+    }
     for (const net of nets[name]!) {
-      if (!net.internal) {
+      if (!net.internal && net.family === 'IPv4') {
         ips.push(net.address);
       }
     }
@@ -176,25 +165,6 @@ function handleHttpRequest(req: IncomingMessage, res: ServerResponse): void {
   res.end("WebSocket only");
 }
 
-function handleRelayProbe(raw: string): boolean {
-  let msg: any;
-  try {
-    msg = JSON.parse(raw);
-  } catch {
-    return false;
-  }
-  if (msg.type !== "relay_probe") {
-    return false;
-  }
-  relay.send(JSON.stringify({
-    type: "relay_probe_pong",
-    probeId: String(msg.probeId || ""),
-    hostId: HOST_ID,
-    ts: Date.now(),
-  }));
-  return true;
-}
-
 function sendServerInfo(ws: WebSocket | any) {
   try {
     const hostname = os.hostname();
@@ -202,10 +172,7 @@ function sendServerInfo(ws: WebSocket | any) {
     ws.send(JSON.stringify({
       type: "server_info",
       hostId: HOST_ID,
-      relayPin: HOST_ID,
-      relayUrl: PHONE_RELAY_URL,
-      ecdhPublicKeyHex: relayHostIdentity.publicKeyHex,
-      ed25519PublicKeyHex: relayHostIdentity.ed25519PublicKeyHex,
+      ed25519PublicKeyHex: getOrCreateHostIdentity().ed25519PublicKeyHex,
       hostname,
       ips,
     }));
@@ -215,100 +182,16 @@ function sendServerInfo(ws: WebSocket | any) {
   }
 }
 
-function handleIncomingConnection(transport: any, isRelay: boolean = false) {
-  console.log(`[server] ${isRelay ? 'Relay' : 'Local'} client connected`);
-
-  const identity = getOrCreateHostIdentity();
-  const channels = new Map<string, EncryptedChannel>();
-  // Heartbeat state per channel
-  const heartbeatState = new Map<string, {
-    interval: ReturnType<typeof setInterval>;
-    lastHeard: number;
-  }>();
-
-  const HEARTBEAT_INTERVAL_MS = 10_000;
-  const HEARTBEAT_TIMEOUT_MS = 30_000;
-
-  function startHeartbeat(channelId: string, channel: EncryptedChannel): void {
-    const state = { interval: null as any, lastHeard: Date.now() };
-    state.interval = setInterval(() => {
-      if (channel.getState() !== 'open') {
-        stopHeartbeat(channelId);
-        return;
-      }
-      channel.control('heartbeat', { ts: Date.now() } as unknown as Record<string, unknown>);
-      if (Date.now() - state.lastHeard > HEARTBEAT_TIMEOUT_MS) {
-        console.log(`[server] heartbeat timeout for ${channelId}, closing channel`);
-        channel.close();
-      }
-    }, HEARTBEAT_INTERVAL_MS);
-    heartbeatState.set(channelId, state);
-  }
-
-  function stopHeartbeat(channelId: string): void {
-    const state = heartbeatState.get(channelId);
-    if (state) {
-      clearInterval(state.interval);
-      heartbeatState.delete(channelId);
-    }
-  }
-
-  function getOrCreateChannel(channelId: string): EncryptedChannel {
-    let channel = channels.get(channelId);
-    if (!channel) {
-      channel = new EncryptedChannel({ role: 'host', hostIdentity: identity });
-      channel.setEvents({
-        onopen: () => {
-          console.log(`[server] E2EE handshake completed for ${channelId}`);
-          startHeartbeat(channelId, channel!);
-        },
-        onclose: () => {
-          console.log(`[server] EncryptedChannel closed for ${channelId}`);
-          stopHeartbeat(channelId);
-          channels.delete(channelId);
-        },
-        onerror: (err: Error) => console.log(`[server] EncryptedChannel error (${channelId}): ${err.message}`),
-        oncontrol: (type: string, _payload: Record<string, unknown>) => {
-          if (type === 'heartbeat') {
-            const state = heartbeatState.get(channelId);
-            if (state) state.lastHeard = Date.now();
-            return;
-          }
-          console.log(`[server] control message from ${channelId}: ${type}`);
-        },
-        onmessage: (data: string | ArrayBuffer) => {
-          const rawStr = typeof data === 'string' ? data : Buffer.from(data).toString('utf-8');
-          handlePlaintextMessage(rawStr);
-        },
-      });
-      channel.attachTransport({
-        on: () => {},
-        send: (data: string | Buffer) => originalSend(data),
-        close: () => {},
-      });
-      channels.set(channelId, channel);
-    }
-    return channel;
-  }
-
+function handleIncomingConnection(transport: any) {
+  console.log(`[server] Local client connected`);
   const originalSend = transport.send.bind(transport);
-
-  // Override transport.send to broadcast business payloads via all open EncryptedChannels
-  transport.send = (data: string | Buffer) => {
-    if (typeof data === 'string' && channels.size > 0) {
-      let hasOpenChannel = false;
-      for (const channel of channels.values()) {
-        if (channel.getState() === 'open') {
-          channel.send(data).catch(() => {});
-          hasOpenChannel = true;
-        }
-      }
-      if (hasOpenChannel) return;
-    }
-    originalSend(data);
-  };
-
+  transport.send = (data: string | Buffer) => originalSend(data);
   sendServerInfo(transport);
+  // Heartbeat: respond to ping with pong via plain WS frame
+  const HEARTBEAT_INTERVAL_MS = 10_000;
+  setInterval(() => {
+    try { transport.send(JSON.stringify({ type: "ping" })); } catch {}
+  }, HEARTBEAT_INTERVAL_MS);
 
   function handlePlaintextMessage(rawStr: string) {
     let msg: any;
@@ -332,6 +215,14 @@ function handleIncomingConnection(transport: any, isRelay: boolean = false) {
       msg.sessionId ? ` sessionId="${msg.sessionId?.slice(0, 20)}"` : '';
     console.log(`${logPrefix}${logDetails}`);
 
+    // ── Transport layer: messages about the connection itself ──
+    // These are handled first and don't enter the session routing.
+    if (handleTransportMessage(msg, rawStr)) {
+      return;
+    }
+
+    // ── Session layer ──────────────────────────────────────────
+    // Try to reclaim orphaned session for any message with a sessionId.
     if (msg.sessionId) {
       const reclaimed = reclaimOrphanedSession(msg.sessionId, transport);
       if (reclaimed) {
@@ -339,13 +230,43 @@ function handleIncomingConnection(transport: any, isRelay: boolean = false) {
       }
     }
 
+    // Dispatch to the appropriate handler.
+    handleSessionMessage(msg, rawStr);
+  }
+
+  /**
+   * Handle transport-level messages (heartbeat, ping/pong, etc.)
+   * Returns true if the message was consumed, false otherwise.
+   */
+  function handleTransportMessage(msg: any, rawStr: string): boolean {
     switch (msg.type) {
+      case "heartbeat":
+        transport.send(JSON.stringify({ type: "heartbeat", ts: msg.ts || Date.now() }));
+        return true;
+
+      case "ping":
+        // Transport-level liveness check — respond immediately.
+        originalSend(JSON.stringify({ type: "pong" }));
+        return true;
+
+      default:
+        return false;
+    }
+  }
+
+  function handleSessionMessage(msg: any, _rawStr: string): void {
+    // Support two inbound formats:
+    //   Legacy: { type: "start", ... }
+    //   Layered: { type: "session", message: { type: "start", ... } }
+    const sessionMsg = msg.type === "session" && msg.message ? msg.message : msg;
+
+    switch (sessionMsg.type) {
       case "start":
-        console.log(`[server] handleStart agent="${msg.agent || "opencode"}" cwd="${msg.cwd || process.cwd()}"`);
+        console.log(`[server] handleStart agent="${sessionMsg.agent || "opencode"}" cwd="${sessionMsg.cwd || process.cwd()}"`);
         // Send immediate ack before spawning agent to prevent WS timeout
         transport.send(JSON.stringify({ type: "start_ack" }));
         clearSessionListCache(transport);
-        handleStart(transport, msg).catch((err: Error) => {
+        handleStart(transport, sessionMsg).catch((err: Error) => {
           console.log(`[server] handleStart error: ${err.message}`);
         });
         break;
@@ -377,7 +298,7 @@ function handleIncomingConnection(transport: any, isRelay: boolean = false) {
       }
 
       case "install_agent": {
-        const agentId = String(msg.agentId || "");
+        const agentId = String(sessionMsg.agentId || "");
         console.log(`[server] install_agent: ${agentId}`);
         try {
           if (!agentId) throw new Error("missing agentId");
@@ -391,7 +312,7 @@ function handleIncomingConnection(transport: any, isRelay: boolean = false) {
       }
 
       case "uninstall_agent": {
-        const agentId = String(msg.agentId || "");
+        const agentId = String(sessionMsg.agentId || "");
         console.log(`[server] uninstall_agent: ${agentId}`);
         try {
           if (!agentId) throw new Error("missing agentId");
@@ -405,9 +326,9 @@ function handleIncomingConnection(transport: any, isRelay: boolean = false) {
       }
 
       case "install_custom_agent": {
-        const command = String(msg.command || "");
-        const args = Array.isArray(msg.args) ? msg.args as string[] : [];
-        const name = String(msg.name || command.split(/[\\/]/).pop() || "custom-agent");
+        const command = String(sessionMsg.command || "");
+        const args = Array.isArray(sessionMsg.args) ? sessionMsg.args as string[] : [];
+        const name = String(sessionMsg.name || command.split(/[\\/]/).pop() || "custom-agent");
         console.log(`[server] install_custom_agent: ${name} cmd=${command}`);
         try {
           if (!command) throw new Error("missing command");
@@ -421,84 +342,84 @@ function handleIncomingConnection(transport: any, isRelay: boolean = false) {
       }
 
       case "input":
-        console.log(`[server] handleInput session="${msg.sessionId?.slice(0, 20)}" text="${msg.text?.slice(0, 80)}"`);
-        handleInput(transport, msg.sessionId, msg.text);
+        console.log(`[server] handleInput session="${sessionMsg.sessionId?.slice(0, 20)}" text="${sessionMsg.text?.slice(0, 80)}"`);
+        handleInput(transport, sessionMsg.sessionId, sessionMsg.text);
         break;
 
       case "cancel":
-        console.log(`[server] handleCancel session="${msg.sessionId?.slice(0, 20)}"`);
-        handleCancel(transport, msg.sessionId);
+        console.log(`[server] handleCancel session="${sessionMsg.sessionId?.slice(0, 20)}"`);
+        handleCancel(transport, sessionMsg.sessionId);
         break;
 
       case "switch_model":
-        console.log(`[server] handleSwitchModel session="${msg.sessionId?.slice(0, 20)}" model="${msg.model}"`);
-        handleSwitchModel(transport, msg.sessionId, msg.model).catch((err: Error) => {
+        console.log(`[server] handleSwitchModel session="${sessionMsg.sessionId?.slice(0, 20)}" model="${sessionMsg.model}"`);
+        handleSwitchModel(transport, sessionMsg.sessionId, sessionMsg.model).catch((err: Error) => {
           console.log(`[server] handleSwitchModel error: ${err.message}`);
         });
         break;
 
       case "list_models":
-        console.log(`[server] handleListModels agent="${msg.agent || ""}"`);
-        enqueueWsOp(transport, () => handleListModels(transport, msg.agent, Boolean(msg.refresh)));
+        console.log(`[server] handleListModels agent="${sessionMsg.agent || ""}"`);
+        enqueueWsOp(transport, () => handleListModels(transport, sessionMsg.agent, Boolean(sessionMsg.refresh)));
         break;
 
       case "list_sessions":
-        console.log(`[server] handleListSessions cwd="${msg.cwd || ""}" agent="${msg.agent || ""}"`);
-        enqueueWsOp(transport, () => handleListSessions(transport, msg.cwd, msg.agent));
+        console.log(`[server] handleListSessions cwd="${sessionMsg.cwd || ""}" agent="${sessionMsg.agent || ""}"`);
+        enqueueWsOp(transport, () => handleListSessions(transport, sessionMsg.cwd, sessionMsg.agent));
         break;
 
       case "set_mode":
-        console.log(`[server] handleSetMode session="${msg.sessionId?.slice(0, 20)}" mode="${msg.modeId}"`);
-        handleSetMode(transport, msg.sessionId, msg.modeId).catch((err: Error) => {
+        console.log(`[server] handleSetMode session="${sessionMsg.sessionId?.slice(0, 20)}" mode="${sessionMsg.modeId}"`);
+        handleSetMode(transport, sessionMsg.sessionId, sessionMsg.modeId).catch((err: Error) => {
           console.log(`[server] handleSetMode error: ${err.message}`);
         });
         break;
 
       case "set_config":
-        console.log(`[server] handleSetConfig session="${msg.sessionId?.slice(0, 20)}" config="${msg.configId}" value="${msg.value}"`);
-        handleSetConfig(transport, msg.sessionId, msg.configId, msg.value).catch((err: Error) => {
+        console.log(`[server] handleSetConfig session="${sessionMsg.sessionId?.slice(0, 20)}" config="${sessionMsg.configId}" value="${sessionMsg.value}"`);
+        handleSetConfig(transport, sessionMsg.sessionId, sessionMsg.configId, sessionMsg.value).catch((err: Error) => {
           console.log(`[server] handleSetConfig error: ${err.message}`);
         });
         break;
 
       case "load_session":
-        console.log(`[server] handleLoadSession target="${msg.sessionId?.slice(0, 20)}" agent="${msg.agent || "opencode"}"`);
+        console.log(`[server] handleLoadSession target="${sessionMsg.sessionId?.slice(0, 20)}" agent="${sessionMsg.agent || "opencode"}"`);
         clearSessionListCache(transport);
-        enqueueWsOp(transport, () => handleLoadSession(transport, msg));
+        enqueueWsOp(transport, () => handleLoadSession(transport, sessionMsg));
         break;
 
       case "resume_session":
-        console.log(`[server] handleResumeSession target="${msg.sessionId?.slice(0, 20)}" agent="${msg.agent || "opencode"}"`);
+        console.log(`[server] handleResumeSession target="${sessionMsg.sessionId?.slice(0, 20)}" agent="${sessionMsg.agent || "opencode"}"`);
         clearSessionListCache(transport);
-        enqueueWsOp(transport, () => handleResumeSession(transport, msg));
+        enqueueWsOp(transport, () => handleResumeSession(transport, sessionMsg));
         break;
 
       case "close_session":
-        console.log(`[server] handleCloseSession session="${msg.sessionId?.slice(0, 20)}"`);
-        enqueueWsOp(transport, () => handleCloseSession(transport, msg.sessionId));
+        console.log(`[server] handleCloseSession session="${sessionMsg.sessionId?.slice(0, 20)}"`);
+        enqueueWsOp(transport, () => handleCloseSession(transport, sessionMsg.sessionId));
         break;
 
       case "permission_response":
-        console.log(`[server] handlePermissionResponse session="${msg.sessionId?.slice(0, 20)}" outcome="${msg.outcome}"`);
+        console.log(`[server] handlePermissionResponse session="${sessionMsg.sessionId?.slice(0, 20)}" outcome="${sessionMsg.outcome}"`);
         handlePermissionResponse(
           transport,
-          msg.sessionId,
-          msg.requestId,
-          msg.outcome,
-          msg.optionId,
+          sessionMsg.sessionId,
+          sessionMsg.requestId,
+          sessionMsg.outcome,
+          sessionMsg.optionId,
         );
         break;
 
       case "authenticate":
-        console.log(`[server] handleAuth session="${msg.sessionId?.slice(0, 20)}" method="${msg.methodId}"`);
-        handleAuth(transport, msg.sessionId, msg.methodId).catch((err: Error) => {
+        console.log(`[server] handleAuth session="${sessionMsg.sessionId?.slice(0, 20)}" method="${sessionMsg.methodId}"`);
+        handleAuth(transport, sessionMsg.sessionId, sessionMsg.methodId).catch((err: Error) => {
           console.log(`[server] handleAuth error: ${err.message}`);
         });
         break;
 
       case "sync_request": {
-        const syncSessionId = msg.sessionId as string;
-        const lastMessageId = msg.lastMessageId as string || '';
+        const syncSessionId = sessionMsg.sessionId as string;
+        const lastMessageId = sessionMsg.lastMessageId as string || '';
         console.log(`[server] sync_request session="${syncSessionId?.slice(0, 20)}" lastMessageId="${lastMessageId?.slice(0, 20)}"`);
         const sess = getSession(syncSessionId);
         if (sess) {
@@ -537,108 +458,55 @@ function handleIncomingConnection(transport: any, isRelay: boolean = false) {
         break;
       }
 
-      case "show_qr":
-        console.log('[server] WS command: re-displaying QR code');
-        printQR();
-        transport.send(JSON.stringify({ type: "qr_displayed" }));
-        break;
-
-      case "heartbeat":
-        if (typeof msg.channelId === "string" && msg.channelId.length > 0) {
-          const channel = channels.get(msg.channelId);
-          if (channel) {
-            channel['handleControl'](rawStr);
-          }
-        } else {
-          originalSend(JSON.stringify({ type: "heartbeat", ts: msg.ts || Date.now() }));
-        }
-        break;
-
       default:
-        if (isRelay && msg.type === 'relay_client_connected') {
-          console.log('[server] new client via relay, sending server_info');
-          originalSend(JSON.stringify({
-            type: "server_info",
-            hostId: HOST_ID,
-            relayPin: HOST_ID,
-            hostname: os.hostname(),
-            ips: []
-          }));
-        } else {
-          console.log(`[server] unknown message type: ${msg.type}`);
-        }
+        console.log(`[server] unknown message type: ${sessionMsg.type}`);
     }
   }
 
   // ── Incoming message handling ──
   function onRawBuffer(raw: Buffer | string): void {
     const buf = typeof raw === 'string' ? Buffer.from(raw) : raw;
-    if (buf.length > 0 && (buf[0] === 0x7B || buf[0] === 0x22)) {
-      const rawStr = buf.toString('utf-8');
-      if (rawStr.includes('"e2ee_hello"') || rawStr.indexOf('type:e2ee_hello') >= 0) {
-        // Forwarder may strip JSON quotes; try to fix before E2EE handler
-        let parsedRaw = rawStr;
-        try {
-          JSON.parse(rawStr);
-        } catch {
-          try {
-            parsedRaw = rawStr
-              .replace(/([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*:/g, '$1"$2":')
-              .replace(/:\s*([a-zA-Z_][a-zA-Z0-9_.-]*)\s*([,}])/g, ':"$1"$2');
-            JSON.parse(parsedRaw);
-          } catch {
-            return;
-          }
-        }
-        try {
-          const parsed = JSON.parse(parsedRaw);
-          if (parsed.type === 'e2ee_hello' && parsed.ephemeralKey) {
-            const channelId = parsed.ephemeralKey.slice(0, 16);
-            const channel = getOrCreateChannel(channelId);
-            channel['handleControl'](parsedRaw);
-          }
-        } catch {}
-        return;
-      }
-      handlePlaintextMessage(rawStr);
-    } else {
-      if (buf.length >= 8) {
-        const channelIdHex = buf.subarray(0, 8).toString('hex');
-        const channel = channels.get(channelIdHex);
-        if (channel) {
-          channel['handleBinary'](buf);
-        } else {
-          console.log(`[server] unknown channelId: ${channelIdHex}, dropping binary frame`);
-        }
-      }
-    }
+    const rawStr = buf.toString('utf-8');
+    handlePlaintextMessage(rawStr);
   }
 
   function onClose(): void {
-    console.log(`[server] ${isRelay ? 'Relay' : 'Local'} client disconnected, cleaning up sessions`);
+    console.log(`[server] Local client disconnected, cleaning up sessions`);
     clearSessionListCache(transport);
     cleanupWsSessions(transport);
-    for (const channelId of heartbeatState.keys()) {
-      stopHeartbeat(channelId);
-    }
-    for (const channel of channels.values()) {
-      channel.close();
-    }
-    channels.clear();
   }
 
-  // Wire up message delivery based on transport type
-  if (isRelay) {
-    (transport as RelayTransport).onMessage((raw: string) => onRawBuffer(raw));
-    (transport as RelayTransport).onClose(() => onClose());
-  } else {
-    transport.on("message", (raw: Buffer) => onRawBuffer(raw));
-    transport.on("close", () => onClose());
-  }
+  // Wire up message delivery
+  transport.on("message", (raw: Buffer) => onRawBuffer(raw));
+  transport.on("close", () => onClose());
 }
 
-handleIncomingConnection(relayTransport, true);
+if (isMainModule) {
+  // Legacy standalone path: create HTTP + WSS server
+  const httpServer = http.createServer((req: IncomingMessage, res: ServerResponse) => {
+    handleHttpRequest(req, res);
+  });
+  const wss = new WebSocketServer({ server: httpServer });
+  httpServer.listen(PORT, () => {
+    console.log(`[server] listening on ws://0.0.0.0:${PORT} and IPv6 if available`);
+  });
 
-wss.on("connection", (ws: WebSocket) => {
-  handleIncomingConnection(ws, false);
-});
+  // WebSocket keep-alive: ping all connected clients every 15s
+  const pingInterval = setInterval(() => {
+    wss.clients.forEach((sock: WebSocket) => {
+      if ((sock as any).isDead) return;
+      try { sock.ping(); } catch {}
+    });
+  }, 15000);
+  wss.on('connection', (sock: WebSocket) => {
+    (sock as any).isDead = false;
+    sock.on('pong', () => { (sock as any).isDead = false; });
+    sock.on('close', () => { (sock as any).isDead = true; });
+  });
+
+  wss.on("connection", (ws: WebSocket) => {
+    handleIncomingConnection(ws);
+  });
+
+  console.log('[server] started (legacy mode: node server.mjs)');
+} // end if (isMainModule)

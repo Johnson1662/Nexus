@@ -37,7 +37,7 @@ export struct MarkdownRender {
 
   aboutToAppear(): void {
     this.controller.setTextColor(Colors.foreground);
-    this.controller.setTextSize(15);
+    this.controller.setTextSize(FontSize.base);
     this.controller.setTextLineHeight(24);
     this.controller.setTitleColor(Colors.foreground);
     this.controller.setCodeBlockTheme('light');

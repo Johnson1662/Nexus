@@ -15,7 +15,6 @@ import type {
   ResumeSessionResponse,
   AuthenticateResponse,
   SetSessionModeResponse,
-  SetSessionModelResponse,
   SetSessionConfigOptionResponse,
   CloseSessionResponse,
   McpServer,
@@ -216,7 +215,7 @@ export class AcpClient {
     text: string,
   ): Promise<PromptResponse> {
     console.log(`[acp] bridge→agent: prompt sessionId="${sessionId.slice(0, 20)}" text="${text.slice(0, 50)}"`);
-    return await this.conn.prompt({
+    return await (this.conn as any).prompt({
       sessionId,
       prompt: [{ type: "text", text }],
     });
@@ -224,7 +223,7 @@ export class AcpClient {
 
   async cancel(sessionId: string): Promise<void> {
     console.log(`[acp] bridge→agent: cancel sessionId="${sessionId.slice(0, 20)}"`);
-    await this.conn.cancel({ sessionId });
+    await (this.conn as any).cancel({ sessionId });
   }
 
   async closeSession(sessionId: string): Promise<CloseSessionResponse> {
@@ -249,8 +248,8 @@ export class AcpClient {
   async setSessionModel(
     sessionId: string,
     modelId: string,
-  ): Promise<SetSessionModelResponse | void> {
-    return await this.conn.unstable_setSessionModel({ sessionId, modelId });
+  ): Promise<SetSessionConfigOptionResponse> {
+    return await this.conn.setSessionConfigOption({ sessionId, configId: "model", value: modelId });
   }
 
   async setSessionConfigOption(

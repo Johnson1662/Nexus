@@ -6,7 +6,7 @@ import { AgentInfo, RegistryAgentInfo } from '../../common/websocket/WSProtocol'
 @Component
 export struct AgentManageTabItem {
   @Prop itemKey: string = '';
-  @Prop name: string = '';
+  @Prop name: string | Resource = '';
   @Prop currentTab: string = '';
   onSelect?: () => void;
 
@@ -202,14 +202,14 @@ export struct AgentManageView {
   showUninstallConfirm(agent: AgentInfo): void {
     let label: string = agent.title || agent.name;
     this.getUIContext().showAlertDialog({
-      title: '卸载 Agent',
+      title: $r('app.string.agent_uninstall_title'),
       message: label,
       primaryButton: {
-        value: '取消',
+        value: $r('app.string.common_cancel'),
         action: () => {}
       },
       secondaryButton: {
-        value: '卸载',
+        value: $r('app.string.agent_uninstall'),
         fontColor: Colors.error,
         action: () => {
           if (this.onUninstallAgent) {
@@ -246,13 +246,13 @@ export struct AgentManageView {
         Row() {
           AgentManageTabItem({
             itemKey: 'installed',
-            name: '已安装',
+            name: $r('app.string.agent_installed'),
             currentTab: this.currentTab,
             onSelect: () => { this.currentTab = 'installed'; }
           })
           AgentManageTabItem({
             itemKey: 'store',
-            name: '商店',
+            name: $r('app.string.agent_store'),
             currentTab: this.currentTab,
             onSelect: () => { this.currentTab = 'store'; }
           })
@@ -284,7 +284,7 @@ export struct AgentManageView {
       .backgroundColor(Colors.surface0)
     }
     .hideTitleBar(false)
-    .title('Agent 管理')
+    .title($r('app.string.agent_manage_title'))
     .padding({ left: 0, right: 0, top: 0, bottom: 0 })
     .transition(AnimationPresets.fadeIn)
   }
@@ -292,7 +292,7 @@ export struct AgentManageView {
   @Builder
   StoreTabContent() {
     Column() {
-      TextInput({ placeholder: '搜索 Agent', text: this.searchQuery })
+      TextInput({ placeholder: $r('app.string.agent_search_placeholder'), text: this.searchQuery })
         .width('100%')
         .height(44)
         .fontSize(FontSize.md)
@@ -304,21 +304,21 @@ export struct AgentManageView {
         .onChange((value: string) => { this.searchQuery = value; })
 
       if (this.loading && this.registryAgents.length === 0) {
-        Text('加载中…')
+        Text($r('app.string.agent_loading'))
           .fontSize(FontSize.sm)
           .fontColor(Colors.foregroundMuted)
           .padding({ top: Spacing.xl })
       } else if (this.registryAgents.length === 0) {
-        Text('暂无可用 Agent')
+        Text($r('app.string.agent_none_available'))
           .fontSize(FontSize.sm)
           .fontColor(Colors.foregroundMuted)
           .padding({ top: Spacing.xl })
-        Text('请确保 PC 端 Anywhere Server 已更新到最新版本')
+        Text($r('app.string.agent_update_hint'))
           .fontSize(FontSize.xs)
           .fontColor(Colors.foregroundMuted)
           .padding({ top: Spacing.sm })
       } else if (this.getFilteredRegistryAgents().length === 0) {
-        Text('无匹配的 Agent')
+        Text($r('app.string.agent_no_match'))
           .fontSize(FontSize.sm)
           .fontColor(Colors.foregroundMuted)
           .padding({ top: Spacing.xl })
@@ -362,11 +362,11 @@ export struct AgentManageView {
       .margin({ right: Spacing.md })
 
       if (this.isRegistryAgentInstalled(agent)) {
-        Text('已安装')
+        Text($r('app.string.agent_installed'))
           .fontSize(FontSize.sm)
           .fontColor(Colors.foregroundMuted)
       } else {
-        Button('安装')
+        Button($r('app.string.agent_install'))
           .type(ButtonType.Normal)
           .height(36)
           .fontSize(FontSize.sm)
@@ -392,11 +392,11 @@ export struct AgentManageView {
   InstalledTabContent() {
     Column() {
       if (this.installedAgents.length === 0) {
-        Text('尚未安装任何 Agent')
+        Text($r('app.string.agent_not_installed'))
           .fontSize(FontSize.sm)
           .fontColor(Colors.foregroundMuted)
           .padding({ top: Spacing.xl, bottom: Spacing.sm })
-        Button('前往商店安装')
+        Button($r('app.string.agent_go_to_store'))
           .type(ButtonType.Normal)
           .height(40)
           .fontSize(FontSize.md)
@@ -426,7 +426,7 @@ export struct AgentManageView {
           .fontSize(18)
           .fontColor([Colors.accent])
           .margin({ right: Spacing.sm })
-        Text('添加自定义 Agent')
+        Text($r('app.string.agent_add_custom'))
           .fontSize(FontSize.md)
           .fontColor(Colors.accent)
           .fontWeight(FontWeight.Medium)
@@ -443,7 +443,7 @@ export struct AgentManageView {
 
       if (this.showCustomForm) {
         Column() {
-          TextInput({ placeholder: '命令路径', text: this.customCommand })
+          TextInput({ placeholder: $r('app.string.agent_command_path'), text: this.customCommand })
             .width('100%')
             .height(44)
             .fontSize(FontSize.md)
@@ -453,7 +453,7 @@ export struct AgentManageView {
             .margin({ bottom: Spacing.md })
             .onChange((value: string) => { this.onCustomCommandChange(value); })
 
-          TextInput({ placeholder: '参数（空格分隔）', text: this.customArgs })
+          TextInput({ placeholder: $r('app.string.agent_command_args'), text: this.customArgs })
             .width('100%')
             .height(44)
             .fontSize(FontSize.md)
@@ -463,7 +463,7 @@ export struct AgentManageView {
             .margin({ bottom: Spacing.md })
             .onChange((value: string) => { this.customArgs = value; })
 
-          TextInput({ placeholder: '名称', text: this.customName })
+          TextInput({ placeholder: $r('app.string.agent_custom_name'), text: this.customName })
             .width('100%')
             .height(44)
             .fontSize(FontSize.md)
@@ -473,7 +473,7 @@ export struct AgentManageView {
             .margin({ bottom: Spacing.lg })
             .onChange((value: string) => { this.customName = value; })
 
-          Button('安装')
+          Button($r('app.string.agent_install'))
             .type(ButtonType.Normal)
             .width('100%')
             .height(44)
@@ -514,7 +514,7 @@ export struct AgentManageView {
       .layoutWeight(1)
       .margin({ right: Spacing.md })
 
-      Button('卸载')
+      Button($r('app.string.agent_uninstall'))
         .type(ButtonType.Normal)
         .height(36)
         .fontSize(FontSize.sm)

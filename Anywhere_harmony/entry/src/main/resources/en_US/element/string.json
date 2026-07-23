@@ -53,7 +53,7 @@
     {"name": "ws_path_placeholder", "value": "/path/to/project"},
     {"name": "ws_cancel", "value": "Cancel"},
     {"name": "ws_add", "value": "Add"},
-    {"name": "ws_empty_prompt", "value": "No Workspaces"},
+    {"name": "ws_empty_prompt", "value": "No workspaces yet. Tap + to add your first workspace."},
     {"name": "ws_empty_subtitle", "value": "Add a project path to get started"},
     {"name": "ws_host_manage", "value": "Host Management"},
     {"name": "ws_settings", "value": "Settings"},
