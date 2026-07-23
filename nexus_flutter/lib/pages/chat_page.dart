@@ -14,6 +14,7 @@ import '../widgets/config_panel.dart';
 import '../widgets/permission_sheet.dart';
 import '../widgets/reconnect_banner.dart';
 import '../widgets/typing_indicator.dart';
+import '../widgets/diff_view.dart';
 
 // ── Internal item types for list view construction ──
 
@@ -676,6 +677,15 @@ class _ChatPageState extends State<ChatPage> {
   /// File manager panel content (the sliding surface itself).
   Widget _buildFilePanel(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
+    final state = context.watch<ChatProvider>().state;
+    final fg = AppColors.foregroundCtx(context);
+    final muted = AppColors.foregroundMutedCtx(context);
+
+    // Extract tool diffs from assistant messages
+    final diffMessages = state.messages
+        .where((m) => m.toolContentType == 'diff' && m.toolPath != null)
+        .toList();
+
     return Container(
       decoration: BoxDecoration(
         color: AppColors.surfaceElevatedCtx(context),
@@ -698,15 +708,16 @@ class _ChatPageState extends State<ChatPage> {
               ),
               child: Row(
                 children: [
-                  Icon(Icons.folder,
-                      size: 20, color: AppColors.foregroundCtx(context)),
+                  Icon(Icons.folder_outlined, size: 20, color: fg),
                   const SizedBox(width: AppSpacing.sm),
-                  Text('文件',
-                      style: TextStyle(
-                        fontSize: AppFontSize.xl,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.foregroundCtx(context),
-                      )),
+                  Text(
+                    '文件与 Diff',
+                    style: TextStyle(
+                      fontSize: AppFontSize.lg,
+                      fontWeight: FontWeight.w600,
+                      color: fg,
+                    ),
+                  ),
                   const Spacer(),
                   _roundIconButton(
                     Icons.close_rounded,
@@ -716,22 +727,82 @@ class _ChatPageState extends State<ChatPage> {
               ),
             ),
             Divider(color: AppColors.borderCtx(context), height: 0.5),
+
             Expanded(
-              child: Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.folder_open_outlined,
-                        size: 40, color: AppColors.foregroundMutedCtx(context)),
-                    const SizedBox(height: AppSpacing.md),
-                    Text('文件管理器（待实现）',
-                        style: TextStyle(
-                          fontSize: AppFontSize.base,
-                          color: AppColors.foregroundMutedCtx(context),
-                        )),
-                  ],
-                ),
-              ),
+              child: diffMessages.isEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.folder_open_outlined,
+                              size: 40, color: muted),
+                          const SizedBox(height: AppSpacing.md),
+                          Text(
+                            '暂无修改文件',
+                            style: TextStyle(
+                              fontSize: AppFontSize.base,
+                              color: muted,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.all(AppSpacing.md),
+                      itemCount: diffMessages.length,
+                      itemBuilder: (context, idx) {
+                        final msg = diffMessages[idx];
+                        final filename = msg.toolPath?.split('/').last ?? 'file';
+
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: AppSpacing.md),
+                          decoration: BoxDecoration(
+                            color: AppColors.surfaceCtx(context),
+                            borderRadius: BorderRadius.circular(AppRadius.md),
+                            border: Border.all(
+                              color: dark ? Colors.white10 : Colors.black12,
+                              width: 0.8,
+                            ),
+                          ),
+                          child: ExpansionTile(
+                            leading: Icon(
+                              Icons.difference_outlined,
+                              size: 18,
+                              color: fg,
+                            ),
+                            title: Text(
+                              filename,
+                              style: TextStyle(
+                                fontSize: AppFontSize.sm,
+                                fontWeight: FontWeight.w600,
+                                color: fg,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            subtitle: Text(
+                              msg.toolPath ?? '',
+                              style: TextStyle(
+                                fontSize: AppFontSize.xxs,
+                                color: muted,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.all(AppSpacing.sm),
+                                child: DiffView(
+                                  path: msg.toolPath ?? '',
+                                  oldText: msg.toolOldText,
+                                  newText: msg.toolNewText,
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
             ),
           ],
         ),
