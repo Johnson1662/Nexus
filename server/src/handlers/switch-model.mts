@@ -8,7 +8,7 @@ export async function handleSwitchModel(
   model: string,
 ): Promise<void> {
   const sess = getSession(sessionId);
-  if (!sess || !sess.acpSessionId) {
+  if (!sess || !sess.sessionId) {
     ws.send(
       JSON.stringify({ type: "error", text: `no active session: ${sessionId}` }),
     );
@@ -22,7 +22,7 @@ export async function handleSwitchModel(
 
   try {
     console.log(`[server] switching model for ${sessionId} to ${model}`);
-    await sess.client.setSessionModel(sess.acpSessionId, model);
+    await sess.client.setSessionModel(sess.sessionId, model);
     console.log(`[server] model switched for ${sessionId} to ${model}`);
     setLastModel(sess.agent || "opencode", model);
     ws.send(

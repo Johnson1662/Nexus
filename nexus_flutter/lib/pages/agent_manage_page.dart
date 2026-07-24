@@ -32,7 +32,7 @@ class _AgentManagePageState extends State<AgentManagePage>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final chatProvider = context.read<ChatProvider>();
       chatProvider.listRegistryAgents();
-      // Agent list is already maintained via list_agents message handling
+      chatProvider.requestAgents();
     });
   }
 
@@ -128,20 +128,20 @@ class _AgentManagePageState extends State<AgentManagePage>
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Agent Management'),
+        title: const Text('Agent 商店 & 管理'),
         bottom: TabBar(
           controller: _tabController,
           tabs: const [
-            Tab(text: '已安装'),
             Tab(text: '商店'),
+            Tab(text: '已安装'),
           ],
         ),
       ),
       body: TabBarView(
         controller: _tabController,
         children: [
+          _buildStoreTab(context, filteredRegistry, installedAgents),
           _buildInstalledTab(context, installedAgents),
-          _buildStoreTab(context, filteredRegistry),
         ],
       ),
     );
@@ -319,6 +319,7 @@ class _AgentManagePageState extends State<AgentManagePage>
   Widget _buildStoreTab(
     BuildContext context,
     List<RegistryAgentInfo> registryAgents,
+    List<AgentInfo> installedAgents,
   ) {
     return Column(
       children: [
@@ -335,7 +336,7 @@ class _AgentManagePageState extends State<AgentManagePage>
               prefixIcon: Icon(
                 Icons.search,
                 size: 18,
-                color: AppColors.foregroundM(context),
+                color: AppColors.foregroundMutedCtx(context),
               ),
               suffixIcon: _storeSearchQuery.isNotEmpty
                   ? IconButton(
@@ -360,7 +361,7 @@ class _AgentManagePageState extends State<AgentManagePage>
                       Icon(
                         Icons.store_outlined,
                         size: 48,
-                        color: AppColors.foregroundM(context).withAlpha(80),
+                        color: AppColors.foregroundMutedCtx(context).withAlpha(80),
                       ),
                       const SizedBox(height: AppSpacing.md),
                       Text(
@@ -368,7 +369,7 @@ class _AgentManagePageState extends State<AgentManagePage>
                             ? '未找到匹配的 Agent'
                             : '商店暂无 Agent',
                         style: TextStyle(
-                          color: AppColors.foregroundM(context),
+                          color: AppColors.foregroundMutedCtx(context),
                           fontSize: AppFontSize.md,
                         ),
                       ),
@@ -382,6 +383,7 @@ class _AgentManagePageState extends State<AgentManagePage>
                     return _buildRegistryAgentCard(
                       context,
                       registryAgents[index],
+                      installedAgents,
                     );
                   },
                 ),
@@ -393,11 +395,15 @@ class _AgentManagePageState extends State<AgentManagePage>
   Widget _buildRegistryAgentCard(
     BuildContext context,
     RegistryAgentInfo agent,
+    List<AgentInfo> installedAgents,
   ) {
+    final isInstalled = installedAgents
+        .any((a) => a.name == agent.id || a.name == agent.name);
+
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.sm),
       child: Material(
-        color: AppColors.surface1(context),
+        color: AppColors.surfaceCtx(context),
         borderRadius: BorderRadius.circular(AppRadius.md),
         child: Padding(
           padding: const EdgeInsets.all(AppSpacing.lg),
@@ -415,7 +421,11 @@ class _AgentManagePageState extends State<AgentManagePage>
                             Flexible(
                               child: Text(
                                 agent.name,
-                                style: Theme.of(context).textTheme.titleMedium,
+                                style: TextStyle(
+                                  fontSize: AppFontSize.md,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.foregroundCtx(context),
+                                ),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),
@@ -425,7 +435,7 @@ class _AgentManagePageState extends State<AgentManagePage>
                               'v${agent.version}',
                               style: TextStyle(
                                 fontSize: AppFontSize.xxs,
-                                color: AppColors.foregroundM(context),
+                                color: AppColors.foregroundMutedCtx(context),
                               ),
                             ),
                           ],
@@ -434,7 +444,10 @@ class _AgentManagePageState extends State<AgentManagePage>
                           const SizedBox(height: AppSpacing.xs),
                           Text(
                             agent.description,
-                            style: Theme.of(context).textTheme.bodySmall,
+                            style: TextStyle(
+                              fontSize: AppFontSize.sm,
+                              color: AppColors.foregroundMutedCtx(context),
+                            ),
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -443,26 +456,42 @@ class _AgentManagePageState extends State<AgentManagePage>
                     ),
                   ),
                   const SizedBox(width: AppSpacing.md),
-                  ElevatedButton(
-                    onPressed: () {
-                      context.read<ChatProvider>().installAgent(agent.id);
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.accent,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(AppRadius.sm),
-                      ),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: AppSpacing.md,
-                        vertical: AppSpacing.sm,
-                      ),
-                    ),
-                    child: const Text(
-                      '安装',
-                      style: TextStyle(fontSize: AppFontSize.sm),
-                    ),
-                  ),
+                  isInstalled
+                      ? OutlinedButton(
+                          onPressed: null,
+                          style: OutlinedButton.styleFrom(
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(AppRadius.sm),
+                            ),
+                          ),
+                          child: const Text('已安装', style: TextStyle(fontSize: AppFontSize.xs)),
+                        )
+                      : ElevatedButton(
+                          onPressed: () {
+                            context.read<ChatProvider>().installAgent(agent.id);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('正在安装 ${agent.name}...'),
+                                duration: const Duration(seconds: 2),
+                              ),
+                            );
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.accent,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(AppRadius.sm),
+                            ),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: AppSpacing.md,
+                              vertical: AppSpacing.sm,
+                            ),
+                          ),
+                          child: const Text(
+                            '安装',
+                            style: TextStyle(fontSize: AppFontSize.sm),
+                          ),
+                        ),
                 ],
               ),
             ],

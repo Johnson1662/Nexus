@@ -27,6 +27,8 @@ Thumbs.db
 *.local
 
 # Temp
+*.bak
+*.hap
 tmpfix/
 .codegraph/
 .agent/

@@ -12,7 +12,7 @@ export async function handleCloseSession(
   }
 
   try {
-    await sess.client.closeSession(sess.acpSessionId);
+    await sess.client.closeSession(sess.sessionId);
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     console.log(`[server] closeSession error: ${msg}`);

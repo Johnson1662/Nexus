@@ -13,6 +13,7 @@ import {
   killSessionProcess,
   cleanupWsSessions,
   bufferAgentEvent,
+  updateSessionActivity,
 } from "../session.mjs";
 import { createAcpCallbacks } from "../acp-callbacks.mjs";
 import type { SessionState } from "../acp/types.mjs";
@@ -50,7 +51,8 @@ export async function handleStart(
     shell: true,
   });
 
-  const sessionId = `acp-${Date.now()}-${randomUUID().slice(0, 8)}`;
+  // Will be set to the real ACP session ID after createSession()
+  let sessionId = '';
 
   const sess: Partial<SessionState> = {
     ws,
@@ -63,6 +65,8 @@ export async function handleStart(
     restartCount: 0,
     toolCallIdMap: new Map(),
     orphanedAt: null,
+    turnActive: false,
+    lastActivity: Date.now(),
     messageBuffer: [],
   };
 
@@ -71,6 +75,8 @@ export async function handleStart(
       const currentSess = getSession(sessionId);
       if (currentSess) {
         recordToolCallIds(currentSess, update.update);
+        // Any agent event counts as session activity
+        updateSessionActivity(sessionId);
       }
       // Q5 grill: parallel send + buffer — bufferAgentEvent runs
       // independently even if ws.send() fails (disconnected WS).
@@ -110,7 +116,6 @@ export async function handleStart(
   });
 
   sess.client = client;
-  setSession(sessionId, sess as SessionState);
 
   proc.stderr.on("data", (chunk: Buffer) => {
     const text = chunk.toString();
@@ -149,9 +154,11 @@ export async function handleStart(
 
     console.log(`[server] creating session for ${sessionId}...`);
     const sessionResult = await client.createSession(cwd || process.cwd());
-    const acpSessionId = sessionResult.sessionId;
-    sess.acpSessionId = acpSessionId;
-    console.log(`[server] ACP session created: ${acpSessionId}`);
+    sessionId = sessionResult.sessionId;
+    sess.sessionId = sessionId;
+    // Register with the real ACP session ID as the canonical key
+    setSession(sessionId, sess as SessionState);
+    console.log(`[server] ACP session created: ${sessionId}`);
     if (sessionResult.modes) {
       console.log(`[server] default mode: ${sessionResult.modes.currentModeId || "not set"}`);
     }
@@ -179,8 +186,8 @@ export async function handleStart(
 
     try {
       const sessionTitle = prompt ? prompt.slice(0, 50) + (prompt.length > 50 ? "…" : "") : "New Session";
-      if (acpSessionId) {
-        sessionTitleOverrides.set(acpSessionId, sessionTitle);
+      if (sessionId) {
+        sessionTitleOverrides.set(sessionId, sessionTitle);
         clearSessionListCache(ws);
       }
       sess.ws?.send(
@@ -189,7 +196,6 @@ export async function handleStart(
           sessionId,
           agent,
           prompt,
-          acpSessionId,
           ...(effectiveModel ? { model: effectiveModel } : {}),
           title: sessionTitle,
         }),
@@ -200,11 +206,11 @@ export async function handleStart(
       if (effectiveModel) {
         try {
           console.log(`[server] setting model to ${effectiveModel} via configOption`);
-          await client.setSessionConfigOption(acpSessionId, "model", effectiveModel);
+          await client.setSessionConfigOption(sessionId, "model", effectiveModel);
         } catch (_) {
           try {
             console.log(`[server] configOption failed, trying setSessionModel`);
-            await client.setSessionModel(acpSessionId, effectiveModel);
+            await client.setSessionModel(sessionId, effectiveModel);
           } catch (err: unknown) {
             const msg = err instanceof Error ? err.message : String(err);
             console.log(`[server] set initial model failed: ${msg}`);
@@ -221,10 +227,15 @@ export async function handleStart(
       const keepAlive = setInterval(() => {
         try { sess.ws?.send(JSON.stringify({ type: "heartbeat", sessionId, ts: Date.now() })); } catch {}
       }, 3000);
-      client.prompt(acpSessionId, prompt).then(
+      // Mark turn active before starting prompt
+      const currentSess = getSession(sessionId);
+      if (currentSess) currentSess.turnActive = true;
+      client.prompt(sessionId, prompt).then(
         (result) => {
           clearInterval(keepAlive);
           console.log(`[server] turn ended: ${result?.stopReason}`);
+          const s = getSession(sessionId);
+          if (s) s.turnActive = false;
           try {
             bufferAgentEvent(sessionId, { type: "agent_event", sessionId, event: { sessionUpdate: "turn_ended", stopReason: result?.stopReason } });
             sess.ws?.send(
@@ -241,6 +252,8 @@ export async function handleStart(
           clearInterval(keepAlive);
           const msg = err instanceof Error ? err.message : String(err);
           console.log(`[server] prompt error: ${msg}`);
+          const s = getSession(sessionId);
+          if (s) s.turnActive = false;
           try {
             bufferAgentEvent(sessionId, { type: "agent_event", sessionId, event: { sessionUpdate: "turn_ended", stopReason: "error" } });
             sess.ws?.send(JSON.stringify({ type: "turn_ended", sessionId, stopReason: "error" }));
@@ -251,8 +264,8 @@ export async function handleStart(
       );
     } else if (effectiveModel) {
       console.log(`[server] restoring model to ${effectiveModel}`);
-      client.setSessionConfigOption(acpSessionId, "model", effectiveModel).catch(() => {
-        client.setSessionModel(acpSessionId, effectiveModel).catch((err: Error) => {
+      client.setSessionConfigOption(sessionId, "model", effectiveModel).catch(() => {
+        client.setSessionModel(sessionId, effectiveModel).catch((err: Error) => {
           console.log(`[server] restore model failed: ${err.message}`);
           try {
             sess.ws?.send(JSON.stringify({ type: "error", sessionId, text: `model restore failed: ${err.message}` }));

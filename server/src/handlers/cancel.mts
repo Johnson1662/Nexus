@@ -8,6 +8,6 @@ export function handleCancel(
   const sess = getSession(sessionId);
   if (!sess) return;
 
-  sess.client.cancel(sess.acpSessionId).catch(() => {});
+  sess.client.cancel(sess.sessionId).catch(() => {});
   ws.send(JSON.stringify({ type: "session_cancelled", sessionId }));
 }

@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import kill from "tree-kill";
 import type { WebSocket } from "ws";
-import { getSession, setSession, killTerminalProcesses, killSessionProcess, bufferAgentEvent } from "../session.mjs";
+import { getSession, setSession, killTerminalProcesses, killSessionProcess, bufferAgentEvent, updateSessionActivity } from "../session.mjs";
 import { AcpClient } from "../acp/client.mjs";
 import { getAgentLaunchArgs } from "../discovery/agents.mjs";
 import { createAcpCallbacks } from "../acp-callbacks.mjs";
@@ -21,7 +21,8 @@ const MODEL_ERROR_PATTERNS: RegExp[] = [
 async function ensureSessionAlive(ws: WebSocket, sessionId: string): Promise<boolean> {
   const sess = getSession(sessionId);
   if (!sess) return false;
-  if (sess.acpSessionId && sess.client?.connected) return true;
+  updateSessionActivity(sessionId);
+  if (sess.sessionId && sess.client?.connected) return true;
 
   // Cap restart attempts to prevent infinite loop
   sess.restartCount = (sess.restartCount || 0) + 1;
@@ -62,6 +63,7 @@ async function ensureSessionAlive(ws: WebSocket, sessionId: string): Promise<boo
       const s = getSession(sessionId);
       if (s) {
         recordToolCallIds(s, update.update);
+        updateSessionActivity(sessionId);
       }
       // Q5 grill: parallel send + buffer — bufferAgentEvent runs
       // independently even if ws.send() fails (disconnected WS).
@@ -97,7 +99,7 @@ async function ensureSessionAlive(ws: WebSocket, sessionId: string): Promise<boo
   await client.initialize();
 
   // Try to reload existing session first to avoid creating orphaned sessions in the agent's store
-  const reloadSessionId = sess.loadedSessionId || sess.acpSessionId;
+  const reloadSessionId = sess.sessionId;
 
   let acpSessionId: string;
   if (reloadSessionId) {
@@ -122,13 +124,13 @@ async function ensureSessionAlive(ws: WebSocket, sessionId: string): Promise<boo
 
   sess.process = proc;
   sess.client = client;
-  sess.acpSessionId = acpSessionId;
+  sess.sessionId = acpSessionId;
   sess.pendingPermission = null;
   sess.restartCount = 0;
 
   const lastModel = getLastModel(sess.agent);
   if (lastModel) {
-    client.setSessionModel(acpSessionId, lastModel).catch((err: Error) => {
+    client.setSessionModel(sess.sessionId, lastModel).catch((err: Error) => {
       console.log(`[server] restore model failed: ${err.message}`);
     });
   }
@@ -136,7 +138,7 @@ async function ensureSessionAlive(ws: WebSocket, sessionId: string): Promise<boo
   // Re-insert into map in case old exit handler deleted it
   setSession(sessionId, sess);
 
-  console.log(`[server] ACP session restarted: ${sessionId} → ${acpSessionId}`);
+  console.log(`[server] ACP session restarted: ${sessionId}`);
   return true;
 }
 
@@ -150,9 +152,10 @@ export function handleInput(
     ws.send(JSON.stringify({ type: "error", text: `session not found: ${sessionId}` }));
     return;
   }
+  updateSessionActivity(sessionId);
 
   // Auto-recover if ACP connection is dead
-  if (!sess.acpSessionId || !sess.client?.connected) {
+  if (!sess.sessionId || !sess.client?.connected) {
     ensureSessionAlive(ws, sessionId).then((ok) => {
       if (!ok) {
         ws.send(JSON.stringify({ type: "error", text: "failed to restart session" }));
@@ -178,15 +181,18 @@ function doPrompt(
   text: string,
 ): void {
   const sess = getSession(sessionId);
-  if (!sess || !sess.acpSessionId) {
-    console.log(`[server] doPrompt: session not found or no acpSessionId for ${sessionId}`);
+  if (!sess || !sess.sessionId) {
+    console.log(`[server] doPrompt: session not found or no sessionId for ${sessionId}`);
     try {
       ws.send(JSON.stringify({ type: "error", sessionId, text: `session lost while sending message` }));
     } catch {}
     return;
   }
 
-  console.log(`[server] calling ACP prompt (acpSessionId=${sess.acpSessionId}, text="${text.slice(0, 50)}")`);
+  // Mark turn active
+  sess.turnActive = true;
+
+  console.log(`[server] calling ACP prompt (sessionId=${sess.sessionId}, text="${text.slice(0, 50)}")`);
 
   const startTime = Date.now();
   let timedOut = false;
@@ -208,8 +214,9 @@ function doPrompt(
           clearInterval(keepAlive);
           clearTimeout(timer);
           console.log(`[server] model error detected: ${stderrText.slice(0, 200)}`);
-          sess.client.cancel(sess.acpSessionId).catch(() => {});
-          killSessionProcess(sess);
+sess.client.cancel(sess.sessionId).catch(() => {});
+          const modelErrorSess = getSession(sessionId);
+          if (modelErrorSess) modelErrorSess.turnActive = false;
           bufferAgentEvent(sessionId, { type: "agent_event", sessionId, event: { sessionUpdate: 'turn_ended', stopReason: "error" } });
           ws.send(JSON.stringify({ type: "turn_ended", sessionId, stopReason: "error" }));
           ws.send(JSON.stringify({ type: "error", sessionId, text: `Model error: ${stderrText.slice(0, 300).trim()}` }));
@@ -228,15 +235,16 @@ function doPrompt(
     if (stderrHandler && sess.process?.stderr) {
       try { sess.process.stderr.removeListener("data", stderrHandler); } catch {}
     }
-    sess.client.cancel(sess.acpSessionId).catch(() => {});
-    killSessionProcess(sess);
+    sess.client.cancel(sess.sessionId).catch(() => {});
+    const timeoutSess = getSession(sessionId);
+    if (timeoutSess) timeoutSess.turnActive = false;
     bufferAgentEvent(sessionId, { type: "agent_event", sessionId, event: { sessionUpdate: 'turn_ended', stopReason: "timeout" } });
     ws.send(JSON.stringify({ type: "turn_ended", sessionId, stopReason: "timeout" }));
     ws.send(JSON.stringify({ type: "error", sessionId, text: `[Timeout] No response in 2 minutes. Switch model and try again.` }));
 
   }, PROMPT_TIMEOUT);
 
-  sess.client.prompt(sess.acpSessionId, text)
+  sess.client.prompt(sess.sessionId, text)
     .then((result) => {
       if (timedOut || errorDetected) return;
       clearInterval(keepAlive);
@@ -244,6 +252,8 @@ function doPrompt(
       if (stderrHandler && sess.process?.stderr) {
         try { sess.process.stderr.removeListener("data", stderrHandler); } catch {}
       }
+      const s = getSession(sessionId);
+      if (s) s.turnActive = false;
       console.log(`[server] turn ended after ${Math.floor((Date.now() - startTime) / 1000)}s: ${result?.stopReason}`);
       bufferAgentEvent(sessionId, { type: "agent_event", sessionId, event: { sessionUpdate: 'turn_ended', stopReason: result?.stopReason } });
       ws.send(JSON.stringify({ type: "turn_ended", sessionId, stopReason: result?.stopReason }));
@@ -256,6 +266,8 @@ function doPrompt(
       if (stderrHandler && sess.process?.stderr) {
         try { sess.process.stderr.removeListener("data", stderrHandler); } catch {}
       }
+      const s = getSession(sessionId);
+      if (s) s.turnActive = false;
       const msg = err?.message || String(err);
       console.log(`[server] prompt error after ${Math.floor((Date.now() - startTime) / 1000)}s: ${msg}`);
       bufferAgentEvent(sessionId, { type: "agent_event", sessionId, event: { sessionUpdate: 'turn_ended', stopReason: "error" } });

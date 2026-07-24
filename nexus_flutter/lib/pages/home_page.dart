@@ -10,6 +10,7 @@ import '../models/host_runtime_state.dart';
 import '../models/ws_protocol.dart';
 import '../models/device_entry.dart';
 import '../widgets/host_filter_bar.dart';
+import '../widgets/session_tile.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -502,79 +503,12 @@ class _HomePageState extends State<HomePage> {
     BuildContext context,
     ServerSessionData session,
   ) {
-    final title = session.title ?? '无标题';
-    final agent = session.agent;
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-      child: Material(
-        color: AppColors.surfaceCtx(context),
-        borderRadius: BorderRadius.circular(AppRadius.md),
-        elevation: 1,
-        shadowColor: const Color(0x141A1A2E),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(AppRadius.md),
-          onTap: () {
-            context.read<ChatProvider>().loadSession(session.sessionId);
-            Navigator.pushNamed(context, '/chat');
-          },
-          child: Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.lg,
-              vertical: AppSpacing.lg,
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    color: AppColors.accentLight,
-                    borderRadius: BorderRadius.circular(AppRadius.sm),
-                  ),
-                  alignment: Alignment.center,
-                  child: Text(
-                    title.isNotEmpty ? title.characters.first : '?',
-                    style: TextStyle(
-                      color: AppColors.accent,
-                      fontSize: AppFontSize.md,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: AppSpacing.md),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: Theme.of(context).textTheme.titleMedium,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      if (agent != null && agent.isNotEmpty) ...[
-                        const SizedBox(height: AppSpacing.xxs),
-                        Text(
-                          agent,
-                          style: Theme.of(context).textTheme.bodySmall,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                const SizedBox(width: AppSpacing.sm),
-                Text(
-                  _formatRelativeTime(session.createdAt),
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
+    return SessionTile(
+      session: session,
+      onTap: () {
+        context.read<ChatProvider>().loadSession(session.sessionId);
+        Navigator.pushNamed(context, '/chat');
+      },
     );
   }
 

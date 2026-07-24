@@ -242,6 +242,38 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
             onTap: _showAddHostDialog,
           ),
+          const Divider(height: 1),
+
+          // Agent Store / Management button
+          ListTile(
+            leading: Icon(
+              Icons.extension_outlined,
+              size: 20,
+              color: AppColors.foregroundCtx(context),
+            ),
+            title: Text(
+              'Agent 商店 & 管理',
+              style: TextStyle(
+                color: AppColors.foregroundCtx(context),
+              ),
+            ),
+            subtitle: Text(
+              '管理已安装 Agent / 浏览商店',
+              style: TextStyle(
+                color: AppColors.foregroundMutedCtx(context),
+                fontSize: AppFontSize.xs,
+              ),
+            ),
+            trailing: Icon(
+              Icons.chevron_right_rounded,
+              size: 20,
+              color: AppColors.foregroundMutedCtx(context),
+            ),
+            onTap: () {
+              context.read<ChatProvider>().listRegistryAgents();
+              Navigator.pushNamed(context, '/agent-manage');
+            },
+          ),
 
           // Device list
           if (hostStore.devices.isNotEmpty) ...[
@@ -497,6 +529,18 @@ class _SettingsPageState extends State<SettingsPage> {
                         '最后错误',
                         runtimeState.lastError,
                       ),
+                    const SizedBox(height: AppSpacing.sm),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          context.read<ChatProvider>().listRegistryAgents();
+                          Navigator.pushNamed(context, '/agent-manage');
+                        },
+                        icon: const Icon(Icons.extension_outlined, size: 16),
+                        label: const Text('管理 Agent / 商店', style: TextStyle(fontSize: AppFontSize.xs)),
+                      ),
+                    ),
                   ],
                 ),
               ),

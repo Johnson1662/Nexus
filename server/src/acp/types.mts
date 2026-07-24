@@ -22,20 +22,22 @@ export interface TerminalState {
 export interface SessionState {
   ws: import("ws").WebSocket;
   client: import("./client.mjs").AcpClient;
+  /** Canonical ACP Agent session identifier (ses_... or UUID) — single key throughout the stack */
   sessionId: string;
-  acpSessionId: string;
   cwd: string;
   process: import("child_process").ChildProcess;
   agent: string;
   pendingPermission: PendingPermission | null;
   terminals: Map<string, TerminalState>;
   restartCount: number;
-  /** ACP session ID of the loaded history session, if any */
-  loadedSessionId?: string;
   /** Maps bridge-generated tool call IDs → agent's original toolCallId */
   toolCallIdMap: Map<string, string>;
   /** Latest original toolCallId from agent, used by terminal mapping */
   lastToolCallId?: string;
+  /** Whether this session currently has an active turn in progress */
+  turnActive: boolean;
+  /** Timestamp of last session activity (input, output, or interaction) */
+  lastActivity: number;
   /** Timestamp when session was orphaned (WS disconnected), null if active */
   orphanedAt: number | null;
   /** Buffered messages for cursor sync replay (Phase 3a) */

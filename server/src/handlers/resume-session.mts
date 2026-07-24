@@ -10,6 +10,8 @@ import {
   killSessionProcess,
   cleanupWsSessions,
   bufferAgentEvent,
+  updateSessionActivity,
+  getAllSessions,
 } from "../session.mjs";
 import { createAcpCallbacks } from "../acp-callbacks.mjs";
 import type { SessionState } from "../acp/types.mjs";
@@ -39,6 +41,26 @@ export async function handleResumeSession(
 
   cleanupWsSessions(ws);
 
+  // Check if this targetSessionId is already running in the process pool
+  for (const [existingId, existingSess] of getAllSessions()) {
+    if (
+      existingSess.sessionId === targetSessionId
+      && existingSess.process && !existingSess.process.killed
+    ) {
+      console.log(`[server] reusing existing session ${existingId.slice(0, 20)} for resume target ${targetSessionId.slice(0, 20)}`);
+      existingSess.ws = ws;
+      existingSess.orphanedAt = null;
+      updateSessionActivity(existingId);
+      ws.send(JSON.stringify({
+        type: "session_started",
+        sessionId: existingId,
+        agent: existingSess.agent,
+        resumed: true,
+      }));
+      return;
+    }
+  }
+
   const args = getAgentLaunchArgs(agent);
   const proc = spawn(agent, args, {
     cwd: cwd || process.cwd(),
@@ -47,11 +69,9 @@ export async function handleResumeSession(
     shell: true,
   });
 
-  const bridgeSessionId = `acp-${Date.now()}-${randomUUID().slice(0, 8)}`;
-
   const sess: Partial<SessionState> = {
     ws,
-    sessionId: bridgeSessionId,
+    sessionId: targetSessionId,
     process: proc,
     agent,
     cwd: cwd || process.cwd(),
@@ -59,29 +79,32 @@ export async function handleResumeSession(
     terminals: new Map(),
     toolCallIdMap: new Map(),
     orphanedAt: null,
+    turnActive: false,
+    lastActivity: Date.now(),
     messageBuffer: [],
   };
 
   const client = new AcpClient(proc, {
     onSessionUpdate: async (update) => {
-      const s = getSession(bridgeSessionId);
+      const s = getSession(targetSessionId);
       if (s) {
         recordToolCallIds(s, update.update);
+        updateSessionActivity(targetSessionId);
       }
       try {
         const eventPayload = {
           type: "agent_event",
-          sessionId: bridgeSessionId,
+          sessionId: targetSessionId,
           event: update.update,
         };
-        bufferAgentEvent(bridgeSessionId, eventPayload);
+        bufferAgentEvent(targetSessionId, eventPayload);
         sess.ws?.send(JSON.stringify(eventPayload));
       } catch {}
     },
     onPermissionRequest: (params) => {
       return new Promise((resolve) => {
         const requestId = randomUUID();
-        const currentSess = getSession(bridgeSessionId);
+        const currentSess = getSession(targetSessionId);
         if (currentSess) {
           currentSess.pendingPermission = { requestId, resolve };
         }
@@ -89,7 +112,7 @@ export async function handleResumeSession(
           sess.ws?.send(
             JSON.stringify({
               type: "permission_request",
-              sessionId: bridgeSessionId,
+              sessionId: targetSessionId,
               requestId,
               toolCall: params.toolCall,
               options: params.options,
@@ -98,34 +121,33 @@ export async function handleResumeSession(
         } catch {}
       });
     },
-    ...createAcpCallbacks({ sessionId: bridgeSessionId, cwd: cwd || process.cwd(), toolCallIdMap: sess.toolCallIdMap }),
+    ...createAcpCallbacks({ sessionId: targetSessionId, cwd: cwd || process.cwd(), toolCallIdMap: sess.toolCallIdMap }),
   });
 
   sess.client = client;
-  sess.loadedSessionId = targetSessionId;
-  setSession(bridgeSessionId, sess as SessionState);
+  setSession(targetSessionId, sess as SessionState);
 
   proc.stderr.on("data", (chunk: Buffer) => {
     console.log(`[server] stderr: ${chunk.toString().slice(0, 200)}`);
     try {
-      sess.ws?.send(JSON.stringify({ type: "agent_stderr", sessionId: bridgeSessionId, text: chunk.toString() }));
+      sess.ws?.send(JSON.stringify({ type: "agent_stderr", sessionId: targetSessionId, text: chunk.toString() }));
     } catch {}
   });
 
   proc.on("error", (err: Error) => {
-    console.log(`[server] ${bridgeSessionId} spawn error: ${err.message}`);
-    deleteSession(bridgeSessionId);
+    console.log(`[server] ${targetSessionId} spawn error: ${err.message}`);
+    deleteSession(targetSessionId);
   });
 
   proc.on("exit", (code: number | null) => {
-    console.log(`[server] ${bridgeSessionId} exited with code ${code}`);
+    console.log(`[server] ${targetSessionId} exited with code ${code}`);
     try {
       sess.ws?.send(JSON.stringify({
-        type: "session_ended", sessionId: bridgeSessionId, exitCode: code
+        type: "session_ended", sessionId: targetSessionId, exitCode: code
       }));
     } catch {}
     if (sess.orphanedAt === null) {
-      deleteSession(bridgeSessionId);
+      deleteSession(targetSessionId);
     }
   });
 
@@ -135,7 +157,6 @@ export async function handleResumeSession(
 
     console.log(`[server] loading session ${targetSessionId} (via loadSession to replay history)`);
     const result = await client.loadSession(targetSessionId, cwd || process.cwd());
-    sess.acpSessionId = targetSessionId;
 
     const modelList = extractModelList(result);
     setCachedModelList(agent, cwd || process.cwd(), modelList);
@@ -149,9 +170,8 @@ export async function handleResumeSession(
 
     sess.ws?.send(JSON.stringify({
       type: "session_started",
-      sessionId: bridgeSessionId,
+      sessionId: targetSessionId,
       agent,
-      loadedSessionId: targetSessionId,
       resumed: true,
       ...(model ? { model } : {}),
     }));
@@ -160,6 +180,6 @@ export async function handleResumeSession(
     console.log(`[server] resume_session error: ${msg}`);
     sess.ws?.send(JSON.stringify({ type: "error", text: `resume session failed: ${msg}` }));
     killSessionProcess(sess as SessionState);
-    deleteSession(bridgeSessionId);
+    deleteSession(targetSessionId);
   }
 }

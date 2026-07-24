@@ -16,9 +16,7 @@ class ChatState {
   // Connection
   bool connected = false;
   String currentDeviceId = '';
-  String bridgeSessionId = '';
-  String acpSessionId = '';
-  String loadedSessionId = '';
+  String sessionId = '';
   String reconnectPhase = '';
   int reconnectAttempt = 0;
   String errorMessage = '';
@@ -50,14 +48,20 @@ class ChatState {
   // Workspace
   String currentWorkspace = '';
 
+  // File browser
+  List<Map<String, dynamic>> workspaceFiles = [];
+  String? selectedFilePath;
+  String? fileDiff;
+  List<Map<String, dynamic>> fileLogEntries = [];
+  String? fileContent;
+  bool loadingFiles = false;
+
   // Permissions / Usage
   UsageInfo? lastUsage;
   PendingPermission? pendingPermission;
 
   void resetForNewChat() {
-    bridgeSessionId = '';
-    acpSessionId = '';
-    loadedSessionId = '';
+    sessionId = '';
     sessionTitle = '';
     loadingSession = false;
     turnActive = false;

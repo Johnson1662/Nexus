@@ -36,7 +36,7 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
     final session = widget.session;
     final title = session.title?.isNotEmpty == true ? session.title! : '无标题';
     final agent = session.agent ?? '';
-    final isRunning = chatProvider.state.bridgeSessionId == session.sessionId &&
+    final isRunning = chatProvider.state.sessionId == session.sessionId &&
         chatProvider.state.turnActive;
 
     return Scaffold(
@@ -554,11 +554,11 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
                 ),
                 _buildDetailRow(
                   context,
-                  'Bridge Session',
-                  chatProvider.state.bridgeSessionId.isNotEmpty
-                      ? (chatProvider.state.bridgeSessionId.length > 20
-                          ? '${chatProvider.state.bridgeSessionId.substring(0, 20)}...'
-                          : chatProvider.state.bridgeSessionId)
+                  'Session ID',
+                  chatProvider.state.sessionId.isNotEmpty
+                      ? (chatProvider.state.sessionId.length > 20
+                          ? '${chatProvider.state.sessionId.substring(0, 20)}...'
+                          : chatProvider.state.sessionId)
                       : '—',
                 ),
                 _buildDetailRow(

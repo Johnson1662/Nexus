@@ -70,8 +70,6 @@ class ServerMessage {
   final String type;
   final String? text;
   final String? sessionId;
-  final String? acpSessionId;
-  final String? loadedSessionId;
   final String? agent;
   final String? model;
   final String? title;
@@ -93,15 +91,19 @@ class ServerMessage {
   final List<String>? ips;
   final String? hostId;
   final List<String>? workspaces;
-  final List<AcpContent>? entries; // sync_response entries
+  final List<Map<String, dynamic>>? entries; // sync_response entries
+  // Workspace file browser
+  final List<Map<String, dynamic>>? files; // workspace_files response
+  final String? diff; // file_diff response
+  final List<Map<String, dynamic>>? logEntries; // file_log response
+  final String? fileContent; // file_content response
+  final String? path; // file path for responses
   AcpUpdate? get acpUpdate => event;
 
   ServerMessage({
     required this.type,
     this.text,
     this.sessionId,
-    this.acpSessionId,
-    this.loadedSessionId,
     this.agent,
     this.model,
     this.title,
@@ -124,6 +126,11 @@ class ServerMessage {
     this.hostId,
     this.workspaces,
     this.entries,
+    this.files,
+    this.diff,
+    this.logEntries,
+    this.fileContent,
+    this.path,
   });
 
   factory ServerMessage.fromJson(Map<String, dynamic> json) {
@@ -226,7 +233,6 @@ class ServerMessage {
       type: json['type'] as String? ?? '',
       text: json['text'] as String?,
       sessionId: json['sessionId'] as String?,
-      loadedSessionId: json['loadedSessionId'] as String?,
       agent: json['agent'] as String?,
       model: json['model'] as String?,
       title: json['title'] as String?,
@@ -262,8 +268,13 @@ class ServerMessage {
       ips: (json['ips'] as List<dynamic>?)?.map((ip) => ip as String).toList(),
       hostId: json['hostId'] as String?,
       workspaces: (json['workspaces'] as List<dynamic>?)?.map((w) => w as String).toList(),
-      entries: (json['entries'] as List<dynamic>?)?.map((e) => AcpContent.fromJson(e as Map<String, dynamic>)).toList(),
-      acpSessionId: json['acpSessionId'] as String?,
+      entries: (json['entries'] as List<dynamic>?)?.map((e) => e as Map<String, dynamic>).toList(),
+
+      files: (json['files'] as List<dynamic>?)?.map((f) => f as Map<String, dynamic>).toList(),
+      diff: json['diff'] as String?,
+      logEntries: (json['logEntries'] as List<dynamic>?)?.map((e) => e as Map<String, dynamic>).toList(),
+      fileContent: json['content'] as String?,
+      path: json['path'] as String?,
     );
   }
 }

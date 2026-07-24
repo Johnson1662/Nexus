@@ -6,14 +6,14 @@ const wsOpQueues = new Map<import("ws").WebSocket, Promise<unknown>>();
 
 // Maximum entries in toolCallIdMap to prevent unbounded growth per session
 const MAX_TOOLCALL_IDS = 500;
-// Orphan session timeout: 5 minutes
-const ORPHAN_TIMEOUT_MS = 5 * 60 * 1000;
-// Maximum orphan sessions
-const MAX_ORPHANS = 10;
-// Orphan cleanup interval
-const ORPHAN_CLEANUP_INTERVAL_MS = 30_000;
+// Idle session timeout: 15 minutes (background processes are killed after this)
+const IDLE_TIMEOUT_MS = 15 * 60 * 1000;
+// Maximum concurrent ACP processes per bridge (LRU eviction cap)
+const MAX_ACP_PROCESSES = 5;
+// Idle cleanup interval
+const IDLE_CLEANUP_INTERVAL_MS = 30_000;
 
-let orphanCleanupTimer: ReturnType<typeof setInterval> | null = null;
+let idleCleanupTimer: ReturnType<typeof setInterval> | null = null;
 
 // Per-session message sequence counter for messageId generation
 const sessionSeqCounter = new Map<string, number>();
@@ -85,12 +85,21 @@ export function getSession(id: string): SessionState | undefined {
 
 export function setSession(id: string, sess: SessionState): void {
   sessions.set(id, sess);
+  updateSessionActivity(id);
+}
+
+/** Update the lastActivity timestamp for a session to now */
+export function updateSessionActivity(sessionId: string): void {
+  const sess = sessions.get(sessionId);
+  if (sess) {
+    sess.lastActivity = Date.now();
+  }
 }
 
 export function deleteSession(id: string): void {
   const sess = sessions.get(id);
   if (sess) {
-    try { sess.client.destroy(); } catch {}
+    killSessionProcess(sess);
     killTerminalProcesses(sess);
   }
   sessions.delete(id);
@@ -99,7 +108,7 @@ export function deleteSession(id: string): void {
 
 export function findSessionForWs(ws: import("ws").WebSocket): SessionState | undefined {
   for (const [, sess] of sessions) {
-    if (sess.ws === ws && sess.acpSessionId) {
+    if (sess.ws === ws && sess.sessionId) {
       return sess;
     }
   }
@@ -143,17 +152,23 @@ export function killSessionProcess(sess: SessionState): void {
   }
 }
 
+/**
+ * Cleanup all sessions associated with a WebSocket connection.
+ * Sessions are orphaned (ws=null) but their ACP processes are KEPT ALIVE
+ * for background execution. Idle cleanup or explicit close will kill them.
+ */
 export function cleanupWsSessions(ws: import("ws").WebSocket): void {
   for (const [id, sess] of sessions) {
     if (sess.ws === ws) {
       sess.orphanedAt = Date.now();
       sess.ws = null as unknown as import("ws").WebSocket;
-      console.log(`[session] session ${id.slice(0, 20)} orphaned (process kept alive), will keep for ${ORPHAN_TIMEOUT_MS / 1000}s`);
-      startOrphanCleanup();
+      updateSessionActivity(id);
+      console.log(`[session] session ${id.slice(0, 20)} orphaned (process kept alive for background execution)`);
+      startIdleCleanup();
     }
   }
   wsOpQueues.delete(ws);
-  enforceOrphanLimit();
+  enforceProcessPoolLimit();
 }
 
 /** Reclaim an orphaned session when WS reconnects with matching sessionId */
@@ -162,60 +177,87 @@ export function reclaimOrphanedSession(sessionId: string, newWs: import("ws").We
   if (sess && sess.orphanedAt !== null) {
     sess.ws = newWs;
     sess.orphanedAt = null;
+    updateSessionActivity(sessionId);
     console.log(`[session] reclaimed orphaned session ${sessionId.slice(0, 20)}`);
     return sess;
   }
   return undefined;
 }
 
-/** Periodically clean up orphaned sessions that have exceeded the timeout */
-function startOrphanCleanup(): void {
-  if (orphanCleanupTimer !== null) return;
-  orphanCleanupTimer = setInterval(() => {
+/**
+ * Start the idle cleanup timer. Runs every 30s and kills sessions that have
+ * been idle (no activity) for 15 minutes AND are not in an active turn.
+ * Also enforces the max-5 concurrent ACP process limit.
+ */
+function startIdleCleanup(): void {
+  if (idleCleanupTimer !== null) return;
+  idleCleanupTimer = setInterval(() => {
     const now = Date.now();
     const toRemove: string[] = [];
     for (const [id, sess] of sessions) {
-      if (sess.orphanedAt !== null && (now - sess.orphanedAt) > ORPHAN_TIMEOUT_MS) {
+      // Skip sessions in an active turn — never kill mid-turn
+      if (sess.turnActive) continue;
+      // Only evict orphaned sessions (no WS connected); active sessions are not idle-evicted
+      if (sess.orphanedAt === null) continue;
+      const idleFor = now - sess.lastActivity;
+      if (idleFor > IDLE_TIMEOUT_MS) {
         toRemove.push(id);
       }
     }
     for (const id of toRemove) {
       const sess = sessions.get(id);
       if (sess) {
+        console.log(`[session] idle timeout: killing session ${id.slice(0, 20)} (idle ${Math.floor((Date.now() - sess.lastActivity) / 1000)}s)`);
         killTerminalProcesses(sess);
         killSessionProcess(sess);
         sessions.delete(id);
         sessionSeqCounter.delete(id);
-        console.log(`[session] cleaned up orphaned session ${id.slice(0, 20)}`);
       }
     }
-    if (toRemove.length > 0) enforceOrphanLimit();
-  }, ORPHAN_CLEANUP_INTERVAL_MS);
+    if (toRemove.length > 0) {
+      console.log(`[session] idle cleanup removed ${toRemove.length} sessions`);
+    }
+    enforceProcessPoolLimit();
+  }, IDLE_CLEANUP_INTERVAL_MS);
 }
 
-/** Enforce maximum orphan session limit: kill oldest if over limit */
-function enforceOrphanLimit(): void {
-  const orphans: Array<{ id: string; orphanedAt: number }> = [];
+/**
+ * LRU eviction: if more than MAX_ACP_PROCESSES ACP child processes are alive,
+ * kill the oldest idle (non-turnActive) sessions until we're at the limit.
+ * Active-turn sessions are never evicted.
+ */
+function enforceProcessPoolLimit(): void {
+  const running: Array<{ id: string; lastActivity: number; turnActive: boolean }> = [];
   for (const [id, sess] of sessions) {
-    if (sess.orphanedAt !== null) {
-      orphans.push({ id, orphanedAt: sess.orphanedAt });
+    if (sess.process && !sess.process.killed) {
+      running.push({ id, lastActivity: sess.lastActivity || 0, turnActive: sess.turnActive });
     }
   }
-  if (orphans.length > MAX_ORPHANS) {
-    orphans.sort((a, b) => a.orphanedAt - b.orphanedAt);
-    const toRemove = orphans.slice(0, orphans.length - MAX_ORPHANS);
-    for (const { id } of toRemove) {
-      const sess = sessions.get(id);
-      if (sess) {
-        killTerminalProcesses(sess);
-        killSessionProcess(sess);
-        sessions.delete(id);
-        sessionSeqCounter.delete(id);
-        console.log(`[session] evicted oldest orphan session ${id.slice(0, 20)}`);
-      }
+  if (running.length <= MAX_ACP_PROCESSES) return;
+
+  // Sort by lastActivity ascending (oldest first)
+  running.sort((a, b) => a.lastActivity - b.lastActivity);
+
+  // Evict oldest idle processes until under limit
+  const toEvict: string[] = [];
+  for (const entry of running) {
+    if (entry.turnActive) continue;
+    toEvict.push(entry.id);
+    if (running.length - toEvict.length <= MAX_ACP_PROCESSES) break;
+  }
+
+  for (const id of toEvict) {
+    const sess = sessions.get(id);
+    if (sess) {
+      console.log(`[session] LRU eviction: killing idle session ${id.slice(0, 20)}`);
+      killTerminalProcesses(sess);
+      killSessionProcess(sess);
+      sessions.delete(id);
+      sessionSeqCounter.delete(id);
     }
   }
 }
+
 
 export function getAllSessions(): Map<string, SessionState> {
   return sessions;

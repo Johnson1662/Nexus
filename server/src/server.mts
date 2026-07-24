@@ -33,6 +33,8 @@ import { handleSetConfig } from "./handlers/set-config.mjs";
 import { handlePermissionResponse } from "./handlers/permission.mjs";
 import { handleAuth } from "./handlers/auth.mjs";
 import { cleanupWsSessions, enqueueWsOp, getSession, getBufferedAfter, reclaimOrphanedSession, killSessionProcess, getAllSessions } from "./session.mjs";
+import { startWatcher, stopWatcher } from "./discovery/session-watcher.mjs";
+import { handleListWorkspaceFiles, handleFileDiff, handleFileLog, handleFileRead } from "./handlers/workspace-files.mjs";
 
 const PORT = parseInt(process.env.PORT || "", 10) || 12138;
 const HOST_ID = getOrCreateHostId();
@@ -83,6 +85,8 @@ export function createBridgeServer(config: BridgeConfig): BridgeApp {
     handleIncomingConnection(ws);
   });
 
+  startSessionWatcher(wss);
+
   return {
     httpServer,
     wss,
@@ -110,6 +114,47 @@ const isMainModule = process.argv[1] && (
 );
 
 // ── Pure functions (hoisted so createBridgeServer can call them) ──
+
+/** Start the session watcher and broadcast changes to all connected clients. */
+function startSessionWatcher(wss: WebSocketServer): void {
+  // Debounced pending sessions: aggregate rapid watcher ticks into one broadcast
+  const pendingSessions = new Map<string, { sessionId: string; status: string; lastActivity: number }>();
+  let debounceTimer: ReturnType<typeof setTimeout> | undefined;
+
+  function flushPending(): void {
+    if (pendingSessions.size === 0) return;
+    const sessions = Array.from(pendingSessions.values());
+    pendingSessions.clear();
+    debounceTimer = undefined;
+
+    const payload = JSON.stringify({
+      type: "session_status_update",
+      sessions,
+    });
+    wss.clients.forEach((client: WebSocket) => {
+      try { client.send(payload); } catch {}
+    });
+  }
+
+  startWatcher((added, removed, changed) => {
+    const all = [...added, ...changed];
+    if (all.length === 0) return;
+
+    for (const s of all) {
+      pendingSessions.set(s.sessionId, {
+        sessionId: s.sessionId,
+        status: s.status,
+        lastActivity: s.lastActivity,
+      });
+    }
+
+    // Debounce: reset timer on each watcher tick
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(flushPending, 500);
+  }, 5000);
+  console.log("[server] session watcher started (5s interval, 500ms debounce)");
+}
+
 function collectHostIps(): string[] {
   const nets = os.networkInterfaces();
   const ips: string[] = [];
@@ -417,6 +462,23 @@ function handleIncomingConnection(transport: any) {
         });
         break;
 
+      case "list_workspace_files":
+        console.log(`[server] list_workspace_files cwd="${sessionMsg.cwd || ""}"`);
+        enqueueWsOp(transport, () => handleListWorkspaceFiles(transport, { cwd: sessionMsg.cwd || process.cwd() }));
+        break;
+
+      case "get_file_diff":
+        enqueueWsOp(transport, () => handleFileDiff(transport, { cwd: sessionMsg.cwd || process.cwd(), path: sessionMsg.text || sessionMsg.path || "" }));
+        break;
+
+      case "get_file_log":
+        enqueueWsOp(transport, () => handleFileLog(transport, { cwd: sessionMsg.cwd || process.cwd(), path: sessionMsg.text || sessionMsg.path || "" }));
+        break;
+
+      case "get_file_content":
+        enqueueWsOp(transport, () => handleFileRead(transport, { cwd: sessionMsg.cwd || process.cwd(), path: sessionMsg.text || sessionMsg.path || "" }));
+        break;
+
       case "sync_request": {
         const syncSessionId = sessionMsg.sessionId as string;
         const lastMessageId = sessionMsg.lastMessageId as string || '';
@@ -509,4 +571,5 @@ if (isMainModule) {
   });
 
   console.log('[server] started (legacy mode: node server.mjs)');
+  startSessionWatcher(wss);
 } // end if (isMainModule)

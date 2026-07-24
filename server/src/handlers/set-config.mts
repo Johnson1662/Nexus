@@ -16,7 +16,7 @@ export async function handleSetConfig(
 
   try {
     const result = await sess.client.setSessionConfigOption(
-      sess.acpSessionId,
+      sess.sessionId,
       configId,
       value,
     );

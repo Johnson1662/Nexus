@@ -111,7 +111,7 @@ class ChatProvider extends ChangeNotifier {
       return;
     }
 
-    if (_state.bridgeSessionId.isEmpty) {
+    if (_state.sessionId.isEmpty) {
       // New session: use 'start' with full config
       _state.turnActive = true;
       _state.messages = [
@@ -139,7 +139,7 @@ class ChatProvider extends ChangeNotifier {
 
       _ws.send(ClientMessage(
         type: 'input',
-        sessionId: _state.bridgeSessionId,
+        sessionId: _state.sessionId,
         text: text,
       ));
     }
@@ -183,10 +183,10 @@ class ChatProvider extends ChangeNotifier {
     if (index >= 0 && index < _state.models.length) {
       _state.modelIndex = index;
       notifyListeners();
-      if (_state.bridgeSessionId.isNotEmpty) {
+      if (_state.sessionId.isNotEmpty) {
         _ws.send(ClientMessage(
           type: 'switch_model',
-          sessionId: _state.bridgeSessionId,
+          sessionId: _state.sessionId,
           model: _state.models[index].id,
         ));
       }
@@ -197,10 +197,10 @@ class ChatProvider extends ChangeNotifier {
     if (index >= 0 && index < _state.modes.length) {
       _state.modeIndex = index;
       notifyListeners();
-      if (_state.bridgeSessionId.isNotEmpty) {
+      if (_state.sessionId.isNotEmpty) {
         _ws.send(ClientMessage(
           type: 'set_mode',
-          sessionId: _state.bridgeSessionId,
+          sessionId: _state.sessionId,
           modeId: _state.modes[index].id,
         ));
       }
@@ -218,9 +218,13 @@ class ChatProvider extends ChangeNotifier {
       sessionId: sessionId,
       cwd: _state.currentWorkspace,
       agent: _state.selectedAgentName,
+      lastMessageId: _state.lastMessageId.isNotEmpty ? _state.lastMessageId : null,
     ));
-    // Clear messages to prepare for history load
+    // Clear messages and enter loading state; mirror ArkTS loadSessionIntoStore
+    _state.loadingSession = true;
     _state.messages = [];
+    _state.planEntries = [];
+    _state.streamingThinking = '';
     _state.turnActive = false;
     notifyListeners();
   }
@@ -230,8 +234,51 @@ class ChatProvider extends ChangeNotifier {
   void _requestServerSessions() {
     _ws.send(ClientMessage(
       type: 'list_sessions',
-      agent: _state.agentNames.isNotEmpty ? _state.agentNames.first : null,
       cwd: _state.currentWorkspace.isNotEmpty ? _state.currentWorkspace : null,
+    ));
+  }
+
+  // ── Workspace File Browser ──
+  void requestWorkspaceFiles() {
+    _state.loadingFiles = true;
+    _state.fileDiff = null;
+    _state.selectedFilePath = null;
+    _state.fileLogEntries = [];
+    notifyListeners();
+    _ws.send(ClientMessage(
+      type: 'list_workspace_files',
+      cwd: _state.currentWorkspace,
+    ));
+  }
+
+  void requestFileDiff(String filePath) {
+    _state.fileDiff = null;
+    _state.selectedFilePath = filePath;
+    notifyListeners();
+    _ws.send(ClientMessage(
+      type: 'get_file_diff',
+      cwd: _state.currentWorkspace,
+      text: filePath,
+    ));
+  }
+
+  void requestFileLog(String filePath) {
+    _state.fileLogEntries = [];
+    notifyListeners();
+    _ws.send(ClientMessage(
+      type: 'get_file_log',
+      cwd: _state.currentWorkspace,
+      text: filePath,
+    ));
+  }
+
+  void requestFileContent(String filePath) {
+    _state.fileContent = null;
+    notifyListeners();
+    _ws.send(ClientMessage(
+      type: 'get_file_content',
+      cwd: _state.currentWorkspace,
+      text: filePath,
     ));
   }
 
@@ -239,7 +286,7 @@ class ChatProvider extends ChangeNotifier {
   void permissionResponse(String requestId, String outcome, {String? optionId}) {
     _ws.send(ClientMessage(
       type: 'permission_response',
-      sessionId: _state.bridgeSessionId,
+      sessionId: _state.sessionId,
       requestId: requestId,
       outcome: outcome,
       optionId: optionId,
@@ -255,6 +302,7 @@ class ChatProvider extends ChangeNotifier {
   }
 
   // ── Agent Management ──
+  void requestAgents() => _ws.send(ClientMessage(type: 'list_agents'));
   void listRegistryAgents() => _ws.send(ClientMessage(type: 'list_registry_agents'));
   void installAgent(String agentId) => _ws.send(ClientMessage(type: 'install_agent', agentId: agentId));
   void uninstallAgent(String agentId) => _ws.send(ClientMessage(type: 'uninstall_agent', agentId: agentId));
@@ -264,10 +312,10 @@ class ChatProvider extends ChangeNotifier {
 
   // ── Sync after reconnect ──
   void syncRequest() {
-    if (_state.bridgeSessionId.isNotEmpty) {
+    if (_state.sessionId.isNotEmpty) {
       _ws.send(ClientMessage(
         type: 'sync_request',
-        sessionId: _state.bridgeSessionId,
+        sessionId: _state.sessionId,
         lastMessageId: _state.lastMessageId,
       ));
     }
@@ -280,29 +328,27 @@ class ChatProvider extends ChangeNotifier {
         _handleServerInfo(msg);
         break;
       case 'session_started':
-        _state.bridgeSessionId = msg.sessionId ?? '';
-        _state.acpSessionId = msg.acpSessionId ?? '';
+        _state.sessionId = msg.sessionId ?? '';
         _state.sessionTitle = msg.title ?? msg.sessionId ?? '';
-        // Resume: server sends session_started with loadedSessionId set.
+        // Resume: server sends session_started with resumed: true.
         // Keep turnActive false so the next message continues via 'input'.
-        if (msg.loadedSessionId != null && msg.loadedSessionId!.isNotEmpty) {
-          _state.loadedSessionId = msg.loadedSessionId!;
+        if (msg.resumed == true) {
           _state.turnActive = false;
         }
+        // Safety net: clear loading state if history replay already completed
+        _state.loadingSession = false;
         notifyListeners();
         break;
       case 'session_ended':
         _state.turnActive = false;
-        _state.bridgeSessionId = '';
-        _state.acpSessionId = '';
-        _state.loadedSessionId = '';
+        _state.sessionId = '';
         _state.sessionTitle = '';
         notifyListeners();
         break;
       case 'resumed_session':
-        _state.bridgeSessionId = msg.sessionId ?? '';
-        _state.loadedSessionId = msg.loadedSessionId ?? '';
+        _state.sessionId = msg.sessionId ?? '';
         _state.turnActive = false;
+        _state.loadingSession = false;
         notifyListeners();
         break;
       case 'agent_event':
@@ -337,6 +383,12 @@ class ChatProvider extends ChangeNotifier {
         }
         notifyListeners();
         break;
+      case 'install_agent_done':
+      case 'uninstall_agent_done':
+        _ws.send(ClientMessage(type: 'list_agents'));
+        _ws.send(ClientMessage(type: 'list_registry_agents'));
+        notifyListeners();
+        break;
       case 'error':
         if (msg.text != null) {
           _state.errorMessage = msg.text!;
@@ -359,19 +411,81 @@ class ChatProvider extends ChangeNotifier {
         break;
       case 'session_closed':
         _state.turnActive = false;
-        _state.bridgeSessionId = '';
+        _state.sessionId = '';
         notifyListeners();
         break;
       case 'sync_response':
         if (msg.entries != null) {
           for (final entry in msg.entries!) {
-            _handleAcpContent(entry);
+            // Each entry is { messageId, payload: { sessionUpdate, text, ... }, timestamp }
+            final payload = entry['payload'];
+            if (payload is Map<String, dynamic>) {
+              // Construct a synthetic agent_event JSON so ServerMessage.fromJson
+              // applies the full event parsing (content blocks, nesting, etc.)
+              final syntheticJson = <String, dynamic>{
+                'type': 'agent_event',
+                'sessionId': msg.sessionId,
+                'event': payload,
+              };
+              final eventMsg = ServerMessage.fromJson(syntheticJson);
+              _handleAgentEvent(eventMsg);
+            }
           }
         }
         break;
       case 'target_offline':
         _state.connected = false;
         notifyListeners();
+        break;
+      case 'workspace_files':
+        if (msg.files != null) {
+          _state.workspaceFiles = msg.files!;
+          _state.loadingFiles = false;
+        }
+        notifyListeners();
+        break;
+      case 'file_diff':
+        _state.fileDiff = msg.diff;
+        _state.selectedFilePath = msg.path;
+        notifyListeners();
+        break;
+      case 'file_log':
+        if (msg.logEntries != null) _state.fileLogEntries = msg.logEntries!;
+        notifyListeners();
+        break;
+      case 'file_content':
+        _state.fileContent = msg.fileContent;
+        notifyListeners();
+        break;
+      case 'session_status_update':
+        // Real-time update of session status & activity from server watcher
+        if (msg.sessions != null && msg.sessions!.isNotEmpty) {
+          bool updated = false;
+          bool hasNewSession = false;
+          for (final updatedSession in msg.sessions!) {
+            final idx = _state.sessions.indexWhere(
+              (s) => s.sessionId == updatedSession.sessionId,
+            );
+            if (idx >= 0) {
+              _state.sessions[idx] = ServerSessionData(
+                sessionId: _state.sessions[idx].sessionId,
+                title: _state.sessions[idx].title,
+                agent: _state.sessions[idx].agent,
+                cwd: _state.sessions[idx].cwd,
+                createdAt: _state.sessions[idx].createdAt,
+                status: updatedSession.status,
+              );
+              updated = true;
+            } else {
+              hasNewSession = true;
+            }
+          }
+          if (hasNewSession) {
+            _requestServerSessions();
+          } else if (updated) {
+            notifyListeners();
+          }
+        }
         break;
     }
   }
@@ -411,6 +525,18 @@ class ChatProvider extends ChangeNotifier {
     if (msg.acpUpdate != null) {
       final event = msg.acpUpdate!;
 
+      // Mirror ArkTS MessageHandler: on first history event during load, re-clear
+      // any stale messages that may have accumulated before the agent replay started.
+      if (_state.loadingSession &&
+          (event.event == 'agent_message_chunk' ||
+           event.event == 'user_message_chunk' ||
+           event.event == 'tool_call')) {
+        _state.messages = [];
+        _state.planEntries = [];
+        _state.streamingThinking = '';
+        _state.turnActive = false;
+      }
+
       switch (event.event) {
         case 'agent_thought_chunk':
           _flushStreamingText();
@@ -420,6 +546,9 @@ class ChatProvider extends ChangeNotifier {
           break;
 
         case 'agent_message_chunk':
+          if (_state.loadingSession) {
+            _state.loadingSession = false;
+          }
           _flushStreamingThinking();
           _finishRunningTools(); // tool → text: tool is done
           {
@@ -453,6 +582,9 @@ class ChatProvider extends ChangeNotifier {
           break;
 
         case 'tool_call':
+          if (_state.loadingSession) {
+            _state.loadingSession = false;
+          }
           _flushStreamingThinking();
           _state.accumulatorType = 'tool';
           final callId = event.toolCallId ?? '';
@@ -539,6 +671,9 @@ class ChatProvider extends ChangeNotifier {
           _handleAcpContent(event.planContent);
           break;
         case 'user_message_chunk':
+          if (_state.loadingSession) {
+            _state.loadingSession = false;
+          }
           {
             final text = event.text ?? '';
             if (text.isNotEmpty) {

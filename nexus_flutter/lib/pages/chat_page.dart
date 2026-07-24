@@ -382,7 +382,10 @@ class _ChatPageState extends State<ChatPage> {
                 ),
                 _roundIconButton(
                   Icons.folder_open_rounded,
-                  () => setState(() => _fileDrawerOpen = true),
+                  () {
+                    setState(() => _fileDrawerOpen = true);
+                    context.read<ChatProvider>().requestWorkspaceFiles();
+                  },
                   size: 34,
                 ),
               ],
@@ -435,11 +438,9 @@ class _ChatPageState extends State<ChatPage> {
   ) {
     final title = state.sessionTitle.isNotEmpty
         ? state.sessionTitle
-        : (state.bridgeSessionId.isEmpty && state.acpSessionId.isEmpty
+        : (state.sessionId.isEmpty
             ? '新对话'
-            : state.acpSessionId.isNotEmpty
-                ? state.acpSessionId.substring(0, 8)
-                : 'Nexus');
+            : state.sessionId.substring(0, 8));
 
     // Online status color
     Color dotColor;
@@ -674,17 +675,19 @@ class _ChatPageState extends State<ChatPage> {
     );
   }
 
-  /// File manager panel content (the sliding surface itself).
+  /// File manager panel — real workspace file browser with git diff.
   Widget _buildFilePanel(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
-    final state = context.watch<ChatProvider>().state;
+    final provider = context.watch<ChatProvider>();
+    final state = provider.state;
     final fg = AppColors.foregroundCtx(context);
     final muted = AppColors.foregroundMutedCtx(context);
 
-    // Extract tool diffs from assistant messages
-    final diffMessages = state.messages
-        .where((m) => m.toolContentType == 'diff' && m.toolPath != null)
+    // Build git-status-aware file list
+    final changedFiles = state.workspaceFiles
+        .where((f) => f['status'] != null && (f['status'] as String).isNotEmpty)
         .toList();
+    final allFiles = state.workspaceFiles;
 
     return Container(
       decoration: BoxDecoration(
@@ -701,112 +704,170 @@ class _ChatPageState extends State<ChatPage> {
       child: SafeArea(
         child: Column(
           children: [
+            // Header
             Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.md,
-                vertical: AppSpacing.sm,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
               child: Row(
                 children: [
-                  Icon(Icons.folder_outlined, size: 20, color: fg),
+                  if (state.selectedFilePath != null)
+                    _roundIconButton(Icons.arrow_back_rounded, () {
+                      provider.requestWorkspaceFiles();
+                    })
+                  else
+                    Icon(Icons.folder_outlined, size: 20, color: fg),
                   const SizedBox(width: AppSpacing.sm),
-                  Text(
-                    '文件与 Diff',
-                    style: TextStyle(
-                      fontSize: AppFontSize.lg,
-                      fontWeight: FontWeight.w600,
-                      color: fg,
+                  Expanded(
+                    child: Text(
+                      state.selectedFilePath != null
+                          ? state.selectedFilePath!.split('/').last
+                          : '文件浏览器',
+                      style: TextStyle(fontSize: AppFontSize.lg, fontWeight: FontWeight.w600, color: fg),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  const Spacer(),
-                  _roundIconButton(
-                    Icons.close_rounded,
-                    () => setState(() => _fileDrawerOpen = false),
-                  ),
+                  _roundIconButton(Icons.close_rounded, () => setState(() => _fileDrawerOpen = false)),
                 ],
               ),
             ),
             Divider(color: AppColors.borderCtx(context), height: 0.5),
 
+            // Content
             Expanded(
-              child: diffMessages.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.folder_open_outlined,
-                              size: 40, color: muted),
-                          const SizedBox(height: AppSpacing.md),
-                          Text(
-                            '暂无修改文件',
-                            style: TextStyle(
-                              fontSize: AppFontSize.base,
-                              color: muted,
-                            ),
-                          ),
-                        ],
-                      ),
-                    )
-                  : ListView.builder(
-                      padding: const EdgeInsets.all(AppSpacing.md),
-                      itemCount: diffMessages.length,
-                      itemBuilder: (context, idx) {
-                        final msg = diffMessages[idx];
-                        final filename = msg.toolPath?.split('/').last ?? 'file';
-
-                        return Container(
-                          margin: const EdgeInsets.only(bottom: AppSpacing.md),
-                          decoration: BoxDecoration(
-                            color: AppColors.surfaceCtx(context),
-                            borderRadius: BorderRadius.circular(AppRadius.md),
-                            border: Border.all(
-                              color: dark ? Colors.white10 : Colors.black12,
-                              width: 0.8,
-                            ),
-                          ),
-                          child: ExpansionTile(
-                            leading: Icon(
-                              Icons.difference_outlined,
-                              size: 18,
-                              color: fg,
-                            ),
-                            title: Text(
-                              filename,
-                              style: TextStyle(
-                                fontSize: AppFontSize.sm,
-                                fontWeight: FontWeight.w600,
-                                color: fg,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            subtitle: Text(
-                              msg.toolPath ?? '',
-                              style: TextStyle(
-                                fontSize: AppFontSize.xxs,
-                                color: muted,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            children: [
-                              Padding(
-                                padding: const EdgeInsets.all(AppSpacing.sm),
-                                child: DiffView(
-                                  path: msg.toolPath ?? '',
-                                  oldText: msg.toolOldText,
-                                  newText: msg.toolNewText,
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
+              child: _buildFileContent(context, provider, state, changedFiles, allFiles, fg, muted),
             ),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildFileContent(
+    BuildContext context,
+    ChatProvider provider,
+    ChatState state,
+    List<Map<String, dynamic>> changedFiles,
+    List<Map<String, dynamic>> allFiles,
+    Color fg,
+    Color muted,
+  ) {
+    // Show diff view for selected file
+    if (state.selectedFilePath != null) {
+      if (state.fileDiff != null) {
+        return ListView(
+          padding: const EdgeInsets.all(AppSpacing.md),
+          children: [
+            // File info
+            Container(
+              padding: const EdgeInsets.all(AppSpacing.sm),
+              margin: const EdgeInsets.only(bottom: AppSpacing.md),
+              decoration: BoxDecoration(
+                color: Theme.of(context).brightness == Brightness.dark
+                    ? Colors.white10 : Colors.black.withOpacity(0.04),
+                borderRadius: BorderRadius.circular(AppRadius.sm),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.insert_drive_file_outlined, size: 16, color: muted),
+                  const SizedBox(width: AppSpacing.xs),
+                  Expanded(
+                    child: Text(state.selectedFilePath!, style: TextStyle(fontSize: AppFontSize.xs, color: muted)),
+                  ),
+                  TextButton.icon(
+                    icon: Icon(Icons.history, size: 14, color: fg),
+                    label: Text('历史', style: TextStyle(fontSize: AppFontSize.xs, color: fg)),
+                    onPressed: () => provider.requestFileLog(state.selectedFilePath!),
+                  ),
+                ],
+              ),
+            ),
+            // Git log (if loaded)
+            if (state.fileLogEntries.isNotEmpty) ...[
+              Padding(
+                padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                child: Text('最近提交', style: TextStyle(fontSize: AppFontSize.sm, fontWeight: FontWeight.w600, color: fg)),
+              ),
+              ...state.fileLogEntries.take(5).map((e) => Container(
+                    padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
+                    margin: const EdgeInsets.only(bottom: AppSpacing.xxs),
+                    child: Row(
+                      children: [
+                        Text(e['hash'] as String? ?? '', style: TextStyle(fontSize: AppFontSize.xxs, color: AppColors.accent, fontFamily: 'monospace')),
+                        const SizedBox(width: AppSpacing.sm),
+                        Expanded(child: Text(e['message'] as String? ?? '', style: TextStyle(fontSize: AppFontSize.xxs, color: fg), maxLines: 1, overflow: TextOverflow.ellipsis)),
+                        Text(e['date'] as String? ?? '', style: TextStyle(fontSize: AppFontSize.xxs, color: muted)),
+                      ],
+                    ),
+                  )),
+              const Divider(),
+            ],
+            // Diff content
+            if (state.fileDiff!.isNotEmpty)
+              Text(
+                state.fileDiff!,
+                style: TextStyle(fontSize: AppFontSize.xxs, color: fg, fontFamily: 'monospace', height: 1.5),
+              )
+            else
+              Padding(
+                padding: const EdgeInsets.all(AppSpacing.md),
+                child: Text('此文件无变更内容', style: TextStyle(fontSize: AppFontSize.sm, color: muted)),
+              ),
+          ],
+        );
+      }
+      // Loading diff
+      return const Center(child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2)));
+    }
+
+    // File list
+    if (state.loadingFiles) {
+      return const Center(child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2)));
+    }
+
+    if (allFiles.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.folder_open_outlined, size: 40, color: muted),
+            const SizedBox(height: AppSpacing.md),
+            Text('暂无文件', style: TextStyle(fontSize: AppFontSize.base, color: muted)),
+          ],
+        ),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(AppSpacing.sm),
+      itemCount: allFiles.length,
+      itemBuilder: (ctx, i) {
+        final f = allFiles[i];
+        final path = f['path'] as String? ?? '';
+        final name = f['name'] as String? ?? '';
+        final status = f['status'] as String? ?? '';
+        final isDir = f['type'] == 'directory';
+
+        // Skip directories in list view
+        if (isDir) return const SizedBox.shrink();
+
+        IconData statusIcon;
+        Color statusColor;
+        switch (status) {
+          case 'M': statusIcon = Icons.edit_outlined; statusColor = const Color(0xFFE6A817); break;
+          case 'A': statusIcon = Icons.add_circle_outline; statusColor = const Color(0xFF2DA44E); break;
+          case 'D': statusIcon = Icons.remove_circle_outline; statusColor = const Color(0xFFCF222E); break;
+          case '??': statusIcon = Icons.help_outline; statusColor = muted; break;
+          default: statusIcon = Icons.insert_drive_file_outlined; statusColor = muted; break;
+        }
+
+        return ListTile(
+          dense: true,
+          leading: Icon(statusIcon, size: 16, color: statusColor),
+          title: Text(name, style: TextStyle(fontSize: AppFontSize.sm, color: fg)),
+          subtitle: path.isNotEmpty ? Text(path, style: TextStyle(fontSize: AppFontSize.xxs, color: muted), maxLines: 1, overflow: TextOverflow.ellipsis) : null,
+          onTap: () => provider.requestFileDiff(path),
+        );
+      },
     );
   }
 
