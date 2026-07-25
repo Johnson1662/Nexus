@@ -35,6 +35,10 @@ export function getLocalAgentLocations(): Record<string, string[]> {
       path.join(home, ".codex", "history.jsonl"),
       path.join(home, ".codex", "sessions"),
     ],
+    omp: [
+      path.join(home, ".omp", "sessions"),
+      path.join(home, ".omp", "history"),
+    ],
   };
 }
 
@@ -44,6 +48,30 @@ export function getLocalAgentLocations(): Record<string, string[]> {
 export async function scanLocalSessionStatuses(): Promise<ActiveSessionStatus[]> {
   const results: ActiveSessionStatus[] = [];
   const locations = getLocalAgentLocations();
+
+  // Scan OMP session directories
+  for (const ompDir of (locations.omp || [])) {
+    if (existsSync(ompDir)) {
+      try {
+        const files = await fs.readdir(ompDir);
+        for (const f of files) {
+          if (f.endsWith(".json") || f.endsWith(".jsonl")) {
+            const fp = path.join(ompDir, f);
+            const stat = await fs.stat(fp);
+            const isRunning = Date.now() - stat.mtimeMs < 15000;
+            results.push({
+              sessionId: f.replace(/\.(json|jsonl)$/, ""),
+              agentName: "omp",
+              status: isRunning ? "running" : "idle",
+              lastActivity: stat.mtimeMs,
+            });
+          }
+        }
+      } catch (err: any) {
+        console.warn(`[session-watcher] Error scanning omp sessions ${ompDir}:`, err.message);
+      }
+    }
+  }
 
   // Scan Claude Code session directory
   for (const claudeDir of locations.claude) {

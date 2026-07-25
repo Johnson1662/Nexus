@@ -1,3 +1,4 @@
+import path from "node:path";
 import type { WebSocket } from "ws";
 import type { AcpClient } from "../acp/client.mjs";
 import { findSessionForWs } from "../session.mjs";
@@ -138,6 +139,7 @@ async function doListAggregateSessions(
   const allSessions: any[] = [];
   const localStatuses = await scanLocalSessionStatuses();
   const statusMap = new Map(localStatuses.map((ls) => [ls.sessionId, ls.status]));
+  const normalizedTargetCwd = cwd ? path.resolve(cwd).toLowerCase() : undefined;
 
   await Promise.all(
     installed.map(async (agentItem) => {
@@ -152,6 +154,10 @@ async function doListAggregateSessions(
         ]);
         const sessions = (result as any).sessions || [];
         for (const s of sessions) {
+          if (normalizedTargetCwd && s.cwd) {
+            const normalizedSessionCwd = path.resolve(s.cwd).toLowerCase();
+            if (normalizedSessionCwd !== normalizedTargetCwd) continue;
+          }
           s.agent = agentItem.agentId;
           if (sessionTitleOverrides.has(s.sessionId)) {
             s.title = sessionTitleOverrides.get(s.sessionId);
