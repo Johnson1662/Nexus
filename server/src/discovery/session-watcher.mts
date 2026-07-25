@@ -36,6 +36,8 @@ export function getLocalAgentLocations(): Record<string, string[]> {
       path.join(home, ".codex", "sessions"),
     ],
     omp: [
+      path.join(home, ".omp", "agent", "agent.db"),
+      path.join(home, ".omp", "agent", "sessions"),
       path.join(home, ".omp", "sessions"),
       path.join(home, ".omp", "history"),
     ],
@@ -49,26 +51,39 @@ export async function scanLocalSessionStatuses(): Promise<ActiveSessionStatus[]>
   const results: ActiveSessionStatus[] = [];
   const locations = getLocalAgentLocations();
 
-  // Scan OMP session directories
-  for (const ompDir of (locations.omp || [])) {
-    if (existsSync(ompDir)) {
+  // Scan OMP session directories & agent.db WAL for status
+  for (const ompTarget of (locations.omp || [])) {
+    if (existsSync(ompTarget)) {
       try {
-        const files = await fs.readdir(ompDir);
-        for (const f of files) {
-          if (f.endsWith(".json") || f.endsWith(".jsonl")) {
-            const fp = path.join(ompDir, f);
-            const stat = await fs.stat(fp);
-            const isRunning = Date.now() - stat.mtimeMs < 15000;
-            results.push({
-              sessionId: f.replace(/\.(json|jsonl)$/, ""),
-              agentName: "omp",
-              status: isRunning ? "running" : "idle",
-              lastActivity: stat.mtimeMs,
-            });
+        const walFile = `${ompTarget}-wal`;
+        const targetFile = existsSync(walFile) ? walFile : ompTarget;
+        const stat = await fs.stat(targetFile);
+        if (stat.isFile()) {
+          const isRunning = Date.now() - stat.mtimeMs < 15000;
+          results.push({
+            sessionId: "omp-active",
+            agentName: "omp",
+            status: isRunning ? "running" : "idle",
+            lastActivity: stat.mtimeMs,
+          });
+        } else if (stat.isDirectory()) {
+          const files = await fs.readdir(ompTarget);
+          for (const f of files) {
+            if (f.endsWith(".json") || f.endsWith(".jsonl")) {
+              const fp = path.join(ompTarget, f);
+              const fstat = await fs.stat(fp);
+              const isRunning = Date.now() - fstat.mtimeMs < 15000;
+              results.push({
+                sessionId: f.replace(/\.(json|jsonl)$/, ""),
+                agentName: "omp",
+                status: isRunning ? "running" : "idle",
+                lastActivity: fstat.mtimeMs,
+              });
+            }
           }
         }
       } catch (err: any) {
-        console.warn(`[session-watcher] Error scanning omp sessions ${ompDir}:`, err.message);
+        console.warn(`[session-watcher] Error scanning omp target ${ompTarget}:`, err.message);
       }
     }
   }
