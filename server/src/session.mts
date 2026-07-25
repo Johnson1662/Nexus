@@ -88,11 +88,16 @@ export function setSession(id: string, sess: SessionState): void {
   updateSessionActivity(id);
 }
 
-/** Update the lastActivity timestamp for a session to now */
+/** Update the lastActivity timestamp for a session to now and refresh prompt inactivity timer */
 export function updateSessionActivity(sessionId: string): void {
   const sess = sessions.get(sessionId);
   if (sess) {
     sess.lastActivity = Date.now();
+    if (sess.resetTimeout) {
+      try {
+        sess.resetTimeout();
+      } catch {}
+    }
   }
 }
 

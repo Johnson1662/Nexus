@@ -9,7 +9,7 @@ import { createAcpCallbacks } from "../acp-callbacks.mjs";
 import { getLastModel } from "../prefs.mjs";
 import { recordToolCallIds } from "../tool-call-map.mjs";
 
-const PROMPT_TIMEOUT = 120 * 1000; // 2 minutes
+const PROMPT_TIMEOUT = 5 * 60 * 1000; // 5 minutes continuous inactivity timeout
 const MODEL_ERROR_PATTERNS: RegExp[] = [
   /rate limit/i, /quota/i, /429/i, /402/i, /insufficient_quota/i,
   /resource.*exhausted/i, /too many request/i, /billing/i,
@@ -227,33 +227,47 @@ sess.client.cancel(sess.sessionId).catch(() => {});
     sess.process.stderr.on("data", stderrHandler);
   }
 
-  const timer = setTimeout(() => {
-    if (errorDetected) return;
-    timedOut = true;
-    clearInterval(keepAlive);
-    console.log(`[server] prompt TIMEOUT after ${Date.now() - startTime}ms for ${sessionId}`);
-    if (stderrHandler && sess.process?.stderr) {
-      try { sess.process.stderr.removeListener("data", stderrHandler); } catch {}
-    }
-    sess.client.cancel(sess.sessionId).catch(() => {});
-    const timeoutSess = getSession(sessionId);
-    if (timeoutSess) timeoutSess.turnActive = false;
-    bufferAgentEvent(sessionId, { type: "agent_event", sessionId, event: { sessionUpdate: 'turn_ended', stopReason: "timeout" } });
-    ws.send(JSON.stringify({ type: "turn_ended", sessionId, stopReason: "timeout" }));
-    ws.send(JSON.stringify({ type: "error", sessionId, text: `[Timeout] No response in 2 minutes. Switch model and try again.` }));
+  let timer: ReturnType<typeof setTimeout> | undefined;
 
-  }, PROMPT_TIMEOUT);
+  const resetInactivityTimer = () => {
+    if (timedOut || errorDetected) return;
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => {
+      if (errorDetected) return;
+      timedOut = true;
+      clearInterval(keepAlive);
+      console.log(`[server] prompt INACTIVITY TIMEOUT (5min continuous silence) after ${Date.now() - startTime}ms for ${sessionId}`);
+      if (stderrHandler && sess.process?.stderr) {
+        try { sess.process.stderr.removeListener("data", stderrHandler); } catch {}
+      }
+      sess.client.cancel(sess.sessionId).catch(() => {});
+      const timeoutSess = getSession(sessionId);
+      if (timeoutSess) {
+        timeoutSess.turnActive = false;
+        delete timeoutSess.resetTimeout;
+      }
+      bufferAgentEvent(sessionId, { type: "agent_event", sessionId, event: { sessionUpdate: 'turn_ended', stopReason: "timeout" } });
+      ws.send(JSON.stringify({ type: "turn_ended", sessionId, stopReason: "timeout" }));
+      ws.send(JSON.stringify({ type: "error", sessionId, text: `[Timeout] 连续 5 分钟未收到任何输出或工具回调。` }));
+    }, PROMPT_TIMEOUT);
+  };
+
+  sess.resetTimeout = resetInactivityTimer;
+  resetInactivityTimer();
 
   sess.client.prompt(sess.sessionId, text)
     .then((result) => {
       if (timedOut || errorDetected) return;
       clearInterval(keepAlive);
-      clearTimeout(timer);
+      if (timer) clearTimeout(timer);
       if (stderrHandler && sess.process?.stderr) {
         try { sess.process.stderr.removeListener("data", stderrHandler); } catch {}
       }
       const s = getSession(sessionId);
-      if (s) s.turnActive = false;
+      if (s) {
+        s.turnActive = false;
+        delete s.resetTimeout;
+      }
       console.log(`[server] turn ended after ${Math.floor((Date.now() - startTime) / 1000)}s: ${result?.stopReason}`);
       bufferAgentEvent(sessionId, { type: "agent_event", sessionId, event: { sessionUpdate: 'turn_ended', stopReason: result?.stopReason } });
       ws.send(JSON.stringify({ type: "turn_ended", sessionId, stopReason: result?.stopReason }));
@@ -262,12 +276,15 @@ sess.client.cancel(sess.sessionId).catch(() => {});
     .catch((err: Error) => {
       if (timedOut || errorDetected) return;
       clearInterval(keepAlive);
-      clearTimeout(timer);
+      if (timer) clearTimeout(timer);
       if (stderrHandler && sess.process?.stderr) {
         try { sess.process.stderr.removeListener("data", stderrHandler); } catch {}
       }
       const s = getSession(sessionId);
-      if (s) s.turnActive = false;
+      if (s) {
+        s.turnActive = false;
+        delete s.resetTimeout;
+      }
       const msg = err?.message || String(err);
       console.log(`[server] prompt error after ${Math.floor((Date.now() - startTime) / 1000)}s: ${msg}`);
       bufferAgentEvent(sessionId, { type: "agent_event", sessionId, event: { sessionUpdate: 'turn_ended', stopReason: "error" } });

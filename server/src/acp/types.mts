@@ -36,6 +36,8 @@ export interface SessionState {
   lastToolCallId?: string;
   /** Whether this session currently has an active turn in progress */
   turnActive: boolean;
+  /** Optional callback to reset the prompt inactivity timeout on new output/tool activity */
+  resetTimeout?: () => void;
   /** Timestamp of last session activity (input, output, or interaction) */
   lastActivity: number;
   /** Timestamp when session was orphaned (WS disconnected), null if active */
