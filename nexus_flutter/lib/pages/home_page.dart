@@ -249,7 +249,7 @@ class _HomePageState extends State<HomePage> {
                       workspaceProvider,
                     ),
                     const SizedBox(height: AppSpacing.md),
-                    _buildRecentSessionsSection(context, chatProvider),
+                    _buildRecentSessionsSection(context, chatProvider, workspaceProvider),
                     const SizedBox(height: 100),
                   ],
                 ),
@@ -480,23 +480,43 @@ class _HomePageState extends State<HomePage> {
 
   // ── Helpers ──
 
-  List<ServerSessionData> _getSortedRecentSessions(List<ServerSessionData> sessions) {
-    final sorted = List<ServerSessionData>.from(sessions);
-    sorted.sort((a, b) {
+  List<ServerSessionData> _getSortedRecentSessions(
+    List<ServerSessionData> sessions,
+    List<Map<String, String>> addedWorkspaces,
+  ) {
+    final validPaths = addedWorkspaces
+        .map((w) => (w['path'] ?? '').replaceAll('\\', '/').toLowerCase().replaceAll(RegExp(r'/$'), ''))
+        .where((p) => p.isNotEmpty)
+        .toSet();
+
+    final filtered = sessions.where((s) {
+      if (s.cwd == null || s.cwd!.isEmpty) return false;
+      final normalizedCwd = s.cwd!.replaceAll('\\', '/').toLowerCase().replaceAll(RegExp(r'/$'), '');
+      return validPaths.contains(normalizedCwd);
+    }).toList();
+
+    filtered.sort((a, b) {
       final aActive = a.status == 'running' || a.status == 'waiting_input';
       final bActive = b.status == 'running' || b.status == 'waiting_input';
       if (aActive != bActive) return aActive ? -1 : 1;
       return b.createdAt.compareTo(a.createdAt);
     });
-    return sorted.take(5).toList();
+    return filtered.take(5).toList();
   }
 
   // ── Recent sessions section ──
 
-  Widget _buildRecentSessionsSection(BuildContext context, ChatProvider chatProvider) {
+  Widget _buildRecentSessionsSection(
+    BuildContext context,
+    ChatProvider chatProvider,
+    WorkspaceProvider workspaceProvider,
+  ) {
     final fg = AppColors.foregroundCtx(context);
     final muted = AppColors.foregroundMutedCtx(context);
-    final sessions = _getSortedRecentSessions(chatProvider.state.sessions);
+    final sessions = _getSortedRecentSessions(
+      chatProvider.state.sessions,
+      workspaceProvider.workspaces,
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
