@@ -87,8 +87,8 @@ class _ToolCallCardState extends State<ToolCallCard> {
                     if (hasContent) ...[
                       const SizedBox(width: 4),
                       Icon(
-                        _expanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
-                        size: 18, color: AppColors.foregroundLightCtx(context),
+                        _expanded ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_right,
+                        size: 16, color: AppColors.foregroundLightCtx(context),
                       ),
                     ],
                   ],

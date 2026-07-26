@@ -44,6 +44,7 @@ class _ThinkingSectionState extends State<ThinkingSection> {
         decoration: BoxDecoration(
           color: AppColors.surfaceElevatedCtx(context),
           borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AppColors.borderCtx(context).withAlpha(80)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -57,28 +58,39 @@ class _ThinkingSectionState extends State<ThinkingSection> {
                 child: Row(
                   children: [
                     Icon(
-                      _expanded ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_right,
-                      size: 16, color: AppColors.foregroundM(context),
-                    ),
-                    const SizedBox(width: 6),
-                    Icon(
                       widget.isStreaming ? Icons.psychology : Icons.lightbulb_outline,
-                      size: 14, color: AppColors.accent,
+                      size: 16,
+                      color: AppColors.accent,
                     ),
-                    const SizedBox(width: 6),
+                    const SizedBox(width: 8),
                     Text(
                       '思考过程',
-                      style: TextStyle(fontSize: 13, color: AppColors.foregroundM(context), fontWeight: FontWeight.w500),
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: AppColors.foregroundM(context),
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
-                    const Spacer(),
+                    const SizedBox(width: 8),
                     if (_preview.isNotEmpty && !_expanded)
-                      Flexible(
+                      Expanded(
                         child: Text(
                           _preview,
-                          style: TextStyle(fontSize: 11, color: AppColors.foregroundLightCtx(context)),
-                          maxLines: 1, overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: AppColors.foregroundLightCtx(context),
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                      ),
+                      )
+                    else
+                      const Spacer(),
+                    Icon(
+                      _expanded ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_right,
+                      size: 16,
+                      color: AppColors.foregroundM(context),
+                    ),
                   ],
                 ),
               ),

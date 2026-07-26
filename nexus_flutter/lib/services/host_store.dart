@@ -115,7 +115,56 @@ class HostStore extends ChangeNotifier {
         relayPin: device.relayPin,
       ));
     }
+    deduplicate();
     notifyListeners();
+  }
+
+  void deduplicate() {
+    final merged = <DeviceEntry>[];
+    for (final d in devices) {
+      int existingIdx = -1;
+      if (d.hostId.isNotEmpty && !d.hostId.startsWith('host_')) {
+        existingIdx = merged.indexWhere((m) => m.hostId.isNotEmpty && m.hostId == d.hostId);
+      }
+      if (existingIdx < 0 && d.name.isNotEmpty && !_isIp(d.name)) {
+        existingIdx = merged.indexWhere(
+          (m) => m.name == d.name || (m.hostId.isNotEmpty && m.hostId == d.name),
+        );
+      }
+      if (existingIdx < 0 && d.urls.isNotEmpty) {
+        existingIdx = merged.indexWhere(
+          (m) => m.urls.any((u) => d.urls.contains(u)),
+        );
+      }
+
+      if (existingIdx >= 0) {
+        final old = merged[existingIdx];
+        final mergedUrls = <String>[...old.urls];
+        for (final url in d.urls) {
+          final normalized = _normalizeUrl(url);
+          if (normalized.isNotEmpty && !mergedUrls.contains(normalized)) {
+            mergedUrls.add(normalized);
+          }
+        }
+        final name = (d.name.isNotEmpty && !_isIp(d.name))
+            ? d.name
+            : (old.name.isNotEmpty ? old.name : d.name);
+        final hostId = (d.hostId.isNotEmpty && !d.hostId.startsWith('host_'))
+            ? d.hostId
+            : (old.hostId.isNotEmpty ? old.hostId : d.hostId);
+
+        merged[existingIdx] = DeviceEntry(
+          hostId: hostId,
+          name: name,
+          urls: mergedUrls,
+          relayUrl: d.relayUrl ?? old.relayUrl,
+          relayPin: d.relayPin ?? old.relayPin,
+        );
+      } else {
+        merged.add(d);
+      }
+    }
+    devices = merged;
   }
 
   String _normalizeUrl(String url) {
@@ -139,6 +188,7 @@ class HostStore extends ChangeNotifier {
   Future<void> loadFromDisk() async {
     final storage = await StorageService.getInstance();
     devices = await storage.loadDevices();
+    deduplicate();
     notifyListeners();
   }
 

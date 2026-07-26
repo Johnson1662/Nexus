@@ -212,16 +212,17 @@ class ChatProvider extends ChangeNotifier {
   }
 
   // ── Sessions ──
-  void loadSession(String sessionId, {String? agent}) {
+  void loadSession(String sessionId, {String? agent, String? cwd}) {
     String targetAgent = agent ?? '';
-    if (targetAgent.isEmpty) {
-      final matchingSession = _state.sessions.firstWhere(
-        (s) => s.sessionId == sessionId,
-        orElse: () => ServerSessionData(sessionId: sessionId),
-      );
-      if (matchingSession.agent != null && matchingSession.agent!.isNotEmpty) {
-        targetAgent = matchingSession.agent!;
-      }
+    String targetCwd = cwd ?? '';
+
+    final matchingSession = _state.sessions.firstWhere(
+      (s) => s.sessionId == sessionId,
+      orElse: () => ServerSessionData(sessionId: sessionId),
+    );
+
+    if (targetAgent.isEmpty && matchingSession.agent != null && matchingSession.agent!.isNotEmpty) {
+      targetAgent = matchingSession.agent!;
     }
     if (targetAgent.isEmpty) {
       targetAgent = _state.selectedAgentName;
@@ -229,10 +230,17 @@ class ChatProvider extends ChangeNotifier {
       _state.selectedAgentName = targetAgent;
     }
 
+    if (targetCwd.isEmpty && matchingSession.cwd != null && matchingSession.cwd!.isNotEmpty) {
+      targetCwd = matchingSession.cwd!;
+    }
+    if (targetCwd.isNotEmpty) {
+      _state.currentWorkspace = targetCwd;
+    }
+
     _ws.send(ClientMessage(
       type: 'load_session',
       sessionId: sessionId,
-      cwd: _state.currentWorkspace,
+      cwd: _state.currentWorkspace.isNotEmpty ? _state.currentWorkspace : null,
       agent: targetAgent,
       lastMessageId: _state.lastMessageId.isNotEmpty ? _state.lastMessageId : null,
     ));
@@ -477,28 +485,25 @@ class ChatProvider extends ChangeNotifier {
         // Real-time update of session status & activity from server watcher
         if (msg.sessions != null && msg.sessions!.isNotEmpty) {
           bool updated = false;
-          bool hasNewSession = false;
           for (final updatedSession in msg.sessions!) {
             final idx = _state.sessions.indexWhere(
               (s) => s.sessionId == updatedSession.sessionId,
             );
             if (idx >= 0) {
-              _state.sessions[idx] = ServerSessionData(
-                sessionId: _state.sessions[idx].sessionId,
-                title: _state.sessions[idx].title,
-                agent: _state.sessions[idx].agent,
-                cwd: _state.sessions[idx].cwd,
-                createdAt: _state.sessions[idx].createdAt,
-                status: updatedSession.status,
-              );
-              updated = true;
-            } else {
-              hasNewSession = true;
+              if (_state.sessions[idx].status != updatedSession.status) {
+                _state.sessions[idx] = ServerSessionData(
+                  sessionId: _state.sessions[idx].sessionId,
+                  title: _state.sessions[idx].title,
+                  agent: _state.sessions[idx].agent,
+                  cwd: _state.sessions[idx].cwd,
+                  createdAt: _state.sessions[idx].createdAt,
+                  status: updatedSession.status,
+                );
+                updated = true;
+              }
             }
           }
-          if (hasNewSession) {
-            _requestServerSessions();
-          } else if (updated) {
+          if (updated) {
             notifyListeners();
           }
         }
@@ -541,16 +546,8 @@ class ChatProvider extends ChangeNotifier {
     if (msg.acpUpdate != null) {
       final event = msg.acpUpdate!;
 
-      // Mirror ArkTS MessageHandler: on first history event during load, re-clear
-      // any stale messages that may have accumulated before the agent replay started.
-      if (_state.loadingSession &&
-          (event.event == 'agent_message_chunk' ||
-           event.event == 'user_message_chunk' ||
-           event.event == 'tool_call')) {
-        _state.messages = [];
-        _state.planEntries = [];
-        _state.streamingThinking = '';
-        _state.turnActive = false;
+      if (_state.loadingSession) {
+        _state.loadingSession = false;
       }
 
       switch (event.event) {
@@ -562,9 +559,6 @@ class ChatProvider extends ChangeNotifier {
           break;
 
         case 'agent_message_chunk':
-          if (_state.loadingSession) {
-            _state.loadingSession = false;
-          }
           _flushStreamingThinking();
           _finishRunningTools(); // tool → text: tool is done
           {
@@ -598,9 +592,6 @@ class ChatProvider extends ChangeNotifier {
           break;
 
         case 'tool_call':
-          if (_state.loadingSession) {
-            _state.loadingSession = false;
-          }
           _flushStreamingThinking();
           _state.accumulatorType = 'tool';
           final callId = event.toolCallId ?? '';
@@ -687,16 +678,23 @@ class ChatProvider extends ChangeNotifier {
           _handleAcpContent(event.planContent);
           break;
         case 'user_message_chunk':
-          if (_state.loadingSession) {
-            _state.loadingSession = false;
-          }
           {
             final text = event.text ?? '';
             if (text.isNotEmpty) {
-              // Dedup consecutive user bubbles (ArkTS skips if prev is user)
               if (_state.messages.isNotEmpty) {
                 final last = _state.messages.last;
                 if (last.role == 'user' && last.type == 'text') {
+                  final updated = MessageData(
+                    role: 'user',
+                    content: last.content + text,
+                    type: 'text',
+                    id: last.id,
+                    sendStatus: 'sent',
+                  );
+                  _state.messages = [
+                    ..._state.messages.sublist(0, _state.messages.length - 1),
+                    updated,
+                  ];
                   break;
                 }
               }

@@ -1,303 +1,87 @@
-# TODO
+# Nexus Roadmap & TODO
 
-## 设置页语言切换动画统一
+## 已经完成 (Completed)
 
-### 背景
+### 架构与服务端深模块
+- [x] **统一 Session ID 架构**：移除 `bridgeSessionId` (`acp-timestamp-...`)，全链路（Flutter App → WebSocket 协议 → Node.js Bridge → ACP Agent）统一使用 Agent 原生 `sessionId`（UUID / `ses_...`）。
+- [x] **多 Session 后台并发与进程池**：实现 `SessionManager` 进程池，支持后台保留 active ACP 子进程（最多 5 个 LRU 淘汰，15 分钟闲置清理），切换会话或切出 App 时长任务不被中断。
+- [x] **事件缓冲与回放 (Message Buffer)**：`SessionManager` 维护滚动消息缓冲区，客户端重连/载入会话时通过 `lastMessageId` 游标平滑补齐遗漏事件。
+- [x] **实时状态检测引擎 (`SessionStatusWatcher`)**：重构 watcher 为深模块类，支持 `computeSessionDiff` 纯函数计算与 `mergeSessionStatus` 内存 `turnActive` 覆盖，向手机端广播 `{ type: "session_status_update" }`。
+- [x] **Agent 注册表服务 (`AgentRegistryService`)**：收敛 Agent 发现、安装/卸载、多 Agent 聚合查询、12 秒超时保护与 Windows 路径规范化。
+- [x] **自动归并同 Host 节点**：`HostStore` 自动按 `hostId` 与 `hostname` 去重合并多 IP 候选地址（`urls` 数组），解决多网卡/热点 IP 导致的重复主机记录问题。
 
-设置页语言切换功能已可正常刷新文案和选择器状态，但切换瞬间的视觉节奏还不够统一。当前没有设置页专用的显式动画，主要是 `appLanguage` 状态更新、`localeRevision` 强制刷新、语言选项 keyed 重建、系统语言资源刷新和 Toast 弹出几类变化叠在一起。
+### 客户端 (Flutter OHOS) 与 UI
+- [x] **会话恢复工作区 (`cwd`) 自动归位**：`loadSession` 自动提取目标会话原本绑定的 `cwd` 路径并更新当前工作区，彻底修复跨工作区 resume 时 OMP 抛出 `Internal error (ACP session not found)` 的问题。
+- [x] **消除 `session_status_update` 死循环**：修正 Flutter 端状态更新比对逻辑，不再将其他工作区的 Status 更新误判为 `hasNewSession`，消除无限发送 `list_sessions` 的死循环。
+- [x] **思考过程与工具卡片视觉对齐**：`ThinkingSection` 的展开箭头统一移至右侧，方向调整为“闭合朝右、展开朝下”，并加上与 `ToolCallCard` 相同的浅色外框。
+- [x] **输入栏与 ConfigPanel 升级**：Model 胶囊 Chip 内嵌在输入框左下角，ConfigPanel 支持 AnimatedSwitcher 视图切换与 Agent 商店一键安装。
 
-### 目标
+---
 
-后续把语言切换时的刷新路径收敛成更稳定的系统设置风体验，避免选项区域和页面文案出现不同步的跳变感。
+## 🏆 鸿蒙应用创新赛道 Kit 融合方案 (HarmonyOS 6+ 集成)
 
-### 建议能力
+### 架构设计：Flutter UI + ArkTS 原生 Kit 混合架构
 
-- 将语言 / 外观选项拆成独立响应式组件，减少通过 keyed `ForEach` 强制重建。
-- 统一使用项目内 150ms opacity 风格过渡，避免不同区域各自刷新。
-- 保留选择器即时反馈，确保摘要、勾选和页面文案仍一次性同步。
-- Toast 出现时避免遮挡当前设置组的状态变化。
-
-### 注意事项
-
-- 这是低优先级 UI polish，不影响当前语言切换功能。
-- 优化前需要确认 ArkUI 在语言资源刷新时的组件生命周期表现，避免重新引入选择器勾选不更新问题。
-
-## 全局搜索
-
-### 背景
-
-首页底部已有 `Search chats` 入口，但当前更像占位入口。Nexus 的核心信息分散在 host、workspace、session、message、tool call、plan 等多层结构中，用户在手机上很难快速找回某次任务、某条回答或某个工作区。
-
-### 目标
-
-做一个统一搜索中心，支持搜索会话、消息、工作区、路径、Agent 输出和工具调用摘要，让用户可以从首页快速回到目标上下文。
-
-### 建议能力
-
-- 搜索最近会话标题、消息正文和工作区名称 / 路径。
-- 支持按 host、workspace、agent、时间范围过滤。
-- 搜索结果点击后进入对应聊天页，并滚动到相关消息。
-- 优先展示最近命中的会话，其次展示工作区和历史消息。
-- 对本地缓存数据先做端侧搜索，后续再考虑 Bridge 端全文索引。
-
-### 实现提示
-
-- 先复用 `ChatStore.sessions`、`WorkspaceStore.workspaces` 和本地缓存消息做 MVP。
-- 搜索结果项只展示必要摘要，保持首页极简风格。
-- 后续可在 Bridge 端维护 SQLite / JSON 索引，支持跨设备和大量历史会话。
-
-## 会话管理增强
-
-### 背景
-
-Nexus 已经能列出和加载 session，但会话生命周期管理还偏基础。远程编程场景里，用户经常需要区分活跃任务、历史任务、重要任务和可以清理的任务。
-
-### 目标
-
-增强会话列表和详情页，让用户能在手机上管理远程 Agent 会话，而不是只能打开最近记录。
-
-### 建议能力
-
-- 会话重命名。
-- 会话置顶 / 取消置顶。
-- 会话归档 / 删除。
-- 关闭远端 session，释放 Bridge / ACP 资源。
-- 按 workspace、agent、model、状态过滤会话。
-- 会话项展示当前模型、最后活跃时间、是否有未读事件或待审批请求。
-
-### 实现提示
-
-- 客户端先维护本地置顶 / 归档状态，避免立即扩展 ACP 协议。
-- 关闭远端 session 可复用现有 `close_session` handler。
-- 删除前区分“仅本地隐藏”和“远端关闭 / 清理”，避免误删有价值历史。
-
-## 权限请求审阅增强
-
-### 背景
-
-当前已有 `PermissionSheet`，可以响应 Agent 的 `permission_request`。但远程审批工具调用时，用户需要知道它将执行什么、影响哪些文件、风险有多大，否则在手机上点 Allow 会缺少安全感。
-
-### 目标
-
-把权限弹窗升级成审阅面板，在批准前展示足够上下文，并支持更细粒度的授权选择。
-
-### 建议能力
-
-- 展示工具名、工具类型、目标路径、命令摘要或 diff 摘要。
-- 对高风险操作给出明确提示，例如删除文件、执行 shell、修改大量文件。
-- 支持 `Allow once`、`Reject once`、`Allow for workspace` 等策略。
-- 支持从通知点击进入对应权限请求。
-- 请求过期、重连或 session 结束时自动清理幽灵浮层。
-
-### 实现提示
-
-- Bridge 端通知 payload 不放敏感全文，只传 `requestId` 和摘要。
-- App 打开后通过 `sync_request` 拉取当前待审批状态。
-- 记住授权策略时要按 host + workspace + agent + tool scope 约束，避免全局放大权限。
-
-## 工具调用审阅面板
-
-### 背景
-
-`ToolCallCard` 已支持工具调用、diff 和 terminal 内容类型，但在手机上审阅远程编程过程还可以更强：用户需要看懂 Agent 做了什么、命令是否成功、修改了哪些文件，以及是否需要介入。
-
-### 目标
-
-把工具调用详情做成可展开的审阅面板，让远程执行过程可追踪、可复制、可复盘。
-
-### 建议能力
-
-- terminal 输出使用等宽字体展示，并区分 stdout / stderr / exit code。
-- diff 支持查看完整内容、复制路径、复制 diff 摘要。
-- 工具调用失败时显示失败原因，并提供重试或复制错误信息。
-- 长输出默认折叠，支持“查看全部”。
-- 对文件读写、搜索、执行命令使用不同图标和摘要格式。
-
-### 实现提示
-
-- 优先增强 `ToolCallCard.ets`，不改变消息协议。
-- LazyForEach key 继续包含工具内容长度和状态，确保流式更新能刷新 UI。
-- 终端长输出需要截断策略，避免列表渲染卡顿。
-
-## 通知与后台唤醒
-
-### 背景
-
-Nexus 目前依赖手机端 WebSocket 与 Bridge / Relay 保持连接。App 不在前台、进程被挂起或被系统回收后，手机端无法继续通过 WebSocket 接收 `permission_request`、`turn_ended`、`error` 等事件，也就无法自行发布本地通知。
-
-### 目标
-
-接入 HarmonyOS Push Kit，让系统推送通道在 App 不运行时也能提醒用户。通知点击后拉起 Nexus，App 再重连 Relay / Bridge，并通过 `sync_request` 补齐会话状态。
-
-### 推荐链路
+`nexus_flutter` 界面保持跨平台的高效 UI 迭代，鸿蒙系统级特有能力通过 `MethodChannel` 与 `nexus_flutter/ohos/entry/src/main/ets` 原生 ArkTS 代码通信，直接调用 HarmonyOS 原生 Kit SDK。
 
 ```text
-Bridge / Relay 发现重要事件
-        ↓
-云端 Notifier 调用 Push Kit REST API
-        ↓
-HarmonyOS 系统推送服务下发通知
-        ↓
-用户点击通知打开 Nexus
-        ↓
-App 根据通知 data 进入对应 host / workspace / session
-        ↓
-WSClient 重连并 sync_request 补齐消息和权限状态
+Flutter (Dart 代码) ── MethodChannel ──> ArkTS (nexus_flutter/ohos/entry) ──> 鸿蒙系统 Kit
 ```
 
-### 需要通知的事件
+### 推荐融合 Kit 方案
 
-- `permission_request`：Agent 等待用户审批工具调用。
-- `turn_ended`：远程任务完成。
-- `error`：Agent / Bridge / Relay 出错。
-- 连接断开或重连失败超过阈值。
-- Agent 长时间等待用户输入。
+#### 1. 实况窗 (Live View Kit) —— 锁屏/状态栏实时看 Agent 进度
+- **定位**：AI 智能化体验 / 实时状态感知
+- **目标**：用户把手机平放桌上，瞥一眼锁屏或状态栏左上角胶囊，就能看到 remote AI 的实时进度，无需解锁进 App。
+- **功能设计**：
+  - **状态栏胶囊**：显示小胶囊 `[🟢 AI 编写中 65%]`。
+  - **展开卡片**：显示 Agent 名称、当前执行步骤（如 `正在修改 server.mts 第 120 行...`），并提供 **[暂停] [取消]** 按钮。
+  - **锁屏展示**：常显全景进度条，任务完成时音效与通知提醒。
+- **技术实现**：
+  - Dart 侧：`MethodChannel('com.anywhere.app/live_view').invokeMethod('updateLiveView', ...)`
+  - ArkTS 侧：引入 `@kit.LiveViewKit`，调用 `liveViewManager.startLiveView()` / `updateLiveView()`。
 
-### 客户端任务
+#### 2. 交互式通知审批 (Notification Kit) —— 下拉通知栏直接授权/拒绝
+- **定位**：安全隐私保护
+- **目标**：当 Remote Agent 在 PC 上请求高危命令（如 `rm -rf` / 执行 Shell / 改配置）触发 `permission_request` 时，通知栏直接呈现决策按钮，用户无需解锁打开 App。
+- **功能设计**：
+  - 收到权限请求时，弹出系统通知，展示目标路径与命令摘要。
+  - 通知下方嵌入 ActionButton：**[允许]** 与 **[拒绝 (红色)]**。
+  - 点击按钮后，通过后台 Channel 直接回传 `permission_response` 到 Bridge。
+- **技术实现**：
+  - 引入 `@kit.NotificationKit`，使用带操作按钮的 Action Notification。
 
-- 请求通知授权：`notificationManager.requestEnableNotification()`。
-- 接入 Push Kit 获取 Push Token。
-- 将 Push Token 绑定到当前用户 / 设备 / hostId，并上报给 Relay 或 Bridge。
-- 支持通知点击参数，读取 `hostId`、`workspaceId`、`sessionId`、`requestId` 等 data。
-- 点击通知后进入对应聊天页，触发自动重连和 `sync_request`。
-- 前台时不要重复弹系统通知，可改为应用内提示。
+#### 3. 近场发现与无缝流转 (DeviceManager / 软总线 / Continuation)
+- **定位**：全场景一体协同
+- **目标**：利用鸿蒙近场感知与分布式软总线，实现免配置连 PC、大屏流转。
+- **功能设计**：
+  - **近场自动感知**：手机靠近运行 Bridge 的 PC 时，自动弹窗提示“发现附近 PC (LAPTOP-3FLH)，点击一键连接”。
+  - **大屏流转**：点击鸿蒙系统右上角流转按钮，将当前代码 Diff 审查与聊天界面拉起至鸿蒙平板（MatePad Pro），大屏双页对比代码。
+  - **分布式剪贴板**：PC 终端报错一键复制，手机侧自动识别并浮现“让 Nexus 修复此报错？”。
 
-### 服务端任务
-
-- Relay 或 Bridge 保存 hostId / deviceId / Push Token 映射。
-- Bridge 收到关键事件后生成通知 payload。
-- Relay / 云端 Notifier 调用 Push Kit REST API 发送通知。
-- `permission_request` 需要在 Bridge 端挂起等待，直到 App 回传 `permission_response`。
-- 通知 payload 中不要包含敏感 diff / 命令全文，只放摘要和跳转所需 ID。
+#### 4. 后台唤醒与推送 (Push Kit)
+- **定位**：全场景一体协同
+- **目标**：解决手机切后台/长睡眠后 WebSocket 断连问题。
+- **功能设计**：
+  - App 退后台或挂起时，通过 Push Kit 推送通道接收 Agent 状态提醒（如长任务完成、权限等待）。
+  - 点击通知自动唤起 App 并重连，带上 `lastMessageId` 游标恢复上下文。
 
 ---
 
-## 比赛方向：依题意三个创新 Kit (HarmonyOS 6+)
+## 💡 功能增强与 UI Polish (待办)
 
-### 背景
+### 全局搜索中心 (Search Hub)
+- **目标**：首页底部 `Search chats` 入口升级为真正搜索中心。
+- **功能**：跨 Host、Workspace、Session 检索历史对话正文、Agent 工具调用摘要（如命令、文件路径）和 Plan 步骤。
 
-鸿蒙高校创新赛（C4-AI，国赛）要求作品基于 HarmonyOS 6+ 且至少调用 3 个创新 Kit 能力（安全隐私保护、全场景一体协同、AI 智能化体验、3D 空间化）。当前 Nexus 未使用任何鸿蒙特有 SDK，需要在不破坏现有架构的前提下，增加几个鸿蒙原生体验功能凑齐 Kit 分。
+### 权限请求审阅面板 (Permission Sheet)
+- **目标**：增强 `permission_sheet.dart`，在授权前展示完整的风险等级、命令摘要、涉及文件列表及 Diff 预览，避免盲目 Allow。
 
-### 整体定位
+### 工具调用审阅面板 (Tool Call Review Panel)
+- **目标**：增强 `tool_call_card.dart`，提供 stdout / stderr 分色渲染、Bash 命令一键复制、Git Diff 双栏预览。
 
-> **Nexus — 你电脑上所有 AI Agent 的指挥中心，藏在手机里。**
+### 会话管理增强
+- **目标**：支持手机端直接重命名 Session、置顶重要会话、归档历史会话与手动销毁后台 ACP 进程。
 
-产品本质已是"手机统一控制 PC 多 Agent"，不需要改定位。需要做的是找到"鸿蒙手机能做而 PC/其他平台做不到"的交互增量。
-
-### 推荐方案
-
-#### 1. 实况窗 — 锁屏看 Agent 进度
-
-**目标：** 用户把手机放桌上，瞥一眼锁屏就知道任务跑完没、成功了没、是否需要介入。
-
-**场景：** Agent 执行一个 5 分钟的重构任务。现在必须解锁 → 打开 App → 看进度。实况窗让锁屏直接展示。
-
-**样式：**
-
-```
-┌──────────────────────┐
-│  Claude Code 正在运行   │
-│  ████████░░░░ 重构 login │
-│  2:30 / 预计 4:00       │
-└──────────────────────┘
-```
-
-**所用 Kit：** `@kit.LiveViewKit` — 创新方向 **AI 智能化体验**
-
-**触发时机：** WSClient 收到 `agent_event` / `turn_ended` 时同步更新 Live View。
-
-**工作量：** 中。
-
-**注意事项：**
-- 实况窗是 App 在前台/后台均可更新，不依赖 App 常驻后台。
-- 仅在 Agent 有活跃任务时展示，空闲时自动移除。
-- 点击实况窗跳转回对应对话页。
-
-**演示效果：** 锁屏展示进度条 + Agent 名称，视频 5 秒让评委理解"鸿蒙特色"。
-
----
-
-#### 2. 交互式通知审批 — 不打开 App 就批准/拒绝
-
-**目标：** Agent 请求 `permission_request` 时，通知上直接展示上下文和操作按钮，用户无需打开 App 即可完成审批。
-
-**现状痛点：** 当前流程：收到通知 → 解锁 → 打开 Nexus → 找到权限请求 → 点 Allow。来回切 App 体验割裂。
-
-**样式：**
-
-```
-┌──────────────────────────┐
-│ 🔴 高风险操作              │
-│ Agent 要执行: rm -rf /tmp  │
-│ 目标路径: /home/project/*  │
-│                           │
-│ [ 拒绝 ]    [ 允许一次 ]    │
-└──────────────────────────┘
-```
-
-**所用 Kit：** `@kit.NotificationKit`（交互式通知 ActionButton）— 创新方向 **安全隐私保护**
-
-**触发时机：** WSClient 收到 `permission_request` → 弹本地通知 + 内联操作按钮。
-
-**工作量：** 小（现有 PermissionSheet 已处理权限请求，加一层通知即可）。
-
-**注意事项：**
-- 高风险操作（删除文件、执行 shell）使用红色醒目标识，低风险用灰色。
-- 通知点击"允许"后直接回放 `permission_response`，无需打开 App。
-- "拒绝"后可根据策略选择拒绝一次或永久拒绝该工具。
-- 前台时不弹通知，改为应用内提示（已有 PermissionSheet）。
-
-**演示效果：** 下拉通知栏 → 看到 Agent 要干啥 → 点拒绝，全程不离开通知。视频拍摄特写通知栏操作，评委能直观感受"手机审批"的安全感。
-
----
-
-#### 3. 多 Agent 工作流编排（探索性，时间充裕再做）
-
-**目标：** 在手机上编排多个 Agent 的协作流程，一个接一个自动执行。
-
-**场景：**
-
-```
-[OpenCode 分析项目] → [Claude Code 重构] → [DevEco Code 检查鸿蒙兼容性]
-```
-
-设好就不用管了，每个 Agent 做完自动触发下一个，最终通知用户。
-
-**所用 Kit：** 无新 Kit，利用现有 ACP 协议中的多 Agent 发现与调用能力。
-
-**工作量：** 中大 — 需定义工作流 DSL + Bridge 端编排执行器 + 手机端编排 UI。
-
-**注意事项：**
-- 这是一个壁垒性功能，别人抄不了，因为底层基于 ACP 协议的多 Agent 支持。
-- 可以作为赛后持续迭代方向，不一定是赛前必须做完。
-
----
-
-### Kit 覆盖总结
-
-| Kit | 对应功能 | 创新方向 |
-|-----|---------|---------|
-| `@kit.LiveViewKit` | 实况窗锁屏监控 | AI 智能化体验 |
-| `@kit.NotificationKit` | 交互式通知审批 | 安全隐私保护 |
-| 现有 ACP 多 Agent 架构 | 工作流编排 | 全场景一体协同（底层能力） |
-
-3 个 Kit + 2 个创新方向，满足比赛硬性要求。
-
-### 不做的事项（不贡献创新分）
-
-- 语音输入（手机自带，无鸿蒙独特性）
-- 全局搜索（完备度加分但无创新点）
-- 语言切换动画（纯 polish）
-- 拍照诊断（PC Agent 直接读文件更好）
-
-### 优先级
-
-1. **实况窗** — Demo 效果最好，锁屏展示评委一眼明白
-2. **交互式通知审批** — 工作量最小，差异化明显
-3. **工作流编排** — 有时间再做，做出来是壁垒
-
-### 注意事项
-
-- 不能依赖普通 WebSocket 在后台长期存活。
-- Push Kit 通知消息适合用户可感知提醒；后台消息不展示通知，且可能延迟或只缓存最新一条，不适合紧急审批。
-- 长时任务只能用于用户明确开启的“保持当前会话监控”模式，需要常驻通知和符合系统校验的业务类型，不能作为无感保活方案。
+### 语言 / 主题切换动画平滑统一
+- **目标**：收敛 Settings 页面语言/深浅色模式切换时的 UI 重绘路径，避免跳变感。

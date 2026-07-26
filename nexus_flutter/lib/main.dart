@@ -229,6 +229,8 @@ Future<void> _probeAllHosts(HostStore hostStore) async {
       debugPrint('[Probe] $hostKey OFFLINE');
     }
   }
+  hostStore.deduplicate();
+  await hostStore.saveToDisk();
 }
 
 /// Catches widget build errors

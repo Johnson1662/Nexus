@@ -16,7 +16,7 @@ class AppMarkdownRenderer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Markdown(
+    return MarkdownBody(
       data: data,
       shrinkWrap: shrinkWrap,
       selectable: true,
