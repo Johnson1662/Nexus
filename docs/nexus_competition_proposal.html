@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nexus — 2026中国高校计算机大赛初赛作品说明</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'neutral' });</script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+    body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; background-color: #0b0f19; color: #e2e8f0; }
+    .glass-card { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 1rem; }
+    .accent-pill { background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); color: #10b981; }
+    .badge-count { background: #1e293b; border: 1px solid #334155; color: #94a3b8; font-size: 0.75rem; padding: 0.2rem 0.6rem; border-radius: 9999px; }
+  </style>
+</head>
+<body class="py-10 px-4 md:px-12 max-w-5xl mx-auto">
+  
+  <!-- Header / Meta -->
+  <header class="glass-card p-8 mb-8 border-l-4 border-l-emerald-500">
+    <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4">
+      <div>
+        <span class="accent-pill px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider">2026中国高校计算机大赛 — 人工智能创意赛（鸿蒙赛道）</span>
+        <h1 class="text-3xl md:text-4xl font-extrabold text-white mt-2 tracking-tight">Nexus — 远程多 Agent AI 编程助手</h1>
+      </div>
+      <div class="bg-slate-800/90 border border-slate-700 rounded-lg p-3 text-xs text-slate-300">
+        <div><strong>赛题方向：</strong> (√) Agent创新</div>
+        <div class="mt-1"><strong>作品分类：</strong> 移动端 / 云端双端协同应用</div>
+      </div>
+    </div>
+  </header>
+
+  <!-- 1. 创意描述 -->
+  <section class="glass-card p-8 mb-8">
+    <div class="flex justify-between items-center mb-4">
+      <h2 class="text-xl font-bold text-emerald-400 flex items-center gap-2">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+        一、 创意描述（30字以内）
+      </h2>
+      <span class="badge-count">字数限制: 30字 | 当前: 29字</span>
+    </div>
+    
+    <div class="bg-slate-900/90 border border-emerald-500/30 p-6 rounded-xl text-lg font-medium text-white shadow-inner">
+      “Nexus是基于ACP协议的鸿蒙远程多Agent AI编程助手，实现手机驱动PC多Agent并行开发与状态协同。”
+    </div>
+  </section>
+
+  <!-- 2. 设计稿 / 技术方案 -->
+  <section class="glass-card p-8 mb-8">
+    <h2 class="text-xl font-bold text-emerald-400 mb-6 flex items-center gap-2">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z"></path></svg>
+      二、 设计稿 / 技术方案
+    </h2>
+
+    <!-- 系统架构与交互拓扑图 -->
+    <div class="mb-8">
+      <h3 class="text-md font-semibold text-slate-200 mb-3 flex items-center gap-2">
+        <span class="w-2 h-2 rounded-full bg-emerald-400"></span> 1. 系统架构与多 Agent 拓扑流程图 (System Architecture)
+      </h3>
+      <div class="bg-slate-900 p-6 rounded-xl border border-slate-700/80">
+        <pre class="mermaid">
+graph LR
+    subgraph Mobile["Nexus 鸿蒙 / Flutter 客户端"]
+        UI["极简黑白灰 UI / SessionTile"]
+        State["AcpSessionStore 状态库"]
+        InputCapsule["大输入框胶囊 / Model Chip"]
+    end
+
+    subgraph Bridge["PC 端 Node.js Bridge Server"]
+        WSHub["WebSocket 双轨通信"]
+        ProcPool["activeSessions 进程池 (Max 5 LRU)"]
+        Buffer["MessageBuffer 增量环形缓冲区"]
+        Watcher["SessionStatusWatcher 探针 (500ms 防抖)"]
+    end
+
+    subgraph Agents["ACP Agent 矩阵"]
+        OpenCode["OpenCode Agent (SQLite db)"]
+        Codex["Codex CLI (JSONL)"]
+        OMP["Oh-My-Pi Agent (agent.db)"]
+        Custom["Custom ACP Agent"]
+    end
+
+    UI <--> WSHub
+    WSHub <--> ProcPool
+    ProcPool <--> OpenCode
+    ProcPool <--> Codex
+    ProcPool <--> OMP
+    ProcPool <--> Custom
+    Watcher -.->|"动态状态检测"| OpenCode
+    Watcher -.->|"动态状态检测"| OMP
+    Watcher -.->|"状态广播"| WSHub
+        </pre>
+      </div>
+    </div>
+
+    <!-- UI/UX 核心视觉设计点 -->
+    <div>
+      <h3 class="text-md font-semibold text-slate-200 mb-3 flex items-center gap-2">
+        <span class="w-2 h-2 rounded-full bg-emerald-400"></span> 2. 界面视觉设计与交互亮点 (UI/UX Highlights)
+      </h3>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+        <div class="bg-slate-800/80 p-4 rounded-lg border border-slate-700">
+          <div class="font-bold text-emerald-400 mb-1 text-sm">极致无边框极简风格</div>
+          <div class="text-slate-300 leading-relaxed">ChatGPT/Linear 混合单色调，大留白与软微遮罩按压反馈。移除繁复边框，依靠留白分隔逻辑区块。</div>
+        </div>
+        <div class="bg-slate-800/80 p-4 rounded-lg border border-slate-700">
+          <div class="font-bold text-emerald-400 mb-1 text-sm">大输入框胶囊 & Model Chip</div>
+          <div class="text-slate-300 leading-relaxed">多行弹框胶囊，将 Agent/Model 切换 Chip 贴合放置于输入框内左下角，实现一体化紧凑操控。</div>
+        </div>
+        <div class="bg-slate-800/80 p-4 rounded-lg border border-slate-700">
+          <div class="font-bold text-emerald-400 mb-1 text-sm">实时 `进行中` 绿点徽章</div>
+          <div class="text-slate-300 leading-relaxed">多任务后台保活运行时，多会话卡片同步闪烁绿色状态徽章，支持随时切入切出查看最新进度。</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. 介绍文档 -->
+  <section class="glass-card p-8">
+    <div class="flex justify-between items-center mb-6">
+      <h2 class="text-xl font-bold text-emerald-400 flex items-center gap-2">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+        三、 介绍文档（800字以内）
+      </h2>
+      <span class="badge-count">字数限制: 800字 | 当前正文: ~520字</span>
+    </div>
+
+    <div class="space-y-6 text-sm text-slate-300 leading-relaxed">
+      <!-- 背景与痛点 -->
+      <div class="bg-slate-900/60 p-5 rounded-xl border border-slate-700/60">
+        <h3 class="text-base font-semibold text-white mb-2 flex items-center gap-2">
+          <span class="text-emerald-400 font-bold">01.</span> 创意背景与痛点分析
+        </h3>
+        <p class="text-slate-300">
+          当前主流 AI 编程智能体（如 OpenCode、Codex、Claude Code）强依赖桌面 PC 端的算力与本地编译环境。开发者一旦离开电脑便彻底脱离开发上下文。现有的通用远程桌面软件缺乏针对 AI 智能体对话、工具调用与多任务协同的移动端优化。Nexus 旨在消除桌面束缚，打造一款面向鸿蒙生态的原生移动端远程 AI 编程助手。
+        </p>
+      </div>
+
+      <!-- 核心功能与技术路径 -->
+      <div class="bg-slate-900/60 p-5 rounded-xl border border-slate-700/60">
+        <h3 class="text-base font-semibold text-white mb-2 flex items-center gap-2">
+          <span class="text-emerald-400 font-bold">02.</span> 核心功能设计与技术路径
+        </h3>
+        <ul class="list-disc list-inside space-y-2 text-slate-300">
+          <li><strong class="text-white">去中心化多 Agent 协议调度</strong>：基于开放 ACP (Agent Client Protocol) 协议，手机端通过 WebSocket 连接 PC 端的 Bridge Server，实现对 OpenCode、Codex、OMP 等 70+ 智能体的统一管理、动态拉起与商店化安装。</li>
+          <li><strong class="text-white">多任务后台并行与增量重放</strong>：采用 PC 端进程池 (`activeSessions`) 与滑动 `MessageBuffer`，手机端切出会话或新建对话时，后台任务持续运行；切回会话时根据消息游标秒级重放补齐增量 Chunks，配合 `SessionStatusWatcher` 探针实现全局实时“进行中”绿点感知。</li>
+          <li><strong class="text-white">单 Session ID 极简架构与优雅 UI</strong>：全栈统一使用 Agent 原生 `sessionId`；移动端采用 ChatGPT/Linear 混合双色极简风格，内置大输入框胶囊、左下角 Model 切换 Chip 以及带平滑切页动画的 ConfigPanel。</li>
+        </ul>
+      </div>
+
+      <!-- 市场前景 -->
+      <div class="bg-slate-900/60 p-5 rounded-xl border border-slate-700/60">
+        <h3 class="text-base font-semibold text-white mb-2 flex items-center gap-2">
+          <span class="text-emerald-400 font-bold">03.</span> 市场前景与应用价值
+        </h3>
+        <p class="text-slate-300">
+          Nexus 填补了移动端 AI Agent 远程编程协同工具的空白。它极大提升了开发者在离案、通勤等移动场景下的碎片化开发与后台监控效率，为鸿蒙生态下的端云协同与多智能体交互提供了标准的范式落地。
+        </p>
+      </div>
+    </div>
+  </section>
+
+</body>
+</html>

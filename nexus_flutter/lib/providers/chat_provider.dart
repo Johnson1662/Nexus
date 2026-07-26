@@ -9,6 +9,8 @@ import '../services/ws_client.dart';
 import '../services/storage_service.dart';
 import '../services/host_store.dart';
 import '../services/device_agent_store.dart';
+import '../services/live_view_service.dart';
+import '../services/notification_service.dart';
 
 /// Core chat state provider — mirrors ArkTS ChatStore + Index.ets logic
 class ChatProvider extends ChangeNotifier {
@@ -261,6 +263,47 @@ class ChatProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  bool isPinned(String sessionId) => _state.pinnedSessionIds.contains(sessionId);
+
+  void togglePinSession(String sessionId) {
+    if (_state.pinnedSessionIds.contains(sessionId)) {
+      _state.pinnedSessionIds.remove(sessionId);
+    } else {
+      _state.pinnedSessionIds.add(sessionId);
+    }
+    notifyListeners();
+  }
+
+  void closeSession(String sessionId) {
+    _ws.send(ClientMessage(type: 'close_session', sessionId: sessionId));
+    _state.sessions.removeWhere((s) => s.sessionId == sessionId);
+    if (_state.sessionId == sessionId) {
+      _state.sessionId = '';
+      _state.sessionTitle = '';
+      _state.turnActive = false;
+    }
+    notifyListeners();
+  }
+
+  void renameSession(String sessionId, String newTitle) {
+    final idx = _state.sessions.indexWhere((s) => s.sessionId == sessionId);
+    if (idx >= 0) {
+      final old = _state.sessions[idx];
+      _state.sessions[idx] = ServerSessionData(
+        sessionId: old.sessionId,
+        title: newTitle,
+        agent: old.agent,
+        cwd: old.cwd,
+        createdAt: old.createdAt,
+        status: old.status,
+      );
+      if (_state.sessionId == sessionId) {
+        _state.sessionTitle = newTitle;
+      }
+      notifyListeners();
+    }
+  }
+
   void requestSessionList() => _ws.send(ClientMessage(type: 'list_sessions'));
 
   void _requestServerSessions() {
@@ -388,6 +431,8 @@ class ChatProvider extends ChangeNotifier {
         break;
       case 'turn_ended':
         _handleTurnEnded();
+        // Remove live view when turn completes
+        LiveViewService.stop();
         break;
       case 'model_list':
         if (msg.models != null) _state.models = msg.models!;
@@ -437,6 +482,14 @@ class ChatProvider extends ChangeNotifier {
               name: o['name']?.toString() ?? '',
               kind: o['kind']?.toString() ?? '',
             )).toList(),
+          );
+          // Show OS notification for permission request
+          final toolCallStr = msg.toolCall?.toString() ?? '';
+          NotificationService.showPermissionNotification(
+            requestId: msg.requestId!,
+            toolName: msg.acpUpdate?.toolName ?? 'Tool',
+            command: toolCallStr,
+            path: msg.path ?? '',
           );
         }
         notifyListeners();
@@ -619,6 +672,12 @@ class ChatProvider extends ChangeNotifier {
               toolKind: event.kind ?? '',
             ),
           ];
+          // Show live view for the new tool
+          LiveViewService.updateProgress(
+            progress: 0.0,
+            statusText: 'Starting $toolName...',
+            title: toolName,
+          );
           break;
 
         case 'tool_call_update':
@@ -628,6 +687,7 @@ class ChatProvider extends ChangeNotifier {
             final status = event.toolStatus ?? (newContent.isNotEmpty ? 'completed' : 'in_progress');
             debugPrint('[ToolCall] update: callId=${event.toolCallId} len=${newContent.length} type=$newType status=$status');
             bool found = false;
+            String toolName = '';
             if (event.toolCallId != null && event.toolCallId!.isNotEmpty) {
               for (int i = _state.messages.length - 1; i >= 0; i--) {
                 if (_state.messages[i].toolCallId == event.toolCallId) {
@@ -639,6 +699,7 @@ class ChatProvider extends ChangeNotifier {
                   if (event.newText != null && event.newText!.isNotEmpty) m.toolNewText = event.newText!;
                   if (event.terminalId != null && event.terminalId!.isNotEmpty) m.toolTerminalId = event.terminalId!;
                   m.toolStatus = status;
+                  toolName = m.toolName;
                   found = true;
                   debugPrint('[ToolCall] update OK: toolContent now ${m.toolContent.length} chars, status=${m.toolStatus}');
                   break;
@@ -658,6 +719,7 @@ class ChatProvider extends ChangeNotifier {
                   if (event.newText != null && event.newText!.isNotEmpty) m.toolNewText = event.newText!;
                   if (event.terminalId != null && event.terminalId!.isNotEmpty) m.toolTerminalId = event.terminalId!;
                   m.toolStatus = status;
+                  toolName = m.toolName;
                   found = true;
                   debugPrint('[ToolCall] update (fallback last-running): OK');
                   break;
@@ -666,6 +728,23 @@ class ChatProvider extends ChangeNotifier {
             }
             if (!found) {
               debugPrint('[ToolCall] update: NO card found for callId=${event.toolCallId}');
+            }
+            // Update live view with progress
+            if (toolName.isNotEmpty) {
+              final int totalLen = newContent.length;
+              // Scale progress based on content accumulation; cap at 90% until completed
+              final double progress = status == 'completed' || status == 'cancelled' || status == 'failed'
+                  ? 1.0
+                  : (totalLen > 0 ? (totalLen / 1000).clamp(0.05, 0.9) : 0.05);
+              LiveViewService.updateProgress(
+                progress: progress,
+                statusText: status == 'completed'
+                    ? 'Completed'
+                    : status == 'cancelled'
+                        ? 'Cancelled'
+                        : 'Running... (${totalLen}B)',
+                title: toolName,
+              );
             }
           }
           break;
@@ -676,6 +755,15 @@ class ChatProvider extends ChangeNotifier {
             for (int i = _state.messages.length - 1; i >= 0; i--) {
               if (_state.messages[i].toolCallId == event.toolCallId) {
                 _state.messages[i].toolStatus = event.toolStatus ?? 'completed';
+                final toolName = _state.messages[i].toolName;
+                // Show completed status on live view immediately
+                if (toolName.isNotEmpty) {
+                  LiveViewService.updateProgress(
+                    progress: 1.0,
+                    statusText: 'Completed',
+                    title: toolName,
+                  );
+                }
                 break;
               }
             }

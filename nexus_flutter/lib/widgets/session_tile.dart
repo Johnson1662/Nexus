@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 
 import '../constants/theme.dart';
 import '../models/ws_protocol.dart';
+import '../providers/chat_provider.dart';
 
 /// Formats an epoch timestamp (ms) into a human-readable relative string.
 String formatRelativeTime(int epoch) {
@@ -135,11 +137,86 @@ class SessionTile extends StatelessWidget {
             ),
             const SizedBox(width: AppSpacing.xs),
 
-            // Right chevron
-            Icon(
-              Icons.chevron_right_rounded,
-              size: 18,
-              color: muted,
+            // Trailing popup menu
+            PopupMenuButton<String>(
+              icon: Icon(Icons.more_horiz_rounded, size: 18, color: muted),
+              padding: EdgeInsets.zero,
+              onSelected: (value) async {
+                final cp = context.read<ChatProvider>();
+                switch (value) {
+                  case 'rename':
+                    final ctrl = TextEditingController(text: session.title ?? '');
+                    final newTitle = await showDialog<String>(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        title: const Text('重命名会话'),
+                        content: TextField(
+                          controller: ctrl,
+                          autofocus: true,
+                          decoration: const InputDecoration(
+                            hintText: '输入新名称',
+                          ),
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(ctx),
+                            child: const Text('取消'),
+                          ),
+                          TextButton(
+                            onPressed: () => Navigator.pop(ctx, ctrl.text),
+                            child: const Text('确认'),
+                          ),
+                        ],
+                      ),
+                    );
+                    if (newTitle != null && newTitle.trim().isNotEmpty) {
+                      cp.renameSession(session.sessionId, newTitle.trim());
+                    }
+                    break;
+                  case 'pin':
+                    cp.togglePinSession(session.sessionId);
+                    break;
+                  case 'close':
+                    final confirmed = await showDialog<bool>(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        title: const Text('关闭会话'),
+                        content: const Text('确认关闭此会话？'),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(ctx, false),
+                            child: const Text('取消'),
+                          ),
+                          TextButton(
+                            onPressed: () => Navigator.pop(ctx, true),
+                            child: const Text('关闭'),
+                            style: TextButton.styleFrom(
+                              foregroundColor: Colors.red,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                    if (confirmed == true) {
+                      cp.closeSession(session.sessionId);
+                    }
+                    break;
+                }
+              },
+              itemBuilder: (_) => [
+                const PopupMenuItem(
+                  value: 'rename',
+                  child: Text('重命名'),
+                ),
+                const PopupMenuItem(
+                  value: 'pin',
+                  child: Text('置顶'),
+                ),
+                const PopupMenuItem(
+                  value: 'close',
+                  child: Text('关闭会话'),
+                ),
+              ],
             ),
           ],
         ),

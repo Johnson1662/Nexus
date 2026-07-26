@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nexus 应用图标设计展示方案 (20款白底精选概念)</title>
+  <style>
+    :root {
+      --bg: #FAFAFA;
+      --card-bg: #FFFFFF;
+      --text-main: #111827;
+      --text-muted: #6B7280;
+      --border: #E5E7EB;
+      --accent: #007DFF;
+      --accent-light: #EFF6FF;
+      --shadow-sm: 0 1px 3px rgba(0,0,0,0.05);
+      --shadow-md: 0 10px 25px -5px rgba(0,0,0,0.08);
+      --squircle-radius: 22.5%;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "HarmonyOS Sans", "Segoe UI", Roboto, sans-serif;
+      background-color: var(--bg);
+      color: var(--text-main);
+      line-height: 1.5;
+      padding: 40px 20px;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+
+    header h1 {
+      font-size: 34px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      margin-bottom: 10px;
+      color: var(--text-main);
+    }
+
+    header p {
+      font-size: 15px;
+      color: var(--text-muted);
+      max-width: 680px;
+      margin: 0 auto;
+    }
+
+    .section-header {
+      margin: 50px 0 24px;
+      padding-bottom: 12px;
+      border-bottom: 2px solid var(--border);
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+    }
+
+    .section-header h2 {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--text-main);
+    }
+
+    .section-header span {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 28px;
+    }
+
+    .icon-card {
+      background: var(--card-bg);
+      border-radius: 20px;
+      border: 1px solid var(--border);
+      padding: 26px 20px 22px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      box-shadow: var(--shadow-sm);
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      position: relative;
+    }
+
+    .icon-card:hover {
+      transform: translateY(-4px);
+      box-shadow: var(--shadow-md);
+      border-color: #D1D5DB;
+    }
+
+    .badge {
+      position: absolute;
+      top: 14px;
+      right: 14px;
+      background: #F3F4F6;
+      color: #374151;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 12px;
+      text-transform: uppercase;
+    }
+
+    .badge.popular {
+      background: #DBEAFE;
+      color: #1E40AF;
+    }
+
+    .badge.new {
+      background: #D1FAE5;
+      color: #065F46;
+    }
+
+    .icon-wrapper {
+      width: 128px;
+      height: 128px;
+      margin-bottom: 20px;
+      position: relative;
+      filter: drop-shadow(0 12px 20px rgba(0, 0, 0, 0.08));
+    }
+
+    .icon-svg {
+      width: 100%;
+      height: 100%;
+      border-radius: var(--squircle-radius);
+      display: block;
+    }
+
+    .icon-title {
+      font-size: 17px;
+      font-weight: 700;
+      margin-bottom: 6px;
+      color: var(--text-main);
+    }
+
+    .icon-concept {
+      font-size: 13px;
+      color: var(--text-muted);
+      text-align: center;
+      line-height: 1.4;
+      margin-bottom: 16px;
+      min-height: 38px;
+    }
+
+    .tag-container {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .tag {
+      font-size: 11px;
+      background: var(--bg);
+      color: var(--text-muted);
+      padding: 2px 8px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+    }
+
+    /* Mockup Phone Section */
+    .mockup-section {
+      background: #111827;
+      color: #FFF;
+      border-radius: 24px;
+      padding: 40px;
+      margin-top: 60px;
+    }
+
+    .mockup-section h2 {
+      font-size: 24px;
+      font-weight: 700;
+      margin-bottom: 12px;
+      text-align: center;
+    }
+
+    .mockup-section p {
+      font-size: 14px;
+      color: #9CA3AF;
+      text-align: center;
+      margin-bottom: 30px;
+    }
+
+    .home-screen-preview {
+      display: flex;
+      justify-content: center;
+      gap: 24px;
+      flex-wrap: wrap;
+    }
+
+    .dock-container {
+      background: rgba(255, 255, 255, 0.15);
+      backdrop-filter: blur(20px);
+      padding: 14px 20px;
+      border-radius: 30px;
+      display: flex;
+      gap: 18px;
+      align-items: center;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .dock-icon {
+      width: 58px;
+      height: 58px;
+      border-radius: 14px;
+    }
+
+    footer {
+      text-align: center;
+      margin-top: 50px;
+      color: var(--text-muted);
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <header>
+    <h1>Nexus 应用图标设计展示方案</h1>
+    <p>围绕“Nexus（枢纽/连结/核心）”真实含义与网络拓扑灵感 · 20 款纯白底座 App Icon 设计大合集</p>
+  </header>
+
+  <!-- SECTION 2: NEW TOPOLOGY & NEXUS HUB CONCEPTS -->
+  <div class="section-header">
+    <h2>专题一：Nexus“枢纽与网络拓扑”灵感系列 (10 款新品)</h2>
+    <span>基于 Option 06 延伸：突出 Central Hub、多端图谱、汇聚节点与无限管道</span>
+  </div>
+
+  <div class="grid">
+
+    <!-- New 1: Central Core Hub -->
+    <div class="icon-card">
+      <span class="badge new">主推推荐</span>
+      <div class="icon-wrapper">
+        <svg class="icon-svg" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect width="128" height="128" rx="28" fill="#FFFFFF"/>
+          <!-- Connecting Lines -->
+          <line x1="64" y1="64" x2="34" y2="38" stroke="#E5E7EB" stroke-width="6" stroke-linecap="round"/>
+          <line x1="64" y1="64" x2="94" y2="38" stroke="#E5E7EB" stroke-width="6" stroke-linecap="round"/>
+          <line x1="64" y1="64" x2="34" y2="90" stroke="#007DFF" stroke-width="7" stroke-linecap="round"/>
+          <line x1="64" y1="64" x2="94" y2="90" stroke="#007DFF" stroke-width="7" stroke-linecap="round"/>
+          <!-- Peripheral Nodes -->
+          <circle cx="34" cy="38" r="7" fill="#9CA3AF"/>
+          <circle cx="94" cy="38" r="7" fill="#9CA3AF"/>
+          <circle cx="34" cy="90" r="9" fill="#007DFF"/>
+          <circle cx="94" cy="90" r="9" fill="#007DFF"/>
+          <!-- Central Nexus Hub -->
+          <circle cx="64" cy="64" r="18" fill="#111827"/>
+          <circle cx="64" cy="64" r="7" fill="#36B37E"/>
+        </svg>
+      </div>
+      <div class="icon-title">11. 星型核心枢纽</div>
+      <div class="icon-concept">中央黑绿的核心 Nexus 枢纽（Bridge Server），向外辐射连接手机、PC 与多设备节点。</div>
+      <div class="tag-container">
+        <span class="tag">核心枢纽</span>
+        <span class="tag">多端辐射</span>
+      </div>
+    </div>
+
+    <!-- New 2: Interlocking Convergent Rings -->
+    <div class="icon-card">
+      <span class="badge new">推荐</span>
+      <div class="icon-wrapper">
+        <svg class="icon-svg" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect width="128" height="128" rx="28" fill="#FFFFFF"/>
+          <!-- Left Ring (Mobile) -->
+          <circle cx="50" cy="64" r="26" stroke="#111827" stroke-width="9"/>
+          <!-- Right Ring (PC) -->
+          <circle cx="78" cy="64" r="26" stroke="#007DFF" stroke-width="9"/>
+          <!-- Intersection Nexus Core -->
+          <path d="M64 48C69 53 72 58 72 64C72 70 69 75 64 80C59 75 56 70 56 64C56 58 59 53 64 48Z" fill="#10B981"/>
+        </svg>
+      </div>
+      <div class="icon-title">12. 汇聚交叠双环</div>
+      <div class="icon-concept">黑色环（手机）与鸿蒙蓝环（PC）重叠交汇，在中心形成绿色 Nexus 连结核心。</div>
+      <div class="tag-container">
+        <span class="tag">双环重叠</span>
+        <span class="tag">交汇点</span>
+      </div>
+    </div>
+
+    <!-- New 3: Hexagonal Lattice Matrix -->
+    <div class="icon-card">
+      <div class="icon-wrapper">
+        <svg class="icon-svg" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect width="128" height="128" rx="28" fill="#FFFFFF"/>
+          <!-- Hexagon Grid Lines -->
+          <polygon points="64,30 90,45 90,75 64,90 38,75 38,45" fill="none" stroke="#E5E7EB" stroke-width="5"/>
+          <line x1="64" y1="30" x2="64" y2="60" stroke="#007DFF" stroke-width="6"/>
+          <line x1="90" y1="75" x2="64" y2="60" stroke="#007DFF" stroke-width="6"/>
+          <line x1="38" y1="75" x2="64" y2="60" stroke="#007DFF" stroke-width="6"/>
+          <!-- Nodes -->
+          <circle cx="64" cy="60" r="10" fill="#111827"/>
+          <circle cx="64" cy="60" r="4" fill="#007DFF"/>
+          <circle cx="64" cy="30" r="6" fill="#007DFF"/>
+          <circle cx="90" cy="75" r="6" fill="#007DFF"/>
+          <circle cx="38" cy="75" r="6" fill="#007DFF"/>
+        </svg>
+      </div>
+      <div class="icon-title">13. 六边形晶格拓扑</div>
+      <div class="icon-concept">三维感六边形架构，三向边线汇聚至中央 Nexus 主节点，极具科技严谨度。</div>
+      <div class="tag-container">
+        <span class="tag">六边形</span>
+        <span class="tag">晶格图谱</span>
+      </div>
+    </div>
+
+    <!-- New 4: Orbital Core Sphere -->
+    <div class="icon-card">
+      <div class="icon-wrapper">
+        <svg class="icon-svg" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect width="128" height="128" rx="28" fill="#FFFFFF"/>
+          <!-- Orbit paths -->
+          <ellipse cx="64" cy="64" rx="36" ry="16" transform="rotate(-30 64 64)" stroke="#E5E7EB" stroke-width="5"/>
+          <ellipse cx="64" cy="64" rx="36" ry="16" transform="rotate(30 64 64)" stroke="#007DFF" stroke-width="5"/>
+          <!-- Orbiting Nodes -->
+          <circle cx="38" cy="48" r="6" fill="#007DFF"/>
+          <circle cx="90" cy="48" r="6" fill="#111827"/>
+          <!-- Central Core -->
+          <circle cx="64" cy="64" r="14" fill="#111827"/>
+          <circle cx="64" cy="64" r="5" fill="#10B981"/>
+        </svg>
+      </div>
+      <div class="icon-title">14. 运行轨道矩阵</div>
+      <div class="icon-concept">多维轨道围绕 Nexus 核心运转，象征多 Agent 会话（OMP/Codex/OpenCode）环绕中心调度。</div>
+      <div class="tag-container">
+        <span class="tag">多维轨道</span>
+        <span class="tag">Agent 调度</span>
+      </div>
+    </div>
+
+    <!-- New 5: Infinity Pipeline Ribbon -->
+    <div class="icon-card">
+      <div class="icon-wrapper">
+        <svg class="icon-svg" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect width="128" height="128" rx="28" fill="#FFFFFF"/>
+          <!-- Infinity Path -->
+          <path d="M42 64C42 52 52 44 64 64C76 84 86 76 86 64C86 52 76 44 64 64C52 84 42 76 42 64Z" stroke="#111827" stroke-width="10" stroke-linecap="round"/>
+          <circle cx="64" cy="64" r="7" fill="#007DFF"/>
+          <circle cx="42" cy="64" r="5" fill="#10B981"/>
+          <circle cx="86" cy="64" r="5" fill="#10B981"/>
+        </svg>
+      </div>
+      <div class="icon-title">15. 无限管道拓扑</div>
+      <div class="icon-concept">无限符号 `∞` 穿过中央连结点，象征 ACP 双向流式（Streaming）管道不断流。</div>
+      <div class="tag-container">
+        <span class="tag">无限双向</span>
+        <span class="tag">流式管道</span>
+      </div>
+    </div>
+
+    <!-- New 6: Tri-Node Convergence -->
+    <div class="icon-card">
+      <div class="icon-wrapper">
+        <svg class="icon-svg" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect width="128" height="128" rx="28" fill="#FFFFFF"/>
+          <!-- Triangle Lines -->
+          <path d="M64 34L94 84H34L64 34Z" stroke="#E5E7EB" stroke-width="5" stroke-linejoin="round"/>
+          <line x1="64" y1="34" x2="64" y2="67" stroke="#007DFF" stroke-width="6"/>
+          <line x1="94" y1="84" x2="64" y2="67" stroke="#007DFF" stroke-width="6"/>
+          <line x1="34" y1="84" x2="64" y2="67" stroke="#007DFF" stroke-width="6"/>
+          <!-- Center Nexus -->
+          <circle cx="64" cy="67" r="10" fill="#111827"/>
+          <circle cx="64" cy="34" r="6" fill="#007DFF"/>
+          <circle cx="94" cy="84" r="6" fill="#111827"/>
+          <circle cx="34" cy="84" r="6" fill="#111827"/>
+        </svg>
+      </div>
+      <div class="icon-title">16. 三元汇聚架构</div>
+      <div class="icon-concept">手机、Relay 中继、PC 客户端三方汇聚于中央核心节点，直观展示网络拓扑。</div>
+      <div class="tag-container">
+        <span class="tag">三端汇聚</span>
+        <span class="tag">网络拓扑</span>
+      </div>
+    </div>
+
+    <!-- New 7: Code Core Shield -->
+    <div class="icon-card">
+      <div class="icon-wrapper">
+        <svg class="icon-svg" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect width="128" height="128" rx="28" fill="#FFFFFF"/>
+          <!-- Shield Frame -->
+          <path d="M64 30L90 42V64C90 82 64 96 64 96C64 96 38 82 38 64V42L64 30Z" stroke="#111827" stroke-width="7" fill="none"/>
+          <!-- Internal Connected Core -->
+          <circle cx="64" cy="60" r="8" fill="#007DFF"/>
+          <line x1="50" y1="50" x2="78" y2="70" stroke="#007DFF" stroke-width="5"/>
+          <line x1="50" y1="70" x2="78" y2="50" stroke="#007DFF" stroke-width="5"/>
+          <circle cx="50" cy="50" r="4" fill="#111827"/>
+          <circle cx="78" cy="70" r="4" fill="#111827"/>
+        </svg>
+      </div>
+      <div class="icon-title">17. 安全守护核心</div>
+      <div class="icon-concept">盾牌外廓包裹中央 Nexus 节点网，强调端到端 E2EE 加密通道与安全授权。</div>
+      <div class="tag-container">
+        <span class="tag">安全加密</span>
+        <span class="tag">防护核心</span>
+      </div>
+    </div>
+
+    <!-- New 8: Matrix Grid Cluster -->
+    <div class="icon-card">
+      <div class="icon-wrapper">
+        <svg class="icon-svg" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect width="128" height="128" rx="28" fill="#FFFFFF"/>
+          <!-- Grid connections -->
+          <line x1="40" y1="40" x2="88" y2="88" stroke="#E5E7EB" stroke-width="5"/>
+          <line x1="40" y1="88" x2="88" y2="40" stroke="#E5E7EB" stroke-width="5"/>
+          <line x1="64" y1="36" x2="64" y2="92" stroke="#007DFF" stroke-width="6"/>
+          <line x1="36" y1="64" x2="92" y2="64" stroke="#007DFF" stroke-width="6"/>
+          <!-- Peripheral Dots -->
+          <circle cx="64" cy="36" r="6" fill="#111827"/>
+          <circle cx="64" cy="92" r="6" fill="#111827"/>
+          <circle cx="36" cy="64" r="6" fill="#111827"/>
+          <circle cx="92" cy="64" r="6" fill="#111827"/>
+          <!-- Central Hub -->
+          <circle cx="64" cy="64" r="12" fill="#007DFF"/>
+          <circle cx="64" cy="64" r="5" fill="#FFFFFF"/>
+        </svg>
+      </div>
+      <div class="icon-title">18. 点阵矩阵枢纽</div>
+      <div class="icon-concept">正交十字光轴连接四方节点，中间放置环线核心，呈现高精度工程仪器感。</div>
+      <div class="tag-container">
+        <span class="tag">正交点阵</span>
+        <span class="tag">精密工程</span>
+      </div>
+    </div>
+
+    <!-- New 9: Pulsing Signal Ripples -->
+    <div class="icon-card">
+      <div class="icon-wrapper">
+        <svg class="icon-svg" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect width="128" height="128" rx="28" fill="#FFFFFF"/>
+          <!-- Concentric Ripples -->
+          <circle cx="64" cy="64" r="40" stroke="#E5E7EB" stroke-width="4" stroke-dasharray="6 6"/>
+          <circle cx="64" cy="64" r="26" stroke="#93C5FD" stroke-width="5"/>
+          <circle cx="64" cy="64" r="14" fill="#007DFF"/>
+          <circle cx="64" cy="64" r="5" fill="#FFFFFF"/>
+          <!-- Signal Pulse Line -->
+          <path d="M24 64H40" stroke="#007DFF" stroke-width="5" stroke-linecap="round"/>
+          <path d="M88 64H104" stroke="#007DFF" stroke-width="5" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <div class="icon-title">19. 脉冲雷达水波</div>
+      <div class="icon-concept">像声呐与雷达一样向外广播波纹，象征近场设备发现（SoftBus）与连结感知。</div>
+      <div class="tag-container">
+        <span class="tag">近场雷达</span>
+        <span class="tag">波纹扩散</span>
+      </div>
+    </div>
+
+    <!-- New 10: Prism Diamond Network -->
+    <div class="icon-card">
+      <div class="icon-wrapper">
+        <svg class="icon-svg" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect width="128" height="128" rx="28" fill="#FFFFFF"/>
+          <!-- Diamond Frame -->
+          <polygon points="64,28 98,64 64,100 30,64" stroke="#111827" stroke-width="6" fill="none"/>
+          <line x1="64" y1="28" x2="64" y2="100" stroke="#007DFF" stroke-width="6"/>
+          <line x1="30" y1="64" x2="98" y2="64" stroke="#007DFF" stroke-width="6"/>
+          <!-- Central Node -->
+          <circle cx="64" cy="64" r="9" fill="#111827"/>
+          <circle cx="64" cy="64" r="4" fill="#10B981"/>
+        </svg>
+      </div>
+      <div class="icon-title">20. 菱形八面晶体</div>
+      <div class="icon-concept">菱形对角轴线汇聚于绿色中心点，结构稳定且极具硬核极客视觉印记。</div>
+      <div class="tag-container">
+        <span class="tag">菱形对角</span>
+        <span class="tag">稳定晶体</span>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- SECTION 1: ORIGINAL 10 ICONS -->
+  <div class="section-header">
+    <h2>专题二：首批概念设计系列 (10 款基础版)</h2>
+    <span>包含 3D 字符 N、代码语法括号、经典黑白徽标等方向</span>
+  </div>
+
+  <div class="grid">
+
+    <!-- Option 1 -->
+    <div class="icon-card">
+      <span class="badge popular">经典默认</span>
+      <div class="icon-wrapper">
+        <svg class="icon-svg" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect width="128" height="128" rx="28" fill="#FFFFFF"/>
+          <path d="M34 94V34H48.5L79.5 78V34H94V94H79.5L48.5 50V94H34Z" fill="#18181B"/>
+          <path d="M48.5 34L79.5 78H94V34H79.5L48.5 78V34Z" fill="#27272A" opacity="0.15"/>
+          <path d="M34 34L48.5 50V94L34 78V34Z" fill="#09090B" opacity="0.2"/>
+        </svg>
+      </div>
+      <div class="icon-title">01. 3D 棱镜 ASCII N</div>
+      <div class="icon-concept">纯白底座搭配 3D 立体切面字符 N，黑白极简与硬核 Console 终端极客范。</div>
+      <div class="tag-container">
+        <span class="tag">极简黑白</span>
+        <span class="tag">立体切面</span>
+      </div>
+    </div>
+
+    <!-- Option 2 -->
+    <div class="icon-card">
+      <div class="icon-wrapper">
+        <svg class="icon-svg" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect width="128" height="128" rx="28" fill="#FFFFFF"/>
+          <path d="M38 92V36L88 92V36" stroke="#007DFF" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="38" cy="36" r="6" fill="#007DFF"/>
+          <circle cx="88" cy="92" r="6" fill="#007DFF"/>
+          <circle cx="63" cy="64" r="5" fill="#36B37E"/>
+        </svg>
+      </div>
+      <div class="icon-title">02. 鸿蒙神经节点 N</div>
+      <div class="icon-concept">以华为鸿蒙蓝为主色，圆润神经元节点连接 PC 与手机端 ACP 协议通道。</div>
+      <div class="tag-container">
+        <span class="tag">鸿蒙蓝</span>
+        <span class="tag">ACP 节点</span>
+      </div>
+    </div>
+
+    <!-- Option 3 -->
+    <div class="icon-card">
+      <div class="icon-wrapper">
+        <svg class="icon-svg" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect width="128" height="128" rx="28" fill="#FFFFFF"/>
+          <path d="M36 44L20 64L36 84" stroke="#1F2937" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M92 44L108 64L92 84" stroke="#1F2937" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M52 86L76 42" stroke="#2563EB" stroke-width="10" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <div class="icon-title">03. 代码括号 & 斜杠</div>
+      <div class="icon-concept">标准的代码尖括号 `< >` 与蓝色高亮斜杠，直接体现远程代码与编程工具属性。</div>
+      <div class="tag-container">
+        <span class="tag">代码语法</span>
+        <span class="tag">直观识别</span>
+      </div>
+    </div>
+
+    <!-- Option 4 -->
+    <div class="icon-card">
+      <div class="icon-wrapper">
+        <svg class="icon-svg" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect width="128" height="128" rx="28" fill="#FFFFFF"/>
+          <rect x="32" y="32" width="64" height="64" rx="16" fill="#18181B"/>
+          <path d="M46 76V52H54L64 68V52H72V76H64L54 60V76H46Z" fill="#FFFFFF"/>
+          <circle cx="80" cy="48" r="4" fill="#10B981"/>
+        </svg>
+      </div>
+      <div class="icon-title">04. 黑方块徽标 N</div>
+      <div class="icon-concept">白底圆角矩形内部镶嵌黑灰 Squircle，呈现高端模块化品牌勋章质感。</div>
+      <div class="tag-container">
+        <span class="tag">勋章质感</span>
+        <span class="tag">悬浮对比</span>
+      </div>
+    </div>
+
+    <!-- Option 5 -->
+    <div class="icon-card">
+      <div class="icon-wrapper">
+        <svg class="icon-svg" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect width="128" height="128" rx="28" fill="#FFFFFF"/>
+          <path d="M36 92L36 36L64 70L92 36V92" stroke="#111827" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M64 70L92 92" stroke="#3B82F6" stroke-width="11" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <div class="icon-title">05. 双端联动光束 N</div>
+      <div class="icon-concept">经典线条 N monogram，右下角带有蓝色折光，象征 PC 客户端向手机端推流。</div>
+      <div class="tag-container">
+        <span class="tag">流线 Monogram</span>
+        <span class="tag">动态推流</span>
+      </div>
+    </div>
+
+    <!-- Option 6 -->
+    <div class="icon-card">
+      <div class="icon-wrapper">
+        <svg class="icon-svg" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect width="128" height="128" rx="28" fill="#FFFFFF"/>
+          <circle cx="40" cy="40" r="8" fill="#1F2937"/>
+          <circle cx="40" cy="88" r="8" fill="#1F2937"/>
+          <circle cx="88" cy="40" r="8" fill="#1F2937"/>
+          <circle cx="88" cy="88" r="8" fill="#2563EB"/>
+          <line x1="40" y1="40" x2="40" y2="88" stroke="#1F2937" stroke-width="6"/>
+          <line x1="40" y1="40" x2="88" y2="88" stroke="#2563EB" stroke-width="6"/>
+          <line x1="88" y1="40" x2="88" y2="88" stroke="#1F2937" stroke-width="6"/>
+        </svg>
+      </div>
+      <div class="icon-title">06. 基础拓扑网络</div>
+      <div class="icon-concept">以 4 个顶点与 3 条边构成简化的分布式图网络（Network Graph），高亮 ACP 管道。</div>
+      <div class="tag-container">
+        <span class="tag">拓扑图</span>
+        <span class="tag">分布式</span>
+      </div>
+    </div>
+
+    <!-- Option 7 -->
+    <div class="icon-card">
+      <div class="icon-wrapper">
+        <svg class="icon-svg" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect width="128" height="128" rx="28" fill="#FFFFFF"/>
+          <path d="M34 94V34H48.5L79.5 78V34H94V94H79.5L48.5 50V94H34Z" fill="url(#grad7)"/>
+          <defs>
+            <linearGradient id="grad7" x1="34" y1="34" x2="94" y2="94" gradientUnits="userSpaceOnUse">
+              <stop stop-color="#007DFF"/>
+              <stop offset="1" stop-color="#00C4B4"/>
+            </linearGradient>
+          </defs>
+        </svg>
+      </div>
+      <div class="icon-title">07. 鸿蒙青蓝渐变 N</div>
+      <div class="icon-concept">采用鸿蒙 Design Token 的 Harmony Blue 到 Cyan 渐变流色，兼具科幻与现代感。</div>
+      <div class="tag-container">
+        <span class="tag">鸿蒙渐变</span>
+        <span class="tag">科幻感</span>
+      </div>
+    </div>
+
+    <!-- Option 8 -->
+    <div class="icon-card">
+      <div class="icon-wrapper">
+        <svg class="icon-svg" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect width="128" height="128" rx="28" fill="#FFFFFF"/>
+          <rect x="28" y="36" width="48" height="34" rx="4" stroke="#1F2937" stroke-width="6"/>
+          <line x1="42" y1="70" x2="62" y2="70" stroke="#1F2937" stroke-width="6" stroke-linecap="round"/>
+          <rect x="74" y="52" width="26" height="44" rx="5" fill="#2563EB"/>
+          <path d="M48 52C56 52 64 64 74 64" stroke="#60A5FA" stroke-width="4" stroke-dasharray="3 3"/>
+        </svg>
+      </div>
+      <div class="icon-title">08. 电脑与手机跨端</div>
+      <div class="icon-concept">直观展示 PC 电脑大屏与手机小屏的双端形态，中间以蓝色无线信号连接。</div>
+      <div class="tag-container">
+        <span class="tag">双端形态</span>
+        <span class="tag">具象化</span>
+      </div>
+    </div>
+
+    <!-- Option 9 -->
+    <div class="icon-card">
+      <div class="icon-wrapper">
+        <svg class="icon-svg" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect width="128" height="128" rx="28" fill="#FFFFFF"/>
+          <path d="M36 36H52L72 74V36H88V92H72L52 54V92H36V36Z" fill="#111827"/>
+          <rect x="54" y="60" width="8" height="18" fill="#10B981" rx="2"/>
+        </svg>
+      </div>
+      <div class="icon-title">09. 终端光标块 N</div>
+      <div class="icon-concept">在实体 N 字母核心嵌入绿色 Terminal Block 光标（`_`），呼应 AI 编程时的闪烁 Cursor。</div>
+      <div class="tag-container">
+        <span class="tag">终端光标</span>
+        <span class="tag">绿色高亮</span>
+      </div>
+    </div>
+
+    <!-- Option 10 -->
+    <div class="icon-card">
+      <div class="icon-wrapper">
+        <svg class="icon-svg" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect width="128" height="128" rx="28" fill="#FFFFFF"/>
+          <circle cx="64" cy="64" r="38" stroke="#E5E7EB" stroke-width="6"/>
+          <path d="M46 82V46H58L70 70V46H82V82H70L58 58V82H46Z" fill="#000000"/>
+          <path d="M64 26A38 38 0 0 1 102 64" stroke="#007DFF" stroke-width="6" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <div class="icon-title">10. 环形状态轨道 N</div>
+      <div class="icon-concept">圆环环绕字母 N，顶端带弧形鸿蒙蓝状态弧线，象征实时 Sync 运行轨道。</div>
+      <div class="tag-container">
+        <span class="tag">环形轨道</span>
+        <span class="tag">实时状态</span>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Dock Mockup Preview -->
+  <div class="mockup-section">
+    <h2>全新拓扑图标在 HarmonyOS Dock 栏预览</h2>
+    <p>多端节点与枢纽连结概念图标在鸿蒙系统桌面中具备高辨识度与极客科技感</p>
+    
+    <div class="home-screen-preview">
+      <div class="dock-container">
+        <!-- Sample System Dock Icons -->
+        <svg class="dock-icon" viewBox="0 0 128 128"><rect width="128" height="128" rx="28" fill="#007DFF"/><path d="M40 64L56 80L88 48" stroke="#FFF" stroke-width="10" stroke-linecap="round"/></svg>
+        <svg class="dock-icon" viewBox="0 0 128 128"><rect width="128" height="128" rx="28" fill="#34C759"/><path d="M40 40H88V88H40Z" fill="#FFF"/></svg>
+
+        <!-- New Option 11: Central Core Hub -->
+        <svg class="dock-icon" viewBox="0 0 128 128" style="box-shadow: 0 8px 16px rgba(0,0,0,0.3);">
+          <rect width="128" height="128" rx="28" fill="#FFFFFF"/>
+          <line x1="64" y1="64" x2="34" y2="38" stroke="#E5E7EB" stroke-width="6" stroke-linecap="round"/>
+          <line x1="64" y1="64" x2="94" y2="38" stroke="#E5E7EB" stroke-width="6" stroke-linecap="round"/>
+          <line x1="64" y1="64" x2="34" y2="90" stroke="#007DFF" stroke-width="7" stroke-linecap="round"/>
+          <line x1="64" y1="64" x2="94" y2="90" stroke="#007DFF" stroke-width="7" stroke-linecap="round"/>
+          <circle cx="34" cy="38" r="7" fill="#9CA3AF"/>
+          <circle cx="94" cy="38" r="7" fill="#9CA3AF"/>
+          <circle cx="34" cy="90" r="9" fill="#007DFF"/>
+          <circle cx="94" cy="90" r="9" fill="#007DFF"/>
+          <circle cx="64" cy="64" r="18" fill="#111827"/>
+          <circle cx="64" cy="64" r="7" fill="#36B37E"/>
+        </svg>
+
+        <!-- New Option 12: Interlocking Rings -->
+        <svg class="dock-icon" viewBox="0 0 128 128" style="box-shadow: 0 8px 16px rgba(0,0,0,0.3);">
+          <rect width="128" height="128" rx="28" fill="#FFFFFF"/>
+          <circle cx="50" cy="64" r="26" stroke="#111827" stroke-width="9"/>
+          <circle cx="78" cy="64" r="26" stroke="#007DFF" stroke-width="9"/>
+          <path d="M64 48C69 53 72 58 72 64C72 70 69 75 64 80C59 75 56 70 56 64C56 58 59 53 64 48Z" fill="#10B981"/>
+        </svg>
+
+        <svg class="dock-icon" viewBox="0 0 128 128"><rect width="128" height="128" rx="28" fill="#FF9500"/><circle cx="64" cy="64" r="24" fill="#FFF"/></svg>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <p>Nexus Project · HarmonyOS App Icon Collection (20 Concept Designs) · 2026</p>
+  </footer>
+</div>
+
+</body>
+</html>

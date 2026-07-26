@@ -19,6 +19,7 @@ import 'pages/agent_detail_page.dart';
 import 'pages/agent_manage_page.dart';
 import 'pages/session_detail_page.dart';
 import 'pages/new_session_wizard.dart';
+import 'pages/search_page.dart';
 
 void main() {
   FlutterError.onError = (details) {
@@ -154,6 +155,7 @@ class NexusApp extends StatelessWidget {
         '/agent-manage': (context) => const AgentManagePage(),
         '/session-detail': (context) => const SizedBox(),
         '/new-session': (context) => const NewSessionWizard(),
+        '/search': (context) => const SearchPage(),
       },
     );
   }

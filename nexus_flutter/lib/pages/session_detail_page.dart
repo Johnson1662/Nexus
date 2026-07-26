@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 
 import '../constants/theme.dart';
+import '../models/message_data.dart';
 import '../models/ws_protocol.dart';
 import '../providers/chat_provider.dart';
 
@@ -28,6 +29,70 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
     if (diff.inHours < 24) return '${diff.inHours} 小时前';
     if (diff.inDays < 7) return '${diff.inDays} 天前';
     return DateFormat('M/d/yy').format(date);
+  }
+
+  Future<void> _showRenameDialog(
+    BuildContext context,
+    ChatProvider chatProvider,
+  ) async {
+    final session = widget.session;
+    final controller = TextEditingController(text: session.title ?? '');
+    final newTitle = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('重命名会话'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(
+            hintText: '输入新名称',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, controller.text),
+            child: const Text('确认'),
+          ),
+        ],
+      ),
+    );
+    if (newTitle != null && newTitle.trim().isNotEmpty) {
+      chatProvider.renameSession(session.sessionId, newTitle.trim());
+    }
+  }
+
+  Future<void> _showDeleteConfirmDialog(
+    BuildContext context,
+    ChatProvider chatProvider,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('删除会话'),
+        content: const Text('确认删除此会话？此操作不可撤销。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('删除'),
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.red,
+            ),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      chatProvider.closeSession(widget.session.sessionId);
+      if (context.mounted) Navigator.pop(context);
+    }
   }
 
   @override
@@ -65,6 +130,42 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
           // ── File changes section ──
           _buildFileChanges(context, chatProvider),
           const SizedBox(height: AppSpacing.xl),
+
+          // ── Session management actions ──
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => _showRenameDialog(context, chatProvider),
+                  icon: const Icon(Icons.edit_outlined, size: 16),
+                  label: const Text('重命名'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.foregroundC(context),
+                    side: BorderSide(color: AppColors.border),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(AppRadius.md),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => _showDeleteConfirmDialog(context, chatProvider),
+                  icon: const Icon(Icons.delete_outline, size: 16),
+                  label: const Text('删除会话'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.red,
+                    side: const BorderSide(color: Colors.red),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(AppRadius.md),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
 
           // ── Continue chat button ──
           SizedBox(
@@ -224,8 +325,8 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
     );
   }
 
-  Widget _buildMessagePreview(BuildContext context, dynamic message) {
-    // Just show a preview of the request content
+  Widget _buildMessagePreview(BuildContext context, MessageData message) {
+    final text = message.content.isNotEmpty ? message.content : '请求内容';
     return Container(
       padding: const EdgeInsets.all(AppSpacing.md),
       decoration: BoxDecoration(
@@ -243,11 +344,13 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
           const SizedBox(width: AppSpacing.sm),
           Expanded(
             child: Text(
-              'Request content',
+              text.length > 120 ? '${text.substring(0, 120)}…' : text,
               style: TextStyle(
                 fontSize: AppFontSize.sm,
                 color: AppColors.foregroundM(context),
               ),
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         ],

@@ -23,6 +23,7 @@ class ChatState {
 
   // Sessions
   List<ServerSessionData> sessions = [];
+  Set<String> pinnedSessionIds = {};
   bool loadingSession = false;
   String sessionTitle = '';
   String sessionCurrentModelId = '';

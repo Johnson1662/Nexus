@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../constants/theme.dart';
 import '../models/message_data.dart';
 
@@ -23,6 +24,53 @@ class _ToolCallCardState extends State<ToolCallCard> {
     if (name.contains('create') || name.contains('new')) return Icons.create_new_folder_outlined;
     if (name.contains('delete') || name.contains('remove')) return Icons.delete_outline;
     return Icons.build_outlined;
+  }
+
+  /// Content to copy: toolContent if non-empty, else the diff (old→new) as text.
+  String _copyableContent() {
+    final msg = widget.message;
+    if (msg.toolContent.isNotEmpty) return msg.toolContent;
+    if (msg.toolOldText.isNotEmpty || msg.toolNewText.isNotEmpty) {
+      final buf = StringBuffer();
+      if (msg.toolOldText.isNotEmpty) {
+        buf.writeln('--- old');
+        buf.writeln(msg.toolOldText);
+      }
+      if (msg.toolNewText.isNotEmpty) {
+        buf.writeln('+++ new');
+        buf.writeln(msg.toolNewText);
+      }
+      return buf.toString().trim();
+    }
+    return msg.toolName;
+  }
+
+  /// Simple line-diff: walk matching prefix, then mark remainder old as `-` and new as `+`.
+  List<_DiffLine> _computeDiff(String oldText, String newText) {
+    final oldLines = oldText.split('\n');
+    final newLines = newText.split('\n');
+    final result = <_DiffLine>[];
+    int i = 0, j = 0;
+    while (i < oldLines.length && j < newLines.length) {
+      if (oldLines[i] == newLines[j]) {
+        result.add(_DiffLine(' ', newLines[j]));
+        i++;
+        j++;
+      } else {
+        break;
+      }
+    }
+    // Remaining old lines are deletions
+    while (i < oldLines.length) {
+      result.add(_DiffLine('-', oldLines[i]));
+      i++;
+    }
+    // Remaining new lines are insertions
+    while (j < newLines.length) {
+      result.add(_DiffLine('+', newLines[j]));
+      j++;
+    }
+    return result;
   }
 
   @override
@@ -104,50 +152,132 @@ class _ToolCallCardState extends State<ToolCallCard> {
   }
 
   Widget _buildContent(BuildContext context) {
-    final ct = widget.message.toolContentType;
-    final content = widget.message.toolContent;
+    final msg = widget.message;
+    final ct = msg.toolContentType;
+    final hasDiff = msg.toolOldText.isNotEmpty || msg.toolNewText.isNotEmpty;
 
-    if (ct == 'terminal' || ct == 'shell') {
-      return _buildScrollableContent(
-        context,
-        content,
-        bg: const Color(0xFF1E1E1E),
-        textColor: const Color(0xFFD4D4D4),
-      );
-    }
-    if (ct == 'diff') {
-      return _buildScrollableContent(
-        context,
-        content,
-        bg: AppColors.surface2Ctx(context),
-        isDiff: true,
-      );
-    }
-    return _buildScrollableContent(
-      context,
-      content,
-      bg: AppColors.surface2Ctx(context),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // ── Header row: label + Copy button ──
+          Row(
+            children: [
+              Text(
+                ct == 'terminal' || ct == 'shell' ? '输出' :
+                ct == 'diff' ? '变更' :
+                hasDiff ? '变更' : '详情',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.foregroundM(context),
+                ),
+              ),
+              const Spacer(),
+              Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(4),
+                  onTap: () {
+                    Clipboard.setData(ClipboardData(text: _copyableContent()));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('已复制'), duration: Duration(seconds: 1)),
+                    );
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.all(4),
+                    child: Icon(Icons.copy, size: 14, color: AppColors.foregroundM(context)),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+
+          // ── Old/New diff block ──
+          if (hasDiff)
+            _buildOldNewDiff(context, msg.toolOldText, msg.toolNewText),
+
+          // ── Content block ──
+          if (msg.toolContent.isNotEmpty)
+            _buildContentBlock(context, msg.toolContent, ct),
+        ],
+      ),
     );
   }
 
-  Widget _buildScrollableContent(BuildContext context, String content, {Color? bg, Color? textColor, bool isDiff = false}) {
+  Widget _buildOldNewDiff(BuildContext context, String oldText, String newText) {
+    if (oldText.isEmpty && newText.isEmpty) return const SizedBox.shrink();
+
+    final diffLines = _computeDiff(oldText, newText);
     return Container(
       width: double.infinity,
-      margin: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: AppColors.surface2Ctx(context),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: diffLines.map((dl) {
+          Color? bg;
+          Color fg;
+          String prefix;
+          if (dl.kind == '+') {
+            bg = AppColors.diffAdd.withAlpha(25);
+            fg = AppColors.diffAdd;
+            prefix = '+ ';
+          } else if (dl.kind == '-') {
+            bg = AppColors.diffDel.withAlpha(25);
+            fg = AppColors.diffDel;
+            prefix = '- ';
+          } else {
+            bg = null;
+            fg = AppColors.foregroundM(context);
+            prefix = '  ';
+          }
+          final text = dl.line.isEmpty ? ' ' : '$prefix${dl.line}';
+          return Container(
+            width: double.infinity,
+            color: bg,
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+            child: Text(
+              text,
+              style: TextStyle(fontFamily: 'monospace', fontSize: 11, color: fg, height: 1.4),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _buildContentBlock(BuildContext context, String content, String contentType) {
+    final isTerminal = contentType == 'terminal' || contentType == 'shell';
+    final isDiff = contentType == 'diff';
+
+    return Container(
+      width: double.infinity,
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: bg,
+        color: isTerminal ? const Color(0xFF1E1E1E) : AppColors.surface2Ctx(context),
         borderRadius: BorderRadius.circular(6),
       ),
       child: isDiff
           ? _buildDiffLines(context, content)
-          : Text(
-              content,
-              style: TextStyle(
-                fontFamily: 'monospace',
-                fontSize: 12,
-                color: textColor ?? AppColors.foregroundM(context),
-                height: 1.4,
+          : SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Text(
+                content,
+                style: TextStyle(
+                  fontFamily: 'monospace',
+                  fontSize: 12,
+                  color: isTerminal ? const Color(0xFFD4D4D4) : AppColors.foregroundM(context),
+                  height: 1.4,
+                ),
               ),
             ),
     );
@@ -174,4 +304,10 @@ class _ToolCallCardState extends State<ToolCallCard> {
       }).toList(),
     );
   }
+}
+
+class _DiffLine {
+  final String kind; // '+', '-', ' '
+  final String line;
+  const _DiffLine(this.kind, this.line);
 }

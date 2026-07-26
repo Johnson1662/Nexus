@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nexus 旗舰级 App Icon 方案 (Elite Edition)</title>
+  <style>
+    :root {
+      --bg: #F3F4F6;
+      --card-bg: #FFFFFF;
+      --text-main: #111827;
+      --text-muted: #6B7280;
+      --border: #E5E7EB;
+      --squircle-radius: 22.5%;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "HarmonyOS Sans", "Segoe UI", Roboto, sans-serif;
+      background-color: var(--bg);
+      color: var(--text-main);
+      line-height: 1.5;
+      padding: 60px 20px;
+    }
+
+    .container {
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 60px;
+    }
+
+    header h1 {
+      font-size: 36px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      margin-bottom: 12px;
+      background: linear-gradient(135deg, #111827 0%, #374151 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    header p {
+      font-size: 16px;
+      color: var(--text-muted);
+      max-width: 650px;
+      margin: 0 auto;
+    }
+
+    .elite-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(460px, 1fr));
+      gap: 40px;
+      margin-bottom: 60px;
+    }
+
+    .elite-card {
+      background: var(--card-bg);
+      border-radius: 28px;
+      border: 1px solid var(--border);
+      padding: 40px;
+      display: flex;
+      gap: 32px;
+      align-items: center;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.04);
+      transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .elite-card:hover {
+      transform: translateY(-6px);
+      box-shadow: 0 20px 40px rgba(0,0,0,0.08);
+      border-color: #D1D5DB;
+    }
+
+    .elite-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 4px;
+      background: linear-gradient(90deg, #007DFF, #10B981);
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+
+    .elite-card:hover::before {
+      opacity: 1;
+    }
+
+    .icon-preview {
+      width: 140px;
+      height: 140px;
+      flex-shrink: 0;
+      filter: drop-shadow(0 16px 24px rgba(0,0,0,0.12));
+    }
+
+    .icon-svg {
+      width: 100%;
+      height: 100%;
+      border-radius: var(--squircle-radius);
+      display: block;
+    }
+
+    .info-content {
+      flex: 1;
+    }
+
+    .tag-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .tag-elite {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 10px;
+      border-radius: 20px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .tag-blue { background: #E0F2FE; color: #0369A1; }
+    .tag-emerald { background: #D1FAE5; color: #047857; }
+    .tag-purple { background: #F3E8FF; color: #6B21A8; }
+    .tag-dark { background: #F3F4F6; color: #1F2937; }
+
+    .elite-title {
+      font-size: 22px;
+      font-weight: 800;
+      margin-bottom: 8px;
+      color: var(--text-main);
+    }
+
+    .elite-desc {
+      font-size: 14px;
+      color: var(--text-muted);
+      line-height: 1.6;
+      margin-bottom: 16px;
+    }
+
+    .feature-list {
+      font-size: 12px;
+      color: #4B5563;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .feature-list span {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .feature-list span::before {
+      content: '✦';
+      color: #007DFF;
+      font-size: 10px;
+    }
+
+    /* Comparison Bar */
+    .comparison-box {
+      background: #111827;
+      color: #FFF;
+      border-radius: 24px;
+      padding: 40px;
+      margin-top: 40px;
+    }
+
+    .comparison-box h2 {
+      font-size: 22px;
+      font-weight: 700;
+      text-align: center;
+      margin-bottom: 24px;
+    }
+
+    .dock-bar {
+      background: rgba(255, 255, 255, 0.12);
+      backdrop-filter: blur(20px);
+      padding: 16px 28px;
+      border-radius: 36px;
+      display: flex;
+      gap: 24px;
+      justify-content: center;
+      align-items: center;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      width: fit-content;
+      margin: 0 auto;
+    }
+
+    .dock-app {
+      width: 64px;
+      height: 64px;
+      border-radius: 15px;
+    }
+
+    footer {
+      text-align: center;
+      margin-top: 60px;
+      color: var(--text-muted);
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <header>
+    <h1>Nexus 旗舰级 App Icon 重磅设计方案</h1>
+    <p>摆脱平庸二维线条 · 融入光影质感、悬浮拟物与黑曜石玻璃 · Raycast / Xcode / Linear 级拟质质感</p>
+  </header>
+
+  <div class="elite-grid">
+
+    <!-- CONCEPT 1 -->
+    <div class="elite-card">
+      <div class="icon-preview">
+        <svg class="icon-svg" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="c1_bg" x1="0" y1="0" x2="128" y2="128" gradientUnits="userSpaceOnUse">
+              <stop stop-color="#FFFFFF"/>
+              <stop offset="1" stop-color="#F3F4F6"/>
+            </linearGradient>
+            <linearGradient id="c1_mono" x1="36" y1="36" x2="92" y2="92" gradientUnits="userSpaceOnUse">
+              <stop stop-color="#27272A"/>
+              <stop offset="1" stop-color="#09090B"/>
+            </linearGradient>
+            <linearGradient id="c1_laser" x1="20" y1="64" x2="108" y2="64" gradientUnits="userSpaceOnUse">
+              <stop stop-color="#007DFF"/>
+              <stop offset="0.5" stop-color="#60A5FA"/>
+              <stop offset="1" stop-color="#10B981"/>
+            </linearGradient>
+            <filter id="c1_glow" x="10" y="50" width="108" height="28" filterUnits="userSpaceOnUse">
+              <feGaussianBlur stdDeviation="4" result="effect1_foregroundBlur"/>
+            </filter>
+          </defs>
+          <rect width="128" height="128" rx="28" fill="url(#c1_bg)"/>
+          <!-- Black Obsidian Pillar -->
+          <rect x="36" y="32" width="56" height="64" rx="16" fill="url(#c1_mono)"/>
+          <!-- Inner Terminal Window Cut -->
+          <rect x="42" y="38" width="44" height="52" rx="12" fill="#18181B"/>
+          <!-- Laser Glow Behind -->
+          <path d="M20 64H108" stroke="url(#c1_laser)" stroke-width="12" opacity="0.6" filter="url(#c1_glow)"/>
+          <!-- Laser Beam Beam Core -->
+          <path d="M20 64H108" stroke="url(#c1_laser)" stroke-width="6" stroke-linecap="round"/>
+          <!-- Core Nodes -->
+          <circle cx="36" cy="64" r="6" fill="#007DFF"/>
+          <circle cx="92" cy="64" r="6" fill="#10B981"/>
+          <circle cx="64" cy="64" r="8" fill="#FFFFFF"/>
+        </svg>
+      </div>
+      <div class="info-content">
+        <div class="tag-row">
+          <span class="tag-elite tag-blue">概念一</span>
+          <span class="tag-elite tag-dark">黑曜石与穿透激光</span>
+        </div>
+        <div class="elite-title">01. 激光穿透黑曜石</div>
+        <div class="elite-desc">黑曜石终端窗口悬浮于纯白底座，一条高亮度青蓝激光（代表 ACP 通道）从中间穿透而出，形成极强的光影反差。</div>
+        <div class="feature-list">
+          <span>光影对比：深黑终端与霓拿激光撞色</span>
+          <span>含义契合：激光代表移动端与 PC 远程高速通信</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- CONCEPT 2 -->
+    <div class="elite-card">
+      <div class="icon-preview">
+        <svg class="icon-svg" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="c2_glass" x1="28" y1="28" x2="100" y2="100" gradientUnits="userSpaceOnUse">
+              <stop stop-color="#FFFFFF" stop-opacity="0.9"/>
+              <stop offset="1" stop-color="#E5E7EB" stop-opacity="0.6"/>
+            </linearGradient>
+            <radialGradient id="c2_core" cx="64" cy="64" r="30" gradientUnits="userSpaceOnUse">
+              <stop stop-color="#007DFF"/>
+              <stop offset="0.7" stop-color="#0056B3"/>
+              <stop offset="1" stop-color="#09090B"/>
+            </radialGradient>
+            <filter id="c2_shadow" x="20" y="20" width="88" height="88" filterUnits="userSpaceOnUse">
+              <feDropShadow dx="0" dy="12" stdDeviation="10" flood-color="#007DFF" flood-opacity="0.25"/>
+            </filter>
+          </defs>
+          <rect width="128" height="128" rx="28" fill="#FFFFFF"/>
+          <!-- Outer Orb Shadow -->
+          <circle cx="64" cy="64" r="36" fill="url(#c2_core)" filter="url(#c2_shadow)"/>
+          <!-- Glass Overlay Ring -->
+          <circle cx="64" cy="64" r="36" fill="url(#c2_glass)" stroke="#FFFFFF" stroke-width="2"/>
+          <!-- Inner Core AI Node -->
+          <circle cx="64" cy="64" r="16" fill="#09090B"/>
+          <circle cx="64" cy="64" r="6" fill="#10B981"/>
+          <!-- Orbit Ring -->
+          <ellipse cx="64" cy="64" rx="28" ry="12" transform="rotate(-30 64 64)" stroke="#FFFFFF" stroke-width="3" stroke-dasharray="8 6"/>
+        </svg>
+      </div>
+      <div class="info-content">
+        <div class="tag-row">
+          <span class="tag-elite tag-emerald">概念二</span>
+          <span class="tag-elite tag-dark">磨砂玻璃与发光量子核</span>
+        </div>
+        <div class="elite-title">02. 磨砂玻璃量子核</div>
+        <div class="elite-desc">借鉴 Apple VisionOS 玻璃拟态设计，球体内部包裹着高光发光的 AI 核心与轨道弧线，呈现深邃的科技灵性。</div>
+        <div class="feature-list">
+          <span>拟态玻璃：透光玻璃感与弥散投影</span>
+          <span>含义契合：表达 AI 算力核心与多端协同轨道</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- CONCEPT 3 -->
+    <div class="elite-card">
+      <div class="icon-preview">
+        <svg class="icon-svg" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="c3_grad1" x1="32" y1="32" x2="96" y2="96" gradientUnits="userSpaceOnUse">
+              <stop stop-color="#111827"/>
+              <stop offset="1" stop-color="#1F2937"/>
+            </linearGradient>
+            <linearGradient id="c3_grad2" x1="64" y1="32" x2="96" y2="96" gradientUnits="userSpaceOnUse">
+              <stop stop-color="#007DFF"/>
+              <stop offset="1" stop-color="#3B82F6"/>
+            </linearGradient>
+          </defs>
+          <rect width="128" height="128" rx="28" fill="#FFFFFF"/>
+          <!-- Isometric Cube / Node Block -->
+          <path d="M64 28L96 46V82L64 100L32 82V46L64 28Z" fill="url(#c3_grad1)"/>
+          <!-- Top Facet Light -->
+          <path d="M64 28L96 46L64 64L32 46L64 28Z" fill="#374151"/>
+          <!-- Right Facet Blue Pulse -->
+          <path d="M64 64L96 46V82L64 100V64Z" fill="url(#c3_grad2)" opacity="0.9"/>
+          <!-- Central Glowing Node -->
+          <circle cx="64" cy="64" r="8" fill="#FFFFFF"/>
+          <circle cx="64" cy="64" r="4" fill="#10B981"/>
+        </svg>
+      </div>
+      <div class="info-content">
+        <div class="tag-row">
+          <span class="tag-elite tag-purple">概念三</span>
+          <span class="tag-elite tag-dark">等距 3D 悬浮晶体</span>
+        </div>
+        <div class="elite-title">03. 等距 3D 悬浮晶体</div>
+        <div class="elite-desc">三维 Isometric 六边形立方晶体，顶面为灰黑深邃金属，右侧侧面被蓝光穿透，中央镶嵌绿光 Nexus 核心。</div>
+        <div class="feature-list">
+          <span>三维等距：高精度 C4D 级立方体结构</span>
+          <span>含义契合：稳固的底层系统架构与多维扩展</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- CONCEPT 4 -->
+    <div class="elite-card">
+      <div class="icon-preview">
+        <svg class="icon-svg" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="c4_card" x1="28" y1="28" x2="100" y2="100" gradientUnits="userSpaceOnUse">
+              <stop stop-color="#1F2937"/>
+              <stop offset="1" stop-color="#111827"/>
+            </linearGradient>
+          </defs>
+          <rect width="128" height="128" rx="28" fill="#FFFFFF"/>
+          <!-- Terminal Window Frame -->
+          <rect x="28" y="32" width="72" height="64" rx="14" fill="url(#c4_card)"/>
+          <!-- Top Window Header Dots -->
+          <circle cx="40" cy="44" r="3" fill="#EF4444"/>
+          <circle cx="50" cy="44" r="3" fill="#F59E0B"/>
+          <circle cx="60" cy="44" r="3" fill="#10B981"/>
+          <!-- Terminal Prompt Symbol >_ -->
+          <path d="M42 62L52 70L42 78" stroke="#10B981" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+          <line x1="58" y1="78" x2="72" y2="78" stroke="#007DFF" stroke-width="5" stroke-linecap="round"/>
+          <!-- Glowing Wireless Pulse from Top Right -->
+          <circle cx="84" cy="44" r="5" fill="#60A5FA"/>
+        </svg>
+      </div>
+      <div class="info-content">
+        <div class="tag-row">
+          <span class="tag-elite tag-blue">概念四</span>
+          <span class="tag-elite tag-dark">极客 Terminal 命令行窗</span>
+        </div>
+        <div class="elite-title">04. 极客 Terminal 命令行窗</div>
+        <div class="elite-desc">极具辩识度的深色终端窗口，带红黄绿控制点、绿色 Prompt 符与蓝色下划光标，直指远程 AI 命令行编程与 Agent 沟通。</div>
+        <div class="feature-list">
+          <span>终端符：红黄绿控制点与 `>` 符</span>
+          <span>含义契合：直观传递“远程 AI 编程控制台”定位</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Dock Comparison -->
+  <div class="comparison-box">
+    <h2>在 HarmonyOS 系统桌面 Dock 栏的最终效果</h2>
+    <div class="dock-bar">
+      <!-- Standard App -->
+      <svg class="dock-app" viewBox="0 0 128 128"><rect width="128" height="128" rx="28" fill="#007DFF"/><path d="M40 64L56 80L88 48" stroke="#FFF" stroke-width="10" stroke-linecap="round"/></svg>
+
+      <!-- Concept 01 -->
+      <svg class="dock-app" viewBox="0 0 128 128" style="box-shadow: 0 10px 20px rgba(0,0,0,0.4);">
+        <rect width="128" height="128" rx="28" fill="#FFFFFF"/>
+        <rect x="36" y="32" width="56" height="64" rx="16" fill="#18181B"/>
+        <path d="M20 64H108" stroke="#007DFF" stroke-width="6" stroke-linecap="round"/>
+        <circle cx="64" cy="64" r="7" fill="#FFFFFF"/>
+        <circle cx="36" cy="64" r="5" fill="#007DFF"/>
+        <circle cx="92" cy="64" r="5" fill="#10B981"/>
+      </svg>
+
+      <!-- Concept 02 -->
+      <svg class="dock-app" viewBox="0 0 128 128" style="box-shadow: 0 10px 20px rgba(0,0,0,0.4);">
+        <rect width="128" height="128" rx="28" fill="#FFFFFF"/>
+        <circle cx="64" cy="64" r="34" fill="#007DFF"/>
+        <circle cx="64" cy="64" r="16" fill="#09090B"/>
+        <circle cx="64" cy="64" r="6" fill="#10B981"/>
+      </svg>
+
+      <!-- Concept 03 -->
+      <svg class="dock-app" viewBox="0 0 128 128" style="box-shadow: 0 10px 20px rgba(0,0,0,0.4);">
+        <rect width="128" height="128" rx="28" fill="#FFFFFF"/>
+        <path d="M64 28L96 46V82L64 100L32 82V46L64 28Z" fill="#1F2937"/>
+        <path d="M64 64L96 46V82L64 100V64Z" fill="#007DFF" opacity="0.9"/>
+        <circle cx="64" cy="64" r="6" fill="#FFFFFF"/>
+      </svg>
+
+      <svg class="dock-app" viewBox="0 0 128 128"><rect width="128" height="128" rx="28" fill="#34C759"/><path d="M40 40H88V88H40Z" fill="#FFF"/></svg>
+    </div>
+  </div>
+
+  <footer>
+    <p>Nexus Elite Icon Collection · Designed for HarmonyOS Application Innovation Track · 2026</p>
+  </footer>
+</div>
+
+</body>
+</html>

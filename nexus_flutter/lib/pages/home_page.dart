@@ -483,6 +483,7 @@ class _HomePageState extends State<HomePage> {
   List<ServerSessionData> _getSortedRecentSessions(
     List<ServerSessionData> sessions,
     List<Map<String, String>> addedWorkspaces,
+    ChatProvider chatProvider,
   ) {
     final validPaths = addedWorkspaces
         .map((w) => (w['path'] ?? '').replaceAll('\\', '/').toLowerCase().replaceAll(RegExp(r'/$'), ''))
@@ -496,6 +497,10 @@ class _HomePageState extends State<HomePage> {
     }).toList();
 
     filtered.sort((a, b) {
+      final aPinned = chatProvider.isPinned(a.sessionId);
+      final bPinned = chatProvider.isPinned(b.sessionId);
+      if (aPinned != bPinned) return aPinned ? -1 : 1;
+
       final aActive = a.status == 'running' || a.status == 'waiting_input';
       final bActive = b.status == 'running' || b.status == 'waiting_input';
       if (aActive != bActive) return aActive ? -1 : 1;
@@ -516,6 +521,7 @@ class _HomePageState extends State<HomePage> {
     final sessions = _getSortedRecentSessions(
       chatProvider.state.sessions,
       workspaceProvider.workspaces,
+      chatProvider,
     );
 
     return Column(
@@ -571,9 +577,7 @@ class _HomePageState extends State<HomePage> {
               shadowColor: const Color(0x141A1A2E),
               child: InkWell(
                 borderRadius: BorderRadius.circular(AppRadius.full),
-                onTap: () {
-                  // Placeholder — no-op for now
-                },
+                onTap: () => Navigator.pushNamed(context, '/search'),
                 child: Container(
                   height: 50,
                   padding: const EdgeInsets.only(left: AppSpacing.lg),
