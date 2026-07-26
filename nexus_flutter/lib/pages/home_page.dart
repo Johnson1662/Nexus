@@ -158,6 +158,18 @@ class _HomePageState extends State<HomePage> {
       }
     }
 
+    final phase = hostStore.getPhase(matchedDevice?.hostId ?? chatProvider.state.currentDeviceId);
+    final isConnected = chatProvider.state.connected;
+
+    final Color statusDotColor;
+    if (isConnected || phase == 'online' || phase == 'syncing') {
+      statusDotColor = AppColors.success;
+    } else if (phase == 'connecting' || phase == 'reconnecting' || phase == 'waiting_host') {
+      statusDotColor = AppColors.warning;
+    } else {
+      statusDotColor = AppColors.foregroundMutedCtx(context).withAlpha(120);
+    }
+
     return Scaffold(
       appBar: AppBar(
         centerTitle: true,
@@ -192,9 +204,9 @@ class _HomePageState extends State<HomePage> {
                   Container(
                     width: 6,
                     height: 6,
-                    decoration: const BoxDecoration(
+                    decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: AppColors.success,
+                      color: statusDotColor,
                     ),
                   ),
                   const SizedBox(width: AppSpacing.xs),
@@ -236,6 +248,8 @@ class _HomePageState extends State<HomePage> {
                       hostStore,
                       workspaceProvider,
                     ),
+                    const SizedBox(height: AppSpacing.md),
+                    _buildRecentSessionsSection(context, chatProvider),
                     const SizedBox(height: 100),
                   ],
                 ),
@@ -464,54 +478,60 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  // ── Helpers ──
+
+  List<ServerSessionData> _getSortedRecentSessions(List<ServerSessionData> sessions) {
+    final sorted = List<ServerSessionData>.from(sessions);
+    sorted.sort((a, b) {
+      final aActive = a.status == 'running' || a.status == 'waiting_input';
+      final bActive = b.status == 'running' || b.status == 'waiting_input';
+      if (aActive != bActive) return aActive ? -1 : 1;
+      return b.createdAt.compareTo(a.createdAt);
+    });
+    return sorted.take(5).toList();
+  }
+
   // ── Recent sessions section ──
 
-  Widget _buildRecentSection(
-    BuildContext context,
-    ChatProvider chatProvider,
-  ) {
-    final sessions = chatProvider.state.sessions;
+  Widget _buildRecentSessionsSection(BuildContext context, ChatProvider chatProvider) {
+    final fg = AppColors.foregroundCtx(context);
+    final muted = AppColors.foregroundMutedCtx(context);
+    final sessions = _getSortedRecentSessions(chatProvider.state.sessions);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          '最近聊天',
-          style: Theme.of(context).textTheme.headlineMedium,
+        Padding(
+          padding: const EdgeInsets.only(bottom: AppSpacing.md),
+          child: Text(
+            '最近会话',
+            style: TextStyle(
+              fontSize: AppFontSize.lg,
+              fontWeight: FontWeight.w600,
+              color: fg,
+            ),
+          ),
         ),
-        const SizedBox(height: AppSpacing.lg),
         if (sessions.isEmpty)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
             child: Text(
-              '暂无最近聊天',
+              '暂无最近会话',
               style: TextStyle(
-                color: AppColors.foregroundMutedCtx(context),
+                color: muted,
                 fontSize: AppFontSize.sm,
               ),
             ),
           )
         else
-          ...sessions.take(4).map(
-                (s) => _buildRecentSessionRow(context, s),
-              ),
+          ...sessions.map((s) => SessionTile(
+            session: s,
+            onTap: () {
+              chatProvider.loadSession(s.sessionId, agent: s.agent, cwd: s.cwd);
+              Navigator.pushNamed(context, '/chat');
+            },
+          )),
       ],
-    );
-  }
-
-  Widget _buildRecentSessionRow(
-    BuildContext context,
-    ServerSessionData session,
-  ) {
-    return SessionTile(
-      session: session,
-      onTap: () {
-        context.read<ChatProvider>().loadSession(
-          session.sessionId,
-          agent: session.agent,
-        );
-        Navigator.pushNamed(context, '/chat');
-      },
     );
   }
 

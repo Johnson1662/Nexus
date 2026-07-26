@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../constants/theme.dart';
 import '../models/device_entry.dart';
@@ -33,7 +34,7 @@ class HostFilterBar extends StatelessWidget {
         separatorBuilder: (_, __) => const SizedBox(width: AppSpacing.sm),
         itemBuilder: (context, index) {
           final device = devices[index];
-          final hostStore = HostStore();
+          final hostStore = context.watch<HostStore>();
           final phase = hostStore.getPhase(device.hostId);
           final isSelected = device.hostId == selectedKey || device.name == selectedKey;
 

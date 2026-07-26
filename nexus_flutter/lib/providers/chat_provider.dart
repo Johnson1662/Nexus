@@ -212,7 +212,7 @@ class ChatProvider extends ChangeNotifier {
   }
 
   // ── Sessions ──
-  void loadSession(String sessionId, {String? agent, String? cwd}) {
+  void loadSession(String sessionId, {String? agent, String? cwd, String? title}) {
     String targetAgent = agent ?? '';
     String targetCwd = cwd ?? '';
 
@@ -220,6 +220,14 @@ class ChatProvider extends ChangeNotifier {
       (s) => s.sessionId == sessionId,
       orElse: () => ServerSessionData(sessionId: sessionId),
     );
+
+    if (matchingSession.title != null && matchingSession.title!.isNotEmpty) {
+      _state.sessionTitle = matchingSession.title!;
+    } else if (title != null && title.isNotEmpty) {
+      _state.sessionTitle = title;
+    } else {
+      _state.sessionTitle = '';
+    }
 
     if (targetAgent.isEmpty && matchingSession.agent != null && matchingSession.agent!.isNotEmpty) {
       targetAgent = matchingSession.agent!;
@@ -536,9 +544,9 @@ class ChatProvider extends ChangeNotifier {
     HostRuntimeStore().markOnline(actualHostId, currentUrl);
     hostStore.markOnline(actualHostId, currentUrl);
 
-    // Request agents, models, and sessions
+    // Request agents, models, and all sessions
     _ws.send(ClientMessage(type: 'list_agents'));
-    _requestServerSessions();
+    requestSessionList();
     _onServerInfo();
   }
 

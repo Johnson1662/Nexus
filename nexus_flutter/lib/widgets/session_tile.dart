@@ -91,7 +91,7 @@ class SessionTile extends StatelessWidget {
                       height: 9,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: AppColors.success,
+                        color: session.status == 'waiting_input' ? AppColors.warning : AppColors.success,
                         border: Border.all(
                           color: AppColors.surfaceCtx(context),
                           width: 1.5,
