@@ -4,8 +4,11 @@
  * Tests the real-time session discovery and status watcher:
  * 1. Unit Test: scanLocalSessionStatuses() schema & time validation
  * 2. Mock Scanner Test: Session detection & mtime status classification (running vs idle)
- * 3. Watcher Engine Test: startWatcher/stopWatcher diff calculation (added, changed, removed)
+ * 3. Watcher Engine Test: SessionStatusWatcher diff calculation (added, changed, removed)
  * 4. WebSocket E2E Test: session_status_update broadcast payload verification
+ * 5. Pure Function Test: computeSessionDiff() deterministic diff logic
+ * 6. Smoke Test: SessionStatusWatcher.scanOnce() real disk scan
+ * 7. Pure Function Test: mergeSessionStatus() live state override
  *
  * Usage: node test-session-watcher.mjs
  */
@@ -16,8 +19,9 @@ import fs from "node:fs/promises";
 import { existsSync, mkdirSync } from "node:fs";
 import {
  scanLocalSessionStatuses,
- startWatcher,
- stopWatcher,
+ SessionStatusWatcher,
+ computeSessionDiff,
+ mergeSessionStatus,
  getLocalAgentLocations,
 } from "./dist/discovery/session-watcher.mjs";
 
@@ -26,13 +30,60 @@ let testsFailed = 0;
 
 function assert(condition, message) {
  if (!condition) {
-  console.error(`❌ FAIL: ${message}`);
+  console.error(`\u274c FAIL: ${message}`);
   testsFailed++;
   throw new Error(`Assertion failed: ${message}`);
  } else {
-  console.log(`✓ PASS: ${message}`);
+  console.log(`\u2713 PASS: ${message}`);
   testsPassed++;
  }
+}
+
+// ── Test 7: mergeSessionStatus Pure Function ────────────────────────
+
+function testMergeSessionStatus() {
+ console.log("\n--- Test 7: mergeSessionStatus Pure Function ---");
+ const base = [
+  { sessionId: "s1", agentName: "opencode", status: "idle", lastActivity: 0 },
+  { sessionId: "s2", agentName: "omp", status: "idle", lastActivity: 0 },
+  { sessionId: "s3", agentName: "claude-code", status: "running", lastActivity: Date.now() },
+ ];
+
+ // 7a. No active IDs → unchanged
+ const r1 = mergeSessionStatus(base, new Set());
+ assert(r1[0].status === "idle", "No active IDs: idle stays idle");
+ assert(r1[1].status === "idle", "No active IDs: second stays idle");
+ assert(r1[2].status === "running", "No active IDs: running stays running");
+
+ // 7b. Active ID overrides idle → "running"
+ const r2 = mergeSessionStatus(base, new Set(["s1"]));
+ assert(r2[0].status === "running", "s1 in activeIds: idle→running");
+ assert(r2[1].status === "idle", "s2 not active: stays idle");
+ assert(r2[2].status === "running", "s3 not in activeIds but already running");
+
+ // 7c. Active ID does not override running → stays "running"
+ const r3 = mergeSessionStatus(base, new Set(["s3"]));
+ assert(r3[2].status === "running", "s3 active: running stays running");
+
+ // 7d. Multiple active IDs
+ const r4 = mergeSessionStatus(base, new Set(["s1", "s2"]));
+ assert(r4[0].status === "running", "s1 active: idle→running");
+ assert(r4[1].status === "running", "s2 active: idle→running");
+ assert(r4[2].status === "running", "s3 not active but already running");
+
+ // 7e. Active IDs not in disk results → no entries added
+ const r5 = mergeSessionStatus(base, new Set(["s99"]));
+ assert(r5.length === 3, "active IDs not in disk: no extra entries");
+ assert(r5[0].status === "idle", "s1 unchanged");
+
+ // 7f. Original array not mutated (pure function)
+ const originalStatus = base[0].status;
+ mergeSessionStatus(base, new Set(["s1"]));
+ assert(base[0].status === originalStatus, "original array not mutated");
+
+ // 7g. Empty disk → empty output
+ const r6 = mergeSessionStatus([], new Set(["s1"]));
+ assert(r6.length === 0, "empty disk: empty output");
 }
 
 // ── Test 1: Unit Test (scanLocalSessionStatuses) ────────────────────
@@ -96,7 +147,6 @@ async function testMockScannerStatusClassification() {
 
 async function testWatcherDiffEngine() {
  console.log("\n--- Test 3: Watcher Engine & Diff Calculation Test ---");
- stopWatcher(); // Reset any existing watcher timer
  const home = os.homedir();
  const testClaudeDir = path.join(home, ".claude", "sessions");
  await fs.mkdir(testClaudeDir, { recursive: true });
@@ -108,17 +158,18 @@ async function testWatcherDiffEngine() {
  let removedReceived = [];
  let changedReceived = [];
 
- const onChangeCallback = (added, removed, changed) => {
+ const watcher = new SessionStatusWatcher(500);
+ watcher.onStatusUpdate(({ added, removed, changed }) => {
   console.log("    [watcher callback fired] added:", added.map(s => s.sessionId), "changed:", changed.map(s => s.sessionId), "removed:", removed.map(s => s.sessionId));
   addedReceived.push(...added);
   removedReceived.push(...removed);
   changedReceived.push(...changed);
- };
+ });
 
  try {
   // Start watcher with fast 500ms interval
-  startWatcher(onChangeCallback, 500);
-  assert(true, "Watcher started with 500ms interval");
+  watcher.start();
+  assert(true, "SessionStatusWatcher started with 500ms interval");
 
   // Wait 1200ms for initial baseline scan to complete
   await new Promise((resolve) => setTimeout(resolve, 1200));
@@ -148,8 +199,8 @@ async function testWatcherDiffEngine() {
   if (existsSync(testFilePath)) {
    await fs.unlink(testFilePath);
   }
-  stopWatcher(onChangeCallback);
-  assert(true, "stopWatcher executed and callback unregistered successfully");
+  watcher.stop();
+  assert(true, "SessionStatusWatcher stopped and listeners cleared successfully");
  }
 }
 
@@ -202,6 +253,114 @@ async function testWebSocketBroadcast() {
  assert(msg.added[0].status === "running", `Session status matches: ${msg.added[0].status}`);
 }
 
+// ── Test 5: computeSessionDiff Pure Function ─────────────────────────
+
+function testComputeSessionDiff() {
+ console.log("\n--- Test 5: computeSessionDiff Pure Function ---");
+
+ // 5a. Empty prev, non-empty curr -> all added
+ const prev = [];
+ const curr = [
+  { sessionId: "s1", agentName: "a", status: "running", lastActivity: 1000 },
+ ];
+ const r1 = computeSessionDiff(prev, curr);
+ assert(r1.added.length === 1, "Empty prev -> added contains new session");
+ assert(r1.removed.length === 0, "Empty prev -> removed is empty");
+ assert(r1.changed.length === 0, "Empty prev -> changed is empty");
+ assert(r1.added[0].sessionId === "s1", "Added entry has correct sessionId");
+ assert(r1.added[0].status === "running", "Added entry preserves original status");
+
+ // 5b. Single session disappears -> removed with idle status
+ const r2 = computeSessionDiff(curr, prev);
+ assert(r2.added.length === 0, "Sessions removed -> added is empty");
+ assert(r2.removed.length === 1, "Session removed -> removed has entry");
+ assert(r2.removed[0].status === "idle", "Removed entry gets idle status");
+ assert(r2.removed[0].sessionId === "s1", "Removed entry has correct sessionId");
+ assert(r2.changed.length === 0, "Sessions removed -> changed is empty");
+
+ // 5c. Status changed -> changed
+ const curr2 = [
+  { sessionId: "s1", agentName: "a", status: "idle", lastActivity: 1000 },
+ ];
+ const r3 = computeSessionDiff(curr, curr2);
+ assert(r3.added.length === 0, "Status changed -> added is empty");
+ assert(r3.removed.length === 0, "Status changed -> removed is empty");
+ assert(r3.changed.length === 1, "Status changed -> changed has entry");
+ assert(r3.changed[0].sessionId === "s1", "Changed entry has correct sessionId");
+ assert(r3.changed[0].status === "idle", "Changed entry has new status");
+
+ // 5d. Activity changed by >3s -> changed
+ const curr3 = [
+  { sessionId: "s1", agentName: "a", status: "running", lastActivity: 5000 },
+ ];
+ const r4 = computeSessionDiff(curr, curr3);
+ assert(r4.changed.length === 1, "Activity diff >3s -> changed entry");
+ assert(r4.changed[0].lastActivity === 5000, "Changed entry has new activity timestamp");
+ assert(r4.added.length === 0, "Large activity change -> no added");
+ assert(r4.removed.length === 0, "Large activity change -> no removed");
+
+ // 5e. Activity changed by <3s -> no change
+ const curr4 = [
+  { sessionId: "s1", agentName: "a", status: "running", lastActivity: 1001 },
+ ];
+ const r5 = computeSessionDiff(curr, curr4);
+ assert(r5.changed.length === 0, "Activity diff <3s -> no change");
+ assert(r5.added.length === 0, "Small activity change -> no added");
+ assert(r5.removed.length === 0, "Small activity change -> no removed");
+
+ // 5f. Identical snapshots -> empty diff
+ const r6 = computeSessionDiff(curr, curr);
+ assert(r6.added.length === 0, "Identical -> no added");
+ assert(r6.removed.length === 0, "Identical -> no removed");
+ assert(r6.changed.length === 0, "Identical -> no changed");
+
+ // 5g. Mixed: added + removed + changed simultaneously
+ const prevMixed = [
+  { sessionId: "s1", agentName: "a", status: "running", lastActivity: 1000 },
+  { sessionId: "s2", agentName: "a", status: "idle", lastActivity: 2000 },
+ ];
+ const currMixed = [
+  { sessionId: "s1", agentName: "a", status: "idle", lastActivity: 1000 },    // changed
+  { sessionId: "s3", agentName: "b", status: "running", lastActivity: 3000 },  // added
+ ];
+ const r7 = computeSessionDiff(prevMixed, currMixed);
+ assert(r7.added.length === 1, "Mixed test: 1 added");
+ assert(r7.removed.length === 1, "Mixed test: 1 removed (s2)");
+ assert(r7.changed.length === 1, "Mixed test: 1 changed (s1)");
+ assert(r7.removed[0].sessionId === "s2", "Removed entry is s2");
+ assert(r7.removed[0].status === "idle", "Removed s2 is forced to idle");
+ assert(r7.added[0].sessionId === "s3", "Added entry is s3");
+ assert(r7.changed[0].sessionId === "s1", "Changed entry is s1");
+
+ // 5h. Different agentName for same sessionId -> treated as different entries
+ const prevDiffAgent = [
+  { sessionId: "s1", agentName: "claude-code", status: "running", lastActivity: 1000 },
+ ];
+ const currDiffAgent = [
+  { sessionId: "s1", agentName: "opencode", status: "running", lastActivity: 1000 },
+ ];
+ const r8 = computeSessionDiff(prevDiffAgent, currDiffAgent);
+ assert(r8.added.length === 1, "Different agent -> curr entry is added");
+ assert(r8.removed.length === 1, "Different agent -> prev entry is removed");
+ assert(r8.changed.length === 0, "Different agent -> no changed (it's add+remove)");
+}
+
+// ── Test 6: SessionStatusWatcher.scanOnce() Smoke Test ────────────────
+
+async function testWatcherScanOnce() {
+ console.log("\n--- Test 6: SessionStatusWatcher.scanOnce() Smoke Test ---");
+ const watcher = new SessionStatusWatcher();
+ const results = await watcher.scanOnce();
+ assert(Array.isArray(results), "scanOnce() returns an array");
+ // Should match scanLocalSessionStatuses output structure
+ for (const s of results) {
+  assert(typeof s.sessionId === "string" && s.sessionId.length > 0, `scanOnce sessionId: ${s.sessionId}`);
+  assert(typeof s.agentName === "string", `scanOnce agentName: ${s.agentName}`);
+  assert(["running", "waiting_input", "idle", "error"].includes(s.status), `scanOnce status: ${s.status}`);
+ }
+ console.log(`  scanOnce found ${results.length} sessions.`);
+}
+
 // ── Runner ─────────────────────────────────────────────────────────
 
 async function main() {
@@ -210,17 +369,23 @@ async function main() {
  console.log("=================================================");
 
  try {
+  // Pure function tests run first (synchronous, no I/O)
+  testComputeSessionDiff();
+  testMergeSessionStatus();
+
+  // Async tests
   await testScanLocalSessionStatuses();
   await testMockScannerStatusClassification();
   await testWatcherDiffEngine();
   await testWebSocketBroadcast();
+  await testWatcherScanOnce();
 
   console.log("\n=================================================");
-  console.log(`🎉 ALL TESTS PASSED! (${testsPassed} checks passed, 0 failed)`);
+  console.log(`\uD83c\uDF89 ALL TESTS PASSED! (${testsPassed} checks passed, 0 failed)`);
   console.log("=================================================");
  } catch (err) {
   console.error("\n=================================================");
-  console.error(`💥 TEST SUITE FAILED: ${err.message}`);
+  console.error(`\uD83D\uDCA5 TEST SUITE FAILED: ${err.message}`);
   console.error(`Summary: ${testsPassed} passed, ${testsFailed + 1} failed`);
   console.error("=================================================");
   process.exit(1);

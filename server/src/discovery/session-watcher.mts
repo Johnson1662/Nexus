@@ -45,7 +45,7 @@ export function getLocalAgentLocations(): Record<string, string[]> {
 }
 
 /**
- * Scans local session directories asynchronously and enriches status.
+ * Scans local session directories asynchronously.
  */
 export async function scanLocalSessionStatuses(): Promise<ActiveSessionStatus[]> {
   const results: ActiveSessionStatus[] = [];
@@ -179,120 +179,151 @@ export async function scanLocalSessionStatuses(): Promise<ActiveSessionStatus[]>
     }
   }
 
-  // Detect waiting_input: check for lock files or running agent processes
-  // ponytail: crude process-name heuristic; replace with proper ACP status query if needed
-  await enrichWithProcessStatus(results);
-
   return results;
 }
 
-// ── Process-based status enrichment (waiting_input detection) ──
+// ── Pure diff function (deterministic, testable) ──
 
-async function enrichWithProcessStatus(results: ActiveSessionStatus[]): Promise<void> {
-  const cp = await import("node:child_process");
-  try {
-    const { stdout } = await new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
-      cp.exec('ps aux 2>/dev/null || tasklist /fo csv 2>nul || echo ""', { timeout: 3000, maxBuffer: 512 * 1024 }, (err, stdout, stderr) => {
-        if (err && !stdout) { reject(err); return; }
-        resolve({ stdout: stdout || '', stderr: stderr || '' });
-      });
-    });
-    for (const r of results) {
-      if (r.status === "running") {
-        const agentPats: Record<string, RegExp> = {
-          "claude-code": /claude/i,
-          "opencode": /opencode/i,
-          "codex": /codex/i,
-        };
-        const pat = agentPats[r.agentName];
-        if (pat && !pat.test(stdout)) {
-          // Process not found in process list → likely idle despite recent mtime
-          // Mark as idle instead of running (false positive reduction)
-        }
-      }
-    }
-  } catch {
-    // Process check is best-effort; ignore failures
-  }
+export interface SessionDiff {
+  added: ActiveSessionStatus[];
+  removed: ActiveSessionStatus[];
+  changed: ActiveSessionStatus[];
 }
 
-// ── Continuous watcher (interval-based push) ──
+/**
+ * Computes the diff between two snapshots of session statuses.
+ * Pure function — no I/O, no side effects.
+ *
+ * - New entries → `added`
+ * - Removed entries → `removed` (with status forced to "idle")
+ * - Entries whose status changed or lastActivity drifted by >3s → `changed`
+ */
+export function computeSessionDiff(
+  prev: ActiveSessionStatus[],
+  curr: ActiveSessionStatus[],
+): SessionDiff {
+  const prevMap = new Map(prev.map(r => [r.sessionId + ":" + r.agentName, r]));
+  const currMap = new Map(curr.map(r => [r.sessionId + ":" + r.agentName, r]));
 
-let watchTimer: ReturnType<typeof setInterval> | null = null;
-let lastWatchResults: ActiveSessionStatus[] = [];
-let baselinePromise: Promise<void> | null = null;
+  const added: ActiveSessionStatus[] = [];
+  const removed: ActiveSessionStatus[] = [];
+  const changed: ActiveSessionStatus[] = [];
 
-export type WatchCallback = (
-  added: ActiveSessionStatus[],
-  removed: ActiveSessionStatus[],
-  changed: ActiveSessionStatus[],
-) => void;
-
-let watchCallbacks: WatchCallback[] = [];
-
-/** Start continuous session monitoring. Calls onChange whenever session state changes. */
-export function startWatcher(onChange: WatchCallback, intervalMs: number = 5000): void {
-  watchCallbacks.push(onChange);
-  if (watchTimer) {
-    clearInterval(watchTimer);
-    watchTimer = null;
+  for (const [key, s] of currMap) {
+    const prevEntry = prevMap.get(key);
+    if (!prevEntry) {
+      added.push(s);
+    } else if (
+      prevEntry.status !== s.status ||
+      Math.abs(prevEntry.lastActivity - s.lastActivity) > 3000
+    ) {
+      changed.push(s);
+    }
   }
 
-  // Lock in initial baseline scan
-  baselinePromise = scanLocalSessionStatuses()
-    .then(results => { lastWatchResults = results; })
-    .catch(() => {});
-
-  watchTimer = setInterval(async () => {
-    try {
-      if (baselinePromise) {
-        await baselinePromise;
-        baselinePromise = null;
-      }
-      const current = await scanLocalSessionStatuses();
-      const lastMap = new Map(lastWatchResults.map(r => [r.sessionId + ":" + r.agentName, r]));
-      const currMap = new Map(current.map(r => [r.sessionId + ":" + r.agentName, r]));
-
-      const added: ActiveSessionStatus[] = [];
-      const removed: ActiveSessionStatus[] = [];
-      const changed: ActiveSessionStatus[] = [];
-
-      for (const [key, s] of currMap) {
-        const prev = lastMap.get(key);
-        if (!prev) {
-          added.push(s);
-        } else if (prev.status !== s.status || Math.abs(prev.lastActivity - s.lastActivity) > 3000) {
-          changed.push(s);
-        }
-      }
-
-      for (const [key, prev] of lastMap) {
-        if (!currMap.has(key)) {
-          removed.push({ ...prev, status: "idle" });
-        }
-      }
-
-      if (added.length > 0 || removed.length > 0 || changed.length > 0) {
-        for (const cb of watchCallbacks) {
-          try { cb(added, removed, changed); } catch {}
-        }
-      }
-
-      lastWatchResults = current;
-    } catch (err: any) {
-      console.warn(`[session-watcher] watch interval error:`, err.message);
+  for (const [key, prevEntry] of prevMap) {
+    if (!currMap.has(key)) {
+      removed.push({ ...prevEntry, status: "idle" });
     }
-  }, intervalMs);
+  }
+
+  return { added, removed, changed };
 }
 
-/** Stop the watcher and remove a specific callback. */
-export function stopWatcher(cb?: WatchCallback): void {
-  if (cb) {
-    watchCallbacks = watchCallbacks.filter(c => c !== cb);
+/**
+ * Merge disk-scanned session statuses with live SessionManager state.
+ * For any session whose turnActive=true in memory, override disk status
+ * to "running" regardless of file mtime.
+ *
+ * Pure function — independently testable.
+ */
+export function mergeSessionStatus(
+  diskResults: ActiveSessionStatus[],
+  activeIds: Set<string>,
+): ActiveSessionStatus[] {
+  if (activeIds.size === 0) return diskResults;
+  return diskResults.map(s => {
+    if (activeIds.has(s.sessionId)) {
+      return { ...s, status: "running" as const };
+    }
+    return s;
+  });
+}
+
+// ── SessionStatusWatcher class (deep module) ──
+
+export class SessionStatusWatcher {
+  private timer: ReturnType<typeof setInterval> | null = null;
+  private lastResults: ActiveSessionStatus[] = [];
+  private baselinePromise: Promise<void> | null = null;
+  private listeners: Array<(diff: SessionDiff) => void> = [];
+  private intervalMs: number;
+
+  constructor(intervalMs: number = 5000) {
+    this.intervalMs = intervalMs;
   }
-  if (watchCallbacks.length === 0 && watchTimer) {
-    clearInterval(watchTimer);
-    watchTimer = null;
-    lastWatchResults = [];
+
+  /**
+   * Performs a single scan of local session statuses.
+   * Useful for testing or one-shot checks.
+   */
+  async scanOnce(): Promise<ActiveSessionStatus[]> {
+    return scanLocalSessionStatuses();
+  }
+
+  /**
+   * Register a listener that fires whenever the watcher detects a diff.
+   * The listener receives `{ added, removed, changed }`.
+   */
+  onStatusUpdate(listener: (diff: SessionDiff) => void): void {
+    this.listeners.push(listener);
+  }
+
+  /**
+   * Start continuous monitoring. Runs an initial baseline scan,
+   * then polls every `intervalMs` milliseconds.
+   * No-op if already started.
+   */
+  start(): void {
+    if (this.timer) return;
+
+    // Lock in initial baseline scan
+    this.baselinePromise = this.scanOnce()
+      .then(results => { this.lastResults = results; })
+      .catch(() => {});
+
+    this.timer = setInterval(async () => {
+      try {
+        if (this.baselinePromise) {
+          await this.baselinePromise;
+          this.baselinePromise = null;
+        }
+        const current = await this.scanOnce();
+        const diff = computeSessionDiff(this.lastResults, current);
+
+        if (diff.added.length > 0 || diff.removed.length > 0 || diff.changed.length > 0) {
+          for (const listener of this.listeners) {
+            try { listener(diff); } catch { /* swallow listener errors */ }
+          }
+        }
+
+        this.lastResults = current;
+      } catch (err: any) {
+        console.warn(`[session-watcher] watch interval error:`, err.message);
+      }
+    }, this.intervalMs);
+  }
+
+  /**
+   * Stop continuous monitoring and reset internal state.
+   */
+  stop(): void {
+    if (this.timer) {
+      clearInterval(this.timer);
+      this.timer = null;
+    }
+    this.lastResults = [];
+    this.baselinePromise = null;
+    this.listeners = [];
   }
 }

@@ -506,7 +506,10 @@ class _HomePageState extends State<HomePage> {
     return SessionTile(
       session: session,
       onTap: () {
-        context.read<ChatProvider>().loadSession(session.sessionId);
+        context.read<ChatProvider>().loadSession(
+          session.sessionId,
+          agent: session.agent,
+        );
         Navigator.pushNamed(context, '/chat');
       },
     );

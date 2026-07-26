@@ -212,12 +212,28 @@ class ChatProvider extends ChangeNotifier {
   }
 
   // ── Sessions ──
-  void loadSession(String sessionId) {
+  void loadSession(String sessionId, {String? agent}) {
+    String targetAgent = agent ?? '';
+    if (targetAgent.isEmpty) {
+      final matchingSession = _state.sessions.firstWhere(
+        (s) => s.sessionId == sessionId,
+        orElse: () => ServerSessionData(sessionId: sessionId),
+      );
+      if (matchingSession.agent != null && matchingSession.agent!.isNotEmpty) {
+        targetAgent = matchingSession.agent!;
+      }
+    }
+    if (targetAgent.isEmpty) {
+      targetAgent = _state.selectedAgentName;
+    } else {
+      _state.selectedAgentName = targetAgent;
+    }
+
     _ws.send(ClientMessage(
       type: 'load_session',
       sessionId: sessionId,
       cwd: _state.currentWorkspace,
-      agent: _state.selectedAgentName,
+      agent: targetAgent,
       lastMessageId: _state.lastMessageId.isNotEmpty ? _state.lastMessageId : null,
     ));
     // Clear messages and enter loading state; mirror ArkTS loadSessionIntoStore

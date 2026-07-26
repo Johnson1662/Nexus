@@ -33,8 +33,9 @@ import { handleSetConfig } from "./handlers/set-config.mjs";
 import { handlePermissionResponse } from "./handlers/permission.mjs";
 import { handleAuth } from "./handlers/auth.mjs";
 import { cleanupWsSessions, enqueueWsOp, getSession, getBufferedAfter, reclaimOrphanedSession, killSessionProcess, getAllSessions } from "./session.mjs";
-import { startWatcher, stopWatcher } from "./discovery/session-watcher.mjs";
+import { SessionStatusWatcher, mergeSessionStatus } from "./discovery/session-watcher.mjs";
 import { handleListWorkspaceFiles, handleFileDiff, handleFileLog, handleFileRead } from "./handlers/workspace-files.mjs";
+import { sessionManager } from "./session-manager.mjs";
 
 const PORT = parseInt(process.env.PORT || "", 10) || 12138;
 const HOST_ID = getOrCreateHostId();
@@ -136,8 +137,14 @@ function startSessionWatcher(wss: WebSocketServer): void {
     });
   }
 
-  startWatcher((added, removed, changed) => {
-    const all = [...added, ...changed];
+  const watcher = new SessionStatusWatcher(5000);
+  watcher.onStatusUpdate(({ added, removed, changed }) => {
+    // Merge live SessionManager state: turnActive=true → "running"
+    const activeIds = sessionManager.getActiveSessionIds();
+    const finalAdded = activeIds.size > 0 ? mergeSessionStatus(added, activeIds) : added;
+    const finalChanged = activeIds.size > 0 ? mergeSessionStatus(changed, activeIds) : changed;
+
+    const all = [...finalAdded, ...finalChanged];
     if (all.length === 0) return;
 
     for (const s of all) {
@@ -151,7 +158,8 @@ function startSessionWatcher(wss: WebSocketServer): void {
     // Debounce: reset timer on each watcher tick
     clearTimeout(debounceTimer);
     debounceTimer = setTimeout(flushPending, 500);
-  }, 5000);
+  });
+  watcher.start();
   console.log("[server] session watcher started (5s interval, 500ms debounce)");
 }
 

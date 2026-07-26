@@ -434,7 +434,10 @@ class _AgentDetailPageState extends State<AgentDetailPage>
         return SessionTile(
           session: sessions[index],
           onTap: () {
-            chatProvider.loadSession(sessions[index].sessionId);
+            chatProvider.loadSession(
+              sessions[index].sessionId,
+              agent: sessions[index].agent,
+            );
             Navigator.pushNamed(context, '/chat');
           },
         );

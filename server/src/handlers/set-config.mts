@@ -1,6 +1,5 @@
 import type { WebSocket } from "ws";
-import { getSession } from "../session.mjs";
-import { invalidateModelListCache } from "../model-list.mjs";
+import { sessionManager } from "../session-manager.mjs";
 
 export async function handleSetConfig(
   ws: WebSocket,
@@ -8,26 +7,17 @@ export async function handleSetConfig(
   configId: string,
   value: string,
 ): Promise<void> {
-  const sess = getSession(sessionId);
-  if (!sess) {
-    ws.send(JSON.stringify({ type: "error", text: "session not found" }));
-    return;
-  }
-
   try {
-    const result = await sess.client.setSessionConfigOption(
-      sess.sessionId,
-      configId,
-      value,
-    );
-    invalidateModelListCache(sess.agent || undefined);
-    ws.send(JSON.stringify({
-      type: "config_option_updated",
-      sessionId,
-      configOptions: result,
-    }));
-  } catch (err: unknown) {
+    const result = await sessionManager.setConfig(sessionId, configId, value);
+    try {
+      ws.send(JSON.stringify({
+        type: "config_option_updated",
+        sessionId,
+        configOptions: result,
+      }));
+    } catch {}
+  } catch (err: any) {
     const msg = err instanceof Error ? err.message : String(err);
-    ws.send(JSON.stringify({ type: "error", text: `set_config failed: ${msg}` }));
+    try { ws.send(JSON.stringify({ type: "error", text: `set_config failed: ${msg}` })); } catch {}
   }
 }

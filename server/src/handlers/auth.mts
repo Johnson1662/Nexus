@@ -1,12 +1,12 @@
 import type { WebSocket } from "ws";
-import { getSession } from "../session.mjs";
+import { sessionManager } from "../session-manager.mjs";
 
 export async function handleAuth(
   ws: WebSocket,
   sessionId: string,
   methodId: string,
 ): Promise<void> {
-  const sess = getSession(sessionId);
+  const sess = sessionManager.getSession(sessionId);
   if (!sess) {
     ws.send(JSON.stringify({ type: "error", text: "session not found" }));
     return;

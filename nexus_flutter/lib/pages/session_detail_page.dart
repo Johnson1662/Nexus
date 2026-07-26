@@ -72,7 +72,7 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
             height: 48,
             child: ElevatedButton.icon(
               onPressed: () {
-                chatProvider.loadSession(session.sessionId);
+                chatProvider.loadSession(session.sessionId, agent: session.agent);
                 Navigator.pushNamed(context, '/chat');
               },
               icon: const Icon(Icons.chat_outlined, size: 18),

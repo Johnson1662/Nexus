@@ -1,22 +1,19 @@
 import type { WebSocket } from "ws";
-import { getSession } from "../session.mjs";
+import { sessionManager } from "../session-manager.mjs";
 
 export async function handleSetMode(
   ws: WebSocket,
   sessionId: string,
   modeId: string,
 ): Promise<void> {
-  const sess = getSession(sessionId);
-  if (!sess || !sess.sessionId) {
-    ws.send(JSON.stringify({ type: "error", text: "no active session" }));
+  if (!sessionId || !modeId) {
+    try { ws.send(JSON.stringify({ type: "error", text: "sessionId and modeId are required" })); } catch {}
     return;
   }
   try {
-    await sess.client.setSessionMode(sess.sessionId, modeId);
-    ws.send(JSON.stringify({ type: "mode_set", sessionId, modeId }));
+    await sessionManager.setMode(sessionId, modeId);
+    try { ws.send(JSON.stringify({ type: "mode_set", sessionId, modeId })); } catch {}
   } catch (err: any) {
-    ws.send(
-      JSON.stringify({ type: "error", text: `set_mode failed: ${err.message}` }),
-    );
+    try { ws.send(JSON.stringify({ type: "error", text: `set_mode failed: ${err.message}` })); } catch {}
   }
 }

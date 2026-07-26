@@ -33,11 +33,14 @@ Nexus（原 Nexus）是一个 HarmonyOS App，通过 WebSocket 连接到 PC 端 
 
 ## 工作流程
 
-1. 用户输入
-2. 分析用户输入，使用codegraph MCP获取上下文，分析代码
-3. 充分计划，然后将任务拆分为多个子任务，调用子代理处理，子代理编写完代码后要让他们用deveco-mcp自己检查是否有arkts语法错误
-4. 收集并review子代理的结果，先使用deveco-mcp检查arkts语法，然后再使用devecocli构建项目，进行修正，整合为最终结果，然后用devecocli部署到手机端测试
-5. 测试无误后进行git提交
+1. **分析与探索**：分析用户需求，使用 `codegraph` MCP 与代码路由工具获取上下文，精准厘清相关模块与影响面。
+2. **计划与拆分**：充分计划，将任务合理拆分为独立子任务并分配处理，确保每个模块有清晰的验证标准。
+3. **测试与验证**：编写/修改代码后，先运行单元/集成测试套件，使用 `deveco-mcp` 检查语法，再用 `devecocli` 构建项目并部署到手机端进行实机功能验证。
+4. **审查与汇报**：收集并审查改动结果（Code Review），向用户汇报验证命令、测试输出与实机表现。
+5. **Git 提交纪律（严格执行）**：
+   - ⚠️ **严禁在每次修改代码后自动直接执行 Git 提交**；
+   - 必须先完成测试与 Review 确认，并向用户展示验证结果；
+   - **仅在测试完全无误、实机验证通过，且得到用户明确确认或指令要求提交时，才允许进行 Git 提交**。
 
 ## 关键工具
 1. 用 `deveco-cli` skill 查鸿蒙官方文档、连接手机，部署项目。不确定就查文档！
@@ -501,16 +504,25 @@ Nexus/                             # 项目根（PC 端 + 手机端合一）
 │   │   ├── encrypted-channel.mts     # E2EE 加密通道
 │   │   ├── host-identity.mts         # 主机身份 / 密钥
 │   │   ├── prefs.mts                 # 持久化偏好
-│   │   ├── session.mts               # 桥接会话管理
+│   │   ├── session.mts               # 旧桥接会话管理（遗留，逐步迁移至 session-manager.mts）
+│   │   ├── session-manager.mts       # 深模块：会话生命周期、进程池、LRU 淘汰、事件缓冲
+│   │   ├── agent-registry-service.mts # 深模块：Agent 注册/发现/安装、路径规范化
+│   │   ├── agents-store.mts          # 已安装 Agent 持久化存储
 │   │   ├── temp-client.mts           # 临时 ACP 子进程
 │   │   ├── acp-callbacks.mts         # ACP 事件回调 → WS 转发
+│   │   ├── model-list.mts            # Model 列表缓存
+│   │   ├── tool-call-map.mts         # Tool call ID 映射
 │   │   ├── acp/
 │   │   │   ├── client.mts            # ACP JSON-RPC 客户端
 │   │   │   └── types.mts             # ACP 协议类型
 │   │   ├── discovery/
 │   │   │   ├── agents.mts            # Agent 发现
+│   │   │   ├── session-watcher.mts   # 深模块：SessionStatusWatcher + computeSessionDiff
 │   │   │   └── mcp-config.mts        # MCP 配置发现
-│   │   └── handlers/                 # ACP 消息处理器
+│   │   ├── registry/
+│   │   │   ├── agents.json           # 内置 Agent 注册表
+│   │   │   └── registry.mts          # 注册表加载器
+│   │   └── handlers/                 # ACP 消息处理器（薄适配器）
 │   │       ├── auth.mts
 │   │       ├── start.mts
 │   │       ├── input.mts
@@ -524,7 +536,7 @@ Nexus/                             # 项目根（PC 端 + 手机端合一）
 │   │       ├── switch-model.mts
 │   │       ├── set-config.mts
 │   │       ├── permission.mts
-│   │       └── close-session.mts
+│   │       └── workspace-files.mts
 │   └── dist/                         # 编译产物（*.mjs）
 │
 ├── relay/                            # GCloud Relay Server

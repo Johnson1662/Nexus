@@ -1,5 +1,5 @@
 import type { WebSocket } from "ws";
-import { getSession } from "../session.mjs";
+import { sessionManager } from "../session-manager.mjs";
 
 export function handlePermissionResponse(
   ws: WebSocket,
@@ -8,7 +8,7 @@ export function handlePermissionResponse(
   outcome: string,
   optionId?: string,
 ): void {
-  const sess = getSession(sessionId);
+  const sess = sessionManager.getSession(sessionId);
   if (!sess || !sess.pendingPermission) {
     ws.send(
       JSON.stringify({ type: "error", text: "no pending permission request" }),
