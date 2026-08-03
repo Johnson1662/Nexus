@@ -268,6 +268,28 @@ codex app-server --listen stdio://
 
 发送 `initialize`、`initialized`、`model/list` 后，观察到 `initialize` 返回成功，随后收到配置/远程控制状态通知；stdin EOF 后进程 `exit 0`。本次未把 `model/list` 作为成功依据，只把协议握手作为本机验证结果。
 
+## 6. OpenCode Server 空载开销（本机实测）
+
+启动参数：
+
+```text
+opencode serve --pure --hostname 127.0.0.1 --port 4096 --log-level ERROR
+```
+
+`--pure` 用于排除外部插件；没有发送 Prompt，也没有启动模型、MCP 或 LSP 工作负载。
+
+观察到：
+
+- `GET /global/health` 返回 `{"healthy":true,"version":"1.18.4"}`；
+- `GET /doc` 返回 OpenAPI 3.1 文档；
+- 空载 `opencode.exe` 的 Working Set 约 `32.2 MB → 29.5 MB`；
+- Private Bytes 约 `570.6 MB → 570.7 MB`；
+- 约 25 秒观察窗口内，累计 CPU 时间从 `10.33 s` 增至 `12.05 s`。
+
+Private Bytes 包含运行时私有提交/保留，不等于实际物理内存；评估桌面常驻成本时优先看 Working Set。按本次纯净空载结果，[推断] 在 PC Bridge 上常驻一个 OpenCode Server 不算重，真正可能放大资源的是模型回合、MCP、LSP、插件、项目扫描和会话历史，而不是 HTTP 监听器本身。
+
+建议每台 PC/Bridge 复用一个长期 OpenCode Server 和多个会话，不要每个 Prompt 或每部手机各启动一个进程；手机端只连接 Nexus Bridge，OpenCode 继续运行在 PC 上。
+
 ## 官方来源
 
 ### OpenAI Codex
