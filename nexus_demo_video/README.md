@@ -28,7 +28,7 @@ npm run dev
 **Render video**
 
 ```console
-npx remotion render
+npm run build
 ```
 
 **Upgrade Remotion**

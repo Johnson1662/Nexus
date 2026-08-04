@@ -1,0 +1,429 @@
+% ============================================================
+% 作品说明文档 — Nexus
+% 2026 中国高校计算机大赛 — 人工智能创意赛（鸿蒙赛道）
+% 严格基于官方模板 2026中国高校计算机大赛人工智能创意赛初赛（鸿蒙赛道）作品说明文档模板.docx 还原
+% ============================================================
+\documentclass[12pt,a4paper,openany]{ctexbook}
+
+% ── 页面设置 ──────────────────────────────────────────────
+\usepackage[top=2.5cm,bottom=2.5cm,left=3cm,right=3cm,headheight=0.5cm,headsep=0.5cm,footskip=1.0cm]{geometry}
+
+% ── 字体与编码 ─────────────────────────────────────────────
+\usepackage{fontspec}
+
+\usepackage{ifxetex}
+\ifxetex
+  \IfFontExistsTF{SimSun}{
+    \setCJKmainfont[AutoFakeBold=2]{SimSun}
+    \setCJKsansfont{SimHei}
+  }{
+    \setCJKmainfont[AutoFakeBold=2]{FandolSong}
+    \setCJKsansfont{FandolHei}
+  }
+\fi
+
+% ── 常用宏包 ───────────────────────────────────────────────
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{multirow}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage{titletoc}
+\usepackage{fancyhdr}
+\usepackage{lastpage}
+\usepackage{xcolor}
+\usepackage{tikz}
+\usepackage{hyperref}
+\usepackage{tabularx}
+\usepackage{makecell}
+\usepackage{ulem}
+\usepackage{amssymb}
+\usepackage{pifont}
+
+\usetikzlibrary{arrows.meta, positioning, shapes.geometric, fit, calc, backgrounds}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=black,
+  citecolor=black,
+  urlcolor=blue,
+}
+
+% ── 页眉页脚 ─────────────────────────────────────────────
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\songti\zihao{-5} 中国高校计算机大赛-人工智能创意赛（鸿蒙赛道）组委会编制}
+\fancyhead[R]{\songti\zihao{-5} 2026.06}
+\fancyfoot[OR]{\songti\zihao{-5} \thepage}
+\fancyfoot[EL]{\songti\zihao{-5} \thepage}
+\fancypagestyle{plain}{
+  \fancyhf{}
+  \fancyhead[L]{\songti\zihao{-5} 中国高校计算机大赛-人工智能创意赛（鸿蒙赛道）组委会编制}
+  \fancyhead[R]{\songti\zihao{-5} 2026.06}
+  \fancyfoot[OR]{\songti\zihao{-5} \thepage}
+  \fancyfoot[EL]{\songti\zihao{-5} \thepage}
+  \renewcommand{\headrulewidth}{0pt}
+  \renewcommand{\footrulewidth}{0pt}
+}
+\renewcommand{\headrulewidth}{0pt}
+\renewcommand{\footrulewidth}{0pt}
+
+% ── 字号映射 ──────────────────────────────────────────────
+\newcommand{\erhao}{\fontsize{22pt}{33pt}\selectfont}
+\newcommand{\sanhao}{\fontsize{16pt}{24pt}\selectfont}
+\newcommand{\sihao}{\fontsize{14pt}{21pt}\selectfont}
+\newcommand{\xiaosihao}{\fontsize{12pt}{18pt}\selectfont}
+\newcommand{\wuhao}{\fontsize{10.5pt}{15.75pt}\selectfont}
+
+% ── 标题格式 ─────────────────────────────────────────────
+\titleformat{\chapter}{\centering\sanhao\bfseries}{}{0pt}{}
+\titlespacing{\chapter}{0pt}{12pt}{12pt}
+
+\titleformat{\section}{\sihao\bfseries}{}{0pt}{}
+\titlespacing{\section}{0pt}{6pt}{6pt}
+
+\titleformat{\subsection}{\xiaosihao\bfseries}{}{0pt}{}
+\titlespacing{\subsection}{0pt}{6pt}{6pt}
+
+\titleformat{\subsubsection}{\wuhao\bfseries}{}{0pt}{}
+\titlespacing{\subsubsection}{0pt}{3pt}{3pt}
+
+% ── 行距与缩进 ─────────────────────────────────────────────
+\ctexset{
+  punct=quanjiao,
+  space=auto,
+}
+\newcommand{\正文}{\wuhao}
+\AtBeginDocument{\正文}
+
+\usepackage{setspace}
+\setstretch{1.0}
+
+\newcolumntype{C}{>{\centering\arraybackslash}X}
+\newcolumntype{L}{>{\raggedright\arraybackslash}X}
+
+% 正文一级标题不强制换页；章节计数仍用于标题、图表编号
+\newcommand{\contentchapter}[1]{%
+  \refstepcounter{chapter}%
+  \setcounter{section}{0}%
+  \setcounter{subsection}{0}%
+  \par\addvspace{12pt}%
+  {\sanhao\bfseries #1\par}%
+  \addvspace{8pt}%
+}
+
+\begin{document}
+
+% ════════════════════════════════════════════════════════════
+% 第 1 页：封面页
+% ════════════════════════════════════════════════════════════
+\begin{titlepage}
+\thispagestyle{fancy}
+\centering
+\vspace*{1.5cm}
+
+{\erhao\bfseries 2026 中国高校计算机大赛——人工智能创意赛}\\[18pt]
+{\erhao\bfseries 鸿蒙赛道作品说明文档（初赛）}
+
+\vspace{3.5cm}
+
+\begin{singlespace}
+\sanhao
+\begin{tabular}{r l}
+\textbf{参赛学校：} & \uline{\makebox[7cm][c]{天津大学}} \\[10pt]
+\textbf{团队名称：} & \uline{\makebox[7cm][c]{Nexus}} \\[10pt]
+\textbf{作品名称：} & \uline{\makebox[7cm][c]{Nexus}} \\[10pt]
+\textbf{赛题方向：} & \uline{\makebox[7cm][c]{应用创新赛道}} \\[18pt]
+\textbf{联系人（队长）：} & \uline{\makebox[7cm][c]{陈梓豪}} \\[10pt]
+\textbf{联系电话（队长）：} & \uline{\makebox[7cm][c]{15860808203}} \\
+\end{tabular}
+\end{singlespace}
+
+\vfill
+\end{titlepage}
+
+% ════════════════════════════════════════════════════════════
+% 参赛团队信息表
+% ════════════════════════════════════════════════════════════
+\begin{center}
+{\sanhao\bfseries 2026中国高校计算机大赛—人工智能创意赛}\\[4pt]
+{\sanhao\bfseries 参赛团队信息表}
+\end{center}
+
+\vspace{0.3cm}
+
+\setlength{\extrarowheight}{3pt}
+\setlength{\tabcolsep}{1pt}
+\begin{tabular}{|p{3.7cm}|>{\raggedright\arraybackslash}p{10.0cm}|}
+\hline
+\textbf{作品名称} & Nexus \\
+\hline
+\textbf{团队名称} & Nexus \\
+\hline
+\textbf{参赛学校} & 天津大学 \\
+\hline
+\textbf{参赛赛题方向} & （\ding{51}）应用创新 \\
+& （ ）Agent创新 \\
+& （ ）用户体验创新 \\
+& （ ）操作系统智能创新 \\
+\hline
+\end{tabular}
+
+\vspace{0.4cm}
+
+\begin{center}
+\textbf{\wuhao\bfseries 团队队员基本信息}
+\end{center}
+
+{\wuhao
+\begin{tabular}{|>{\centering\arraybackslash}p{1.1cm}|>{\centering\arraybackslash}p{1.35cm}|>{\centering\arraybackslash}p{1.5cm}|>{\centering\arraybackslash}p{1.2cm}|>{\centering\arraybackslash}p{0.65cm}|>{\centering\arraybackslash}p{1.05cm}|>{\centering\arraybackslash}p{1.55cm}|>{\centering\arraybackslash}p{2.2cm}|>{\centering\arraybackslash}p{0.75cm}|}
+\hline
+姓名 & 学校全称 & 院（系）全称 & 专业全称 & 年级 & 毕业时间 & 联系电话 & 邮箱 & 团队分工 \\
+\hline
+陈梓豪 & 天津大学 & 人工智能学院 & 人工智能 & 大二 & 2028.6 & \makecell{158608\\08203} & \makecell{326139\\6640@qq.com} & 队长 \\
+\hline
+\end{tabular}
+}
+
+\vspace{0.4cm}
+
+\begin{center}
+\textbf{\wuhao\bfseries 团队指导教师信息}
+\end{center}
+
+{\wuhao
+\begin{tabular}{|>{\centering\arraybackslash}p{1.2cm}|>{\centering\arraybackslash}p{1.5cm}|>{\centering\arraybackslash}p{0.8cm}|>{\centering\arraybackslash}p{4.2cm}|>{\centering\arraybackslash}p{1.7cm}|>{\centering\arraybackslash}p{2.6cm}|}
+\hline
+姓名 & 院（系）全称 & 职称 & 研究方向 & 联系电话 & 联系邮箱 \\
+\hline
+赵来平 & 软件学院 & 教授 & 数据中心、云计算、软件定义网络、智能运维 & \makecell{131021\\80622} & \makecell{laiping@\\tju.edu.cn} \\
+\hline
+\end{tabular}
+}
+
+\vspace{0.4cm}
+
+\begin{center}
+\textbf{\wuhao\bfseries 团队成员优势描述}
+\end{center}
+
+\begin{tabular}{|>{\raggedright\arraybackslash}p{14.0cm}|}
+\hline
+团队成员围绕移动端体验、鸿蒙原生能力、AI Agent协议和服务端工程形成互补分工。\\[4pt]
+队长陈梓豪擅长全栈架构与鸿蒙端侧开发，熟悉 Flutter 与 ArkTS 架构适配及系统级 Kit 调用，负责客户端与 PC 端通信链路搭建及交互设计。\\[4pt]
+团队指导教师赵来平教授为天津大学软件学院教授，长期从事数据中心、云计算、软件定义网络与智能运维领域研究，为项目系统架构与边缘云协作提供了深厚的理论指导。\\[4pt]
+项目已完成 Flutter OHOS 客户端、Node.js Bridge Server、ACP Agent 适配、会话管理、权限审批、搜索和代码差异审阅等核心模块。\\
+\hline
+\end{tabular}
+
+\newpage
+
+% ════════════════════════════════════════════════════════════
+% 第 4 页：作品原创性声明
+% ════════════════════════════════════════════════════════════
+\begin{center}
+{\sanhao\bfseries 《 Nexus 》 作品原创性声明}
+\end{center}
+
+\vspace{1.2cm}
+
+\begingroup
+\setstretch{1.8}
+\noindent \textbf{郑重声明：}承诺本参赛队伍报名信息真实有效；呈交的参赛作品相关资料以及所完成的作品实物等相关成果，是本团队独立进行研究工作所取得的成果，除文中已经注明引用的内容外，本作品说明文档不包含任何其他个人或集体已经发表或撰写过的作品成果，不侵犯任何第三方的知识产权或其他权利。本声明的法律结果由本参赛队承担。
+
+\vspace{2.5cm}
+
+\noindent 参赛队员签名（团队全部成员）：\uline{\hspace{6cm}}
+
+\vspace{1.2cm}
+
+\noindent\hspace*{12.5cm} 日期：\hspace{0.8cm} 年 \hspace{0.6cm} 月 \hspace{0.6cm} 日
+
+\vspace{2.5cm}
+
+\noindent 指导老师审核签名：\uline{\hspace{6cm}}
+
+\vspace{1.2cm}
+
+\noindent\hspace*{12.5cm} 日期：\hspace{0.8cm} 年 \hspace{0.6cm} 月 \hspace{0.6cm} 日
+
+\vspace{2cm}
+
+\noindent\footnotesize{（注：本页签名可以打印纸质文件后签名，提供扫描件；或者使用电子签名。不论哪种方式，需保证页面内容完整、字迹清晰，请与本项目创意书作为同一文档提交，否则项目创意书提交可能无效。）}
+\endgroup
+
+\newpage
+
+% ════════════════════════════════════════════════════════════
+% 正文内容开始（清理冗余说明段落）
+% ════════════════════════════════════════════════════════════
+\contentchapter{创意描述}
+
+Nexus 基于 ACP 协议与鸿蒙 LiveViewKit / NotificationKit 融合，打造全场景远程 AI 编程客户端，实现手机端对 PC 端 AI Agent 的实时感知、远程调度与安全授权。
+
+\contentchapter{设计稿 / 技术方案}
+
+\section{作品概述}
+
+Nexus 是一款运行于鸿蒙操作系统的全场景远程 AI 编程助手客户端。它通过 WebSocket 连接桌面 PC 端的 Bridge Server，借助 ACP（Agent Client Protocol）协议与包括 OpenCode、Claude Code、Codex 在内的多种 AI 编程 Agent 进行通信，让开发者随时随地通过手机监控 AI Agent 执行状态、审阅代码变更并完成安全授权。
+
+\section{系统架构}
+
+图2.1展示了 Nexus 的整体系统架构，包括三层结构：移动客户端层、传输层与桌面 Agent 层。
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+  x=1cm, y=1cm,
+  layer/.style={rounded corners=6pt, line width=0.6pt},
+  layerlabel/.style={font=\xiaosihao\bfseries, anchor=west},
+  box/.style={draw=black!65, rounded corners=4pt, minimum height=0.78cm, align=center, font=\wuhao, inner sep=4pt, fill=white},
+  clientbox/.style={box, text width=3.15cm, fill=blue!10, draw=blue!60, font=\wuhao\bfseries},
+  netbox/.style={box, text width=3.15cm, fill=green!10, draw=green!60},
+  pcbox/.style={box, text width=3.15cm, fill=orange!10, draw=orange!60},
+  agentbox/.style={box, text width=3.05cm, fill=purple!10, draw=purple!60},
+  arrow/.style={-{Latex[length=2.4mm]}, thick, color=black!70},
+  darrow/.style={<->, {Latex[length=2.4mm]}-{Latex[length=2.4mm]}, thick, color=blue!70!black},
+]
+
+% 三层背景框；标题置于框内预留的上方区域，避免压住节点
+\node[layer, draw=blue!45, fill=blue!4, minimum width=13.2cm, minimum height=2.45cm] (layer1) at (0,7.1) {};
+\node[layer, draw=green!45, fill=green!4, minimum width=13.2cm, minimum height=2.45cm] (layer2) at (0,3.6) {};
+\node[layer, draw=orange!45, fill=orange!4, minimum width=13.2cm, minimum height=4.45cm] (layer3) at (0,-0.9) {};
+
+\node[layerlabel, text=blue!75!black] at (-6.15,7.93) {1. 移动客户端层（HarmonyOS）};
+\node[layerlabel, text=green!55!black] at (-6.15,4.43) {2. 传输层（LAN / Relay）};
+\node[layerlabel, text=orange!80!black] at (-6.15,0.96) {3. 桌面 PC 端（Bridge \& Agents）};
+
+% 移动客户端层：能力入口 → 移动客户端 ← 交互通知
+\node[clientbox] (liveview) at (-4.35,6.65) {LiveViewKit\\{\small 实况窗}};
+\node[clientbox] (client) at (0,6.65) {Nexus 移动客户端\\{\small Flutter + ArkTS}};
+\node[clientbox] (notif) at (4.35,6.65) {NotificationKit\\{\small 交互通知}};
+
+% 传输层：连接探测 → WebSocket → 加密
+\node[netbox] (probe) at (-4.35,3.15) {并行 Race 探测\\{\small connectBest / Relay}};
+\node[netbox] (ws) at (0,3.15) {WebSocket 通信模块\\{\small 心跳保活 + 自动重连}};
+\node[netbox] (e2ee) at (4.35,3.15) {端到端安全加密\\{\small AES-GCM}};
+
+% 桌面 PC 端：Bridge 分发到会话、ACP 和权限审批
+\node[pcbox] (session) at (-3.65,0.22) {双通道会话捕获\\{\small ACP API + FS 监听}};
+\node[pcbox] (bridge) at (0,0.22) {Bridge Server\\{\small Node.js :12138}};
+\node[pcbox] (perm) at (3.65,-1.05) {权限审批委托\\{\small Permission Delegation}};
+\node[pcbox] (acp) at (0,-1.05) {ACP 协议适配层\\{\small JSON-RPC 通信}};
+
+% Agent 层：从 ACP 适配层向下分发
+\node[agentbox] (claude) at (-4.35,-2.45) {Claude Code Agent};
+\node[agentbox] (opencode) at (0,-2.45) {OpenCode Agent};
+\node[agentbox] (codex) at (4.35,-2.45) {Codex / OMP Agent};
+
+% 连线只连接相邻模块，不穿过其他节点
+\draw[arrow] (liveview) -- (client);
+\draw[arrow] (notif) -- (client);
+\draw[darrow] (client) -- (ws);
+\draw[arrow] (probe) -- (ws);
+\draw[arrow] (e2ee) -- (ws);
+\draw[darrow] (ws) -- (bridge);
+\draw[arrow] (bridge) -- (session);
+\draw[arrow] (bridge) -- (acp);
+\draw[arrow] (acp) -- (perm);
+\draw[arrow] (acp) -- (claude);
+\draw[arrow] (acp) -- (opencode);
+\draw[arrow] (acp) -- (codex);
+
+% 权限请求通过通知触达手机；走图框右侧，避免穿过任何节点
+\draw[arrow, dashed] (perm.east) -- ++(1.5,0) |- (notif.east);
+
+\end{tikzpicture}
+\caption{Nexus 系统架构图}
+\label{fig:arch}
+\end{figure}
+
+\subsection{移动客户端层}
+
+采用 Flutter 跨端框架 + HarmonyOS ArkTS 原生插件混合架构：
+\begin{itemize}[itemsep=2pt]
+  \item \textbf{Flutter 层}：负责 UI 渲染、状态管理、WebSocket 连接管理、会话列表、消息流展示等核心业务逻辑。
+  \item \textbf{ArkTS MethodChannel 层}：通过 Flutter MethodChannel 调用鸿蒙原生能力，包括通知推送（NotificationKit）、实况窗（LiveViewKit）。
+  \item \textbf{并行 Race 探测}：`connectBest` 算法同时探测 LAN/Hotspot/Tailscale/Relay 等多个候选地址，选择最快可用连接。
+\end{itemize}
+
+\subsection{传输层}
+
+\begin{itemize}[itemsep=2pt]
+  \item 默认使用 LAN / 热点直连，可选 Relay 中继用于远程跨网访问。
+  \item 通信协议为 WebSocket，心跳保活间隔 45 秒，断线采用指数退避自动重连（1s→2s→4s→…→30s 上限）。
+  \item 支持端到端加密（AES-GCM）确保通信安全。
+\end{itemize}
+
+\subsection{桌面 PC 端}
+
+\begin{itemize}[itemsep=2pt]
+  \item Bridge Server 基于 Node.js 实现，监听端口 12138。
+  \item 通过 ACP 协议（Agent Client Protocol）与桌面端的 AI 编程 Agent 通信。
+  \item 双通道会话捕获：主通道通过 ACP API 轮询会话列表，辅通道通过文件系统监听。
+  \item 权限审批流拦截 Agent 的高危操作（Shell 执行、包安装等），转发至手机端进行一键审批。
+\end{itemize}
+
+\section{核心能力与鸿蒙 Kit 集成}
+
+\begin{table}[H]
+\centering
+\caption{Nexus 鸿蒙 Kit 集成清单}
+\label{tab:kit}
+{\wuhao
+\setlength{\tabcolsep}{3pt}
+\begin{tabular}{|>{\centering\arraybackslash}p{2.5cm}|>{\centering\arraybackslash}p{5.2cm}|>{\raggedright\arraybackslash}p{6.2cm}|}
+\hline
+\textbf{Kit 名称} & \textbf{集成方式} & 用途 \\
+\hline
+LiveViewKit & MethodChannel（Flutter$\rightarrow$ArkTS） & 实况窗进度展示（锁屏/状态栏） \\
+\hline
+NotificationKit & MethodChannel（Flutter$\rightarrow$ArkTS） & 权限审批交互通知 \\
+\hline
+Push Kit & build-profile.json5 配置 & AGC Push Service profile（实况窗必需） \\
+\hline
+AbilityKit & WantAgent & 通知点击跳转回应用 \\
+\hline
+Camera（权限） & 声明权限 + usedScene & 扫码连接 PC 主机 \\
+\hline
+网络权限 & INTERNET 声明 & WebSocket 通信 \\
+\hline
+后台运行 & \makecell{KEEP\_BACKGROUND\_\\RUNNING} & 后台维持 WebSocket 连接 \\
+\hline
+\end{tabular}
+}
+\end{table}
+
+\contentchapter{介绍文档}
+
+\section{创意背景与行业痛点}
+
+现代开发者广泛使用 AI 编程助手（如 Claude Code、OpenCode、GitHub Copilot 等）来加速软件开发。然而，这类 AI 工具通常运行于桌面 PC 环境。当开发者离开工位——开会、通勤、差旅——便无法追踪正在运行的 AI Agent 进度，不能审阅已生成的代码变更，也无法对 Agent 的高危操作进行及时审批。
+
+现有移动远程方案存在三个核心问题：
+\begin{enumerate}[itemsep=3pt]
+  \item \textbf{黑盒执行}：App 必须保持前台运行才能看到进度，锁屏后完全失联，缺乏被动感知能力。
+  \item \textbf{审批滞后}：Agent 执行高危 Shell 操作需等待开发者回到 PC 确认，阻塞后续任务链。
+  \item \textbf{连接复杂}：多网络环境（LAN、热点、远程）需手动切换，缺乏智能路由选择。
+\end{enumerate}
+
+\section{解决方案与创新点}
+
+Nexus 提出了一套基于 HarmonyOS 原生能力的全场景远程 AI 编程协作方案，核心创新点如下：
+
+\textbf{（1）实况窗远程进度感知。} 基于 HarmonyOS LiveViewKit 将 AI Agent 的执行步骤投射为系统实况窗，在锁屏界面和状态栏胶囊实时显示任务进度。开发者无需解锁手机即可感知远程 Agent 的工作状态。
+
+\textbf{（2）交互式通知安全审批。} 利用 NotificationKit 的能力，将高危操作的审批请求以推送通知的形式送达手机，用户可以在通知中心直接一键 Allow 或 Deny，无需打开 App。审批结果通过 ACP 协议回传至 Agent。
+
+\textbf{（3）并行 Race 探测智能连接。} Nexus 设计了 `connectBest` 算法：在网络变化时并行探测 LAN、热点、Tailscale、Relay 中继等多个候选地址，选择最快可达的连接，实现零感知的网络切换体验。
+
+\textbf{（4）双通道会话捕获。} Bridge Server 结合 ACP API 轮询和文件系统监听两条通道，准确捕获 PC 端所有 Agent 会话的实时状态推送到移动端。
+
+\section{技术实现路径与市场前景}
+
+Nexus 采用 Flutter 跨端框架 + HarmonyOS ArkTS MethodChannel 混合架构，基于开源 ACP 协议构建。产品定位为「AI 编程 Agent 的移动副驾驶」，填补了移动场景下 AI 编程 Agent 实时感知与远程安全审批的空白。不仅适用于 AI 编程场景，其「远程 Agent 监控与安全审批」架构未来更可拓展至 AIOps 运维与自动化测试领域。
+
+\end{document}

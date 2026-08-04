@@ -1,0 +1,409 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Nexus · System Architecture</title>
+  <style>
+    :root {
+      --paper: #fcfcfb;
+      --ink: #191b20;
+      --muted: #6d727b;
+      --quiet: #a8adb5;
+      --rule: #dfe2e7;
+      --rule-strong: #c7ccd4;
+      --accent: #315bd6;
+      --accent-soft: #f1f4ff;
+      --accent-faint: #f8f9ff;
+      --shadow: 0 16px 42px rgba(25, 35, 61, .08);
+    }
+
+    * { box-sizing: border-box; }
+
+    html { background: var(--paper); }
+
+    body {
+      margin: 0;
+      min-width: 320px;
+      color: var(--ink);
+      background:
+        linear-gradient(var(--paper), var(--paper));
+      font-family: "Noto Sans SC", "HarmonyOS Sans SC", "Microsoft YaHei", system-ui, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .page {
+      width: min(1240px, calc(100% - 48px));
+      margin: 0 auto;
+      padding: clamp(34px, 6vw, 76px) 0 clamp(28px, 5vw, 64px);
+    }
+
+    .masthead {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 32px;
+      margin-bottom: 34px;
+    }
+
+    .eyebrow {
+      margin: 0 0 12px;
+      color: var(--accent);
+      font-size: 11px;
+      font-weight: 750;
+      letter-spacing: .2em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      max-width: 760px;
+      margin: 0;
+      font-family: "Noto Serif SC", "STSong", serif;
+      font-size: clamp(30px, 4vw, 52px);
+      font-weight: 600;
+      letter-spacing: -.055em;
+      line-height: 1.08;
+    }
+
+    .intro {
+      max-width: 360px;
+      margin: 0 0 3px;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.8;
+    }
+
+    .artboard {
+      position: relative;
+      overflow: hidden;
+      border: 1px solid var(--rule);
+      background: #fff;
+      box-shadow: var(--shadow);
+    }
+
+    .artboard::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background-image: radial-gradient(circle at 1px 1px, rgba(49, 91, 214, .1) 1px, transparent 0);
+      background-size: 22px 22px;
+      mask-image: linear-gradient(to bottom, rgba(0, 0, 0, .18), transparent 30%, transparent 72%, rgba(0, 0, 0, .12));
+    }
+
+    svg {
+      position: relative;
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+
+    .layer {
+      fill: var(--accent-faint);
+      stroke: var(--rule);
+      stroke-width: 1.5;
+    }
+
+    .layer.transport { fill: #fbfcff; }
+    .layer.runtime { fill: #fdfdfd; }
+
+    .layer-index {
+      fill: var(--accent);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: .16em;
+    }
+
+    .layer-title {
+      fill: var(--ink);
+      font-size: 15px;
+      font-weight: 750;
+      letter-spacing: .03em;
+    }
+
+    .layer-note {
+      fill: var(--quiet);
+      font-size: 11px;
+      letter-spacing: .08em;
+    }
+
+    .node {
+      fill: #fff;
+      stroke: var(--rule-strong);
+      stroke-width: 1.5;
+      transition: fill .22s ease, stroke .22s ease, transform .22s ease;
+      transform-box: fill-box;
+      transform-origin: center;
+    }
+
+    .node.core {
+      fill: var(--accent-soft);
+      stroke: var(--accent);
+      stroke-width: 1.8;
+    }
+
+    .node:hover,
+    .node:focus-visible {
+      fill: #f5f7ff;
+      stroke: var(--accent);
+      transform: translateY(-2px);
+      outline: none;
+    }
+
+    .node-title {
+      fill: var(--ink);
+      font-size: 16px;
+      font-weight: 750;
+      letter-spacing: -.015em;
+    }
+
+    .node-subtitle {
+      fill: var(--muted);
+      font-size: 12px;
+      font-weight: 500;
+      letter-spacing: .02em;
+    }
+
+    .node-code {
+      fill: var(--accent);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 11px;
+      font-weight: 650;
+    }
+
+    .connector {
+      fill: none;
+      stroke: #707780;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      marker-end: url(#arrow);
+    }
+
+    .connector.primary {
+      stroke: var(--accent);
+      stroke-width: 2.4;
+      marker-end: url(#arrow-accent);
+    }
+
+    .connector.control {
+      stroke: var(--accent);
+      stroke-width: 1.5;
+      stroke-dasharray: 5 6;
+      marker-end: url(#arrow-accent);
+    }
+
+    .rail-label {
+      fill: var(--accent);
+      font-size: 10px;
+      font-weight: 750;
+      letter-spacing: .16em;
+    }
+
+    .legend {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 20px;
+      padding: 15px 20px 17px;
+      border-top: 1px solid var(--rule);
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .legend-line {
+      width: 28px;
+      border-top: 2px solid #707780;
+    }
+
+    .legend-line.control {
+      border-top-color: var(--accent);
+      border-top-style: dashed;
+      border-top-width: 1.5px;
+    }
+
+    .footer-note {
+      display: flex;
+      justify-content: space-between;
+      gap: 24px;
+      margin-top: 17px;
+      color: var(--quiet);
+      font-size: 11px;
+      letter-spacing: .04em;
+    }
+
+    @media (max-width: 760px) {
+      .page { width: min(100% - 24px, 640px); }
+      .masthead { display: block; }
+      .intro { margin-top: 18px; }
+      .artboard { overflow-x: auto; }
+      svg { min-width: 960px; }
+      .legend { justify-content: flex-start; }
+      .footer-note { display: block; line-height: 1.8; }
+    }
+
+    @media print {
+      html, body { background: #fff; }
+      .page { width: 100%; padding: 0; }
+      .masthead { margin: 0 0 20px; }
+      .artboard { box-shadow: none; }
+      .footer-note { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="masthead">
+      <div>
+        <p class="eyebrow">Nexus / System Architecture</p>
+        <h1>Remote AI programming,<br>mapped end to end.</h1>
+      </div>
+      <p class="intro">从鸿蒙移动端到桌面 Agent 的一条清晰链路。实况感知、可靠传输与安全审批，收敛在同一张图里。</p>
+    </header>
+
+    <section class="artboard" aria-label="Nexus 系统架构图">
+      <svg viewBox="0 0 1200 820" role="img" aria-labelledby="diagram-title diagram-desc">
+        <title id="diagram-title">Nexus 系统架构图</title>
+        <desc id="diagram-desc">图示 Nexus 的移动客户端层、传输层和桌面 PC Agent 运行层，以及它们之间的通信、会话捕获和权限审批关系。</desc>
+
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="8.4" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#707780"></path>
+          </marker>
+          <marker id="arrow-accent" viewBox="0 0 10 10" refX="8.4" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#315bd6"></path>
+          </marker>
+        </defs>
+
+        <!-- Layer frames -->
+        <rect class="layer" x="64" y="72" width="1072" height="196" rx="18"></rect>
+        <rect class="layer transport" x="64" y="304" width="1072" height="196" rx="18"></rect>
+        <rect class="layer runtime" x="64" y="536" width="1072" height="246" rx="18"></rect>
+
+        <!-- Layer labels -->
+        <text class="layer-index" x="92" y="107">01</text>
+        <text class="layer-title" x="126" y="107">移动客户端层</text>
+        <text class="layer-note" x="126" y="129">HARMONYOS / FLUTTER SURFACE</text>
+
+        <text class="layer-index" x="92" y="339">02</text>
+        <text class="layer-title" x="126" y="339">传输层</text>
+        <text class="layer-note" x="126" y="361">LAN / HOTSPOT / RELAY</text>
+
+        <text class="layer-index" x="92" y="571">03</text>
+        <text class="layer-title" x="126" y="571">桌面运行层</text>
+        <text class="layer-note" x="126" y="593">BRIDGE / ACP / AGENTS</text>
+
+        <!-- Connectors are deliberately drawn behind nodes -->
+        <path class="connector" d="M 355 187 H 455"></path>
+        <path class="connector" d="M 845 187 H 745"></path>
+        <path class="connector primary" d="M 600 231 V 416"></path>
+
+        <path class="connector" d="M 345 416 H 455"></path>
+        <path class="connector" d="M 745 416 H 855"></path>
+        <path class="connector primary" d="M 600 464 V 590"></path>
+
+        <path class="connector" d="M 455 631 H 385"></path>
+        <path class="connector" d="M 600 678 V 704"></path>
+        <path class="connector" d="M 745 678 H 855"></path>
+        <path class="connector" d="M 600 750 L 250 750"></path>
+        <path class="connector" d="M 600 750 V 760"></path>
+        <path class="connector" d="M 600 750 L 950 750"></path>
+
+        <!-- Control signal routes around the right edge, never through nodes -->
+        <path class="connector control" d="M 1075 631 H 1110 V 187 H 1045"></path>
+        <text class="rail-label" x="1118" y="421" transform="rotate(-90 1118 421)">PERMISSION SIGNAL</text>
+
+        <!-- Nodes -->
+        <g tabindex="0" aria-label="LiveViewKit 实况窗">
+          <rect class="node" x="145" y="154" width="210" height="66" rx="12"></rect>
+          <text class="node-title" x="250" y="182" text-anchor="middle">LiveViewKit</text>
+          <text class="node-subtitle" x="250" y="202" text-anchor="middle">实况窗</text>
+        </g>
+
+        <g tabindex="0" aria-label="Nexus 移动客户端">
+          <rect class="node core" x="455" y="145" width="290" height="84" rx="14"></rect>
+          <text class="node-title" x="600" y="179" text-anchor="middle">Nexus 移动客户端</text>
+          <text class="node-subtitle" x="600" y="203" text-anchor="middle">Flutter + ArkTS</text>
+        </g>
+
+        <g tabindex="0" aria-label="NotificationKit 交互通知">
+          <rect class="node" x="845" y="154" width="210" height="66" rx="12"></rect>
+          <text class="node-title" x="950" y="182" text-anchor="middle">NotificationKit</text>
+          <text class="node-subtitle" x="950" y="202" text-anchor="middle">交互通知</text>
+        </g>
+
+        <g tabindex="0" aria-label="并行 Race 探测">
+          <rect class="node" x="125" y="383" width="220" height="66" rx="12"></rect>
+          <text class="node-title" x="235" y="411" text-anchor="middle">并行 Race 探测</text>
+          <text class="node-code" x="235" y="432" text-anchor="middle">connectBest / Relay</text>
+        </g>
+
+        <g tabindex="0" aria-label="WebSocket 通信模块">
+          <rect class="node core" x="455" y="374" width="290" height="84" rx="14"></rect>
+          <text class="node-title" x="600" y="408" text-anchor="middle">WebSocket 通信模块</text>
+          <text class="node-subtitle" x="600" y="432" text-anchor="middle">心跳保活 + 自动重连</text>
+        </g>
+
+        <g tabindex="0" aria-label="端到端安全加密">
+          <rect class="node" x="855" y="383" width="220" height="66" rx="12"></rect>
+          <text class="node-title" x="965" y="411" text-anchor="middle">端到端安全加密</text>
+          <text class="node-code" x="965" y="432" text-anchor="middle">AES-GCM</text>
+        </g>
+
+        <g tabindex="0" aria-label="双通道会话捕获">
+          <rect class="node" x="120" y="598" width="265" height="66" rx="12"></rect>
+          <text class="node-title" x="252.5" y="626" text-anchor="middle">双通道会话捕获</text>
+          <text class="node-subtitle" x="252.5" y="647" text-anchor="middle">ACP API + FS 监听</text>
+        </g>
+
+        <g tabindex="0" aria-label="Bridge Server">
+          <rect class="node core" x="455" y="590" width="290" height="84" rx="14"></rect>
+          <text class="node-title" x="600" y="624" text-anchor="middle">Bridge Server</text>
+          <text class="node-code" x="600" y="648" text-anchor="middle">Node.js :12138</text>
+        </g>
+
+        <g tabindex="0" aria-label="权限审批委托">
+          <rect class="node" x="855" y="598" width="220" height="66" rx="12"></rect>
+          <text class="node-title" x="965" y="626" text-anchor="middle">权限审批委托</text>
+          <text class="node-subtitle" x="965" y="647" text-anchor="middle">Permission Delegation</text>
+        </g>
+
+        <g tabindex="0" aria-label="ACP 协议适配层">
+          <rect class="node core" x="455" y="678" width="290" height="72" rx="14"></rect>
+          <text class="node-title" x="600" y="708" text-anchor="middle">ACP 协议适配层</text>
+          <text class="node-subtitle" x="600" y="731" text-anchor="middle">JSON-RPC 通信</text>
+        </g>
+
+        <g tabindex="0" aria-label="Claude Code Agent">
+          <rect class="node" x="130" y="760" width="240" height="58" rx="11"></rect>
+          <text class="node-title" x="250" y="796" text-anchor="middle">Claude Code Agent</text>
+        </g>
+        <g tabindex="0" aria-label="OpenCode Agent">
+          <rect class="node" x="480" y="760" width="240" height="58" rx="11"></rect>
+          <text class="node-title" x="600" y="796" text-anchor="middle">OpenCode Agent</text>
+        </g>
+        <g tabindex="0" aria-label="Codex / OMP Agent">
+          <rect class="node" x="830" y="760" width="240" height="58" rx="11"></rect>
+          <text class="node-title" x="950" y="796" text-anchor="middle">Codex / OMP Agent</text>
+        </g>
+      </svg>
+
+      <div class="legend" aria-label="图例">
+        <span class="legend-item"><i class="legend-line"></i>数据 / 调用链路</span>
+        <span class="legend-item"><i class="legend-line control"></i>权限通知回传</span>
+      </div>
+    </section>
+
+    <footer class="footer-note">
+      <span>NEXUS · REMOTE AGENT CONTROL</span>
+      <span>01 / 01</span>
+    </footer>
+  </main>
+</body>
+</html>

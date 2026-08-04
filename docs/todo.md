@@ -38,7 +38,7 @@ Flutter (Dart 代码) ── MethodChannel ──> ArkTS (nexus_flutter/ohos/ent
   - **展开卡片**：显示 Agent 名称、当前执行步骤（如 `正在修改 server.mts 第 120 行...`），并提供 **[暂停] [取消]** 按钮。
   - **锁屏展示**：常显全景进度条，任务完成时音效与通知提醒。
 - **技术实现**：
-  - Dart 侧：`MethodChannel('com.anywhere.app/live_view').invokeMethod('updateLiveView', ...)`
+  - Dart 侧：`MethodChannel('com.nexus.app/live_view').invokeMethod('updateLiveView', ...)`
   - ArkTS 侧：引入 `@kit.LiveViewKit`，调用 `liveViewManager.startLiveView()` / `updateLiveView()`。
 
 #### 2. 交互式通知审批 (Notification Kit) —— 下拉通知栏直接授权/拒绝
