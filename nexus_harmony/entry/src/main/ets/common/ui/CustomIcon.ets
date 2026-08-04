@@ -1,1 +1,0 @@
-// CustomIcon.ets — deleted by ponytail audit (codebase uses SymbolGlyph exclusively)
