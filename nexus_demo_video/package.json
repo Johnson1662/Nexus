@@ -15,6 +15,6 @@
   },
   "scripts": {
     "dev": "remotion studio",
-    "build": "remotion render MyComp output.mp4"
+    "build": "remotion render NexusDemo output.mp4"
   }
 }

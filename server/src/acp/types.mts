@@ -1,6 +1,8 @@
+import type { RequestPermissionResponse } from "@agentclientprotocol/sdk";
+
 export interface PendingPermission {
   requestId: string;
-  resolve: (value: any) => void;
+  resolve: (value: RequestPermissionResponse) => void;
 }
 
 export interface TerminalExitStatus {
@@ -20,7 +22,12 @@ export interface TerminalState {
 }
 
 export interface SessionState {
-  ws: import("ws").WebSocket;
+  /** Legacy alias for the active transport; ownerTransport is authoritative. */
+  ws: import("ws").WebSocket | null;
+  /** Only this authenticated transport may operate on the session. */
+  ownerTransport: import("ws").WebSocket | null;
+  /** Stable bridge-local identity for the current owner transport. */
+  ownerId: string | null;
   client: import("./client.mjs").AcpClient;
   /** Canonical ACP Agent session identifier (ses_... or UUID) — single key throughout the stack */
   sessionId: string;
@@ -44,6 +51,8 @@ export interface SessionState {
   orphanedAt: number | null;
   /** Buffered messages for cursor sync replay (Phase 3a) */
   messageBuffer: Array<{ messageId: string; payload: string; timestamp: number }>;
+  /** Prevent concurrent load/resume requests from replaying history twice. */
+  loadInFlight?: Promise<void>;
 }
 
 export interface WSClientMessage {

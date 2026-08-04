@@ -1,3 +1,22 @@
+/// Canonical replay cursor assigned by the bridge (`sessionId:seq`).
+class SessionMessageCursor {
+  final String sessionId;
+  final int sequence;
+
+  const SessionMessageCursor(this.sessionId, this.sequence);
+
+  static SessionMessageCursor? parse(String? value) {
+    if (value == null || value.isEmpty) return null;
+    final separator = value.lastIndexOf(':');
+    if (separator <= 0 || separator == value.length - 1) return null;
+    final sequence = int.tryParse(value.substring(separator + 1));
+    if (sequence == null || sequence <= 0) return null;
+    return SessionMessageCursor(value.substring(0, separator), sequence);
+  }
+
+  String get messageId => '$sessionId:$sequence';
+}
+
 /// Client → Server message payloads
 class ClientMessage {
   final String type;
@@ -92,6 +111,8 @@ class ServerMessage {
   final String? hostId;
   final List<String>? workspaces;
   final List<Map<String, dynamic>>? entries; // sync_response entries
+  final bool? overflow; // sync_response cursor fell out of the replay window
+  final bool? turnActive; // optional server turn-state snapshot
   // Workspace file browser
   final List<Map<String, dynamic>>? files; // workspace_files response
   final String? diff; // file_diff response
@@ -126,6 +147,8 @@ class ServerMessage {
     this.hostId,
     this.workspaces,
     this.entries,
+    this.overflow,
+    this.turnActive,
     this.files,
     this.diff,
     this.logEntries,
@@ -269,6 +292,8 @@ class ServerMessage {
       hostId: json['hostId'] as String?,
       workspaces: (json['workspaces'] as List<dynamic>?)?.map((w) => w as String).toList(),
       entries: (json['entries'] as List<dynamic>?)?.map((e) => e as Map<String, dynamic>).toList(),
+      overflow: json['overflow'] as bool?,
+      turnActive: json['turnActive'] as bool?,
 
       files: (json['files'] as List<dynamic>?)?.map((f) => f as Map<String, dynamic>).toList(),
       diff: json['diff'] as String?,
@@ -347,6 +372,7 @@ class ServerSessionData {
   final String? agent;
   final String? cwd;
   final int createdAt;
+  final int? lastActivity;
   final String? status;
 
   ServerSessionData({
@@ -355,6 +381,7 @@ class ServerSessionData {
     this.agent,
     this.cwd,
     this.createdAt = 0,
+    this.lastActivity,
     this.status,
   });
 
@@ -364,6 +391,7 @@ class ServerSessionData {
         agent: json['agent'] as String?,
         cwd: json['cwd'] as String?,
         createdAt: json['createdAt'] as int? ?? DateTime.now().millisecondsSinceEpoch,
+        lastActivity: json['lastActivity'] as int?,
         status: json['status'] as String?,
       );
 }

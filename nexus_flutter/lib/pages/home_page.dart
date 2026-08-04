@@ -52,13 +52,17 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _showManualConnectDialog() {
+    if (!mounted) return;
     final controller = TextEditingController();
     showDialog(
       context: context,
       builder: (dialogCtx) => AlertDialog(
         backgroundColor: AppColors.surfaceCtx(context),
         titlePadding: const EdgeInsets.fromLTRB(
-          AppSpacing.xl, AppSpacing.xl, AppSpacing.xl, 0,
+          AppSpacing.xl,
+          AppSpacing.xl,
+          AppSpacing.xl,
+          0,
         ),
         title: Text(
           '手动连接',
@@ -69,7 +73,10 @@ class _HomePageState extends State<HomePage> {
           ),
         ),
         contentPadding: const EdgeInsets.fromLTRB(
-          AppSpacing.xl, AppSpacing.md, AppSpacing.xl, 0,
+          AppSpacing.xl,
+          AppSpacing.md,
+          AppSpacing.xl,
+          0,
         ),
         content: TextField(
           controller: controller,
@@ -80,6 +87,7 @@ class _HomePageState extends State<HomePage> {
             hintText: 'ws://192.168.1.2:12138',
           ),
           onSubmitted: (url) {
+            if (!mounted) return;
             final trimmed = url.trim();
             if (trimmed.isNotEmpty) {
               context.read<ChatProvider>().connectToUrl(trimmed);
@@ -87,8 +95,8 @@ class _HomePageState extends State<HomePage> {
             }
           },
         ),
-        actionsPadding:
-            const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+        actionsPadding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.md, vertical: AppSpacing.sm),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogCtx),
@@ -99,6 +107,7 @@ class _HomePageState extends State<HomePage> {
           ),
           TextButton(
             onPressed: () {
+              if (!mounted) return;
               final url = controller.text.trim();
               if (url.isNotEmpty) {
                 context.read<ChatProvider>().connectToUrl(url);
@@ -119,7 +128,7 @@ class _HomePageState extends State<HomePage> {
           ),
         ],
       ),
-    );
+    ).whenComplete(controller.dispose);
   }
 
   String _formatRelativeTime(int epoch) {
@@ -143,28 +152,38 @@ class _HomePageState extends State<HomePage> {
     final workspaceProvider = context.watch<WorkspaceProvider>();
 
     final matchedDevice = hostStore.devices
-        .where((d) => d.hostId == chatProvider.state.currentDeviceId || d.name == chatProvider.state.currentDeviceId)
+        .where((d) =>
+            d.hostId == chatProvider.state.currentDeviceId ||
+            d.name == chatProvider.state.currentDeviceId)
         .firstOrNull;
-    var activeHostName = (matchedDevice != null && matchedDevice.name.isNotEmpty)
-        ? matchedDevice.name
-        : (chatProvider.state.currentDeviceId.isNotEmpty
-            ? chatProvider.state.currentDeviceId
-            : (hostStore.devices.isNotEmpty ? hostStore.devices.first.name : ''));
+    var activeHostName =
+        (matchedDevice != null && matchedDevice.name.isNotEmpty)
+            ? matchedDevice.name
+            : (chatProvider.state.currentDeviceId.isNotEmpty
+                ? chatProvider.state.currentDeviceId
+                : (hostStore.devices.isNotEmpty
+                    ? hostStore.devices.first.name
+                    : ''));
     if (activeHostName.startsWith('host_')) {
       if (matchedDevice?.urls.isNotEmpty == true) {
-        activeHostName = matchedDevice!.urls.first.replaceFirst('ws://', '').replaceFirst('wss://', '');
+        activeHostName = matchedDevice!.urls.first
+            .replaceFirst('ws://', '')
+            .replaceFirst('wss://', '');
       } else {
         activeHostName = '远程主机';
       }
     }
 
-    final phase = hostStore.getPhase(matchedDevice?.hostId ?? chatProvider.state.currentDeviceId);
+    final phase = hostStore
+        .getPhase(matchedDevice?.hostId ?? chatProvider.state.currentDeviceId);
     final isConnected = chatProvider.state.connected;
 
     final Color statusDotColor;
     if (isConnected || phase == 'online' || phase == 'syncing') {
       statusDotColor = AppColors.success;
-    } else if (phase == 'connecting' || phase == 'reconnecting' || phase == 'waiting_host') {
+    } else if (phase == 'connecting' ||
+        phase == 'reconnecting' ||
+        phase == 'waiting_host') {
       statusDotColor = AppColors.warning;
     } else {
       statusDotColor = AppColors.foregroundMutedCtx(context).withAlpha(120);
@@ -175,7 +194,7 @@ class _HomePageState extends State<HomePage> {
         centerTitle: true,
         automaticallyImplyLeading: false,
         title: const Text(
-          'Remote',
+          'Nexus',
           style: TextStyle(
             fontWeight: FontWeight.w600,
             fontSize: AppFontSize.xl,
@@ -249,7 +268,8 @@ class _HomePageState extends State<HomePage> {
                       workspaceProvider,
                     ),
                     const SizedBox(height: AppSpacing.md),
-                    _buildRecentSessionsSection(context, chatProvider, workspaceProvider),
+                    _buildRecentSessionsSection(
+                        context, chatProvider, workspaceProvider),
                     const SizedBox(height: 100),
                   ],
                 ),
@@ -410,19 +430,23 @@ class _HomePageState extends State<HomePage> {
     if (workspaceProvider.workspaces.isNotEmpty) {
       return Column(
         children: workspaceProvider.workspaces.map((w) {
-          final name = w['name'] ??
-              (w['path']?.split('/').lastOrNull ?? '');
-          return _buildWorkspaceCard(context, name, chatProvider);
+          final name = w['name'] ?? (w['path']?.split('/').lastOrNull ?? '');
+          final path = w['path'] ?? '';
+          return _buildWorkspaceCard(context, name, path, chatProvider);
         }).toList(),
       );
     }
 
     // Fallback: show current workspace if set
     if (chatProvider.state.currentWorkspace.isNotEmpty) {
-      final name = chatProvider.state.currentWorkspace
-          .split(RegExp(r'[/\\]'))
-          .last;
-      return _buildWorkspaceCard(context, name, chatProvider);
+      final name =
+          chatProvider.state.currentWorkspace.split(RegExp(r'[/\\]')).last;
+      return _buildWorkspaceCard(
+        context,
+        name,
+        chatProvider.state.currentWorkspace,
+        chatProvider,
+      );
     }
 
     // Connected but no workspace data
@@ -441,13 +465,18 @@ class _HomePageState extends State<HomePage> {
   Widget _buildWorkspaceCard(
     BuildContext context,
     String name,
+    String path,
     ChatProvider chatProvider,
   ) {
     return _buildProjectRow(
       context,
       icon: Icons.folder_outlined,
       title: name.isNotEmpty ? name : '未命名',
-      onTap: () => Navigator.pushNamed(context, '/workspace-detail', arguments: name),
+      onTap: () => Navigator.pushNamed(
+        context,
+        '/workspace-detail',
+        arguments: {'name': name, 'path': path},
+      ),
     );
   }
 
@@ -485,15 +514,39 @@ class _HomePageState extends State<HomePage> {
     List<Map<String, String>> addedWorkspaces,
     ChatProvider chatProvider,
   ) {
+    String workspaceLeaf(String value) {
+      final parts = value
+          .split(RegExp(r'[/\\]'))
+          .where((part) => part.isNotEmpty)
+          .toList();
+      return parts.isEmpty ? '' : parts.last.toLowerCase();
+    }
+
     final validPaths = addedWorkspaces
-        .map((w) => (w['path'] ?? '').replaceAll('\\', '/').toLowerCase().replaceAll(RegExp(r'/$'), ''))
+        .map((w) => (w['path'] ?? '')
+            .replaceAll('\\', '/')
+            .toLowerCase()
+            .replaceAll(RegExp(r'/$'), ''))
         .where((p) => p.isNotEmpty)
         .toSet();
+    final currentWorkspace = chatProvider.state.currentWorkspace
+        .replaceAll('\\', '/')
+        .toLowerCase()
+        .replaceAll(RegExp(r'/$'), '');
+    if (currentWorkspace.isNotEmpty) validPaths.add(currentWorkspace);
+
+    final validNames = <String>{
+      ...validPaths.map(workspaceLeaf),
+    }..removeWhere((name) => name.isEmpty);
 
     final filtered = sessions.where((s) {
       if (s.cwd == null || s.cwd!.isEmpty) return false;
-      final normalizedCwd = s.cwd!.replaceAll('\\', '/').toLowerCase().replaceAll(RegExp(r'/$'), '');
-      return validPaths.contains(normalizedCwd);
+      final normalizedCwd = s.cwd!
+          .replaceAll('\\', '/')
+          .toLowerCase()
+          .replaceAll(RegExp(r'/$'), '');
+      return validPaths.contains(normalizedCwd) ||
+          validNames.contains(workspaceLeaf(normalizedCwd));
     }).toList();
 
     filtered.sort((a, b) {
@@ -504,7 +557,9 @@ class _HomePageState extends State<HomePage> {
       final aActive = a.status == 'running' || a.status == 'waiting_input';
       final bActive = b.status == 'running' || b.status == 'waiting_input';
       if (aActive != bActive) return aActive ? -1 : 1;
-      return b.createdAt.compareTo(a.createdAt);
+      final aTime = a.lastActivity ?? a.createdAt;
+      final bTime = b.lastActivity ?? b.createdAt;
+      return bTime.compareTo(aTime);
     });
     return filtered.take(5).toList();
   }
@@ -551,12 +606,13 @@ class _HomePageState extends State<HomePage> {
           )
         else
           ...sessions.map((s) => SessionTile(
-            session: s,
-            onTap: () {
-              chatProvider.loadSession(s.sessionId, agent: s.agent, cwd: s.cwd);
-              Navigator.pushNamed(context, '/chat');
-            },
-          )),
+                session: s,
+                onTap: () {
+                  chatProvider.loadSession(s.sessionId,
+                      agent: s.agent, cwd: s.cwd);
+                  Navigator.pushNamed(context, '/chat');
+                },
+              )),
       ],
     );
   }
@@ -604,6 +660,21 @@ class _HomePageState extends State<HomePage> {
             ),
           ),
           const SizedBox(width: AppSpacing.md),
+          // [TEMP] Kit test button
+          Material(
+            color: Colors.orange,
+            borderRadius: BorderRadius.circular(AppRadius.full),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(AppRadius.full),
+              onTap: () => Navigator.pushNamed(context, '/test-kits'),
+              child: const SizedBox(
+                  width: 50,
+                  height: 50,
+                  child: Center(
+                      child: Text('🧪', style: TextStyle(fontSize: 20)))),
+            ),
+          ),
+          const SizedBox(width: AppSpacing.md),
           // New chat button
           Material(
             color: AppColors.foregroundCtx(context),
@@ -618,8 +689,7 @@ class _HomePageState extends State<HomePage> {
               },
               child: Container(
                 height: 50,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
                 alignment: Alignment.center,
                 child: Row(
                   mainAxisSize: MainAxisSize.min,

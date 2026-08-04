@@ -2,13 +2,15 @@ import React from "react";
 import {
   AbsoluteFill,
   Easing,
-  Img,
   interpolate,
   Sequence,
-  staticFile,
   useCurrentFrame,
-  Video,
 } from "remotion";
+
+const DEMO_TARGET = process.env.NEXUS_DEMO_TARGET?.trim() || "<bridge-host>:12138";
+const DEMO_HOST = process.env.NEXUS_DEMO_HOST?.trim() || "<bridge-host>";
+const DEMO_AGENT = process.env.NEXUS_DEMO_AGENT?.trim() || "omp";
+const DEMO_SESSION = process.env.NEXUS_DEMO_SESSION?.trim() || "SessionManager.mts";
 
 // ── Scene 1: Title & Icon Reveal (0 - 2.5s / 0-75f) ──
 const SceneTitle: React.FC = () => {
@@ -108,7 +110,7 @@ const SceneTerminal: React.FC = () => {
   );
 
   const fullCode =
-    'nexus connect --target "192.168.3.143:12138" --agent omp\n[ACP] WebSocket connected to Bridge Server\n[ACP] Session initialized: oh-my-pi v17.1.1\n[Stream] Refactoring SessionManager.mts (101 tests passed)...';
+    `nexus start --foreground\n[ACP] Connected to ${DEMO_TARGET}\n[ACP] Session initialized: ${DEMO_AGENT}\n[Stream] Working on ${DEMO_SESSION}...`;
 
   return (
     <AbsoluteFill
@@ -177,7 +179,7 @@ const SceneTerminal: React.FC = () => {
   );
 };
 
-// ── Scene 3: REAL PHONE SCREEN MOCKUP & DEMO RECORDING (6s - 11s / 180-330f) ──
+// ── Scene 3: PHONE SCREEN MOCKUP (6s - 11s / 180-330f) ──
 const ScenePhoneMockup: React.FC = () => {
   const frame = useCurrentFrame();
 
@@ -265,9 +267,9 @@ const ScenePhoneMockup: React.FC = () => {
             <span>5G 100%</span>
           </div>
 
-          {/* Screen Content: Renders UI simulation & Real Device Demo */}
+          {/* Screen Content: Rendered UI demonstration */}
           <div style={{ flex: 1, position: "relative", overflow: "hidden" }}>
-            {/* Simulated UI Overlay & Real Screen Recording Container */}
+            {/* Simulated UI */}
             <div
               style={{
                 position: "absolute",
@@ -293,7 +295,7 @@ const ScenePhoneMockup: React.FC = () => {
               >
                 <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#10B981" }} />
                 <span style={{ fontSize: 12, fontWeight: 700, color: "#1E40AF" }}>
-                  LAPTOP-3FLH46E9
+                  {DEMO_HOST}
                 </span>
               </div>
 
@@ -378,7 +380,7 @@ const ScenePhoneMockup: React.FC = () => {
             ✦ 真实多端连接与会话状态
           </div>
           <p style={{ fontSize: 13, color: "#D1D5DB", marginTop: 6, lineHeight: 1.5 }}>
-            通过 WebSocket 实时间隔监测与磁盘状态扫描，精准判定“进行中”与“等待输入”，全增量事件流渲染。
+            展示 WebSocket 会话状态与增量事件流在手机端的呈现方式。
           </p>
         </div>
 
@@ -396,7 +398,7 @@ const ScenePhoneMockup: React.FC = () => {
             ✦ 鸿蒙 Flutter 原生高性能渲染
           </div>
           <p style={{ fontSize: 13, color: "#D1D5DB", marginTop: 6, lineHeight: 1.5 }}>
-            采用 MarkdownBody 解决全局手势争抢，配合 HostStore 自动候选 IP 去重归并。
+            使用原生渲染组件展示消息、工具调用和会话状态。
           </p>
         </div>
       </div>

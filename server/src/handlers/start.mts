@@ -1,6 +1,6 @@
 import type { WebSocket } from "ws";
 import { sessionManager } from "../session-manager.mjs";
-import { clearSessionListCache, sessionTitleOverrides } from "./list-sessions.mjs";
+import { setTitle } from "../session-titles.mjs";
 
 interface StartParams {
   agent?: string;
@@ -15,9 +15,16 @@ export async function handleStart(
 ): Promise<void> {
   const { agent = "opencode", prompt, cwd, model } = params;
 
-  const sess = await sessionManager.getOrCreate(ws, {
-    agent, cwd, model,
-  });
+  let sess;
+  try {
+    sess = await sessionManager.getOrCreate(ws, {
+      agent, cwd, model,
+    });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    try { ws.send(JSON.stringify({ type: "start_failed", code: "AGENT_START_FAILED", text: message })); } catch {}
+    return;
+  }
 
   const sessionId = sess.sessionId;
   if (!sessionId) return;
@@ -28,8 +35,7 @@ export async function handleStart(
     : "New Session";
 
   if (sessionId) {
-    sessionTitleOverrides.set(sessionId, sessionTitle);
-    clearSessionListCache(ws);
+    setTitle(sessionId, sessionTitle);
   }
 
   try {
@@ -46,7 +52,7 @@ export async function handleStart(
   // If prompt was provided, dispatch it now
   if (prompt) {
     try {
-      await sessionManager.dispatchPrompt(sessionId, prompt);
+      await sessionManager.dispatchPrompt(sessionId, prompt, ws);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       console.log(`[handler:start] prompt dispatch error: ${msg}`);

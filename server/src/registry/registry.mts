@@ -43,13 +43,39 @@ const BUILTIN_PATH = path.join(CURRENT_DIR, "agents.json");
 
 let registry: AgentRegistry | null = null;
 
+function validCommand(cmd: unknown): cmd is string {
+  return typeof cmd === "string" && cmd.trim().length > 0 && !/[\u0000\r\n]/.test(cmd);
+}
+
+function validArgs(args: unknown): args is string[] {
+  return Array.isArray(args) && args.every(arg => typeof arg === "string" && !/[\u0000\r\n]/.test(arg));
+}
+
+function validLaunch(value: unknown): value is { cmd: string; args: string[]; env?: Record<string, string> } {
+  if (!value || typeof value !== "object") return false;
+  const launch = value as { cmd?: unknown; args?: unknown; env?: unknown };
+  return validCommand(launch.cmd) && validArgs(launch.args);
+}
+
+function validRegistryAgent(value: unknown): value is RegistryAgent {
+  if (!value || typeof value !== "object") return false;
+  const agent = value as Partial<RegistryAgent>;
+  return typeof agent.id === "string" && agent.id.length > 0
+    && typeof agent.name === "string"
+    && !!agent.distribution && typeof agent.distribution === "object";
+}
+
 // ── Public API ────────────────────────────────────────────────────────
 
 export function loadRegistry(refresh: boolean = false): AgentRegistry {
   if (registry && !refresh) return registry;
   try {
     const raw = readFileSync(BUILTIN_PATH, "utf-8");
-    registry = JSON.parse(raw) as AgentRegistry;
+    const parsed = JSON.parse(raw) as Partial<AgentRegistry>;
+    registry = {
+      version: typeof parsed.version === "number" ? parsed.version : 1,
+      agents: Array.isArray(parsed.agents) ? parsed.agents.filter(validRegistryAgent) : [],
+    };
     console.log(`[registry] loaded ${registry.agents.length} agents from built-in registry`);
   } catch (err) {
     console.log(`[registry] failed to load built-in registry: ${err}`);
@@ -78,12 +104,15 @@ export function resolveAgentCommand(agentId: string): { cmd: string; args: strin
   if (!agent) return null;
 
   // direct launch (simplest)
-  if (agent.distribution.direct) {
-    return { ...agent.distribution.direct };
+  if (validLaunch(agent.distribution.direct)) {
+    return { cmd: agent.distribution.direct.cmd, args: [...agent.distribution.direct.args], env: agent.distribution.direct.env };
   }
 
   // npx launch
-  if (agent.distribution.npx) {
+  if (agent.distribution.npx
+      && typeof agent.distribution.npx.package === "string"
+      && agent.distribution.npx.package.length > 0
+      && validArgs(agent.distribution.npx.args)) {
     return {
       cmd: "npx",
       args: ["--yes", agent.distribution.npx.package, ...agent.distribution.npx.args],
@@ -91,12 +120,12 @@ export function resolveAgentCommand(agentId: string): { cmd: string; args: strin
     };
   }
 
-  // binary (try to find a matching platform, otherwise just use cmd)
+  // Binary launch must match this host; never pick an arbitrary platform.
   if (agent.distribution.binary) {
-    const platforms = Object.keys(agent.distribution.binary);
-    for (const platform of platforms) {
-      const target = agent.distribution.binary![platform];
-      return { cmd: target.cmd, args: target.args, env: target.env };
+    const target = agent.distribution.binary[process.platform]
+      || agent.distribution.binary[process.platform === "win32" ? "windows" : process.platform];
+    if (target && validCommand(target.cmd) && validArgs(target.args)) {
+      return { cmd: target.cmd, args: [...target.args], env: target.env };
     }
   }
 
@@ -119,13 +148,15 @@ export async function fetchRemoteRegistry(url?: string): Promise<AgentRegistry> 
       console.log(`[registry] remote fetch returned ${response.status}, using built-in`);
       return loadRegistry();
     }
-    const remote = await response.json() as AgentRegistry;
+    const remote = await response.json() as Partial<AgentRegistry>;
     if (remote && Array.isArray(remote.agents)) {
-      // Merge: keep built-in as base, override with remote entries
+      // Merge only structurally valid entries; launchers remain argv-based.
       const byId = new Map<string, RegistryAgent>();
       for (const a of loadRegistry().agents) byId.set(a.id, a);
-      for (const a of remote.agents) byId.set(a.id, a);
-      const merged: AgentRegistry = { version: remote.version || 1, agents: Array.from(byId.values()) };
+      for (const a of remote.agents) {
+        if (validRegistryAgent(a)) byId.set(a.id, a);
+      }
+      const merged: AgentRegistry = { version: typeof remote.version === "number" ? remote.version : 1, agents: Array.from(byId.values()) };
       registry = merged;
       console.log(`[registry] merged ${remote.agents.length} remote agents into registry`);
       return merged;

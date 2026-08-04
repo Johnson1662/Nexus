@@ -17,9 +17,9 @@ import 'pages/workspace_detail_page.dart';
 import 'pages/workspace_list_page.dart';
 import 'pages/agent_detail_page.dart';
 import 'pages/agent_manage_page.dart';
-import 'pages/session_detail_page.dart';
 import 'pages/new_session_wizard.dart';
 import 'pages/search_page.dart';
+import 'pages/kit_test_page.dart';
 
 void main() {
   FlutterError.onError = (details) {
@@ -156,6 +156,7 @@ class NexusApp extends StatelessWidget {
         '/session-detail': (context) => const SizedBox(),
         '/new-session': (context) => const NewSessionWizard(),
         '/search': (context) => const SearchPage(),
+        '/test-kits': (context) => const KitTestPage(),
       },
     );
   }
@@ -191,14 +192,18 @@ Future<void> _probeAllHosts(HostStore hostStore) async {
 
     bool foundOnline = false;
     for (final url in device.urls) {
+      final client = io.HttpClient();
       try {
         // Convert ws:// → http://, wss:// → https://
         final probeUrl = url
             .replaceFirst('ws://', 'http://')
             .replaceFirst('wss://', 'https://');
-        final client = io.HttpClient();
         client.connectionTimeout = const Duration(seconds: 5);
         final request = await client.getUrl(Uri.parse('$probeUrl/probe'));
+        final authToken = device.authToken;
+        if (authToken != null && authToken.isNotEmpty) {
+          request.headers.set('Authorization', 'Bearer $authToken');
+        }
         final response = await request.close().timeout(const Duration(seconds: 5));
         if (response.statusCode == 200) {
           final raw = await response.transform(utf8.decoder).join();
@@ -213,6 +218,7 @@ Future<void> _probeAllHosts(HostStore hostStore) async {
                 urls: device.urls,
                 relayUrl: device.relayUrl,
                 relayPin: device.relayPin,
+                authToken: device.authToken,
               );
             }
             hostStore.markOnline(hostKey, url);
@@ -221,9 +227,10 @@ Future<void> _probeAllHosts(HostStore hostStore) async {
             break;
           }
         }
-        client.close();
       } catch (_) {
         // Try next URL
+      } finally {
+        client.close(force: true);
       }
     }
     if (!foundOnline) {

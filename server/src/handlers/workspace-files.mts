@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
-import { readdir, stat } from "node:fs/promises";
-import { join, relative, basename } from "node:path";
+import { readdir, realpath, stat } from "node:fs/promises";
+import { lstatSync } from "node:fs";
+import { join, relative, basename, dirname, resolve, isAbsolute } from "node:path";
 import type { WebSocket } from "ws";
 
 export interface WorkspaceFile {
@@ -17,7 +18,41 @@ export interface GitLogEntry {
   author: string;
 }
 
+const MAX_FILE_BYTES = 4 * 1024 * 1024;
+
 // ── Helpers ──
+
+function isWithin(root: string, target: string): boolean {
+  const rel = relative(root, target);
+  return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
+}
+
+async function resolveWorkspaceRoot(cwd: string): Promise<string> {
+  const root = await realpath(cwd);
+  await readdir(root, { withFileTypes: true });
+  return root;
+}
+
+async function resolveWorkspaceEntry(root: string, filePath: string, allowMissing = false): Promise<string> {
+  const lexical = resolve(root, filePath);
+  if (!isWithin(root, lexical)) throw new Error("path traversal denied");
+  let canonical: string;
+  try {
+    canonical = await realpath(lexical);
+  } catch (error) {
+    if (!allowMissing) throw error;
+    try {
+      if (lstatSync(lexical).isSymbolicLink()) throw new Error("path traversal denied");
+    } catch (linkError: unknown) {
+      if (!(linkError instanceof Error && "code" in linkError && linkError.code === "ENOENT")) throw linkError;
+    }
+    const parent = await realpath(dirname(lexical));
+    if (!isWithin(root, parent)) throw new Error("path traversal denied");
+    return join(parent, basename(lexical));
+  }
+  if (!isWithin(root, canonical)) throw new Error("path traversal denied");
+  return canonical;
+}
 
 function git(cwd: string, args: string[], timeoutMs = 8000): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -52,10 +87,11 @@ export async function handleListWorkspaceFiles(
   }
 
   try {
+    const root = await resolveWorkspaceRoot(cwd);
     // Get git status
     let statusMap: Map<string, string>;
     try {
-      const stdout = await git(cwd, ["status", "--porcelain", "-u"], 5000);
+      const stdout = await git(root, ["status", "--porcelain", "-u"], 5000);
       statusMap = parseGitStatus(stdout);
     } catch {
       statusMap = new Map();
@@ -75,7 +111,7 @@ export async function handleListWorkspaceFiles(
         if (e.name.startsWith(".")) continue;
         if (e.name === "node_modules") continue;
         const fp = join(dir, e.name);
-        const rel = relative(cwd, fp).replace(/\\/g, "/");
+        const rel = relative(root, fp).replace(/\\/g, "/");
         if (e.isDirectory()) {
           files.push({ path: rel + "/", name: e.name, type: "directory", status: "" });
           await walk(fp, depth + 1);
@@ -85,9 +121,9 @@ export async function handleListWorkspaceFiles(
         }
       }
     }
-    await walk(cwd, 0);
+    await walk(root, 0);
 
-    ws.send(JSON.stringify({ type: "workspace_files", cwd, files }));
+    ws.send(JSON.stringify({ type: "workspace_files", cwd: root, files }));
   } catch (err: any) {
     ws.send(JSON.stringify({ type: "workspace_files", cwd, files: [], error: err.message }));
   }
@@ -104,29 +140,35 @@ export async function handleFileDiff(
   }
 
   try {
+    const root = await resolveWorkspaceRoot(cwd);
+    const canonicalPath = await resolveWorkspaceEntry(root, filePath, true);
+    const relativePath = relative(root, canonicalPath).replace(/\\/g, "/");
     // Try HEAD diff first (covers staged + unstaged), fall back to unstaged-only
     let diff = "";
     let triedStaged = false;
     try {
-      diff = await git(cwd, ["diff", "HEAD", "--", filePath], 10000);
+      diff = await git(root, ["diff", "HEAD", "--", relativePath], 10000);
     } catch {
       // HEAD diff may fail if file is new (no HEAD commit for it)
       try {
-        diff = await git(cwd, ["diff", "--staged", "--", filePath], 10000);
+        diff = await git(root, ["diff", "--staged", "--", relativePath], 10000);
         triedStaged = true;
       } catch {}
     }
     if (!diff && !triedStaged) {
       try {
-        diff = await git(cwd, ["diff", "--staged", "--", filePath], 10000);
+        diff = await git(root, ["diff", "--staged", "--", relativePath], 10000);
       } catch {}
     }
     // If still no diff and file is untracked, read content as new file
     if (!diff) {
       try {
         const { readFile } = await import("node:fs/promises");
-        const { join: j } = await import("node:path");
-        const content = await readFile(j(cwd, filePath), "utf-8");
+        const fileStat = await stat(canonicalPath);
+        if (!fileStat.isFile() || fileStat.size > MAX_FILE_BYTES) {
+          throw new Error(`file exceeds ${MAX_FILE_BYTES} byte limit`);
+        }
+        const content = await readFile(canonicalPath, "utf-8");
         diff = content;
         ws.send(JSON.stringify({ type: "file_diff", path: filePath, diff }));
         return;
@@ -149,9 +191,12 @@ export async function handleFileLog(
   }
 
   try {
+    const root = await resolveWorkspaceRoot(cwd);
+    const canonicalPath = await resolveWorkspaceEntry(root, filePath, true);
+    const relativePath = relative(root, canonicalPath).replace(/\\/g, "/");
     const stdout = await git(
-      cwd,
-      ["log", "--oneline", "--date=short", "--format=%h|%ad|%an|%s", "-n", "20", "--", filePath],
+      root,
+      ["log", "--oneline", "--date=short", "--format=%h|%ad|%an|%s", "-n", "20", "--", relativePath],
       8000,
     );
     const entries: GitLogEntry[] = stdout
@@ -179,11 +224,11 @@ export async function handleFileRead(
 
   try {
     const fs = await import("node:fs/promises");
-    const fullPath = join(cwd, filePath);
-    // Safety: prevent directory traversal
-    if (!fullPath.startsWith(cwd)) {
-      ws.send(JSON.stringify({ type: "file_content", path: filePath, content: "", error: "path traversal denied" }));
-      return;
+    const root = await resolveWorkspaceRoot(cwd);
+    const fullPath = await resolveWorkspaceEntry(root, filePath);
+    const stat = await fs.stat(fullPath);
+    if (!stat.isFile() || stat.size > MAX_FILE_BYTES) {
+      throw new Error(`file exceeds ${MAX_FILE_BYTES} byte limit`);
     }
     const content = await fs.readFile(fullPath, "utf-8");
     ws.send(JSON.stringify({ type: "file_content", path: filePath, content }));

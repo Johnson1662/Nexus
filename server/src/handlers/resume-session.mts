@@ -17,11 +17,19 @@ export async function handleResumeSession(
     return;
   }
 
-  const sess = await sessionManager.getOrCreate(ws, {
-    agent, cwd, model,
-    sessionId: targetSessionId,
-    mode: "resume",
-  });
+  let sess;
+  try {
+    sess = await sessionManager.getOrCreate(ws, {
+      agent, cwd, model,
+      sessionId: targetSessionId,
+      mode: "resume",
+    });
+  } catch (err: unknown) {
+    const code = typeof err === "object" && err && "code" in err ? String(err.code) : "SESSION_ACCESS_DENIED";
+    const message = err instanceof Error ? err.message : String(err);
+    try { ws.send(JSON.stringify({ type: "error", sessionId: targetSessionId, code, text: message })); } catch {}
+    return;
+  }
 
   const sessionId = sess.sessionId;
   try {

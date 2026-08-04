@@ -4,7 +4,7 @@ import 'package:flutter/services.dart';
 /// Flutter-side service that communicates with the HarmonyOS LiveViewHelper
 /// via MethodChannel to display/update a LiveView (实况窗) during tool execution.
 class LiveViewService {
-  static const MethodChannel _channel = MethodChannel('com.anywhere.app/live_view');
+  static const MethodChannel _channel = MethodChannel('com.nexus.remoteai/live_view');
 
   LiveViewService._(); // static only
 
@@ -17,12 +17,12 @@ class LiveViewService {
     required String title,
   }) async {
     try {
-      final result = await _channel.invokeMethod<Map>('updateLiveView', {
+      final result = await _channel.invokeMethod<bool>('updateLiveView', {
         'progress': progress.clamp(0.0, 1.0),
         'statusText': statusText,
         'title': title,
       });
-      return result?['success'] == true;
+      return result == true;
     } on MissingPluginException {
       // MethodChannel not registered — non-OHOS platforms / test host
       return false;
@@ -35,8 +35,8 @@ class LiveViewService {
   /// Remove the live view from the notification bar.
   static Future<bool> stop() async {
     try {
-      final result = await _channel.invokeMethod<Map>('stopLiveView');
-      return result?['success'] == true;
+      final result = await _channel.invokeMethod<bool>('stopLiveView');
+      return result == true;
     } on MissingPluginException {
       return false;
     } catch (e) {

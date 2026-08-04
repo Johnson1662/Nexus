@@ -5,6 +5,8 @@ import 'package:provider/provider.dart';
 import '../constants/theme.dart';
 import '../models/ws_protocol.dart';
 import '../providers/chat_provider.dart';
+import '../utils/agent_utils.dart';
+import 'agent_logo.dart';
 
 /// Formats an epoch timestamp (ms) into a human-readable relative string.
 String formatRelativeTime(int epoch) {
@@ -38,22 +40,20 @@ class SessionTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final fg = AppColors.foregroundCtx(context);
     final muted = AppColors.foregroundMutedCtx(context);
-    final dark = Theme.of(context).brightness == Brightness.dark;
 
     final title = session.title?.isNotEmpty == true ? session.title! : '无标题';
     final agent = session.agent ?? '';
-    final relativeTime = formatRelativeTime(session.createdAt);
+    final agentDisplayName = AgentUtils.getDisplayName(agent);
+    final relativeTime =
+        formatRelativeTime(session.lastActivity ?? session.createdAt);
 
-    // Build subtitle string: "opencode · 进行中 · 5 分钟前"
-    final subtitleParts = <String>[];
-    if (agent.isNotEmpty) subtitleParts.add(agent);
-    if (session.status == 'running') {
-      subtitleParts.add('进行中');
-    } else if (session.status == 'waiting_input') {
-      subtitleParts.add('等待输入');
-    }
-    if (relativeTime.isNotEmpty) subtitleParts.add(relativeTime);
-    final subtitle = subtitleParts.join(' · ');
+    final isRunning = session.status == 'running';
+    final isWaiting = session.status == 'waiting_input';
+    final statusText = isRunning
+        ? '进行中'
+        : isWaiting
+            ? '等待输入'
+            : '';
 
     return InkWell(
       onTap: onTap,
@@ -62,50 +62,11 @@ class SessionTile extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.symmetric(
           horizontal: AppSpacing.md,
-          vertical: AppSpacing.md,
+          vertical: AppSpacing.sm,
         ),
         child: Row(
           children: [
-            // Left icon container with optional green status dot badge
-            Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    color: dark ? const Color(0x15FFFFFF) : const Color(0x0A000000),
-                    borderRadius: BorderRadius.circular(AppRadius.sm),
-                  ),
-                  alignment: Alignment.center,
-                  child: Icon(
-                    Icons.chat_bubble_outline_rounded,
-                    size: 18,
-                    color: fg,
-                  ),
-                ),
-                if (session.status == 'running' || session.status == 'waiting_input')
-                  Positioned(
-                    right: -1,
-                    top: -1,
-                    child: Container(
-                      width: 9,
-                      height: 9,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: session.status == 'waiting_input' ? AppColors.warning : AppColors.success,
-                        border: Border.all(
-                          color: AppColors.surfaceCtx(context),
-                          width: 1.5,
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-            const SizedBox(width: AppSpacing.md),
-
-            // Middle title & info
+            // Keep the session title primary; agent context stays secondary.
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -120,21 +81,56 @@ class SessionTile extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  if (subtitle.isNotEmpty) ...[
-                    const SizedBox(height: 2),
-                    Text(
-                      subtitle,
-                      style: TextStyle(
-                        fontSize: AppFontSize.xs,
+                  const SizedBox(height: AppSpacing.xs),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      AgentLogo(
+                        agentName: agent,
+                        size: 13,
                         color: muted,
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
+                      const SizedBox(width: AppSpacing.xs),
+                      Text(
+                        agentDisplayName,
+                        style: TextStyle(
+                          fontSize: AppFontSize.xs,
+                          fontWeight: FontWeight.w500,
+                          color: muted,
+                        ),
+                      ),
+                      if (statusText.isNotEmpty) ...[
+                        Text(
+                          ' · ',
+                          style:
+                              TextStyle(fontSize: AppFontSize.xs, color: muted),
+                        ),
+                        Text(
+                          statusText,
+                          style: TextStyle(
+                            fontSize: AppFontSize.xs,
+                            color: isRunning
+                                ? AppColors.success
+                                : AppColors.warning,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
                 ],
               ),
             ),
+            if (relativeTime.isNotEmpty) ...[
+              const SizedBox(width: AppSpacing.sm),
+              Text(
+                relativeTime,
+                style: TextStyle(
+                  fontSize: AppFontSize.xs,
+                  color: muted,
+                ),
+              ),
+            ],
             const SizedBox(width: AppSpacing.xs),
 
             // Trailing popup menu
@@ -142,35 +138,42 @@ class SessionTile extends StatelessWidget {
               icon: Icon(Icons.more_horiz_rounded, size: 18, color: muted),
               padding: EdgeInsets.zero,
               onSelected: (value) async {
+                if (!context.mounted) return;
                 final cp = context.read<ChatProvider>();
                 switch (value) {
                   case 'rename':
-                    final ctrl = TextEditingController(text: session.title ?? '');
-                    final newTitle = await showDialog<String>(
-                      context: context,
-                      builder: (ctx) => AlertDialog(
-                        title: const Text('重命名会话'),
-                        content: TextField(
-                          controller: ctrl,
-                          autofocus: true,
-                          decoration: const InputDecoration(
-                            hintText: '输入新名称',
+                    final ctrl =
+                        TextEditingController(text: session.title ?? '');
+                    try {
+                      final newTitle = await showDialog<String>(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          title: const Text('重命名会话'),
+                          content: TextField(
+                            controller: ctrl,
+                            autofocus: true,
+                            decoration: const InputDecoration(
+                              hintText: '输入新名称',
+                            ),
                           ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(ctx),
+                              child: const Text('取消'),
+                            ),
+                            TextButton(
+                              onPressed: () => Navigator.pop(ctx, ctrl.text),
+                              child: const Text('确认'),
+                            ),
+                          ],
                         ),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.pop(ctx),
-                            child: const Text('取消'),
-                          ),
-                          TextButton(
-                            onPressed: () => Navigator.pop(ctx, ctrl.text),
-                            child: const Text('确认'),
-                          ),
-                        ],
-                      ),
-                    );
-                    if (newTitle != null && newTitle.trim().isNotEmpty) {
-                      cp.renameSession(session.sessionId, newTitle.trim());
+                      );
+                      if (!context.mounted) return;
+                      if (newTitle != null && newTitle.trim().isNotEmpty) {
+                        cp.renameSession(session.sessionId, newTitle.trim());
+                      }
+                    } finally {
+                      ctrl.dispose();
                     }
                     break;
                   case 'pin':
@@ -189,14 +192,15 @@ class SessionTile extends StatelessWidget {
                           ),
                           TextButton(
                             onPressed: () => Navigator.pop(ctx, true),
-                            child: const Text('关闭'),
                             style: TextButton.styleFrom(
                               foregroundColor: Colors.red,
                             ),
+                            child: const Text('关闭'),
                           ),
                         ],
                       ),
                     );
+                    if (!context.mounted) return;
                     if (confirmed == true) {
                       cp.closeSession(session.sessionId);
                     }

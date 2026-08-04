@@ -1,18 +1,16 @@
 import 'dart:convert';
 import 'dart:io' as io;
 import 'package:flutter/foundation.dart';
-import 'package:path_provider/path_provider.dart';
 import '../models/device_entry.dart';
 
 /// File-based persistence layer for OHOS Flutter.
-/// Stores a single JSON file in the app's documents directory.
+/// Stores a single JSON file in the OHOS app sandbox.
 class StorageService {
   static const String _fileName = '.nexus_store.json';
 
   static StorageService? _instance;
   Map<String, dynamic> _data = {};
   io.File? _file;
-  bool _loaded = false;
 
   StorageService._();
 
@@ -25,19 +23,10 @@ class StorageService {
   }
 
   Future<void> _init() async {
-    io.File file;
-    // On OHOS, path_provider has no platform implementation.
-    // The app sandbox base is /data/storage/el2/base/haps/entry/files/
+    // OHOS has no path_provider implementation; use the app sandbox directly.
     const sandbox = '/data/storage/el2/base/haps/entry/files';
-
-    try {
-      final dir = await getApplicationDocumentsDirectory();
-      file = io.File('${dir.path}/$_fileName');
-      debugPrint('[Storage] Using documents dir: ${dir.path}');
-    } catch (e) {
-      debugPrint('[Storage] getApplicationDocumentsDirectory failed, using sandbox dir');
-      file = io.File('$sandbox/$_fileName');
-    }
+    final file = io.File('$sandbox/$_fileName');
+    debugPrint('[Storage] Using OHOS sandbox: ${file.path}');
 
     // Ensure parent directory exists
     try {
@@ -62,7 +51,6 @@ class StorageService {
       debugPrint('[Storage] Read failed: $e');
       _data = {};
     }
-    _loaded = true;
   }
 
   Future<void> _flush() async {
@@ -135,7 +123,11 @@ class StorageService {
   // ── Last Message ID ──
   String getLastMessageIdSync() => _data['last_message_id'] as String? ?? '';
   Future<void> setLastMessageId(String id) async {
-    _data['last_message_id'] = id;
+    if (id.isEmpty) {
+      _data.remove('last_message_id');
+    } else {
+      _data['last_message_id'] = id;
+    }
     await _flush();
   }
 

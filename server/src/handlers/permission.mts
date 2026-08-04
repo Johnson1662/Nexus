@@ -1,5 +1,7 @@
 import type { WebSocket } from "ws";
-import { sessionManager } from "../session-manager.mjs";
+import { SessionOwnerError, sessionManager } from "../session-manager.mjs";
+
+const CANONICAL_OUTCOMES = ["selected", "cancelled"];
 
 export function handlePermissionResponse(
   ws: WebSocket,
@@ -8,8 +10,16 @@ export function handlePermissionResponse(
   outcome: string,
   optionId?: string,
 ): void {
-  const sess = sessionManager.getSession(sessionId);
-  if (!sess || !sess.pendingPermission) {
+  let sess;
+  try {
+    sess = sessionManager.assertOwner(sessionId, ws);
+  } catch (err: unknown) {
+    const code = err instanceof SessionOwnerError ? err.code : "SESSION_ACCESS_DENIED";
+    const message = err instanceof Error ? err.message : String(err);
+    ws.send(JSON.stringify({ type: "error", sessionId, code, text: message }));
+    return;
+  }
+  if (!sess.pendingPermission) {
     ws.send(
       JSON.stringify({ type: "error", text: "no pending permission request" }),
     );
@@ -23,20 +33,29 @@ export function handlePermissionResponse(
     return;
   }
 
-  const { resolve } = sess.pendingPermission;
-  sess.pendingPermission = null;
-
-  const validOutcomes = ["allow", "deny", "selected"];
-  if (!validOutcomes.includes(outcome)) {
+  // Validate outcome BEFORE touching session state
+  if (!CANONICAL_OUTCOMES.includes(outcome)) {
     ws.send(
       JSON.stringify({ type: "error", text: `Invalid outcome: ${outcome}` }),
     );
     return;
   }
 
-  if (outcome === "selected" && optionId) {
-    resolve({ outcome: { outcome: "selected" as const, optionId } });
-  } else {
-    resolve({ outcome: { outcome } });
+  if (outcome === "selected") {
+    const selectedOptionId = optionId?.trim();
+    if (!selectedOptionId) {
+      ws.send(
+        JSON.stringify({ type: "error", text: "selected outcome requires a non-empty optionId" }),
+      );
+      return;
+    }
+    const { resolve } = sess.pendingPermission;
+    sess.pendingPermission = null;
+    resolve({ outcome: { outcome: "selected" as const, optionId: selectedOptionId } });
+    return;
   }
+
+  const { resolve } = sess.pendingPermission;
+  sess.pendingPermission = null;
+  resolve({ outcome: { outcome: "cancelled" as const } });
 }

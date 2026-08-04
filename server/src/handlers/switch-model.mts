@@ -1,5 +1,5 @@
 import type { WebSocket } from "ws";
-import { sessionManager } from "../session-manager.mjs";
+import { SessionOwnerError, sessionManager } from "../session-manager.mjs";
 
 export async function handleSwitchModel(
   ws: WebSocket,
@@ -7,10 +7,11 @@ export async function handleSwitchModel(
   model: string,
 ): Promise<void> {
   try {
-    await sessionManager.switchModel(sessionId, model);
+    await sessionManager.switchModel(sessionId, model, ws);
     try { ws.send(JSON.stringify({ type: "model_switched", sessionId, model })); } catch {}
   } catch (err: any) {
     const msg = err instanceof Error ? err.message : String(err);
-    try { ws.send(JSON.stringify({ type: "error", text: `model switch failed: ${msg}` })); } catch {}
+    const code = err instanceof SessionOwnerError ? err.code : "SESSION_ACCESS_DENIED";
+    try { ws.send(JSON.stringify({ type: "error", sessionId, code, text: `model switch failed: ${msg}` })); } catch {}
   }
 }

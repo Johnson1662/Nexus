@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'package:flutter/foundation.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
+import 'package:web_socket_channel/io.dart';
 import '../models/ws_protocol.dart';
 import '../models/host_runtime_state.dart';
 
@@ -16,9 +16,11 @@ class WSClient {
 
   String _currentUrl = '';
   String _currentHostKey = '';
+  String? _authToken;
   bool _intentionalClose = false;
+  bool _ready = false;
   int _reconnectAttempt = 0;
-  String _lastReceivedMessageId = '';
+  final Set<String> _seenMessageIds = <String>{};
 
   // Callback sets
   final List<MessageCallback> _onMessage = [];
@@ -32,34 +34,56 @@ class WSClient {
   static const int _heartbeatMs = 20000;
   static const int _watchdogMs = 5000;
   static const int _watchdogTimeoutMs = 45000;
+  static const int _readyTimeoutMs = 10000;
+  static const int _maxSeenMessageIds = 4096;
   static const int _reconnectBaseMs = 1000;
   static const int _reconnectMaxMs = 30000;
   DateTime _lastMsgReceived = DateTime.now();
+  Timer? _readyTimer;
 
-  bool get isConnected => _channel != null;
+  bool get isConnected => _channel != null && _ready;
   String get currentUrl => _currentUrl;
   String get currentHostKey => _currentHostKey;
   int get reconnectAttempt => _reconnectAttempt;
 
   // ── Public API ──
 
-  void connect(String url, String hostKey) {
-    if (_currentUrl == url && isConnected) return;
+  void connect(String url, String hostKey, {String? authToken}) {
+    final normalizedToken = _normalizeToken(authToken);
+    if (_currentUrl == url &&
+        _currentHostKey == hostKey &&
+        _authToken == normalizedToken &&
+        isConnected) {
+      return;
+    }
+    final changedEndpoint = _currentUrl != url ||
+        _currentHostKey != hostKey ||
+        _authToken != normalizedToken;
     _intentionalClose = false;
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
     _currentUrl = url;
     _currentHostKey = hostKey;
+    _authToken = normalizedToken;
     _reconnectAttempt = 0;
+    if (changedEndpoint) _clearSeenMessageIds();
     _notifyPhase(HostPhase.connecting);
     _doConnect(url);
   }
 
-  Future<void> connectBest(List<String> candidates, String hostKey) async {
+  Future<void> connectBest(List<String> candidates, String hostKey,
+      {String? authToken}) async {
+    final normalizedToken = _normalizeToken(authToken);
+    final changedEndpoint = _currentHostKey != hostKey ||
+        (_authToken != normalizedToken && _currentUrl.isNotEmpty);
+    if (changedEndpoint) _clearSeenMessageIds();
     _notifyPhase(HostPhase.connecting);
     _currentHostKey = hostKey;
+    _authToken = normalizedToken;
     for (final url in candidates) {
       try {
-        if (await probeCandidate(url)) {
-          connect(url, hostKey);
+        if (await probeCandidate(url, authToken: _authToken)) {
+          connect(url, hostKey, authToken: _authToken);
           return;
         }
       } catch (_) {}
@@ -72,6 +96,7 @@ class WSClient {
   void disconnect() {
     _intentionalClose = true;
     _notifyPhase(HostPhase.offline);
+    _clearSeenMessageIds();
     _cleanup();
   }
 
@@ -84,7 +109,8 @@ class WSClient {
     }
   }
 
-  Future<bool> probeCandidate(String url) async {
+  Future<bool> probeCandidate(String url, {String? authToken}) async {
+    final client = HttpClient();
     try {
       var probeUrl = url
           .replaceFirst('ws://', 'http://')
@@ -96,20 +122,39 @@ class WSClient {
           probeUrl = '$probeUrl/probe';
         }
       }
-      final client = HttpClient();
       client.connectionTimeout = const Duration(seconds: 4);
       final request = await client.getUrl(Uri.parse(probeUrl));
+      final token = _normalizeToken(authToken);
+      if (token != null) {
+        request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
+      }
       final response = await request.close().timeout(const Duration(seconds: 4));
-      client.close();
-      return response.statusCode == 200;
+      final status = response.statusCode;
+      await response.drain<void>();
+      if (status == HttpStatus.unauthorized || status == HttpStatus.forbidden) {
+        _notifyError('需要认证 Token');
+      }
+      return status == HttpStatus.ok;
     } catch (_) {
       return false;
+    } finally {
+      client.close(force: true);
     }
+  }
+
+  String? _normalizeToken(String? token) {
+    final value = token?.trim();
+    return value == null || value.isEmpty ? null : value;
   }
 
   String _friendlyErrorMessage(dynamic error) {
     final str = error.toString();
-    if (str.contains('Connection reset by peer')) {
+    if (str.contains('401') ||
+        str.contains('403') ||
+        str.contains('Unauthorized') ||
+        str.contains('Forbidden')) {
+      return '需要认证 Token';
+    } else if (str.contains('Connection reset by peer')) {
       return '连接被重置，请检查 Tailscale 或局域网网络';
     } else if (str.contains('Connection refused')) {
       return '连接被拒绝，目标主机 Bridge 服务未启动';
@@ -128,10 +173,36 @@ class WSClient {
     _cleanup();
     try {
       final uri = Uri.parse(url);
-      _channel = WebSocketChannel.connect(uri);
+      final headers = <String, dynamic>{};
+      final token = _authToken;
+      if (token != null) {
+        headers[HttpHeaders.authorizationHeader] = 'Bearer $token';
+      }
+      _channel = IOWebSocketChannel.connect(
+        uri,
+        headers: headers,
+        connectTimeout: const Duration(seconds: 10),
+      );
+      final channel = _channel!;
 
       // Catch channel.ready Future exception to prevent bubbling to runZonedGuarded
-      _channel!.ready.catchError((error) {
+      _readyTimer = Timer(const Duration(milliseconds: _readyTimeoutMs), () {
+        if (_channel != channel || _intentionalClose) return;
+        _notifyError('连接就绪超时');
+        _cleanup();
+        _scheduleReconnect();
+      });
+      channel.ready.then((_) {
+        if (_channel != channel || _intentionalClose) return;
+        _readyTimer?.cancel();
+        _readyTimer = null;
+        _ready = true;
+        if (_channel != null) _notifyStateChange(true, url);
+      }).catchError((error) {
+        if (_channel != channel) return;
+        _ready = false;
+        _readyTimer?.cancel();
+        _readyTimer = null;
         _notifyStateChange(false, url);
         _notifyPhase(HostPhase.error);
         _notifyError(_friendlyErrorMessage(error));
@@ -141,18 +212,23 @@ class WSClient {
       _notifyStateChange(false, url);
       _notifyPhase(HostPhase.connecting);
 
-      _channel!.stream.listen(
+      channel.stream.listen(
         (data) {
+          if (_channel != channel) return;
           _lastMsgReceived = DateTime.now();
           _handleRaw(data as String);
         },
         onError: (error) {
+          if (_channel != channel) return;
+          _ready = false;
           _notifyStateChange(false, url);
           _notifyPhase(HostPhase.error);
           _notifyError(_friendlyErrorMessage(error));
           _scheduleReconnect();
         },
         onDone: () {
+          if (_channel != channel) return;
+          _ready = false;
           _notifyStateChange(false, url);
           _scheduleReconnect();
         },
@@ -212,18 +288,14 @@ class WSClient {
       final json = jsonDecode(raw) as Map<String, dynamic>;
       final msg = ServerMessage.fromJson(json);
 
-      // Debug: dump raw JSON of all non-heartbeat messages to sandbox file
-      if (msg.type != 'heartbeat') {
-        try {
-          final f = File('/data/storage/el2/base/haps/entry/files/nexus_acp_debug.jsonl');
-          f.writeAsStringSync('${jsonEncode(json)}\n', mode: FileMode.append);
-        } catch (_) {}
-      }
-
-      // Dedup: skip already-processed messages
-      if (msg.messageId != null && msg.messageId!.isNotEmpty) {
-        if (msg.messageId == _lastReceivedMessageId) return;
-        _lastReceivedMessageId = msg.messageId!;
+      // Message IDs are bridge cursors (`sessionId:seq`). Keep a bounded set so
+      // replay after reconnect cannot duplicate assistant/tool output.
+      final messageId = msg.messageId;
+      if (messageId != null && messageId.isNotEmpty) {
+        if (!_seenMessageIds.add(messageId)) return;
+        if (_seenMessageIds.length > _maxSeenMessageIds) {
+          _seenMessageIds.remove(_seenMessageIds.first);
+        }
       }
 
       _routeMessage(msg);
@@ -235,7 +307,7 @@ class WSClient {
     switch (msg.type) {
       case 'server_info': _notifyServerInfo(); break;
       case 'agent_list': if (msg.agents != null) _notifyAgentList(msg.agents!); break;
-      case 'registry_agest_list': if (msg.registryAgents != null) _notifyRegistryList(msg.registryAgents!); break;
+      case 'registry_agents_list': if (msg.registryAgents != null) _notifyRegistryList(msg.registryAgents!); break;
       case 'error': if (msg.text != null) _notifyError(msg.text!); break;
       case 'target_offline': _notifyPhase(HostPhase.waitingHost); break;
       default: break;
@@ -276,15 +348,22 @@ class WSClient {
     for (final cb in _onPhaseChange) { cb(s); }
   }
 
+  void _clearSeenMessageIds() {
+    _seenMessageIds.clear();
+  }
+
   void _cleanup() {
     _heartbeatTimer?.cancel(); _heartbeatTimer = null;
     _watchdogTimer?.cancel(); _watchdogTimer = null;
+    _readyTimer?.cancel(); _readyTimer = null;
+    _ready = false;
     _channel?.sink.close(); _channel = null;
   }
 
   void dispose() {
     _intentionalClose = true;
     _reconnectTimer?.cancel();
+    _clearSeenMessageIds();
     _cleanup();
   }
 }

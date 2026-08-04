@@ -1,6 +1,6 @@
 {
   "app": {
-    "bundleName": "com.anywhere.app",
+    "bundleName": "com.nexus.remoteai",
     "vendor": "nexus",
     "versionCode": 1000000,
     "versionName": "1.0.0",

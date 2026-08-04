@@ -5,6 +5,8 @@ import '../constants/theme.dart';
 import '../providers/chat_provider.dart';
 import '../models/ws_protocol.dart';
 import '../services/device_agent_store.dart';
+import '../utils/agent_utils.dart';
+import '../widgets/agent_logo.dart';
 
 class AgentManagePage extends StatefulWidget {
   const AgentManagePage({super.key});
@@ -30,6 +32,7 @@ class _AgentManagePageState extends State<AgentManagePage>
     _tabController = TabController(length: 2, vsync: this);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       final chatProvider = context.read<ChatProvider>();
       chatProvider.listRegistryAgents();
       chatProvider.requestAgents();
@@ -47,6 +50,7 @@ class _AgentManagePageState extends State<AgentManagePage>
   }
 
   void _confirmUninstall(String agentId) {
+    if (!mounted) return;
     showDialog(
       context: context,
       builder: (dialogCtx) => AlertDialog(
@@ -76,8 +80,9 @@ class _AgentManagePageState extends State<AgentManagePage>
           ),
           TextButton(
             onPressed: () {
+              if (!mounted) return;
               context.read<ChatProvider>().uninstallAgent(agentId);
-              Navigator.pop(dialogCtx);
+              if (dialogCtx.mounted) Navigator.pop(dialogCtx);
             },
             child: const Text(
               '卸载',
@@ -90,6 +95,7 @@ class _AgentManagePageState extends State<AgentManagePage>
   }
 
   void _installCustomAgent() {
+    if (!mounted) return;
     final name = _customNameController.text.trim();
     final command = _customCommandController.text.trim();
     final argsText = _customArgsController.text.trim();
@@ -195,6 +201,7 @@ class _AgentManagePageState extends State<AgentManagePage>
   }
 
   Widget _buildInstalledAgentCard(BuildContext context, AgentInfo agent) {
+    final displayName = AgentUtils.getDisplayName(agent.name);
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.sm),
       child: Material(
@@ -204,8 +211,8 @@ class _AgentManagePageState extends State<AgentManagePage>
           padding: const EdgeInsets.all(AppSpacing.lg),
           child: Row(
             children: [
-              Icon(
-                Icons.smart_toy_outlined,
+              AgentLogo(
+                agentName: agent.name,
                 size: 22,
                 color: AppColors.accent,
               ),
@@ -218,7 +225,7 @@ class _AgentManagePageState extends State<AgentManagePage>
                       children: [
                         Flexible(
                           child: Text(
-                            agent.name.isNotEmpty ? agent.name : '未命名',
+                            displayName,
                             style: Theme.of(context).textTheme.titleMedium,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -418,9 +425,15 @@ class _AgentManagePageState extends State<AgentManagePage>
                       children: [
                         Row(
                           children: [
+                            AgentLogo(
+                              agentName: agent.id,
+                              size: 16,
+                              color: AppColors.accentCtx(context),
+                            ),
+                            const SizedBox(width: AppSpacing.xs),
                             Flexible(
                               child: Text(
-                                agent.name,
+                                AgentUtils.getDisplayName(agent.name),
                                 style: TextStyle(
                                   fontSize: AppFontSize.md,
                                   fontWeight: FontWeight.w600,

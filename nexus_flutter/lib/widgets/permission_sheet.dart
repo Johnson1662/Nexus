@@ -6,6 +6,17 @@ import '../models/ws_protocol.dart';
 
 enum _RiskLevel { low, medium, high }
 
+class _ParsedCommand {
+  final String command;
+  final String toolName;
+  final Map<String, String> arguments;
+  const _ParsedCommand({
+    required this.command,
+    required this.toolName,
+    this.arguments = const {},
+  });
+}
+
 class PermissionSheetWidget extends StatelessWidget {
   final PendingPermission permission;
   final void Function(String optionId) onSelect;
@@ -31,34 +42,70 @@ class PermissionSheetWidget extends StatelessWidget {
     return _RiskLevel.low;
   }
 
-  /// Extract a human-readable command string from the permission's raw toolCall.
-  /// The raw value is a Map.toString() — clean it up and extract the useful part.
-  String _displayCommand() {
+  /// Parse the raw toolCall Map.toString() into a structured _ParsedCommand.
+  _ParsedCommand _parseCommand() {
     final raw = permission.toolCall.trim();
-    if (raw.isEmpty) return '(empty)';
-
-    // If it looks like a JSON/map string, try to extract the command/name field
-    if (raw.startsWith('{') && raw.endsWith('}')) {
-      final inner = raw.substring(1, raw.length - 1);
-      // Try common keys: command, args, path, name
-      for (final key in ['command', 'args', 'path', 'name']) {
-        final regex = RegExp('\\b$key:\\s*([^,{}]+)');
-        final match = regex.firstMatch(inner);
-        if (match != null) {
-          return match.group(1)!.trim().replaceAll(RegExp(r'^"|"$'), '');
-        }
-      }
-      // Fallback: show the whole inner content cleaned up
-      return inner.trim();
+    if (raw.isEmpty || !raw.startsWith('{') || !raw.endsWith('}')) {
+      return _ParsedCommand(command: raw.isEmpty ? '(empty)' : raw, toolName: '');
     }
-    return raw;
+
+    final inner = raw.substring(1, raw.length - 1);
+    final pairs = <String, String>{};
+
+    // Parse key: value pairs from Map.toString() format.
+    // Handles quoted and unquoted values, skips nested braces.
+    final kvRegex = RegExp(r"""(\w+):\s*(?:"([^"]*)"|'([^']*)'|([^,{}]+))""");
+    for (final m in kvRegex.allMatches(inner)) {
+      final key = m.group(1)!;
+      final value = (m.group(2) ?? m.group(3) ?? m.group(4) ?? '').trim();
+      if (value.isNotEmpty) {
+        pairs[key] = value;
+      }
+    }
+
+    // toolName: look up toolName or name key
+    final toolName = pairs['toolName'] ?? pairs['name'] ?? '';
+
+    // command: first meaningful value from preferred keys
+    String command = '';
+    for (final key in ['command', 'args', 'path', 'name']) {
+      if (pairs.containsKey(key) && pairs[key]!.isNotEmpty) {
+        command = pairs[key]!;
+        break;
+      }
+    }
+    if (command.isEmpty) {
+      // fallback to first non-empty value
+      command = pairs.values.firstWhere((v) => v.isNotEmpty, orElse: () => raw);
+    }
+
+    // arguments: everything except the keys used for toolName and command
+    const usedKeys = {'toolName', 'name', 'command', 'args', 'path'};
+    final arguments = <String, String>{
+      for (final e in pairs.entries)
+        if (!usedKeys.contains(e.key)) e.key: e.value
+    };
+
+    return _ParsedCommand(command: command, toolName: toolName, arguments: arguments);
   }
 
-  Widget _riskBadge(_RiskLevel level) {
+  Widget _buildRiskChip(String toolName, _RiskLevel level) {
     final (Color bg, Color fg, String label) = switch (level) {
-      _RiskLevel.high => (AppColors.error.withAlpha(30), AppColors.error, 'HIGH'),
-      _RiskLevel.medium => (const Color(0xFFE08A00).withAlpha(30), const Color(0xFFE08A00), 'MEDIUM'),
-      _RiskLevel.low => (AppColors.foregroundLight.withAlpha(20), AppColors.foregroundLight, 'LOW'),
+      _RiskLevel.high => (
+        AppColors.error.withAlpha(40),
+        AppColors.error,
+        '高风险',
+      ),
+      _RiskLevel.medium => (
+        const Color(0xFFE08A00).withAlpha(40),
+        const Color(0xFFE08A00),
+        '中风险',
+      ),
+      _RiskLevel.low => (
+        AppColors.success.withAlpha(40),
+        AppColors.success,
+        '低风险',
+      ),
     };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -171,8 +218,8 @@ class PermissionSheetWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final riskLevel = _classifyRisk(permission.toolCall);
-    final displayCmd = _displayCommand();
+    final parsed = _parseCommand();
+    final riskLevel = _classifyRisk(parsed.command);
 
     return Container(
       width: double.infinity,
@@ -185,15 +232,29 @@ class PermissionSheetWidget extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Title row with risk badge
+          // Title row
+          Text('权限请求', style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: AppSpacing.sm),
+
+          // Row: risk chip + tool name
           Row(
             children: [
-              Text('权限请求', style: Theme.of(context).textTheme.titleLarge),
-              const SizedBox(width: AppSpacing.sm),
-              _riskBadge(riskLevel),
+              _buildRiskChip(parsed.toolName, riskLevel),
+              if (parsed.toolName.isNotEmpty) ...[
+                const SizedBox(width: AppSpacing.sm),
+                Text(
+                  parsed.toolName,
+                  style: TextStyle(
+                    fontSize: AppFontSize.sm,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.foregroundM(context),
+                  ),
+                ),
+              ],
             ],
           ),
           const SizedBox(height: AppSpacing.sm),
+
           // Command block with horizontal scroll and copy
           Container(
             width: double.infinity,
@@ -208,7 +269,7 @@ class PermissionSheetWidget extends StatelessWidget {
                   child: SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     child: Text(
-                      displayCmd,
+                      parsed.command,
                       style: const TextStyle(
                         fontFamily: 'monospace',
                         fontSize: 12,
@@ -224,7 +285,7 @@ class PermissionSheetWidget extends StatelessWidget {
                   child: InkWell(
                     borderRadius: BorderRadius.circular(4),
                     onTap: () {
-                      Clipboard.setData(ClipboardData(text: displayCmd));
+                      Clipboard.setData(ClipboardData(text: parsed.command));
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
                           content: Text('已复制到剪贴板'),
@@ -241,7 +302,55 @@ class PermissionSheetWidget extends StatelessWidget {
               ],
             ),
           ),
+
+          // Arguments list (if non-empty)
+          if (parsed.arguments.isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.sm),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(AppSpacing.sm),
+              decoration: BoxDecoration(
+                color: AppColors.foregroundM(context).withAlpha(10),
+                borderRadius: BorderRadius.circular(AppRadius.md),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (final e in parsed.arguments.entries)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 2),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${e.key}: ',
+                            style: TextStyle(
+                              fontSize: AppFontSize.xs,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.foregroundM(context),
+                              fontFamily: 'monospace',
+                            ),
+                          ),
+                          Expanded(
+                            child: Text(
+                              e.value,
+                              style: TextStyle(
+                                fontSize: AppFontSize.xs,
+                                color: AppColors.foregroundM(context),
+                                fontFamily: 'monospace',
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+
           const SizedBox(height: AppSpacing.md),
+
           // Action buttons
           ..._buildActionButtons(context),
         ],

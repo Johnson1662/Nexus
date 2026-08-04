@@ -16,6 +16,12 @@ class AppMarkdownRenderer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final foreground = AppColors.foregroundCtx(context);
+    final muted = AppColors.foregroundMutedCtx(context);
+    final surface = AppColors.surfaceElevatedCtx(context);
+    final border = AppColors.borderCtx(context);
+    final accent = AppColors.accentCtx(context);
+
     return MarkdownBody(
       data: data,
       shrinkWrap: shrinkWrap,
@@ -24,41 +30,44 @@ class AppMarkdownRenderer extends StatelessWidget {
         h1: Theme.of(context).textTheme.headlineLarge,
         h2: Theme.of(context).textTheme.headlineMedium,
         h3: Theme.of(context).textTheme.titleLarge,
-        p: const TextStyle(
+        p: TextStyle(
           fontSize: AppFontSize.base,
-          color: AppColors.foreground,
+          color: foreground,
           height: 1.5,
         ),
-        code: const TextStyle(
+        code: TextStyle(
           fontSize: AppFontSize.sm,
           fontFamily: 'monospace',
-          color: AppColors.foreground,
-          backgroundColor: AppColors.surfaceElevated,
+          color: foreground,
+          backgroundColor: surface,
         ),
         codeblockDecoration: BoxDecoration(
-          color: AppColors.surfaceElevated,
+          color: surface,
           borderRadius: BorderRadius.circular(AppRadius.sm),
         ),
         codeblockPadding: const EdgeInsets.all(AppSpacing.md),
         blockquoteDecoration: BoxDecoration(
-          border: Border(left: BorderSide(color: AppColors.accent.withOpacity(0.3), width: 3)),
-          color: AppColors.surfaceElevated,
+          border: Border(left: BorderSide(color: accent.withOpacity(0.3), width: 3)),
+          color: surface,
           borderRadius: BorderRadius.circular(AppRadius.sm),
         ),
         blockquotePadding: const EdgeInsets.all(AppSpacing.md),
-        listBullet: const TextStyle(
+        listBullet: TextStyle(
           fontSize: AppFontSize.base,
-          color: AppColors.foregroundMuted,
+          color: muted,
         ),
         horizontalRuleDecoration: BoxDecoration(
-          border: Border(top: BorderSide(color: AppColors.border)),
+          border: Border(top: BorderSide(color: border)),
         ),
-        tableBorder: TableBorder.all(color: AppColors.border),
-        tableHead: const TextStyle(fontWeight: FontWeight.bold),
-        tableBody: const TextStyle(color: AppColors.foreground),
-        del: const TextStyle(
+        tableBorder: TableBorder.all(color: border),
+        tableHead: TextStyle(
+          fontWeight: FontWeight.bold,
+          color: foreground,
+        ),
+        tableBody: TextStyle(color: foreground),
+        del: TextStyle(
           decoration: TextDecoration.lineThrough,
-          color: AppColors.foregroundMuted,
+          color: muted,
         ),
       ),
     );

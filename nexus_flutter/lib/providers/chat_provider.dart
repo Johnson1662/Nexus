@@ -13,14 +13,39 @@ import '../services/live_view_service.dart';
 import '../services/notification_service.dart';
 
 /// Core chat state provider — mirrors ArkTS ChatStore + Index.ets logic
-class ChatProvider extends ChangeNotifier {
+class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
   final WSClient _ws;
   final ChatState _state = ChatState();
   ChatState get state => _state;
+  bool _isInBackground = false;
+  String _loadingSessionId = '';
+  bool _startInFlight = false;
+  bool _inputInFlight = false;
+  bool _syncInFlight = false;
+  Timer? _turnRequestTimer;
+  Timer? _cursorPersistTimer;
+  String _cursorSessionId = '';
+  String _lastConnectionHostKey = '';
+  final Set<String> _processedMessageIds = <String>{};
+  static const int _turnRequestTimeoutMs = 15000;
+  static const int _maxProcessedMessageIds = 4096;
 
   ChatProvider(this._ws) {
     _ws.onMessage(_handleServerMessage);
+    _ws.onStateChange((connected, _) {
+      _state.connected = connected;
+      if (connected) {
+        syncRequest();
+      } else {
+        _syncInFlight = false;
+      }
+      notifyListeners();
+    });
     _ws.onServerInfo(_onServerInfo);
+    _ws.onError((error) {
+      _state.errorMessage = error;
+      notifyListeners();
+    });
     _ws.onAgentList(_onAgentList);
     // Bridge WS connection phases to HostStore so UI shows online status
     _ws.onPhaseChange((phase) {
@@ -30,23 +55,66 @@ class ChatProvider extends ChangeNotifier {
       hs.setPhase(hk, phase, url: _ws.currentUrl);
       notifyListeners();
     });
+    // Observe app lifecycle for background notification decisions
+    WidgetsBinding.instance.addObserver(this);
+    // Route native permission notification actions into our permission flow
+    NotificationService.onPermissionAction = (String requestId, bool allow) {
+      if (allow) {
+        // Pick first allow-kind option from the pending permission
+        final perm = _state.pendingPermission;
+        final optionId = (perm != null && perm.options.isNotEmpty
+            ? perm.options
+                .where((o) => o.kind.startsWith('allow'))
+                .firstOrNull
+                ?.optionId
+            : null);
+        if (optionId != null && optionId.isNotEmpty) {
+          permissionResponse(requestId, 'selected', optionId: optionId);
+        } else {
+          permissionResponse(requestId, 'cancelled');
+        }
+      } else {
+        permissionResponse(requestId, 'cancelled');
+      }
+    };
   }
 
   WSClient get ws => _ws;
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused) {
+      _isInBackground = true;
+    } else if (state == AppLifecycleState.resumed) {
+      _isInBackground = false;
+      NotificationService.cancel();
+    }
+  }
+
   // ── Connection ──
   Future<void> initFromDisk() async {
     final storage = await StorageService.getInstance();
-    _state.lastMessageId = storage.getLastMessageIdSync();
+    final persisted = storage.getLastMessageIdSync();
+    final cursor = SessionMessageCursor.parse(persisted);
+    if (cursor != null) {
+      _state.lastMessageId = cursor.messageId;
+      _cursorSessionId = cursor.sessionId;
+    } else {
+      _state.lastMessageId = '';
+      if (persisted.isNotEmpty) await storage.setLastMessageId('');
+    }
     await DeviceAgentStore().loadFromDisk();
   }
 
-  Future<void> connectToUrl(String url, {String? hostKey}) async {
+  Future<void> connectToUrl(String url,
+      {String? hostKey, String? authToken}) async {
     final normalizedUrl = _normalizeUrl(url);
     if (normalizedUrl.isEmpty) return;
 
     final hk = hostKey ?? _getHostKeyForUrl(normalizedUrl);
+    _beginConnectionBoundary(hk);
     _state.currentDeviceId = hk;
+    final token = authToken ?? _authTokenForHost(hk, normalizedUrl);
 
     // Save URL to storage immediately (like ArkTS Index.ets:635-636)
     final storage = await StorageService.getInstance();
@@ -55,16 +123,22 @@ class ChatProvider extends ChangeNotifier {
     // Mark connecting in runtime store BEFORE connecting
     HostRuntimeStore().setPhase(hk, HostPhase.connecting, url: normalizedUrl);
 
-    _ws.connect(normalizedUrl, hk);
+    _ws.connect(normalizedUrl, hk, authToken: token);
   }
 
-  Future<void> connectBest(List<String> candidates, {String? hostKey}) async {
+  Future<void> connectBest(List<String> candidates,
+      {String? hostKey, String? authToken}) async {
     // Normalize all candidates
-    final normalized = candidates.map((u) => _normalizeUrl(u)).where((u) => u.isNotEmpty).toList();
+    final normalized = candidates
+        .map((u) => _normalizeUrl(u))
+        .where((u) => u.isNotEmpty)
+        .toList();
     if (normalized.isEmpty) return;
 
     final hk = hostKey ?? _getHostKeyForUrl(normalized.first);
+    _beginConnectionBoundary(hk);
     _state.currentDeviceId = hk;
+    final token = authToken ?? _authTokenForHost(hk, normalized.first);
 
     // Save first URL to storage
     if (normalized.first.isNotEmpty) {
@@ -73,16 +147,48 @@ class ChatProvider extends ChangeNotifier {
     }
 
     // Mark connecting
-    HostRuntimeStore().setPhase(hk, HostPhase.connecting, url: normalized.first);
+    HostRuntimeStore()
+        .setPhase(hk, HostPhase.connecting, url: normalized.first);
 
-    await _ws.connectBest(normalized, hk);
+    await _ws.connectBest(normalized, hk, authToken: token);
+  }
+
+  void _beginConnectionBoundary(String hostKey) {
+    if (_lastConnectionHostKey.isNotEmpty &&
+        _lastConnectionHostKey != hostKey) {
+      _resetCursor(clearPersisted: true);
+      _processedMessageIds.clear();
+      _state.sessionId = '';
+      _state.turnActive = false;
+      _startInFlight = false;
+      _inputInFlight = false;
+      _turnRequestTimer?.cancel();
+    }
+    _lastConnectionHostKey = hostKey;
+  }
+
+  String? _authTokenForHost(String hostKey, String url) {
+    final normalizedUrl = _normalizeUrl(url);
+    for (final device in HostStore().devices) {
+      if (device.hostId == hostKey ||
+          device.name == hostKey ||
+          device.urls.any((candidate) => _normalizeUrl(candidate) == normalizedUrl) ||
+          (device.relayUrl != null &&
+              _normalizeUrl(device.relayUrl!) == normalizedUrl)) {
+        final token = device.authToken?.trim();
+        return token == null || token.isEmpty ? null : token;
+      }
+    }
+    return null;
   }
 
   String _normalizeUrl(String raw) {
     String url = raw.trim();
     if (url.startsWith('http://')) url = url.replaceFirst('http://', 'ws://');
-    if (url.startsWith('https://')) url = url.replaceFirst('https://', 'wss://');
-    if (!url.startsWith('ws://') && !url.startsWith('wss://')) url = 'ws://$url';
+    if (url.startsWith('https://'))
+      url = url.replaceFirst('https://', 'wss://');
+    if (!url.startsWith('ws://') && !url.startsWith('wss://'))
+      url = 'ws://$url';
     if (url.endsWith('/')) url = url.substring(0, url.length - 1);
     return url;
   }
@@ -98,6 +204,11 @@ class ChatProvider extends ChangeNotifier {
 
   void disconnect() {
     _ws.disconnect();
+    _turnRequestTimer?.cancel();
+    _turnRequestTimer = null;
+    _startInFlight = false;
+    _inputInFlight = false;
+    _syncInFlight = false;
     _state.connected = false;
     _state.currentDeviceId = '';
     _state.sessionTitle = '';
@@ -107,44 +218,101 @@ class ChatProvider extends ChangeNotifier {
   // ── Messaging ──
   void sendMessage(String text) {
     if (text == '__cancel__') {
-      _ws.send(ClientMessage(type: 'cancel'));
+      _ws.send(ClientMessage(type: 'cancel', sessionId: _state.sessionId));
+      _clearTurnRequest();
       _state.turnActive = false;
+      _setCurrentSessionStatus('idle');
       notifyListeners();
       return;
     }
 
-    if (_state.sessionId.isEmpty) {
-      // New session: use 'start' with full config
-      _state.turnActive = true;
-      _state.messages = [
-        ..._state.messages,
-        MessageData(role: 'user', content: text, type: 'text', sendStatus: 'sent'),
-      ];
+    if (text.trim().isEmpty) return;
+    if (!_ws.isConnected) {
+      _state.errorMessage = '连接未就绪，请稍后重试';
       notifyListeners();
+      return;
+    }
+    if (_state.turnActive || _startInFlight || _inputInFlight) {
+      _state.errorMessage = '当前回合正在运行，请等待完成';
+      notifyListeners();
+      return;
+    }
 
+    final starting = _state.sessionId.isEmpty;
+    if (starting) {
+      _startInFlight = true;
+      _state.turnActive = true;
+      _resetCursor(clearPersisted: true);
+      _appendUserMessage(text);
+      notifyListeners();
+      _armTurnRequestTimeout('start');
       _ws.send(ClientMessage(
         type: 'start',
-        agent: _state.selectedAgentName.isNotEmpty ? _state.selectedAgentName : null,
-        cwd: _state.currentWorkspace.isNotEmpty ? _state.currentWorkspace : null,
-        model: _state.modelIndex >= 0 && _state.modelIndex < _state.models.length
-            ? _state.models[_state.modelIndex].id : null,
+        agent: _state.selectedAgentName.isNotEmpty
+            ? _state.selectedAgentName
+            : null,
+        cwd:
+            _state.currentWorkspace.isNotEmpty ? _state.currentWorkspace : null,
+        model:
+            _state.modelIndex >= 0 && _state.modelIndex < _state.models.length
+                ? _state.models[_state.modelIndex].id
+                : null,
         prompt: text,
       ));
     } else {
-      // Continue existing / resumed session
+      _inputInFlight = true;
       _state.turnActive = true;
-      _state.messages = [
-        ..._state.messages,
-        MessageData(role: 'user', content: text, type: 'text', sendStatus: 'sent'),
-      ];
+      _appendUserMessage(text);
       notifyListeners();
-
+      _armTurnRequestTimeout('input');
       _ws.send(ClientMessage(
         type: 'input',
         sessionId: _state.sessionId,
         text: text,
       ));
     }
+  }
+
+  void _appendUserMessage(String text) {
+    _state.messages = [
+      ..._state.messages,
+      MessageData(role: 'user', content: text, type: 'text', sendStatus: 'sent'),
+    ];
+    _setCurrentSessionStatus('running');
+  }
+
+  void _armTurnRequestTimeout(String kind) {
+    _turnRequestTimer?.cancel();
+    _turnRequestTimer = Timer(
+      const Duration(milliseconds: _turnRequestTimeoutMs),
+      () {
+        final pending = kind == 'start' ? _startInFlight : _inputInFlight;
+        if (!pending) return;
+        _startInFlight = false;
+        _inputInFlight = false;
+        _state.turnActive = false;
+        _setCurrentSessionStatus('idle');
+        _state.errorMessage = kind == 'start'
+            ? '启动会话超时，请检查 Bridge 连接'
+            : '发送消息超时，请重试';
+        _turnRequestTimer = null;
+        notifyListeners();
+      },
+    );
+  }
+
+  void _clearTurnRequest() {
+    _startInFlight = false;
+    _inputInFlight = false;
+    _turnRequestTimer?.cancel();
+    _turnRequestTimer = null;
+  }
+
+  void _markInputStarted() {
+    if (!_inputInFlight) return;
+    _inputInFlight = false;
+    _turnRequestTimer?.cancel();
+    _turnRequestTimer = null;
   }
 
   void retryMessage(MessageData msg) {
@@ -160,8 +328,12 @@ class ChatProvider extends ChangeNotifier {
     // fresh, empty chat. The next sent message opens a brand-new server
     // session ('start' instead of 'input').
     if (_state.turnActive) {
-      _ws.send(ClientMessage(type: 'cancel'));
+      _ws.send(ClientMessage(type: 'cancel', sessionId: _state.sessionId));
+      _setCurrentSessionStatus('idle');
     }
+    _clearTurnRequest();
+    _resetCursor(clearPersisted: true);
+    _processedMessageIds.clear();
     _state.resetForNewChat();
     notifyListeners();
   }
@@ -210,11 +382,15 @@ class ChatProvider extends ChangeNotifier {
   }
 
   void refreshModels() {
-    _ws.send(ClientMessage(type: 'list_models', agent: _state.selectedAgentName));
+    _ws.send(
+        ClientMessage(type: 'list_models', agent: _state.selectedAgentName));
   }
 
   // ── Sessions ──
-  void loadSession(String sessionId, {String? agent, String? cwd, String? title}) {
+  void loadSession(String sessionId,
+      {String? agent, String? cwd, String? title}) {
+    if (_loadingSessionId == sessionId) return;
+    _loadingSessionId = sessionId;
     String targetAgent = agent ?? '';
     String targetCwd = cwd ?? '';
 
@@ -231,7 +407,9 @@ class ChatProvider extends ChangeNotifier {
       _state.sessionTitle = '';
     }
 
-    if (targetAgent.isEmpty && matchingSession.agent != null && matchingSession.agent!.isNotEmpty) {
+    if (targetAgent.isEmpty &&
+        matchingSession.agent != null &&
+        matchingSession.agent!.isNotEmpty) {
       targetAgent = matchingSession.agent!;
     }
     if (targetAgent.isEmpty) {
@@ -240,30 +418,39 @@ class ChatProvider extends ChangeNotifier {
       _state.selectedAgentName = targetAgent;
     }
 
-    if (targetCwd.isEmpty && matchingSession.cwd != null && matchingSession.cwd!.isNotEmpty) {
+    if (targetCwd.isEmpty &&
+        matchingSession.cwd != null &&
+        matchingSession.cwd!.isNotEmpty) {
       targetCwd = matchingSession.cwd!;
     }
     if (targetCwd.isNotEmpty) {
       _state.currentWorkspace = targetCwd;
     }
 
+    if (_state.sessionId != sessionId) {
+      _resetCursor(clearPersisted: true);
+      _processedMessageIds.clear();
+    }
+    _state.sessionId = sessionId;
+    _clearTurnRequest();
+    // Clear before sending so a fast replay cannot race with stale messages.
+    _state.loadingSession = true;
+    _state.messages = [];
+    _state.planEntries = [];
+    _state.streamingThinking = '';
+    _state.streamingText = '';
+    _state.turnActive = false;
+    notifyListeners();
     _ws.send(ClientMessage(
       type: 'load_session',
       sessionId: sessionId,
       cwd: _state.currentWorkspace.isNotEmpty ? _state.currentWorkspace : null,
       agent: targetAgent,
-      lastMessageId: _state.lastMessageId.isNotEmpty ? _state.lastMessageId : null,
     ));
-    // Clear messages and enter loading state; mirror ArkTS loadSessionIntoStore
-    _state.loadingSession = true;
-    _state.messages = [];
-    _state.planEntries = [];
-    _state.streamingThinking = '';
-    _state.turnActive = false;
-    notifyListeners();
   }
 
-  bool isPinned(String sessionId) => _state.pinnedSessionIds.contains(sessionId);
+  bool isPinned(String sessionId) =>
+      _state.pinnedSessionIds.contains(sessionId);
 
   void togglePinSession(String sessionId) {
     if (_state.pinnedSessionIds.contains(sessionId)) {
@@ -278,6 +465,9 @@ class ChatProvider extends ChangeNotifier {
     _ws.send(ClientMessage(type: 'close_session', sessionId: sessionId));
     _state.sessions.removeWhere((s) => s.sessionId == sessionId);
     if (_state.sessionId == sessionId) {
+      _clearTurnRequest();
+      _resetCursor(clearPersisted: true);
+      _processedMessageIds.clear();
       _state.sessionId = '';
       _state.sessionTitle = '';
       _state.turnActive = false;
@@ -286,6 +476,7 @@ class ChatProvider extends ChangeNotifier {
   }
 
   void renameSession(String sessionId, String newTitle) {
+    // Optimistic local update
     final idx = _state.sessions.indexWhere((s) => s.sessionId == sessionId);
     if (idx >= 0) {
       final old = _state.sessions[idx];
@@ -295,6 +486,7 @@ class ChatProvider extends ChangeNotifier {
         agent: old.agent,
         cwd: old.cwd,
         createdAt: old.createdAt,
+        lastActivity: old.lastActivity,
         status: old.status,
       );
       if (_state.sessionId == sessionId) {
@@ -302,6 +494,9 @@ class ChatProvider extends ChangeNotifier {
       }
       notifyListeners();
     }
+    // Send rename to server for persistence
+    _ws.send(ClientMessage(
+        type: 'rename_session', sessionId: sessionId, text: newTitle));
   }
 
   void requestSessionList() => _ws.send(ClientMessage(type: 'list_sessions'));
@@ -358,7 +553,8 @@ class ChatProvider extends ChangeNotifier {
   }
 
   // ── Permissions ──
-  void permissionResponse(String requestId, String outcome, {String? optionId}) {
+  void permissionResponse(String requestId, String outcome,
+      {String? optionId}) {
     _ws.send(ClientMessage(
       type: 'permission_response',
       sessionId: _state.sessionId,
@@ -367,66 +563,207 @@ class ChatProvider extends ChangeNotifier {
       optionId: optionId,
     ));
     _state.pendingPermission = null;
+    NotificationService.cancel();
     notifyListeners();
   }
 
   void rejectPermissionOnClose() {
     if (_state.pendingPermission != null) {
-      permissionResponse(_state.pendingPermission!.requestId, 'reject_once');
+      permissionResponse(_state.pendingPermission!.requestId, 'cancelled');
     }
   }
 
   // ── Agent Management ──
   void requestAgents() => _ws.send(ClientMessage(type: 'list_agents'));
-  void listRegistryAgents() => _ws.send(ClientMessage(type: 'list_registry_agents'));
-  void installAgent(String agentId) => _ws.send(ClientMessage(type: 'install_agent', agentId: agentId));
-  void uninstallAgent(String agentId) => _ws.send(ClientMessage(type: 'uninstall_agent', agentId: agentId));
+  void listRegistryAgents() =>
+      _ws.send(ClientMessage(type: 'list_registry_agents'));
+  void installAgent(String agentId) =>
+      _ws.send(ClientMessage(type: 'install_agent', agentId: agentId));
+  void uninstallAgent(String agentId) =>
+      _ws.send(ClientMessage(type: 'uninstall_agent', agentId: agentId));
   void installCustomAgent(String command, List<String> args, String name) {
-    _ws.send(ClientMessage(type: 'install_custom_agent', command: command, args: args, name: name));
+    _ws.send(ClientMessage(
+        type: 'install_custom_agent',
+        command: command,
+        args: args,
+        name: name));
   }
 
   // ── Sync after reconnect ──
   void syncRequest() {
-    if (_state.sessionId.isNotEmpty) {
-      _ws.send(ClientMessage(
-        type: 'sync_request',
-        sessionId: _state.sessionId,
-        lastMessageId: _state.lastMessageId,
-      ));
+    final sessionId = _state.sessionId;
+    if (sessionId.isEmpty || !_ws.isConnected || _syncInFlight) return;
+    final cursor = SessionMessageCursor.parse(_state.lastMessageId);
+    if (cursor != null && cursor.sessionId != sessionId) {
+      _resetCursor(clearPersisted: true);
     }
+    _syncInFlight = true;
+    _ws.send(ClientMessage(
+      type: 'sync_request',
+      sessionId: sessionId,
+      lastMessageId: cursor?.messageId,
+    ));
+  }
+
+  void _resetCursor({bool clearPersisted = false}) {
+    _state.lastMessageId = '';
+    _cursorSessionId = '';
+    _cursorPersistTimer?.cancel();
+    _cursorPersistTimer = null;
+    if (clearPersisted) {
+      StorageService.getInstance().then((storage) => storage.setLastMessageId(''));
+    }
+  }
+
+  void _scheduleCursorPersist() {
+    _cursorPersistTimer?.cancel();
+    final value = _state.lastMessageId;
+    _cursorPersistTimer = Timer(const Duration(milliseconds: 250), () {
+      StorageService.getInstance().then((storage) {
+        storage.setLastMessageId(value);
+      });
+      _cursorPersistTimer = null;
+    });
+  }
+
+  bool _acceptMessageId(String? raw, {String? sessionId}) {
+    if (raw == null || raw.isEmpty) return true;
+    final cursor = SessionMessageCursor.parse(raw);
+    if (cursor != null) {
+      final expectedSession = sessionId ?? _state.sessionId;
+      if (expectedSession.isNotEmpty && cursor.sessionId != expectedSession) {
+        return false;
+      }
+      if (_cursorSessionId.isNotEmpty &&
+          _cursorSessionId != cursor.sessionId &&
+          _state.sessionId.isNotEmpty) {
+        return false;
+      }
+      final previous = SessionMessageCursor.parse(_state.lastMessageId);
+      if (previous != null &&
+          previous.sessionId == cursor.sessionId &&
+          cursor.sequence <= previous.sequence) {
+        return false;
+      }
+      _cursorSessionId = cursor.sessionId;
+      _state.lastMessageId = cursor.messageId;
+      _scheduleCursorPersist();
+    }
+    if (!_processedMessageIds.add(raw)) return false;
+    if (_processedMessageIds.length > _maxProcessedMessageIds) {
+      _processedMessageIds.remove(_processedMessageIds.first);
+    }
+    return true;
   }
 
   // ── Server message routing ──
   void _handleServerMessage(ServerMessage msg) {
+    if (!_acceptMessageId(msg.messageId, sessionId: msg.sessionId)) return;
     switch (msg.type) {
       case 'server_info':
         _handleServerInfo(msg);
         break;
+      case 'ready':
+        _state.connected = true;
+        syncRequest();
+        notifyListeners();
+        break;
+      case 'ack':
+      case 'start_ack':
+        if (_startInFlight) _armTurnRequestTimeout('start');
+        break;
+      case 'input_ack':
+        _markInputStarted();
+        break;
+      case 'start_failed':
+        _clearTurnRequest();
+        _state.turnActive = false;
+        _state.errorMessage = msg.text ?? 'Agent 启动失败';
+        notifyListeners();
+        break;
       case 'session_started':
-        _state.sessionId = msg.sessionId ?? '';
-        _state.sessionTitle = msg.title ?? msg.sessionId ?? '';
+        final sessionId = msg.sessionId ?? '';
+        if (sessionId.isEmpty) break;
+        if (_cursorSessionId.isNotEmpty && _cursorSessionId != sessionId) {
+          _resetCursor(clearPersisted: true);
+          _processedMessageIds.clear();
+        }
+        _cursorSessionId = sessionId;
+        _clearTurnRequest();
+        _syncInFlight = false;
+        if (_loadingSessionId == sessionId) _loadingSessionId = '';
+        final previous = _state.sessions
+            .where(
+              (s) => s.sessionId == sessionId,
+            )
+            .firstOrNull;
+        _state.sessionId = sessionId;
+        _state.sessionTitle = msg.title ?? previous?.title ?? sessionId;
         // Resume: server sends session_started with resumed: true.
         // Keep turnActive false so the next message continues via 'input'.
         if (msg.resumed == true) {
           _state.turnActive = false;
+        }
+        if (sessionId.isNotEmpty) {
+          final now = DateTime.now().millisecondsSinceEpoch;
+          final session = ServerSessionData(
+            sessionId: sessionId,
+            title: _state.sessionTitle,
+            agent: msg.agent ?? previous?.agent ?? _state.selectedAgentName,
+            cwd: previous?.cwd ??
+                (_state.currentWorkspace.isNotEmpty
+                    ? _state.currentWorkspace
+                    : null),
+            createdAt: previous?.createdAt ?? now,
+            lastActivity: msg.resumed == true ? previous?.lastActivity : now,
+            status: msg.resumed == true
+                ? (previous?.status ?? 'idle')
+                : (_state.turnActive ? 'running' : 'idle'),
+          );
+          final index = _state.sessions.indexWhere(
+            (s) => s.sessionId == sessionId,
+          );
+          final sessions = [..._state.sessions];
+          if (index >= 0) {
+            sessions[index] = session;
+          } else {
+            sessions.insert(0, session);
+          }
+          _state.sessions = sessions;
         }
         // Safety net: clear loading state if history replay already completed
         _state.loadingSession = false;
         notifyListeners();
         break;
       case 'session_ended':
+        _clearTurnRequest();
+        _resetCursor(clearPersisted: true);
+        _processedMessageIds.clear();
         _state.turnActive = false;
         _state.sessionId = '';
         _state.sessionTitle = '';
         notifyListeners();
         break;
       case 'resumed_session':
-        _state.sessionId = msg.sessionId ?? '';
+        final sessionId = msg.sessionId ?? '';
+        if (sessionId.isNotEmpty &&
+            _cursorSessionId.isNotEmpty &&
+            _cursorSessionId != sessionId) {
+          _resetCursor(clearPersisted: true);
+          _processedMessageIds.clear();
+        }
+        _cursorSessionId = sessionId;
+        _clearTurnRequest();
+        _state.sessionId = sessionId;
         _state.turnActive = false;
         _state.loadingSession = false;
         notifyListeners();
         break;
       case 'agent_event':
+        if (_loadingSessionId.isNotEmpty &&
+            msg.sessionId != _loadingSessionId) {
+          break;
+        }
         _handleAgentEvent(msg);
         break;
       case 'turn_ended':
@@ -440,7 +777,23 @@ class ChatProvider extends ChangeNotifier {
         notifyListeners();
         break;
       case 'session_list':
-        if (msg.sessions != null) _state.sessions = msg.sessions!;
+        if (msg.sessions != null) {
+          final sessions = [...msg.sessions!];
+          final active = _state.sessions
+              .where((s) => s.sessionId == _state.sessionId)
+              .firstOrNull;
+          if (active != null) {
+            final index = sessions.indexWhere(
+              (s) => s.sessionId == active.sessionId,
+            );
+            if (index >= 0) {
+              sessions[index] = active;
+            } else {
+              sessions.insert(0, active);
+            }
+          }
+          _state.sessions = sessions;
+        }
         notifyListeners();
         break;
       case 'agent_list':
@@ -467,8 +820,13 @@ class ChatProvider extends ChangeNotifier {
         notifyListeners();
         break;
       case 'error':
+        _loadingSessionId = '';
+        _syncInFlight = false;
+        _clearTurnRequest();
+        _state.turnActive = false;
         if (msg.text != null) {
           _state.errorMessage = msg.text!;
+          _setCurrentSessionStatus('idle');
           notifyListeners();
         }
         break;
@@ -477,46 +835,61 @@ class ChatProvider extends ChangeNotifier {
           _state.pendingPermission = PendingPermission(
             requestId: msg.requestId!,
             toolCall: msg.toolCall?.toString() ?? '',
-            options: (msg.options ?? []).map((o) => PermissionOption(
-              optionId: o['optionId']?.toString() ?? '',
-              name: o['name']?.toString() ?? '',
-              kind: o['kind']?.toString() ?? '',
-            )).toList(),
+            options: (msg.options ?? [])
+                .map((o) => PermissionOption(
+                      optionId: o['optionId']?.toString() ?? '',
+                      name: o['name']?.toString() ?? '',
+                      kind: o['kind']?.toString() ?? '',
+                    ))
+                .toList(),
           );
-          // Show OS notification for permission request
-          final toolCallStr = msg.toolCall?.toString() ?? '';
-          NotificationService.showPermissionNotification(
-            requestId: msg.requestId!,
-            toolName: msg.acpUpdate?.toolName ?? 'Tool',
-            command: toolCallStr,
-            path: msg.path ?? '',
-          );
+          // Show OS notification only when app is in background
+          if (_isInBackground) {
+            final toolCallStr = msg.toolCall?.toString() ?? '';
+            NotificationService.showPermissionNotification(
+              requestId: msg.requestId!,
+              toolName: msg.acpUpdate?.toolName ?? 'Tool',
+              command: toolCallStr,
+              path: msg.path ?? '',
+            );
+          }
         }
         notifyListeners();
         break;
       case 'session_closed':
+        _clearTurnRequest();
+        _resetCursor(clearPersisted: true);
+        _processedMessageIds.clear();
         _state.turnActive = false;
         _state.sessionId = '';
         notifyListeners();
         break;
       case 'sync_response':
-        if (msg.entries != null) {
-          for (final entry in msg.entries!) {
-            // Each entry is { messageId, payload: { sessionUpdate, text, ... }, timestamp }
-            final payload = entry['payload'];
-            if (payload is Map<String, dynamic>) {
-              // Construct a synthetic agent_event JSON so ServerMessage.fromJson
-              // applies the full event parsing (content blocks, nesting, etc.)
-              final syntheticJson = <String, dynamic>{
-                'type': 'agent_event',
-                'sessionId': msg.sessionId,
-                'event': payload,
-              };
-              final eventMsg = ServerMessage.fromJson(syntheticJson);
-              _handleAgentEvent(eventMsg);
-            }
-          }
+        _syncInFlight = false;
+        final sessionId = msg.sessionId ?? _state.sessionId;
+        if (msg.turnActive != null) _state.turnActive = msg.turnActive!;
+        if (msg.overflow == true) {
+          _handleSyncOverflow(sessionId);
+          break;
         }
+        for (final entry in msg.entries ?? const <Map<String, dynamic>>[]) {
+          final rawPayload = entry['payload'];
+          if (rawPayload is! Map) continue;
+          final payload = Map<String, dynamic>.from(rawPayload);
+          final rawId = entry['messageId']?.toString() ??
+              payload['messageId']?.toString();
+          if (!_acceptMessageId(rawId, sessionId: sessionId)) continue;
+          if (rawId != null && rawId.isNotEmpty) payload['messageId'] = rawId;
+          final syntheticJson = <String, dynamic>{
+            'type': 'agent_event',
+            'sessionId': sessionId,
+            'messageId': rawId,
+            'event': payload,
+          };
+          final eventMsg = ServerMessage.fromJson(syntheticJson);
+          _handleAgentEvent(eventMsg);
+        }
+        notifyListeners();
         break;
       case 'target_offline':
         _state.connected = false;
@@ -551,13 +924,17 @@ class ChatProvider extends ChangeNotifier {
               (s) => s.sessionId == updatedSession.sessionId,
             );
             if (idx >= 0) {
-              if (_state.sessions[idx].status != updatedSession.status) {
+              if (_state.sessions[idx].status != updatedSession.status ||
+                  _state.sessions[idx].lastActivity !=
+                      updatedSession.lastActivity) {
                 _state.sessions[idx] = ServerSessionData(
                   sessionId: _state.sessions[idx].sessionId,
                   title: _state.sessions[idx].title,
                   agent: _state.sessions[idx].agent,
                   cwd: _state.sessions[idx].cwd,
                   createdAt: _state.sessions[idx].createdAt,
+                  lastActivity: updatedSession.lastActivity ??
+                      _state.sessions[idx].lastActivity,
                   status: updatedSession.status,
                 );
                 updated = true;
@@ -572,9 +949,43 @@ class ChatProvider extends ChangeNotifier {
     }
   }
 
+  void _handleSyncOverflow(String sessionId) {
+    _clearTurnRequest();
+    _resetCursor(clearPersisted: true);
+    _processedMessageIds.clear();
+    _state.messages = [];
+    _state.planEntries = [];
+    _state.toolCallStack.clear();
+    _state.accumulatorType = '';
+    _state.streamingThinking = '';
+    _state.streamingText = '';
+    _state.turnActive = false;
+    _state.loadingSession = sessionId.isNotEmpty;
+    _loadingSessionId = sessionId;
+    _state.errorMessage = '消息同步窗口已过期，正在重新加载';
+    if (sessionId.isNotEmpty) {
+      _ws.send(ClientMessage(
+        type: 'load_session',
+        sessionId: sessionId,
+        cwd: _state.currentWorkspace.isNotEmpty ? _state.currentWorkspace : null,
+        agent: _state.selectedAgentName.isNotEmpty ? _state.selectedAgentName : null,
+      ));
+    }
+    notifyListeners();
+  }
+
   void _handleServerInfo(ServerMessage msg) {
     final actualHostId = msg.hostId ?? _ws.currentHostKey;
+    if (actualHostId.isNotEmpty &&
+        _state.currentDeviceId.isNotEmpty &&
+        _state.currentDeviceId != actualHostId) {
+      _resetCursor(clearPersisted: true);
+      _processedMessageIds.clear();
+      _state.sessionId = '';
+      _state.turnActive = false;
+    }
     _state.connected = true;
+    _state.errorMessage = '';
     _state.currentDeviceId = actualHostId;
 
     if (msg.workspaces != null && msg.workspaces!.isNotEmpty) {
@@ -600,18 +1011,27 @@ class ChatProvider extends ChangeNotifier {
     // Request agents, models, and all sessions
     _ws.send(ClientMessage(type: 'list_agents'));
     requestSessionList();
+    // server_info is the authenticated connection-ready boundary; replay any
+    // events missed while this socket was down before accepting new input.
+    syncRequest();
     _onServerInfo();
   }
 
   void _handleAgentEvent(ServerMessage msg) {
     if (msg.acpUpdate != null) {
       final event = msg.acpUpdate!;
-
       if (_state.loadingSession) {
         _state.loadingSession = false;
       }
+      _markInputStarted();
 
       switch (event.event) {
+        case 'turn_started':
+          _state.turnActive = true;
+          break;
+        case 'turn_ended':
+          _handleTurnEnded();
+          break;
         case 'agent_thought_chunk':
           _flushStreamingText();
           _finishRunningTools(); // tool → thought: tool is done
@@ -646,7 +1066,11 @@ class ChatProvider extends ChangeNotifier {
               final cleaned = text.replaceFirst(RegExp(r'^\n+'), '');
               _state.messages = [
                 ..._state.messages,
-                MessageData(role: 'assistant', content: cleaned, type: 'text', sendStatus: 'sent'),
+                MessageData(
+                    role: 'assistant',
+                    content: cleaned,
+                    type: 'text',
+                    sendStatus: 'sent'),
               ];
             }
           }
@@ -659,7 +1083,8 @@ class ChatProvider extends ChangeNotifier {
           final toolName = event.toolName?.isNotEmpty == true
               ? event.toolName!
               : (event.title?.isNotEmpty == true ? event.title! : callId);
-          debugPrint('[ToolCall] start: name=$toolName callId=$callId kind=${event.kind}');
+          debugPrint(
+              '[ToolCall] start: name=$toolName callId=$callId kind=${event.kind}');
           _state.messages = [
             ..._state.messages,
             MessageData(
@@ -684,24 +1109,32 @@ class ChatProvider extends ChangeNotifier {
           {
             final newContent = event.content ?? '';
             final newType = event.contentType ?? '';
-            final status = event.toolStatus ?? (newContent.isNotEmpty ? 'completed' : 'in_progress');
-            debugPrint('[ToolCall] update: callId=${event.toolCallId} len=${newContent.length} type=$newType status=$status');
+            final status = event.toolStatus ??
+                (newContent.isNotEmpty ? 'completed' : 'in_progress');
+            debugPrint(
+                '[ToolCall] update: callId=${event.toolCallId} len=${newContent.length} type=$newType status=$status');
             bool found = false;
             String toolName = '';
             if (event.toolCallId != null && event.toolCallId!.isNotEmpty) {
               for (int i = _state.messages.length - 1; i >= 0; i--) {
                 if (_state.messages[i].toolCallId == event.toolCallId) {
                   final m = _state.messages[i];
-                  if (newContent.isNotEmpty) m.toolContent = (m.toolContent) + newContent;
+                  if (newContent.isNotEmpty)
+                    m.toolContent = (m.toolContent) + newContent;
                   if (newType.isNotEmpty) m.toolContentType = newType;
-                  if (event.path != null && event.path!.isNotEmpty) m.toolPath = event.path!;
-                  if (event.oldText != null && event.oldText!.isNotEmpty) m.toolOldText = event.oldText!;
-                  if (event.newText != null && event.newText!.isNotEmpty) m.toolNewText = event.newText!;
-                  if (event.terminalId != null && event.terminalId!.isNotEmpty) m.toolTerminalId = event.terminalId!;
+                  if (event.path != null && event.path!.isNotEmpty)
+                    m.toolPath = event.path!;
+                  if (event.oldText != null && event.oldText!.isNotEmpty)
+                    m.toolOldText = event.oldText!;
+                  if (event.newText != null && event.newText!.isNotEmpty)
+                    m.toolNewText = event.newText!;
+                  if (event.terminalId != null && event.terminalId!.isNotEmpty)
+                    m.toolTerminalId = event.terminalId!;
                   m.toolStatus = status;
                   toolName = m.toolName;
                   found = true;
-                  debugPrint('[ToolCall] update OK: toolContent now ${m.toolContent.length} chars, status=${m.toolStatus}');
+                  debugPrint(
+                      '[ToolCall] update OK: toolContent now ${m.toolContent.length} chars, status=${m.toolStatus}');
                   break;
                 }
               }
@@ -710,14 +1143,21 @@ class ChatProvider extends ChangeNotifier {
               // Fallback: update the last pending/in_progress tool card
               for (int i = _state.messages.length - 1; i >= 0; i--) {
                 if (_state.messages[i].type == 'tool_call' &&
-                    (_state.messages[i].toolStatus == 'pending' || _state.messages[i].toolStatus == 'in_progress' || _state.messages[i].toolStatus == 'running')) {
+                    (_state.messages[i].toolStatus == 'pending' ||
+                        _state.messages[i].toolStatus == 'in_progress' ||
+                        _state.messages[i].toolStatus == 'running')) {
                   final m = _state.messages[i];
-                  if (newContent.isNotEmpty) m.toolContent = (m.toolContent) + newContent;
+                  if (newContent.isNotEmpty)
+                    m.toolContent = (m.toolContent) + newContent;
                   if (newType.isNotEmpty) m.toolContentType = newType;
-                  if (event.path != null && event.path!.isNotEmpty) m.toolPath = event.path!;
-                  if (event.oldText != null && event.oldText!.isNotEmpty) m.toolOldText = event.oldText!;
-                  if (event.newText != null && event.newText!.isNotEmpty) m.toolNewText = event.newText!;
-                  if (event.terminalId != null && event.terminalId!.isNotEmpty) m.toolTerminalId = event.terminalId!;
+                  if (event.path != null && event.path!.isNotEmpty)
+                    m.toolPath = event.path!;
+                  if (event.oldText != null && event.oldText!.isNotEmpty)
+                    m.toolOldText = event.oldText!;
+                  if (event.newText != null && event.newText!.isNotEmpty)
+                    m.toolNewText = event.newText!;
+                  if (event.terminalId != null && event.terminalId!.isNotEmpty)
+                    m.toolTerminalId = event.terminalId!;
                   m.toolStatus = status;
                   toolName = m.toolName;
                   found = true;
@@ -727,13 +1167,16 @@ class ChatProvider extends ChangeNotifier {
               }
             }
             if (!found) {
-              debugPrint('[ToolCall] update: NO card found for callId=${event.toolCallId}');
+              debugPrint(
+                  '[ToolCall] update: NO card found for callId=${event.toolCallId}');
             }
             // Update live view with progress
             if (toolName.isNotEmpty) {
               final int totalLen = newContent.length;
               // Scale progress based on content accumulation; cap at 90% until completed
-              final double progress = status == 'completed' || status == 'cancelled' || status == 'failed'
+              final double progress = status == 'completed' ||
+                      status == 'cancelled' ||
+                      status == 'failed'
                   ? 1.0
                   : (totalLen > 0 ? (totalLen / 1000).clamp(0.05, 0.9) : 0.05);
               LiveViewService.updateProgress(
@@ -750,7 +1193,8 @@ class ChatProvider extends ChangeNotifier {
           break;
 
         case 'tool_call_end':
-          debugPrint('[ToolCall] end: callId=${event.toolCallId} status=${event.toolStatus}');
+          debugPrint(
+              '[ToolCall] end: callId=${event.toolCallId} status=${event.toolStatus}');
           if (event.toolCallId != null) {
             for (int i = _state.messages.length - 1; i >= 0; i--) {
               if (_state.messages[i].toolCallId == event.toolCallId) {
@@ -796,7 +1240,11 @@ class ChatProvider extends ChangeNotifier {
               }
               _state.messages = [
                 ..._state.messages,
-                MessageData(role: 'user', content: text, type: 'text', sendStatus: 'sent'),
+                MessageData(
+                    role: 'user',
+                    content: text,
+                    type: 'text',
+                    sendStatus: 'sent'),
               ];
             }
           }
@@ -810,7 +1258,8 @@ class ChatProvider extends ChangeNotifier {
           if (event.config != null) _state.configOptions = event.config!;
           break;
         case 'available_commands_update':
-          if (event.commands != null) _state.availableCommands = event.commands!;
+          if (event.commands != null)
+            _state.availableCommands = event.commands!;
           break;
         case 'usage_update':
           if (event.usage != null) _state.lastUsage = event.usage;
@@ -825,7 +1274,11 @@ class ChatProvider extends ChangeNotifier {
           if (mText.isNotEmpty) {
             _state.messages = [
               ..._state.messages,
-              MessageData(role: mRole, content: mText, type: 'text', sendStatus: 'sent'),
+              MessageData(
+                  role: mRole,
+                  content: mText,
+                  type: 'text',
+                  sendStatus: 'sent'),
             ];
           }
           break;
@@ -841,7 +1294,11 @@ class ChatProvider extends ChangeNotifier {
     if (_state.streamingThinking.isNotEmpty) {
       _state.messages = [
         ..._state.messages,
-        MessageData(role: 'assistant', content: _state.streamingThinking, type: 'thinking', sendStatus: 'sent'),
+        MessageData(
+            role: 'assistant',
+            content: _state.streamingThinking,
+            type: 'thinking',
+            sendStatus: 'sent'),
       ];
       _state.streamingThinking = '';
     }
@@ -851,7 +1308,11 @@ class ChatProvider extends ChangeNotifier {
     if (_state.streamingText.isNotEmpty) {
       _state.messages = [
         ..._state.messages,
-        MessageData(role: 'assistant', content: _state.streamingText, type: 'text', sendStatus: 'sent'),
+        MessageData(
+            role: 'assistant',
+            content: _state.streamingText,
+            type: 'text',
+            sendStatus: 'sent'),
       ];
       _state.streamingText = '';
     }
@@ -868,17 +1329,39 @@ class ChatProvider extends ChangeNotifier {
     }
   }
 
+  void _setCurrentSessionStatus(String status) {
+    final sessionId = _state.sessionId;
+    if (sessionId.isEmpty) return;
+    final index = _state.sessions.indexWhere(
+      (s) => s.sessionId == sessionId,
+    );
+    if (index < 0) return;
+
+    final current = _state.sessions[index];
+    final sessions = [..._state.sessions];
+    sessions[index] = ServerSessionData(
+      sessionId: current.sessionId,
+      title: current.title,
+      agent: current.agent,
+      cwd: current.cwd,
+      createdAt: current.createdAt,
+      lastActivity: DateTime.now().millisecondsSinceEpoch,
+      status: status,
+    );
+    _state.sessions = sessions;
+  }
+
   void _handleTurnEnded() {
+    _clearTurnRequest();
     _state.turnActive = false;
+    _setCurrentSessionStatus('idle');
     _finishRunningTools();
     _flushStreamingThinking();
     _flushStreamingText();
     _state.accumulatorType = '';
     _state.toolCallStack.clear();
-    _state.lastMessageId = _state.messages.isNotEmpty
-        ? _state.messages.last.id : '';
-    // Persist last message id
-    StorageService.getInstance().then((s) => s.setLastMessageId(_state.lastMessageId));
+    // lastMessageId is the bridge's sessionId:seq cursor, never a local
+    // MessageData id. It is persisted when each canonical event is accepted.
     notifyListeners();
   }
 
@@ -899,9 +1382,18 @@ class ChatProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  @override
+  void dispose() {
+    _turnRequestTimer?.cancel();
+    _cursorPersistTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
   // Convenience
   String get lastModelId => _state.models.isNotEmpty && _state.modelIndex >= 0
-      ? _state.models[_state.modelIndex].id : '';
+      ? _state.models[_state.modelIndex].id
+      : '';
 }
 
 /// Simple workspace provider — mirrors ArkTS WorkspaceStore
@@ -911,11 +1403,15 @@ class WorkspaceProvider extends ChangeNotifier {
 
   int get selectedIndex => _currentIndex;
   List<Map<String, String>> get workspaces => _workspaces;
-  String get currentWorkspace => _workspaces.isNotEmpty && _currentIndex < _workspaces.length
-      ? _workspaces[_currentIndex]['path'] ?? '' : '';
+  String get currentWorkspace =>
+      _workspaces.isNotEmpty && _currentIndex < _workspaces.length
+          ? _workspaces[_currentIndex]['path'] ?? ''
+          : '';
 
   void setWorkspaces(List<String> paths) {
-    _workspaces = paths.map((p) => {'path': p, 'name': p.split(RegExp(r'[/\\]')).last}).toList();
+    _workspaces = paths
+        .map((p) => {'path': p, 'name': p.split(RegExp(r'[/\\]')).last})
+        .toList();
     if (_currentIndex >= _workspaces.length) _currentIndex = 0;
     notifyListeners();
     _persistWorkspaces();
@@ -932,7 +1428,8 @@ class WorkspaceProvider extends ChangeNotifier {
   void syncFromServer(List<String> paths) {
     for (final path in paths) {
       if (_workspaces.any((w) => w['path'] == path)) continue;
-      _workspaces.add({'name': path.split(RegExp(r'[/\\]')).last, 'path': path});
+      _workspaces
+          .add({'name': path.split(RegExp(r'[/\\]')).last, 'path': path});
     }
     notifyListeners();
     _persistWorkspaces();
@@ -940,7 +1437,10 @@ class WorkspaceProvider extends ChangeNotifier {
 
   Future<void> _persistWorkspaces() async {
     final storage = await StorageService.getInstance();
-    final paths = _workspaces.map((w) => w['path'] ?? '').where((p) => p.isNotEmpty).toList();
+    final paths = _workspaces
+        .map((w) => w['path'] ?? '')
+        .where((p) => p.isNotEmpty)
+        .toList();
     storage.putString('workspaces', paths.join('\n'));
   }
 

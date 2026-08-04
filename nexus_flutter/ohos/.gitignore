@@ -2,6 +2,13 @@
 /oh_modules
 /local.properties
 /.idea
+/build-profile.json5
+/build-profile.local.json5
+/certs/
+/signing/
+*.cer
+*.p7b
+*.p12
 **/build
 /.hvigor
 .cxx

@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../constants/theme.dart';
-import '../models/ws_protocol.dart';
 import '../providers/chat_provider.dart';
+import '../utils/agent_utils.dart';
+import '../widgets/agent_logo.dart';
 
 class NewSessionWizard extends StatefulWidget {
   const NewSessionWizard({super.key});
@@ -47,6 +48,9 @@ class _NewSessionWizardState extends State<NewSessionWizard>
     if (_selectedWorkspaceIndex >= 0 &&
         _selectedWorkspaceIndex < workspaceProvider.workspaces.length) {
       workspaceProvider.selectWorkspace(_selectedWorkspaceIndex);
+      chatProvider.setCurrentWorkspace(
+        workspaceProvider.workspaces[_selectedWorkspaceIndex]['path'] ?? '',
+      );
     }
 
     if (_selectedAgentIndex >= 0 &&
@@ -162,7 +166,9 @@ class _NewSessionWizardState extends State<NewSessionWizard>
                     style: TextStyle(
                       fontSize: AppFontSize.sm,
                       fontWeight: FontWeight.w600,
-                      color: isActive ? Colors.white : AppColors.foregroundM(context),
+                      color: isActive
+                          ? Colors.white
+                          : AppColors.foregroundM(context),
                     ),
                   ),
           ),
@@ -265,7 +271,8 @@ class _NewSessionWizardState extends State<NewSessionWizard>
                     borderRadius: BorderRadius.circular(AppRadius.md),
                     child: InkWell(
                       borderRadius: BorderRadius.circular(AppRadius.md),
-                      onTap: () => setState(() => _selectedWorkspaceIndex = index),
+                      onTap: () =>
+                          setState(() => _selectedWorkspaceIndex = index),
                       child: Padding(
                         padding: const EdgeInsets.symmetric(
                           horizontal: AppSpacing.lg,
@@ -287,14 +294,16 @@ class _NewSessionWizardState extends State<NewSessionWizard>
                                 children: [
                                   Text(
                                     name.isNotEmpty ? name : '未命名',
-                                    style: Theme.of(context).textTheme.titleMedium,
+                                    style:
+                                        Theme.of(context).textTheme.titleMedium,
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                   const SizedBox(height: AppSpacing.xxs),
                                   Text(
                                     path,
-                                    style: Theme.of(context).textTheme.bodySmall,
+                                    style:
+                                        Theme.of(context).textTheme.bodySmall,
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                   ),
@@ -414,16 +423,17 @@ class _NewSessionWizardState extends State<NewSessionWizard>
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    agent,
-                                    style: Theme.of(context).textTheme.titleMedium,
+                                    AgentUtils.getDisplayName(agent),
+                                    style:
+                                        Theme.of(context).textTheme.titleMedium,
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                 ],
                               ),
                             ),
-                            Icon(
-                              Icons.smart_toy_outlined,
+                            AgentLogo(
+                              agentName: agent,
                               size: 20,
                               color: isSelected
                                   ? AppColors.accent
@@ -454,14 +464,16 @@ class _NewSessionWizardState extends State<NewSessionWizard>
     final workspaceName = _selectedWorkspaceIndex >= 0 &&
             _selectedWorkspaceIndex < workspaces.length
         ? (workspaces[_selectedWorkspaceIndex]['name'] ??
-            workspaces[_selectedWorkspaceIndex]['path']?.split(RegExp(r'[/\\]')).lastOrNull ??
+            workspaces[_selectedWorkspaceIndex]['path']
+                ?.split(RegExp(r'[/\\]'))
+                .lastOrNull ??
             '未选择')
         : '未选择';
 
-    final agentName = _selectedAgentIndex >= 0 &&
-            _selectedAgentIndex < agents.length
-        ? agents[_selectedAgentIndex]
-        : '未选择';
+    final agentName =
+        _selectedAgentIndex >= 0 && _selectedAgentIndex < agents.length
+            ? agents[_selectedAgentIndex]
+            : '未选择';
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
@@ -546,9 +558,7 @@ class _NewSessionWizardState extends State<NewSessionWizard>
                   isConnected ? '已连接' : '未连接',
                   style: TextStyle(
                     fontSize: AppFontSize.xxs,
-                    color: isConnected
-                        ? AppColors.success
-                        : AppColors.error,
+                    color: isConnected ? AppColors.success : AppColors.error,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -644,7 +654,8 @@ class _NewSessionWizardState extends State<NewSessionWizard>
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(AppRadius.md),
                     ),
-                    padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+                    padding:
+                        const EdgeInsets.symmetric(vertical: AppSpacing.md),
                   ),
                   child: const Text('上一步'),
                 ),
@@ -676,9 +687,8 @@ class _NewSessionWizardState extends State<NewSessionWizard>
                       ),
                     )
                   : ElevatedButton(
-                      onPressed: canProceed
-                          ? () => _goToStep(_currentStep + 1)
-                          : null,
+                      onPressed:
+                          canProceed ? () => _goToStep(_currentStep + 1) : null,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.accent,
                         foregroundColor: Colors.white,
@@ -705,5 +715,4 @@ class _NewSessionWizardState extends State<NewSessionWizard>
       ),
     );
   }
-
 }

@@ -1,18 +1,20 @@
 import kill from "tree-kill";
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, realpathSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import type { WebSocket } from "ws";
 import { AcpClient, type AcpClientCallbacks } from "./acp/client.mjs";
+import type { RequestPermissionRequest, RequestPermissionResponse } from "@agentclientprotocol/sdk";
 import type { SessionState } from "./acp/types.mjs";
-import { getAgentLaunchArgs, isValidAgent } from "./discovery/agents.mjs";
+import { resolveAgentInfo } from "./agents-store.mjs";
+import { resolveWorkspacePath } from "./path-utils.mjs";
 import { createAcpCallbacks } from "./acp-callbacks.mjs";
 import { getLastModel, setLastModel } from "./prefs.mjs";
 import { recordToolCallIds } from "./tool-call-map.mjs";
 import { extractModelList, setCachedModelList, invalidateModelListCache } from "./model-list.mjs";
-import { setSession as registerInLegacyMap } from "./session.mjs";
+
 
 // ── Constants ────────────────────────────────────────────────────
 const MAX_TOOLCALL_IDS = 500;
@@ -21,6 +23,57 @@ const MAX_ACP_PROCESSES = 5;
 const IDLE_CLEANUP_INTERVAL_MS = 30_000;
 const MAX_MESSAGE_BUFFER = 500;
 const PROMPT_TIMEOUT = 300_000; // 5 minutes sliding inactivity
+const AGENT_INITIALIZE_TIMEOUT_MS = 30_000;
+
+export type SessionOwnerErrorCode =
+  | "SESSION_NOT_FOUND"
+  | "SESSION_NOT_OWNER"
+  | "SESSION_RECLAIM_REQUIRED";
+
+export class SessionOwnerError extends Error {
+  constructor(public readonly code: SessionOwnerErrorCode, message: string) {
+    super(message);
+    this.name = "SessionOwnerError";
+  }
+}
+
+function resolveAgentLaunch(agent: string): { cmd: string; args: string[]; env: Record<string, string> } {
+  const resolved = resolveAgentInfo(agent);
+  if (!resolved || !resolved.cmd || !Array.isArray(resolved.args) || resolved.args.some(arg => typeof arg !== "string")) {
+    throw new Error(`invalid or unavailable agent: ${agent}`);
+  }
+  return { cmd: resolved.cmd, args: [...resolved.args], env: { ...resolved.env } };
+}
+
+function spawnAgentProcess(agent: string, cwd: string): ChildProcess {
+  const launch = resolveAgentLaunch(agent);
+  return spawn(launch.cmd, launch.args, {
+    cwd,
+    env: { ...process.env, ...launch.env, FORCE_COLOR: "0", NO_COLOR: "1" },
+    stdio: ["pipe", "pipe", "pipe"],
+    shell: false,
+    windowsHide: true,
+  });
+}
+
+async function initializeWithTimeout(client: AcpClient, proc: ChildProcess): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let rejectProcessError: (error: Error) => void = () => {};
+  const onProcessError = (error: Error) => rejectProcessError(error);
+  const processError = new Promise<never>((_resolve, reject) => {
+    rejectProcessError = (error: Error) => reject(new Error(`agent process failed: ${error.message}`));
+    proc.once("error", onProcessError);
+  });
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => reject(new Error("agent initialize timeout")), AGENT_INITIALIZE_TIMEOUT_MS);
+  });
+  try {
+    await Promise.race([client.initialize(), processError, timeout]);
+  } finally {
+    clearTimeout(timer);
+    proc.removeListener("error", onProcessError);
+  }
+}
 
 const MODEL_ERROR_PATTERNS: RegExp[] = [
   /rate limit/i, /quota/i, /429/i, /402/i, /insufficient_quota/i,
@@ -61,6 +114,9 @@ export interface CreateSessionParams {
 export class SessionManager {
   private sessions = new Map<string, SessionState>();
   private sessionSeqCounter = new Map<string, number>();
+  private wsOpQueues = new Map<import("ws").WebSocket, Promise<unknown>>();
+  private pendingCreates = new Map<import("ws").WebSocket, Promise<SessionState>>();
+  private transportIds = new WeakMap<object, string>();
   private idleCleanupTimer: ReturnType<typeof setInterval> | null = null;
   private clientFactory: AcpClientFactory;
 
@@ -68,6 +124,34 @@ export class SessionManager {
     this.clientFactory = factory ?? {
       create: (proc, callbacks) => new AcpClient(proc, callbacks),
     };
+  }
+
+  private transportIdentity(transport: WebSocket): string {
+    const object = transport as unknown as object;
+    let id = this.transportIds.get(object);
+    if (!id) {
+      id = randomUUID();
+      this.transportIds.set(object, id);
+    }
+    return id;
+  }
+
+  private claimSession(sess: SessionState, transport: WebSocket): SessionState {
+    sess.ownerTransport = transport;
+    sess.ownerId = this.transportIdentity(transport);
+    sess.ws = transport;
+    sess.orphanedAt = null;
+    return sess;
+  }
+
+  /** The one owner check used by every sessionId operation. */
+  public assertOwner(sessionId: string, transport: WebSocket): SessionState {
+    const sess = this.sessions.get(sessionId);
+    if (!sess) throw new SessionOwnerError("SESSION_NOT_FOUND", "session not found");
+    if (sess.ownerTransport !== transport) {
+      throw new SessionOwnerError("SESSION_NOT_OWNER", "session is owned by another connection");
+    }
+    return sess;
   }
 
   // ═══════════════════════════════════════════════════════════════
@@ -80,6 +164,18 @@ export class SessionManager {
    *  and register the session in the pool.
    */
   async getOrCreate(ws: WebSocket, params: CreateSessionParams): Promise<SessionState> {
+    const inFlight = this.pendingCreates.get(ws);
+    if (inFlight) return inFlight;
+    const pending = this.getOrCreateInternal(ws, params);
+    this.pendingCreates.set(ws, pending);
+    try {
+      return await pending;
+    } finally {
+      if (this.pendingCreates.get(ws) === pending) this.pendingCreates.delete(ws);
+    }
+  }
+
+  private async getOrCreateInternal(ws: WebSocket, params: CreateSessionParams): Promise<SessionState> {
     const {
       agent = "opencode",
       cwd,
@@ -92,9 +188,33 @@ export class SessionManager {
     if (targetSessionId) {
       const existing = this.sessions.get(targetSessionId);
       if (existing) {
-        existing.ws = ws;
-        existing.orphanedAt = null;
+        if (existing.ownerTransport && existing.ownerTransport !== ws) {
+          throw new SessionOwnerError("SESSION_NOT_OWNER", "session is owned by another connection");
+        }
+        if (!existing.ownerTransport) {
+          if (existing.orphanedAt === null || (mode !== "load" && mode !== "resume")) {
+            throw new SessionOwnerError("SESSION_RECLAIM_REQUIRED", "session reclaim requires an explicit load, resume, or sync request");
+          }
+          this.claimSession(existing, ws);
+        } else {
+          existing.ws = ws;
+          existing.ownerId = this.transportIdentity(ws);
+        }
         this.updateSessionActivity(targetSessionId);
+        if (mode === "load" || mode === "resume") {
+          if (!existing.loadInFlight) {
+            existing.loadInFlight = (async () => {
+              if (mode === "load") {
+                await existing.client.loadSession(targetSessionId, existing.cwd);
+              } else {
+                await existing.client.resumeSession(targetSessionId, existing.cwd);
+              }
+            })().finally(() => {
+              existing.loadInFlight = undefined;
+            });
+          }
+          await existing.loadInFlight;
+        }
         return existing;
       }
     }
@@ -102,19 +222,19 @@ export class SessionManager {
     // Orphan any previous sessions belonging to this WS
     this.cleanupWsSessions(ws);
 
-    if (targetSessionId && !isValidAgent(agent)) {
-      throw new Error(`invalid agent: ${agent}`);
-    }
-
-    const args = getAgentLaunchArgs(agent);
+    const launch = resolveAgentLaunch(agent);
     const ANYWHERE_DIR = join(homedir(), ".nexus");
     mkdirSync(ANYWHERE_DIR, { recursive: true });
-    const resolvedCwd = cwd && existsSync(cwd) ? cwd : ANYWHERE_DIR;
-    const proc = spawn(agent, args, {
+    const requestedCwd = resolveWorkspacePath(cwd);
+    const resolvedCwd = requestedCwd && existsSync(requestedCwd) && statSync(requestedCwd).isDirectory()
+      ? realpathSync(requestedCwd)
+      : ANYWHERE_DIR;
+    const proc = spawn(launch.cmd, launch.args, {
       cwd: resolvedCwd,
-      env: { ...process.env, FORCE_COLOR: "0", NO_COLOR: "1" },
+      env: { ...process.env, ...launch.env, FORCE_COLOR: "0", NO_COLOR: "1" },
       stdio: ["pipe", "pipe", "pipe"],
-      shell: true,
+      shell: false,
+      windowsHide: true,
     });
 
     // `sessionId` is the bridge-wide key; for new sessions it is set after
@@ -126,6 +246,8 @@ export class SessionManager {
 
     const sess: SessionState = {
       ws: wsRef,
+      ownerTransport: wsRef,
+      ownerId: this.transportIdentity(wsRef),
       client: null!, // assigned below
       sessionId: "",
       cwd: resolvedCwd,
@@ -154,30 +276,18 @@ export class SessionManager {
           sessionId,
           event: update.update,
         };
+        let wsPayload: object;
         try {
-          this.bufferAgentEvent(sessionId, eventPayload);
-        } catch { /* buffer full — discard */ }
+          wsPayload = this.bufferAgentEvent(sessionId, eventPayload) ?? eventPayload;
+        } catch { /* buffer full — discard */
+          wsPayload = eventPayload;
+        }
         try {
-          wsRef.send(JSON.stringify(eventPayload));
+          const currentWs = this.sessions.get(sessionId)?.ownerTransport ?? wsRef;
+          currentWs.send(JSON.stringify(wsPayload));
         } catch { /* WS disconnected — event buffered */ }
       },
-      onPermissionRequest: (permParams) =>
-        new Promise((resolve) => {
-          const requestId = randomUUID();
-          const s = this.sessions.get(sessionId);
-          if (s) s.pendingPermission = { requestId, resolve };
-          try {
-            wsRef.send(
-              JSON.stringify({
-                type: "permission_request",
-                sessionId,
-                requestId,
-                toolCall: permParams.toolCall,
-                options: permParams.options,
-              }),
-            );
-          } catch { /* WS gone */ }
-        }),
+      onPermissionRequest: this.buildPermissionRequestCallback(wsRef, () => sessionId),
       ...createAcpCallbacks({
         sessionId,
         cwd: resolvedCwd,
@@ -188,18 +298,30 @@ export class SessionManager {
     const client = this.clientFactory.create(proc, callbacks);
     sess.client = client;
 
-    // Register in the legacy module-level map so createAcpCallbacks's
-    // `getSession()` finds this session for terminal/file callbacks.
+    // Register early in the local map so createAcpCallbacks's
+    // getSession() can find this session once ACP init creates the ID.
     if (targetSessionId) {
       this.sessions.set(targetSessionId, sess);
-      registerInLegacyMap(targetSessionId, sess);
     }
 
     // ── Process lifecycle listeners ────────────────────────────
     proc.stderr.on("data", (chunk: Buffer) => {
       console.log(`[server] stderr: ${chunk.toString().slice(0, 200)}`);
     });
-    proc.on("error", () => {});
+    proc.on("error", (err: Error) => {
+      console.log(`[session-manager] ${agent} process error: ${err.message}`);
+      try {
+        sess.ws?.send(JSON.stringify({ type: "error", sessionId, code: "AGENT_SPAWN_FAILED", text: `Agent process failed: ${err.message}` }));
+      } catch { /* WS gone */ }
+      if (sessionId) {
+        const current = this.sessions.get(sessionId);
+        if (current === sess) {
+          this.killTerminalProcesses(sess);
+          this.sessions.delete(sessionId);
+          this.sessionSeqCounter.delete(sessionId);
+        }
+      }
+    });
     proc.on("exit", (code) => {
       console.log(`[server] ${sessionId} process exited with code ${code}`);
       if (sessionId) {
@@ -213,14 +335,23 @@ export class SessionManager {
     });
 
     // ── ACP initialisation ─────────────────────────────────────
-    await client.initialize();
-
     try {
+      await initializeWithTimeout(client, proc);
       if (mode === "load" && targetSessionId) {
-        await client.loadSession(targetSessionId, resolvedCwd);
+        sess.loadInFlight = (async () => {
+          await client.loadSession(targetSessionId, resolvedCwd);
+        })().finally(() => {
+          sess.loadInFlight = undefined;
+        });
+        await sess.loadInFlight;
         sessionId = targetSessionId;
       } else if (mode === "resume" && targetSessionId) {
-        await client.resumeSession(targetSessionId, resolvedCwd);
+        sess.loadInFlight = (async () => {
+          await client.resumeSession(targetSessionId, resolvedCwd);
+        })().finally(() => {
+          sess.loadInFlight = undefined;
+        });
+        await sess.loadInFlight;
         sessionId = targetSessionId;
       } else {
         const result = await client.createSession(resolvedCwd);
@@ -255,9 +386,8 @@ export class SessionManager {
       if (models) setCachedModelList(agent, resolvedCwd, models);
     } catch { /* best-effort */ }
 
-    // Register in both maps for the final key
+    // Register in the local map under the final key
     this.sessions.set(sessionId, sess);
-    registerInLegacyMap(sessionId, sess);
     this.updateSessionActivity(sessionId);
 
     // Lazy-start idle cleanup timer
@@ -274,10 +404,13 @@ export class SessionManager {
    *
    *  Sends `turn_ended` / `error` events via the session's WebSocket.
    */
-  async dispatchPrompt(sessionId: string, text: string): Promise<void> {
-    const sess = this.sessions.get(sessionId);
-    if (!sess || !sess.sessionId) {
-      throw new Error(`session not found: ${sessionId}`);
+  async dispatchPrompt(sessionId: string, text: string, ownerTransport: WebSocket): Promise<void> {
+    const sess = this.assertOwner(sessionId, ownerTransport);
+    if (sess.turnActive) {
+      throw new Error("session turn already active");
+    }
+    if (!sess.sessionId) {
+      throw new SessionOwnerError("SESSION_NOT_FOUND", "session is not initialized");
     }
 
     // Auto-recover dead ACP connection by restarting the session
@@ -294,7 +427,7 @@ export class SessionManager {
       throw new Error(`session lost after restart: ${sessionId}`);
     }
 
-    const ws = liveSess.ws;
+    const ws = liveSess.ownerTransport;
     this.updateSessionActivity(sessionId);
 
     // Mark turn active
@@ -503,6 +636,7 @@ export class SessionManager {
   replayBuffer(
     sessionId: string,
     lastMessageId: string,
+    ownerTransport?: WebSocket,
   ): {
     entries: Array<{
       messageId: string;
@@ -511,7 +645,9 @@ export class SessionManager {
     }>;
     overflow: boolean;
   } {
-    const sess = this.sessions.get(sessionId);
+    const sess = ownerTransport
+      ? this.assertOwner(sessionId, ownerTransport)
+      : this.sessions.get(sessionId);
     if (!sess) return { entries: [], overflow: false };
 
     let lastSeq = 0;
@@ -586,9 +722,8 @@ export class SessionManager {
    *  Close an ACP session, kill its process, and remove from the
    *  pool.  Throws if the session is not found.
    */
-  async close(sessionId: string): Promise<void> {
-    const sess = this.sessions.get(sessionId);
-    if (!sess) throw new Error(`session not found: ${sessionId}`);
+  async close(sessionId: string, ownerTransport: WebSocket): Promise<void> {
+    const sess = this.assertOwner(sessionId, ownerTransport);
 
     try {
       await sess.client.closeSession(sess.sessionId);
@@ -608,18 +743,18 @@ export class SessionManager {
   /** ── cancel ─────────────────────────────────────────────────
    *  Cancel the current turn on an ACP session (no-op if missing).
    */
-  cancel(sessionId: string): void {
-    const sess = this.sessions.get(sessionId);
-    if (!sess || !sess.sessionId) return;
+  cancel(sessionId: string, ownerTransport: WebSocket): void {
+    const sess = this.assertOwner(sessionId, ownerTransport);
+    if (!sess.sessionId) return;
     sess.client.cancel(sess.sessionId).catch(() => {});
   }
 
   /** ── switchModel ────────────────────────────────────────────
    *  Change the model on a live ACP session.
    */
-  async switchModel(sessionId: string, model: string): Promise<void> {
-    const sess = this.sessions.get(sessionId);
-    if (!sess || !sess.sessionId) throw new Error(`no active session: ${sessionId}`);
+  async switchModel(sessionId: string, model: string, ownerTransport: WebSocket): Promise<void> {
+    const sess = this.assertOwner(sessionId, ownerTransport);
+    if (!sess.sessionId) throw new SessionOwnerError("SESSION_NOT_FOUND", "session is not initialized");
     if (!model) throw new Error("model is required");
 
     console.log(`[session-manager] switching model for ${sessionId.slice(0, 20)} to ${model}`);
@@ -632,9 +767,9 @@ export class SessionManager {
    *  Set a session config option on a live ACP session.
    *  Returns the ACP result for the caller to forward to the client.
    */
-  async setConfig(sessionId: string, configId: string, value: string): Promise<any> {
-    const sess = this.sessions.get(sessionId);
-    if (!sess || !sess.sessionId) throw new Error(`session not found: ${sessionId}`);
+  async setConfig(sessionId: string, configId: string, value: string, ownerTransport: WebSocket): Promise<any> {
+    const sess = this.assertOwner(sessionId, ownerTransport);
+    if (!sess.sessionId) throw new SessionOwnerError("SESSION_NOT_FOUND", "session is not initialized");
 
     const result = await sess.client.setSessionConfigOption(
       sess.sessionId,
@@ -648,9 +783,9 @@ export class SessionManager {
   /** ── setMode ────────────────────────────────────────────────
    *  Set the active mode on a live ACP session.
    */
-  async setMode(sessionId: string, modeId: string): Promise<void> {
-    const sess = this.sessions.get(sessionId);
-    if (!sess || !sess.sessionId) throw new Error(`no active session: ${sessionId}`);
+  async setMode(sessionId: string, modeId: string, ownerTransport: WebSocket): Promise<void> {
+    const sess = this.assertOwner(sessionId, ownerTransport);
+    if (!sess.sessionId) throw new SessionOwnerError("SESSION_NOT_FOUND", "session is not initialized");
     await sess.client.setSessionMode(sess.sessionId, modeId);
   }
 
@@ -666,9 +801,15 @@ export class SessionManager {
   ): boolean {
     const existing = this.sessions.get(sessionId);
     if (!existing) return false;
-
-    existing.ws = ws;
-    existing.orphanedAt = null;
+    if (existing.ownerTransport && existing.ownerTransport !== ws) return false;
+    if (!existing.ownerTransport && existing.orphanedAt !== null) {
+      this.claimSession(existing, ws);
+    } else if (existing.ownerTransport === ws) {
+      existing.ws = ws;
+      existing.ownerId = this.transportIdentity(ws);
+    } else {
+      return false;
+    }
     this.updateSessionActivity(sessionId);
     console.log(
       `[session-manager] reclaimed existing session: ${sessionId.slice(0, 20)}`,
@@ -676,7 +817,7 @@ export class SessionManager {
 
     // Send sync replay if requested
     if (lastMessageId) {
-      const syncResult = this.replayBuffer(sessionId, lastMessageId);
+      const syncResult = this.replayBuffer(sessionId, lastMessageId, ws);
       if (syncResult.entries.length > 0) {
         try {
           ws.send(
@@ -704,7 +845,7 @@ export class SessionManager {
    *  Find the first session associated with a WebSocket connection. */
   findSessionForWs(ws: WebSocket): SessionState | undefined {
     for (const sess of this.sessions.values()) {
-      if (sess.ws === ws) return sess;
+      if (sess.ownerTransport === ws) return sess;
     }
     return undefined;
   }
@@ -726,9 +867,87 @@ export class SessionManager {
     return ids;
   }
 
+  /** ── enqueueWsOp ────────────────────────────────────────────
+   *  Serialize WebSocket operations so they execute one at a time
+   *  per connection. Errors are caught and logged.
+   */
+  public enqueueWsOp(ws: import("ws").WebSocket, fn: () => Promise<void>): void {
+    const prev = this.wsOpQueues.get(ws) || Promise.resolve();
+    const next = prev.catch(() => {}).then(async () => {
+      try {
+        await fn();
+      } catch (err: any) {
+        console.log(`[server] queued op error: ${err.message}`);
+      }
+    });
+    this.wsOpQueues.set(ws, next);
+  }
+
+  /** ── reclaimOrphanedSession ─────────────────────────────────
+   *  Reclaim an orphaned (ws=null) session when a new WebSocket
+   *  connects with a matching sessionId. Returns the session or
+   *  undefined if not found or not orphaned.
+   */
+  public reclaimOrphanedSession(sessionId: string, newWs: import("ws").WebSocket): SessionState | undefined {
+    const sess = this.sessions.get(sessionId);
+    if (!sess) return undefined;
+    if (sess.ownerTransport === newWs) return sess;
+    if (sess.ownerTransport !== null || sess.orphanedAt === null) return undefined;
+    this.claimSession(sess, newWs);
+    this.updateSessionActivity(sessionId);
+    console.log(
+      `[session-manager] reclaimed orphaned session ${sessionId.slice(0, 20)}`,
+    );
+    return sess;
+  }
+
+  /** ── bufferedAfter ──────────────────────────────────────────
+   *  Alias for replayBuffer — return buffered events after a
+   *  given messageId for cursor sync.
+   */
+  public bufferedAfter(
+    sessionId: string,
+    lastMessageId: string,
+  ): {
+    entries: Array<{ messageId: string; payload: string; timestamp: number }>;
+    overflow: boolean;
+  } {
+    return this.replayBuffer(sessionId, lastMessageId);
+  }
+
   // ═══════════════════════════════════════════════════════════════
   // INTERNAL HELPERS
   // ═══════════════════════════════════════════════════════════════
+
+  /** Build the onPermissionRequest callback for AcpClientCallbacks.
+   *  Extracted to avoid duplication between getOrCreate and restartSession.
+   *  sessionIdRef is a thunk so the captured sessionId can be reassigned
+   *  externally (let-variable pattern).
+   */
+  private buildPermissionRequestCallback(
+    wsRef: import("ws").WebSocket | null | undefined,
+    sessionIdRef: () => string,
+  ): (permParams: RequestPermissionRequest) => Promise<RequestPermissionResponse> {
+    return (permParams) =>
+      new Promise((resolve) => {
+        const requestId = randomUUID();
+        const sid = sessionIdRef();
+        const s = this.sessions.get(sid);
+        if (s) s.pendingPermission = { requestId, resolve };
+        try {
+          const currentWs = this.sessions.get(sid)?.ownerTransport ?? wsRef;
+          currentWs?.send(
+            JSON.stringify({
+              type: "permission_request",
+              sessionId: sid,
+              requestId,
+              toolCall: permParams.toolCall,
+              options: permParams.options,
+            }),
+          );
+        } catch { /* WS gone */ }
+      });
+  }
 
   /** Touch lastActivity and slide the prompt inactivity timer. */
   private updateSessionActivity(sessionId: string): void {
@@ -742,12 +961,13 @@ export class SessionManager {
     }
   }
 
-  /** Buffer an event payload for cursor-sync replay, assigning a
-   *  monotonic messageId. */
-  private bufferAgentEvent(
+  /** Buffer a COPY of the event payload for cursor-sync replay, assigning
+   *  a monotonic messageId. Returns the buffered payload (with messageId)
+   *  so callers can send it over WS without relying on implicit mutation. */
+  public bufferAgentEvent(
     sessionId: string,
     eventPayload: object,
-  ): string | undefined {
+  ): object | undefined {
     const sess = this.sessions.get(sessionId);
     if (!sess) return undefined;
 
@@ -755,11 +975,11 @@ export class SessionManager {
     this.sessionSeqCounter.set(sessionId, seq);
     const messageId = `${sessionId}:${seq}`;
 
-    const ep = eventPayload as Record<string, unknown>;
-    ep.messageId = messageId;
+    // Clone — never mutate the caller-owned object
+    const buffered = { ...(eventPayload as Record<string, unknown>), messageId };
     sess.messageBuffer.push({
       messageId,
-      payload: JSON.stringify(eventPayload),
+      payload: JSON.stringify(buffered),
       timestamp: Date.now(),
     });
 
@@ -768,7 +988,7 @@ export class SessionManager {
       const excess = sess.messageBuffer.length - MAX_MESSAGE_BUFFER;
       sess.messageBuffer.splice(0, excess);
     }
-    return messageId;
+    return buffered;
   }
 
   /** Orphan all sessions bound to a WebSocket (keep their ACP
@@ -776,20 +996,40 @@ export class SessionManager {
   cleanupWsSessions(ws: WebSocket): void {
     const now = Date.now();
     for (const [id, sess] of this.sessions) {
-      if (sess.ws !== ws) continue;
+      if (sess.ownerTransport !== ws) continue;
       sess.orphanedAt = now;
-      sess.ws = null as unknown as WebSocket;
+      sess.ownerTransport = null;
+      sess.ownerId = null;
+      sess.ws = null;
+      if (sess.pendingPermission) {
+        const pending = sess.pendingPermission;
+        sess.pendingPermission = null;
+        pending.resolve({ outcome: { outcome: "cancelled" } });
+      }
       this.updateSessionActivity(id);
       console.log(
         `[session-manager] session ${id.slice(0, 20)} orphaned (process kept alive)`,
       );
       this.ensureIdleCleanupRunning();
     }
+    this.wsOpQueues.delete(ws);
     this.enforceProcessPoolLimit();
   }
 
+  /** Stop manager-owned timers and queued transport bookkeeping. */
+  public stop(): void {
+    if (this.idleCleanupTimer !== null) {
+      clearInterval(this.idleCleanupTimer);
+      this.idleCleanupTimer = null;
+    }
+    this.wsOpQueues.clear();
+    this.pendingCreates.clear();
+    this.sessions.clear();
+    this.sessionSeqCounter.clear();
+  }
+
   /** Kill an ACP session's child process and destroy its client. */
-  private killSessionProcess(sess: SessionState): void {
+  public killSessionProcess(sess: SessionState): void {
     try {
       sess.client.destroy();
     } catch { /* ok */ }
@@ -824,7 +1064,7 @@ export class SessionManager {
   }
 
   /** Enforce MAX_TOOLCALL_IDS ceiling on the session's toolCallIdMap. */
-  private trimToolCallIds(sess: SessionState): void {
+  public trimToolCallIds(sess: SessionState): void {
     if (sess.toolCallIdMap.size <= MAX_TOOLCALL_IDS) return;
     const entries = [...sess.toolCallIdMap.entries()];
     const toRemove = entries.slice(0, entries.length - MAX_TOOLCALL_IDS);
@@ -925,13 +1165,7 @@ export class SessionManager {
     }
 
     const cwd = sess.cwd || process.cwd();
-    const args = getAgentLaunchArgs(sess.agent);
-    const proc = spawn(sess.agent, args, {
-      cwd,
-      env: { ...process.env, FORCE_COLOR: "0", NO_COLOR: "1" },
-      stdio: ["pipe", "pipe", "pipe"],
-      shell: true,
-    });
+    const proc = spawnAgentProcess(sess.agent, cwd);
 
     let suppressingReplay = false;
     const wsRef = sess.ws;
@@ -949,30 +1183,18 @@ export class SessionManager {
           sessionId,
           event: update.update,
         };
+        let wsPayload: object;
         try {
-          this.bufferAgentEvent(sessionId, eventPayload);
-        } catch { /* ok */ }
+          wsPayload = this.bufferAgentEvent(sessionId, eventPayload) ?? eventPayload;
+        } catch { /* ok */
+          wsPayload = eventPayload;
+        }
         try {
-          wsRef?.send(JSON.stringify(eventPayload));
+          const currentWs = this.sessions.get(sessionId)?.ownerTransport ?? wsRef;
+          currentWs?.send(JSON.stringify(wsPayload));
         } catch { /* WS gone */ }
       },
-      onPermissionRequest: (permParams) =>
-        new Promise((resolve) => {
-          const requestId = randomUUID();
-          const s = this.sessions.get(sessionId);
-          if (s) s.pendingPermission = { requestId, resolve };
-          try {
-            wsRef?.send(
-              JSON.stringify({
-                type: "permission_request",
-                sessionId,
-                requestId,
-                toolCall: permParams.toolCall,
-                options: permParams.options,
-              }),
-            );
-          } catch { /* WS gone */ }
-        }),
+      onPermissionRequest: this.buildPermissionRequestCallback(wsRef, () => sessionId),
       ...createAcpCallbacks({
         sessionId,
         cwd,
@@ -982,10 +1204,15 @@ export class SessionManager {
 
     const client = this.clientFactory.create(proc, callbacks);
 
-    proc.stderr.on("data", (chunk: Buffer) => {
+    proc.stderr?.on("data", (chunk: Buffer) => {
       console.log(`[server] stderr: ${chunk.toString().slice(0, 200)}`);
     });
-    proc.on("error", () => {});
+    proc.on("error", (err: Error) => {
+      console.log(`[session-manager] restarted ${sess.agent} process error: ${err.message}`);
+      try {
+        sess.ws?.send(JSON.stringify({ type: "error", sessionId, code: "AGENT_SPAWN_FAILED", text: `Agent restart failed: ${err.message}` }));
+      } catch { /* WS gone */ }
+    });
     proc.on("exit", (code) => {
       console.log(
         `[session-manager] ${sessionId.slice(0, 20)} restarted process exited with code ${code}`,
@@ -998,11 +1225,12 @@ export class SessionManager {
       }
     });
 
-    await client.initialize();
-
-    const reloadSessionId = sess.sessionId;
+    let reloadSessionId: string;
     let acpSessionId: string;
-    if (reloadSessionId) {
+    try {
+      await initializeWithTimeout(client, proc);
+      reloadSessionId = sess.sessionId;
+      if (reloadSessionId) {
       suppressingReplay = true;
       try {
         console.log(
@@ -1019,9 +1247,16 @@ export class SessionManager {
       } finally {
         suppressingReplay = false;
       }
-    } else {
-      const result = await client.createSession(cwd);
-      acpSessionId = result.sessionId;
+      } else {
+        const result = await client.createSession(cwd);
+        acpSessionId = result.sessionId;
+      }
+    } catch (err: unknown) {
+      try { client.destroy(); } catch { /* ok */ }
+      if (!proc.killed) {
+        try { kill(proc.pid!, "SIGTERM"); } catch { /* ok */ }
+      }
+      throw err;
     }
 
     sess.process = proc;
@@ -1041,9 +1276,7 @@ export class SessionManager {
         });
     }
 
-    // Re-register in both maps
     this.sessions.set(sessionId, sess);
-    registerInLegacyMap(sessionId, sess);
 
     console.log(
       `[session-manager] ACP session restarted: ${sessionId.slice(0, 20)}`,

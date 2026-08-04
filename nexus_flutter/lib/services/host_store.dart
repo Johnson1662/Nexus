@@ -103,6 +103,7 @@ class HostStore extends ChangeNotifier {
         urls: mergedUrls,
         relayUrl: device.relayUrl ?? old.relayUrl,
         relayPin: device.relayPin ?? old.relayPin,
+        authToken: _mergeAuthToken(device.authToken, old.authToken),
       );
     } else {
       // Normalize URLs before adding
@@ -113,6 +114,7 @@ class HostStore extends ChangeNotifier {
         urls: normalizedUrls,
         relayUrl: device.relayUrl,
         relayPin: device.relayPin,
+        authToken: _mergeAuthToken(device.authToken, null),
       ));
     }
     deduplicate();
@@ -159,12 +161,20 @@ class HostStore extends ChangeNotifier {
           urls: mergedUrls,
           relayUrl: d.relayUrl ?? old.relayUrl,
           relayPin: d.relayPin ?? old.relayPin,
+          authToken: _mergeAuthToken(d.authToken, old.authToken),
         );
       } else {
         merged.add(d);
       }
     }
     devices = merged;
+  }
+
+  String? _mergeAuthToken(String? preferred, String? fallback) {
+    final token = preferred?.trim();
+    if (token != null && token.isNotEmpty) return token;
+    final oldToken = fallback?.trim();
+    return oldToken == null || oldToken.isEmpty ? null : oldToken;
   }
 
   String _normalizeUrl(String url) {

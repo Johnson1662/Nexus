@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../constants/theme.dart';
-import '../models/ws_protocol.dart';
 import '../providers/chat_provider.dart';
 import '../widgets/session_tile.dart';
 
@@ -12,8 +11,13 @@ class WorkspaceDetailPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final chatProvider = context.watch<ChatProvider>();
-    final workspaceName =
-        ModalRoute.of(context)?.settings.arguments as String? ?? '工作区';
+    final args = ModalRoute.of(context)?.settings.arguments;
+    final workspaceName = args is Map
+        ? args['name']?.toString() ?? '工作区'
+        : args is String
+            ? args
+            : '工作区';
+    final workspacePath = args is Map ? args['path']?.toString() ?? '' : '';
 
     // Filter sessions by workspace (cwd matches by path or dir name)
     final sessions = chatProvider.state.sessions.where((s) {
@@ -31,15 +35,11 @@ class WorkspaceDetailPage extends StatelessWidget {
           IconButton(
             icon: const Icon(Icons.add_comment_outlined, size: 22),
             onPressed: () {
-              // Set workspace cwd before starting new session
-              final wp = context.read<WorkspaceProvider>();
-              for (final w in wp.workspaces) {
-                final name = w['name'] ?? '';
-                final path = w['path'] ?? '';
-                if (name == workspaceName || path.split(RegExp(r'[/\\]')).last == workspaceName) {
-                  chatProvider.setCurrentWorkspace(path);
-                  break;
-                }
+              final path = workspacePath.isNotEmpty
+                  ? workspacePath
+                  : _findWorkspacePath(context, workspaceName);
+              if (path.isNotEmpty) {
+                chatProvider.setCurrentWorkspace(path);
               }
               chatProvider.newChat();
               Navigator.pushNamed(context, '/chat');
@@ -71,7 +71,7 @@ class WorkspaceDetailPage extends StatelessWidget {
             )
           : ListView.builder(
               padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.lg,
+                horizontal: AppSpacing.xl,
                 vertical: AppSpacing.md,
               ),
               itemCount: sessions.length,
@@ -89,5 +89,17 @@ class WorkspaceDetailPage extends StatelessWidget {
               },
             ),
     );
+  }
+
+  String _findWorkspacePath(BuildContext context, String name) {
+    final workspaces = context.read<WorkspaceProvider>().workspaces;
+    for (final workspace in workspaces) {
+      final path = workspace['path'] ?? '';
+      if (workspace['name'] == name ||
+          path.split(RegExp(r'[/\\]')).lastOrNull == name) {
+        return path;
+      }
+    }
+    return '';
   }
 }

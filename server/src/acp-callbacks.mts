@@ -1,10 +1,10 @@
 import path from "node:path";
 import fs from "node:fs/promises";
-import { realpathSync } from "node:fs";
+import { lstatSync, realpathSync } from "node:fs";
 import { spawn } from "node:child_process";
 import kill from "tree-kill";
 import type { WebSocket } from "ws";
-import { getSession, bufferAgentEvent } from "./session.mjs";
+import { sessionManager } from "./session-manager.mjs";
 import type {
   ReadTextFileRequest,
   ReadTextFileResponse,
@@ -22,25 +22,36 @@ import type {
   ReleaseTerminalResponse,
 } from "@agentclientprotocol/sdk";
 
-export function isPathWithinCwd(target: string, cwd: string): boolean {
-  const resolved = path.resolve(target);
-  // Resolve symlinks to prevent symlink-based directory escape
+export function resolvePathWithinCwd(target: string, cwd: string, allowMissing = false): string {
+  const resolved = path.resolve(cwd, target);
+  const realCwd = realpathSync(cwd);
   let realResolved: string;
   try {
     realResolved = realpathSync(resolved);
-  } catch {
-    // File doesn't exist yet (e.g. write operation) — resolve parent dir instead
-    const parent = path.dirname(resolved);
+  } catch (error) {
+    if (!allowMissing) throw error;
     try {
-      const realParent = realpathSync(parent);
-      realResolved = path.join(realParent, path.basename(resolved));
-    } catch {
-      return false;
+      if (lstatSync(resolved).isSymbolicLink()) throw new Error(`path not allowed: ${target}`);
+    } catch (linkError: unknown) {
+      if (!(linkError instanceof Error && "code" in linkError && linkError.code === "ENOENT")) throw linkError;
     }
+    const realParent = realpathSync(path.dirname(resolved));
+    realResolved = path.join(realParent, path.basename(resolved));
   }
-  const realCwd: string = realpathSync(cwd);
   const relative = path.relative(realCwd, realResolved);
-  return !relative.startsWith("..") && !path.isAbsolute(relative);
+  if (relative.startsWith("..") || path.isAbsolute(relative)) {
+    throw new Error(`path not allowed: ${target}`);
+  }
+  return realResolved;
+}
+
+export function isPathWithinCwd(target: string, cwd: string): boolean {
+  try {
+    resolvePathWithinCwd(target, cwd, true);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 interface AcpCallbacksConfig {
@@ -63,8 +74,8 @@ export function createAcpCallbacks(config: AcpCallbacksConfig): {
   
   // Resolve WS dynamically from session map — supports session reclaim after reconnect
   function getSessionWs(): import("ws").WebSocket | undefined {
-    const sess = getSession(sessionId);
-    return sess?.ws || undefined;
+    const sess = sessionManager.getSession(sessionId);
+    return sess?.ownerTransport || undefined;
   }
 
   function sendToolCallUpdate(toolCallId: string, status: string, content: object[]): void {
@@ -82,8 +93,8 @@ export function createAcpCallbacks(config: AcpCallbacksConfig): {
         },
       };
       const wss = getSessionWs();
-      bufferAgentEvent(sessionId, eventPayload);
-      if (wss) wss.send(JSON.stringify(eventPayload));
+      const wsPayload = sessionManager.bufferAgentEvent(sessionId, eventPayload) ?? eventPayload;
+      if (wss) wss.send(JSON.stringify(wsPayload));
     } catch {}
   }
 
@@ -92,19 +103,17 @@ export function createAcpCallbacks(config: AcpCallbacksConfig): {
   }
 
   const onReadTextFile = async (params: ReadTextFileRequest): Promise<ReadTextFileResponse> => {
-    const currentSess = getSession(sessionId);
+    const currentSess = sessionManager.getSession(sessionId);
     if (!currentSess) throw new Error("session not found");
-    if (!isPathWithinCwd(params.path, cwd)) {
-      throw new Error(`path not allowed: ${params.path}`);
-    }
+    const resolvedPath = resolvePathWithinCwd(params.path, cwd);
     let content: string;
     if (params.line != null && params.line > 0) {
-      const allLines = (await fs.readFile(params.path, "utf-8")).split("\n");
+      const allLines = (await fs.readFile(resolvedPath, "utf-8")).split("\n");
       const start = params.line - 1;
       const end = params.limit != null ? start + params.limit : undefined;
       content = allLines.slice(start, end).join("\n");
     } else {
-      content = await fs.readFile(params.path, "utf-8");
+      content = await fs.readFile(resolvedPath, "utf-8");
       if (params.limit) {
         content = content.split("\n").slice(0, params.limit).join("\n");
       }
@@ -122,19 +131,17 @@ export function createAcpCallbacks(config: AcpCallbacksConfig): {
   };
 
   const onWriteTextFile = async (params: WriteTextFileRequest): Promise<WriteTextFileResponse> => {
-    const currentSess = getSession(sessionId);
+    const currentSess = sessionManager.getSession(sessionId);
     if (!currentSess) throw new Error("session not found");
-    if (!isPathWithinCwd(params.path, cwd)) {
-      throw new Error(`path not allowed: ${params.path}`);
-    }
+    const resolvedPath = resolvePathWithinCwd(params.path, cwd, true);
     let oldText = "";
     try {
-      oldText = await fs.readFile(params.path, "utf-8");
+      oldText = await fs.readFile(resolvedPath, "utf-8");
     } catch {
       oldText = "";
     }
-    await fs.mkdir(path.dirname(params.path), { recursive: true });
-    await fs.writeFile(params.path, params.content, "utf-8");
+    await fs.mkdir(path.dirname(resolvedPath), { recursive: true });
+    await fs.writeFile(resolvedPath, params.content, "utf-8");
     sendToolCallUpdate(fileToolCallId("write", params.path), "completed", [
       {
         type: "diff",
@@ -147,7 +154,7 @@ export function createAcpCallbacks(config: AcpCallbacksConfig): {
   };
 
   const onCreateTerminal = async (params: CreateTerminalRequest): Promise<CreateTerminalResponse> => {
-    const currentSess = getSession(sessionId);
+    const currentSess = sessionManager.getSession(sessionId);
     if (!currentSess) throw new Error("session not found");
 
     const terminalId = `term-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -175,7 +182,7 @@ export function createAcpCallbacks(config: AcpCallbacksConfig): {
     currentSess.terminals.set(terminalId, terminal);
 
     const sendTerminalUpdate = (status: string): void => {
-      const sess = getSession(sessionId);
+      const sess = sessionManager.getSession(sessionId);
       const t = sess?.terminals.get(terminalId);
       if (!t) return;
       sendToolCallUpdate(terminalId, status, [
@@ -190,8 +197,9 @@ export function createAcpCallbacks(config: AcpCallbacksConfig): {
       ]);
     };
 
+    const terminalCwd = params.cwd ? resolvePathWithinCwd(params.cwd, cwd) : cwd;
     const termProc = spawn(params.command, params.args ?? [], {
-      cwd: params.cwd ?? cwd,
+      cwd: terminalCwd,
       env: params.env
         ? { ...process.env, ...Object.fromEntries(params.env.map((e: { name: string; value: string }) => [e.name, e.value])) }
         : { ...process.env },
@@ -202,7 +210,7 @@ export function createAcpCallbacks(config: AcpCallbacksConfig): {
     terminal.process = termProc;
 
     termProc.stdout!.on("data", (chunk: Buffer) => {
-      const sess = getSession(sessionId);
+      const sess = sessionManager.getSession(sessionId);
       const t = sess?.terminals.get(terminalId);
       if (!t || t.truncated) return;
       t.output += chunk.toString();
@@ -214,7 +222,7 @@ export function createAcpCallbacks(config: AcpCallbacksConfig): {
     });
 
     termProc.stderr!.on("data", (chunk: Buffer) => {
-      const sess = getSession(sessionId);
+      const sess = sessionManager.getSession(sessionId);
       const t = sess?.terminals.get(terminalId);
       if (!t || t.truncated) return;
       t.output += chunk.toString();
@@ -226,7 +234,7 @@ export function createAcpCallbacks(config: AcpCallbacksConfig): {
     });
 
     termProc.on("exit", (code: number | null, sig: string | null) => {
-      const sess = getSession(sessionId);
+      const sess = sessionManager.getSession(sessionId);
       const t = sess?.terminals.get(terminalId);
       if (t) {
         t.exitStatus = { exitCode: code, signal: sig ?? null };
@@ -236,7 +244,7 @@ export function createAcpCallbacks(config: AcpCallbacksConfig): {
     });
 
     termProc.on("error", () => {
-      const sess = getSession(sessionId);
+      const sess = sessionManager.getSession(sessionId);
       const t = sess?.terminals.get(terminalId);
       if (t) {
         t.exitStatus = { exitCode: -1, signal: null };
@@ -249,7 +257,7 @@ export function createAcpCallbacks(config: AcpCallbacksConfig): {
   };
 
   const onTerminalOutput = async (params: TerminalOutputRequest): Promise<TerminalOutputResponse> => {
-    const currentSess = getSession(sessionId);
+    const currentSess = sessionManager.getSession(sessionId);
     if (!currentSess) throw new Error("session not found");
     const term = currentSess.terminals.get(params.terminalId);
     if (!term) throw new Error(`terminal not found: ${params.terminalId}`);
@@ -261,7 +269,7 @@ export function createAcpCallbacks(config: AcpCallbacksConfig): {
   };
 
   const onWaitForTerminalExit = async (params: WaitForTerminalExitRequest): Promise<WaitForTerminalExitResponse> => {
-    const currentSess = getSession(sessionId);
+    const currentSess = sessionManager.getSession(sessionId);
     if (!currentSess) throw new Error("session not found");
     const term = currentSess.terminals.get(params.terminalId);
     if (!term) throw new Error(`terminal not found: ${params.terminalId}`);
@@ -273,7 +281,7 @@ export function createAcpCallbacks(config: AcpCallbacksConfig): {
   };
 
   const onKillTerminal = async (params: KillTerminalRequest): Promise<KillTerminalResponse | void> => {
-    const currentSess = getSession(sessionId);
+    const currentSess = sessionManager.getSession(sessionId);
     if (!currentSess) throw new Error("session not found");
     const term = currentSess.terminals.get(params.terminalId);
     if (!term) throw new Error(`terminal not found: ${params.terminalId}`);
@@ -286,7 +294,7 @@ export function createAcpCallbacks(config: AcpCallbacksConfig): {
   };
 
   const onReleaseTerminal = async (params: ReleaseTerminalRequest): Promise<ReleaseTerminalResponse | void> => {
-    const currentSess = getSession(sessionId);
+    const currentSess = sessionManager.getSession(sessionId);
     if (!currentSess) throw new Error("session not found");
     const term = currentSess.terminals.get(params.terminalId);
     if (!term) throw new Error(`terminal not found: ${params.terminalId}`);

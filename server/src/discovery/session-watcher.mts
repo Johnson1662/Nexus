@@ -232,17 +232,26 @@ export function computeSessionDiff(
 
 /**
  * Merge disk-scanned session statuses with live SessionManager state.
- * For any session whose turnActive=true in memory, override disk status
- * to "running" regardless of file mtime.
+ *
+ * 1. Filters `diskResults` to only include identifiers that match a known
+ *    SessionManager session. Static filesystem labels (e.g. "opencode-active",
+ *    "omp-active") are discarded when they don't correspond to a known session.
+ * 2. For any session whose turnActive=true in memory, overrides disk status
+ *    to "running" regardless of file mtime.
  *
  * Pure function — independently testable.
  */
 export function mergeSessionStatus(
   diskResults: ActiveSessionStatus[],
   activeIds: Set<string>,
+  knownIds: Set<string>,
 ): ActiveSessionStatus[] {
-  if (activeIds.size === 0) return diskResults;
-  return diskResults.map(s => {
+  // No known live sessions → no filesystem identity can leak.
+  if (knownIds.size === 0) return [];
+  const filtered = diskResults.filter(s => knownIds.has(s.sessionId));
+  // Override: turnActive sessions are always "running".
+  if (activeIds.size === 0) return filtered;
+  return filtered.map(s => {
     if (activeIds.has(s.sessionId)) {
       return { ...s, status: "running" as const };
     }

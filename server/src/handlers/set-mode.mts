@@ -1,5 +1,5 @@
 import type { WebSocket } from "ws";
-import { sessionManager } from "../session-manager.mjs";
+import { SessionOwnerError, sessionManager } from "../session-manager.mjs";
 
 export async function handleSetMode(
   ws: WebSocket,
@@ -11,9 +11,11 @@ export async function handleSetMode(
     return;
   }
   try {
-    await sessionManager.setMode(sessionId, modeId);
+    await sessionManager.setMode(sessionId, modeId, ws);
     try { ws.send(JSON.stringify({ type: "mode_set", sessionId, modeId })); } catch {}
   } catch (err: any) {
-    try { ws.send(JSON.stringify({ type: "error", text: `set_mode failed: ${err.message}` })); } catch {}
+    const message = err instanceof Error ? err.message : String(err);
+    const code = err instanceof SessionOwnerError ? err.code : "SESSION_ACCESS_DENIED";
+    try { ws.send(JSON.stringify({ type: "error", sessionId, code, text: `set_mode failed: ${message}` })); } catch {}
   }
 }

@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 
 import '../constants/theme.dart';
 import '../providers/chat_provider.dart';
+import '../utils/agent_utils.dart';
+import 'agent_logo.dart';
 
 /// Fine-tuned modal bottom sheet for configuring Agent, Model, and Mode.
 class ConfigPanel extends StatefulWidget {
@@ -147,9 +149,13 @@ class _ConfigPanelState extends State<ConfigPanel> {
               // Agent Row
               _summaryRow(
                 context,
-                icon: Icons.smart_toy_outlined,
+                iconWidget: AgentLogo(
+                  agentName: agentName,
+                  size: 20,
+                  color: muted,
+                ),
                 label: 'Agent',
-                value: agentName,
+                value: AgentUtils.getDisplayName(agentName),
                 onTap: () => setState(() => _view = 'agents'),
               ),
               const Divider(height: 1),
@@ -181,7 +187,8 @@ class _ConfigPanelState extends State<ConfigPanel> {
 
   Widget _summaryRow(
     BuildContext context, {
-    required IconData icon,
+    IconData? icon,
+    Widget? iconWidget,
     required String label,
     required String value,
     required VoidCallback onTap,
@@ -199,7 +206,7 @@ class _ConfigPanelState extends State<ConfigPanel> {
         ),
         child: Row(
           children: [
-            Icon(icon, size: 20, color: muted),
+            iconWidget ?? Icon(icon ?? Icons.circle_outlined, size: 20, color: muted),
             const SizedBox(width: AppSpacing.md),
             Text(
               label,
@@ -333,9 +340,19 @@ class _ConfigPanelState extends State<ConfigPanel> {
                         ),
                         child: Row(
                           children: [
+                            if (_view == 'agents') ...[
+                              AgentLogo(
+                                agentName: label,
+                                size: 18,
+                                color: isSelected
+                                    ? AppColors.accentCtx(context)
+                                    : muted,
+                              ),
+                              const SizedBox(width: AppSpacing.md),
+                            ],
                             Expanded(
                               child: Text(
-                                label,
+                                _view == 'agents' ? AgentUtils.getDisplayName(label) : label,
                                 style: TextStyle(
                                   fontSize: AppFontSize.base,
                                   fontWeight: isSelected

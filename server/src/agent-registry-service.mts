@@ -1,8 +1,8 @@
-import path from "node:path";
 import type { AcpClient } from "./acp/client.mjs";
 import { createTempClient } from "./temp-client.mjs";
 import { getInstalledAgents, installAgent as storeInstallAgent, uninstallAgent as storeUninstallAgent, type InstalledAgent } from "./agents-store.mjs";
 import { extractModelList, queryModelListOnce, type ModelList } from "./model-list.mjs";
+import { resolveWorkspacePath } from "./path-utils.mjs";
 
 const LIST_TIMEOUT = 12000;
 
@@ -11,7 +11,7 @@ const LIST_TIMEOUT = 12000;
  *
  * Encapsulates temp client spawning, 12-second Promise.race timeout safety,
  * custom command args resolution (via createTempClient → getAgentLaunchArgs),
- * and path.resolve(cwd).toLowerCase() path normalization.
+ * and cross-platform cwd path normalization.
  *
  * Future: will consume SessionManager with AcpClientFactory DI for
  * session-aware client reuse.
@@ -31,7 +31,7 @@ class AgentRegistryService {
    * - Creates temp clients for each agent
    * - Wraps each listSessions call in a 12-second Promise.race timeout
    * - Filters sessions by resolved cwd when `cwd` is provided
-   * - Normalizes cwd paths via path.resolve(cwd).toLowerCase()
+   * - Normalizes cwd paths across Windows and POSIX home aliases
    * - Attaches agent metadata to each session
    */
   async queryAggregateSessions(
@@ -42,38 +42,39 @@ class AgentRegistryService {
       ? getInstalledAgents().filter((a) => a.agentId === agentFilter)
       : getInstalledAgents();
     const allSessions: any[] = [];
-    const normalizedTargetCwd = cwd
-      ? path.resolve(cwd).toLowerCase()
-      : undefined;
+    const resolvedCwd = resolveWorkspacePath(cwd);
+    const normalizedTargetCwd = resolvedCwd?.toLowerCase();
 
     await Promise.all(
       installed.map(async (agentItem) => {
         let temp: { client: AcpClient; destroy: () => void } | null = null;
         try {
-          temp = await createTempClient(agentItem.agentId, cwd);
-          const result = await Promise.race([
-            temp.client.listSessions(cwd),
-            new Promise<never>((_, reject) =>
-              setTimeout(
-                () => reject(new Error("listSessions timeout")),
-                LIST_TIMEOUT,
-              ),
-            ),
-          ]);
-          const sessions = (result as any).sessions || [];
-          for (const s of sessions) {
-            if (normalizedTargetCwd && s.cwd) {
-              const normalizedSessionCwd = path
-                .resolve(s.cwd)
-                .toLowerCase();
-              if (normalizedSessionCwd !== normalizedTargetCwd) continue;
+          temp = await createTempClient(agentItem.agentId, resolvedCwd);
+          let timeout: ReturnType<typeof setTimeout> | undefined;
+          try {
+            const result = await Promise.race([
+              temp.client.listSessions(resolvedCwd),
+              new Promise<never>((_, reject) => {
+                timeout = setTimeout(() => reject(new Error("listSessions timeout")), LIST_TIMEOUT);
+              }),
+            ]);
+            const sessions = (result as any).sessions || [];
+            for (const s of sessions) {
+              if (normalizedTargetCwd && s.cwd) {
+                const normalizedSessionCwd = resolveWorkspacePath(s.cwd)
+                  ?.toLowerCase();
+                if (normalizedSessionCwd !== normalizedTargetCwd) continue;
+              }
+              s.agent = agentItem.agentId;
+              if (!s.createdAt && s.updatedAt) {
+                s.createdAt = new Date(s.updatedAt).getTime();
+              }
+              allSessions.push(s);
             }
-            s.agent = agentItem.agentId;
-            if (!s.createdAt && s.updatedAt) {
-              s.createdAt = new Date(s.updatedAt).getTime();
-            }
-            allSessions.push(s);
+          } finally {
+            clearTimeout(timeout);
           }
+
         } catch (err: any) {
           console.log(
             `[server] aggregate listSessions error for agent "${agentItem.agentId}": ${err.message}`,

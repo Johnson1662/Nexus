@@ -18,11 +18,19 @@ export async function handleLoadSession(
     return;
   }
 
-  const sess = await sessionManager.getOrCreate(ws, {
-    agent, cwd, model,
-    sessionId: targetSessionId,
-    mode: "load",
-  });
+  let sess;
+  try {
+    sess = await sessionManager.getOrCreate(ws, {
+      agent, cwd, model,
+      sessionId: targetSessionId,
+      mode: "load",
+    });
+  } catch (err: unknown) {
+    const code = typeof err === "object" && err && "code" in err ? String(err.code) : "SESSION_ACCESS_DENIED";
+    const message = err instanceof Error ? err.message : String(err);
+    try { ws.send(JSON.stringify({ type: "error", sessionId: targetSessionId, code, text: message })); } catch {}
+    return;
+  }
 
   const sessionId = sess.sessionId;
   try {
@@ -37,7 +45,7 @@ export async function handleLoadSession(
 
   // Replay buffered events since lastMessageId
   if (lastMessageId) {
-    const syncResult = sessionManager.replayBuffer(sessionId, lastMessageId);
+    const syncResult = sessionManager.replayBuffer(sessionId, lastMessageId, ws);
     if (syncResult.entries.length > 0) {
       const safeEntries = syncResult.entries
         .map(e => {

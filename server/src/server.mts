@@ -1,7 +1,8 @@
 import { WebSocketServer, type WebSocket } from "ws";
 import http, { type IncomingMessage, type ServerResponse } from "node:http";
 import os from "os";
-import { getOrCreateHostId, getOrCreateHostIdentity } from "./host-identity.mjs";
+import { getOrCreateHostId } from "./host-identity.mjs";
+import { isAuthorizedHeader } from "./auth-token.mjs";
 // ── Protocol layering: transport vs session messages ──────────
 //
 // Transport-level messages deal with connection lifecycle:
@@ -23,7 +24,7 @@ import { handleStart } from "./handlers/start.mjs";
 import { handleInput } from "./handlers/input.mjs";
 import { handleCancel } from "./handlers/cancel.mjs";
 import { handleListModels } from "./handlers/list-models.mjs";
-import { handleListSessions, clearSessionListCache, sessionTitleOverrides } from "./handlers/list-sessions.mjs";
+import { handleListSessions } from "./handlers/list-sessions.mjs";
 import { handleSetMode } from "./handlers/set-mode.mjs";
 import { handleSwitchModel } from "./handlers/switch-model.mjs";
 import { handleLoadSession } from "./handlers/load-session.mjs";
@@ -32,10 +33,11 @@ import { handleCloseSession } from "./handlers/close-session.mjs";
 import { handleSetConfig } from "./handlers/set-config.mjs";
 import { handlePermissionResponse } from "./handlers/permission.mjs";
 import { handleAuth } from "./handlers/auth.mjs";
-import { cleanupWsSessions, enqueueWsOp, getSession, getBufferedAfter, reclaimOrphanedSession, killSessionProcess, getAllSessions } from "./session.mjs";
+
 import { SessionStatusWatcher, mergeSessionStatus } from "./discovery/session-watcher.mjs";
 import { handleListWorkspaceFiles, handleFileDiff, handleFileLog, handleFileRead } from "./handlers/workspace-files.mjs";
-import { sessionManager } from "./session-manager.mjs";
+import { SessionOwnerError, sessionManager } from "./session-manager.mjs";
+import { setTitle as setSessionTitle } from "./session-titles.mjs";
 
 const PORT = parseInt(process.env.PORT || "", 10) || 12138;
 const HOST_ID = getOrCreateHostId();
@@ -56,14 +58,39 @@ export interface BridgeApp {
   stop: () => Promise<void>;
 }
 
+function sendUnauthorizedUpgrade(socket: { write: (data: string) => void; destroy: () => void }): void {
+  const body = JSON.stringify({ ok: false, error: "unauthorized", code: "AUTH_REQUIRED" });
+  try {
+    socket.write(
+      `HTTP/1.1 401 Unauthorized\r\nContent-Type: application/json\r\nContent-Length: ${Buffer.byteLength(body)}\r\nConnection: close\r\n\r\n${body}`,
+    );
+  } finally {
+    socket.destroy();
+  }
+}
+
+function createAuthenticatedWebSocketServer(httpServer: http.Server): WebSocketServer {
+  const wss = new WebSocketServer({ noServer: true });
+  httpServer.on("upgrade", (req, socket, head) => {
+    if (!isAuthorizedHeader(req.headers.authorization)) {
+      sendUnauthorizedUpgrade(socket);
+      return;
+    }
+    wss.handleUpgrade(req, socket, head, (ws) => {
+      wss.emit("connection", ws, req);
+    });
+  });
+  return wss;
+}
+
 export function createBridgeServer(config: BridgeConfig): BridgeApp {
   const port = config.port;
   const hostId = config.hostId || HOST_ID;
 
   const httpServer = http.createServer((req: IncomingMessage, res: ServerResponse) => {
-    handleHttpRequest(req, res);
+    handleHttpRequest(req, res, hostId);
   });
-  const wss = new WebSocketServer({ server: httpServer });
+  const wss = createAuthenticatedWebSocketServer(httpServer);
   httpServer.listen(port, () => {
     console.log(`[server] listening on ws://0.0.0.0:${port} and IPv6 if available`);
   });
@@ -83,10 +110,10 @@ export function createBridgeServer(config: BridgeConfig): BridgeApp {
 
   // Wire up connections to message handlers
   wss.on("connection", (ws: WebSocket) => {
-    handleIncomingConnection(ws);
+    handleIncomingConnection(ws, hostId);
   });
 
-  startSessionWatcher(wss);
+  const stopSessionWatcher = startSessionWatcher(wss);
 
   return {
     httpServer,
@@ -94,10 +121,12 @@ export function createBridgeServer(config: BridgeConfig): BridgeApp {
     port,
     stop: async () => {
       clearInterval(pingInterval);
+      stopSessionWatcher();
       // Kill all agent subprocesses before closing
-      for (const [, sess] of getAllSessions()) {
-        try { killSessionProcess(sess); } catch {}
+      for (const [, sess] of sessionManager.getAllSessions()) {
+        try { sessionManager.killSessionProcess(sess); } catch {}
       }
+      sessionManager.stop();
       wss.clients.forEach(client => { try { client.close(); } catch {} });
       await new Promise<void>(resolve => wss.close(() => resolve()));
       await new Promise<void>(resolve => httpServer.close(() => resolve()));
@@ -117,7 +146,7 @@ const isMainModule = process.argv[1] && (
 // ── Pure functions (hoisted so createBridgeServer can call them) ──
 
 /** Start the session watcher and broadcast changes to all connected clients. */
-function startSessionWatcher(wss: WebSocketServer): void {
+function startSessionWatcher(wss: WebSocketServer): () => void {
   // Debounced pending sessions: aggregate rapid watcher ticks into one broadcast
   const pendingSessions = new Map<string, { sessionId: string; status: string; lastActivity: number }>();
   let debounceTimer: ReturnType<typeof setTimeout> | undefined;
@@ -139,31 +168,55 @@ function startSessionWatcher(wss: WebSocketServer): void {
 
   const watcher = new SessionStatusWatcher(5000);
   watcher.onStatusUpdate(({ added, removed, changed }) => {
-    // Merge live SessionManager state: turnActive=true → "running"
+    // Get canonical SessionManager state — filter filesystem results to only
+    // include identifiers matching known live sessions. Static filesystem labels
+    // (e.g. "opencode-active") without a matching SessionManager session are dropped.
+    const knownIds = new Set(sessionManager.getAllSessions().keys());
     const activeIds = sessionManager.getActiveSessionIds();
-    const finalAdded = activeIds.size > 0 ? mergeSessionStatus(added, activeIds) : added;
-    const finalChanged = activeIds.size > 0 ? mergeSessionStatus(changed, activeIds) : changed;
 
-    const all = [...finalAdded, ...finalChanged];
-    if (all.length === 0) return;
+    const allChanges = [...added, ...changed];
+    const merged = mergeSessionStatus(allChanges, activeIds, knownIds);
 
-    for (const s of all) {
-      pendingSessions.set(s.sessionId, {
+    // Build complete snapshot: merged disk state + all SessionManager sessions.
+    const result = new Map<string, { sessionId: string; status: string; lastActivity: number }>();
+    for (const s of merged) {
+      result.set(s.sessionId, {
         sessionId: s.sessionId,
         status: s.status,
         lastActivity: s.lastActivity,
       });
     }
 
-    // Debounce: reset timer on each watcher tick
+    const now = Date.now();
+    for (const [id, sess] of sessionManager.getAllSessions()) {
+      if (!result.has(id)) {
+        result.set(id, {
+          sessionId: id,
+          status: sess.turnActive ? "running" : "idle",
+          lastActivity: sess.lastActivity || now,
+        });
+      }
+    }
+
+    if (result.size === 0) return;
+
+    for (const [id, entry] of result) {
+      pendingSessions.set(id, entry);
+    }
+
     clearTimeout(debounceTimer);
     debounceTimer = setTimeout(flushPending, 500);
   });
   watcher.start();
   console.log("[server] session watcher started (5s interval, 500ms debounce)");
+  return () => {
+    clearTimeout(debounceTimer);
+    pendingSessions.clear();
+    watcher.stop();
+  };
 }
 
-function collectHostIps(): string[] {
+function collectHostIps(hostId: string): string[] {
   const nets = os.networkInterfaces();
   const ips: string[] = [];
   for (const name of Object.keys(nets)) {
@@ -179,7 +232,7 @@ function collectHostIps(): string[] {
       }
     }
   }
-  ips.push(`HOST:${HOST_ID}`);
+  ips.push(`HOST:${hostId}`);
   return ips;
 }
 
@@ -194,19 +247,23 @@ function sendJson(res: ServerResponse, statusCode: number, payload: object): voi
   res.end(body);
 }
 
-function handleHttpRequest(req: IncomingMessage, res: ServerResponse): void {
+function handleHttpRequest(req: IncomingMessage, res: ServerResponse, hostId: string = HOST_ID): void {
   if (req.method !== "GET") {
     sendJson(res, 400, { ok: false, error: "bad request" });
     return;
   }
   const url = new URL(req.url || "/", "http://localhost");
   if (url.pathname === "/probe") {
+    if (!isAuthorizedHeader(req.headers.authorization)) {
+      sendJson(res, 401, { ok: false, error: "unauthorized", code: "AUTH_REQUIRED" });
+      return;
+    }
     sendJson(res, 200, {
       ok: true,
       kind: "bridge",
-      hostId: HOST_ID,
+      hostId,
       hostname: os.hostname(),
-      ips: collectHostIps(),
+      ips: collectHostIps(hostId),
       ts: Date.now(),
     });
     return;
@@ -218,14 +275,13 @@ function handleHttpRequest(req: IncomingMessage, res: ServerResponse): void {
   res.end("WebSocket only");
 }
 
-function sendServerInfo(ws: WebSocket | any) {
+function sendServerInfo(ws: WebSocket | any, hostId: string): void {
   try {
     const hostname = os.hostname();
-    const ips = collectHostIps();
+    const ips = collectHostIps(hostId);
     ws.send(JSON.stringify({
       type: "server_info",
-      hostId: HOST_ID,
-      ed25519PublicKeyHex: getOrCreateHostIdentity().ed25519PublicKeyHex,
+      hostId,
       hostname,
       ips,
     }));
@@ -235,14 +291,14 @@ function sendServerInfo(ws: WebSocket | any) {
   }
 }
 
-function handleIncomingConnection(transport: any) {
+function handleIncomingConnection(transport: any, hostId: string = HOST_ID) {
   console.log(`[server] Local client connected`);
   const originalSend = transport.send.bind(transport);
   transport.send = (data: string | Buffer) => originalSend(data);
-  sendServerInfo(transport);
+  sendServerInfo(transport, hostId);
   // Heartbeat: respond to ping with pong via plain WS frame
   const HEARTBEAT_INTERVAL_MS = 10_000;
-  setInterval(() => {
+  const heartbeatTimer = setInterval(() => {
     try { transport.send(JSON.stringify({ type: "ping" })); } catch {}
   }, HEARTBEAT_INTERVAL_MS);
 
@@ -275,13 +331,8 @@ function handleIncomingConnection(transport: any) {
     }
 
     // ── Session layer ──────────────────────────────────────────
-    // Try to reclaim orphaned session for any message with a sessionId.
-    if (msg.sessionId) {
-      const reclaimed = reclaimOrphanedSession(msg.sessionId, transport);
-      if (reclaimed) {
-        console.log(`[server] reclaimed orphaned session ${msg.sessionId?.slice(0, 20)}`);
-      }
-    }
+    // Session ownership is checked by SessionManager. Reclaim is only
+    // performed by the explicit sync/load/resume flows below.
 
     // Dispatch to the appropriate handler.
     handleSessionMessage(msg, rawStr);
@@ -318,7 +369,6 @@ function handleIncomingConnection(transport: any) {
         console.log(`[server] handleStart agent="${sessionMsg.agent || "opencode"}" cwd="${sessionMsg.cwd || process.cwd()}"`);
         // Send immediate ack before spawning agent to prevent WS timeout
         transport.send(JSON.stringify({ type: "start_ack" }));
-        clearSessionListCache(transport);
         handleStart(transport, sessionMsg).catch((err: Error) => {
           console.log(`[server] handleStart error: ${err.message}`);
         });
@@ -413,12 +463,12 @@ function handleIncomingConnection(transport: any) {
 
       case "list_models":
         console.log(`[server] handleListModels agent="${sessionMsg.agent || ""}"`);
-        enqueueWsOp(transport, () => handleListModels(transport, sessionMsg.agent, Boolean(sessionMsg.refresh)));
+        sessionManager.enqueueWsOp(transport, () => handleListModels(transport, sessionMsg.agent, Boolean(sessionMsg.refresh)));
         break;
 
       case "list_sessions":
         console.log(`[server] handleListSessions cwd="${sessionMsg.cwd || ""}" agent="${sessionMsg.agent || ""}"`);
-        enqueueWsOp(transport, () => handleListSessions(transport, sessionMsg.cwd, sessionMsg.agent));
+        sessionManager.enqueueWsOp(transport, () => handleListSessions(transport, sessionMsg.cwd, sessionMsg.agent));
         break;
 
       case "set_mode":
@@ -437,20 +487,36 @@ function handleIncomingConnection(transport: any) {
 
       case "load_session":
         console.log(`[server] handleLoadSession target="${sessionMsg.sessionId?.slice(0, 20)}" agent="${sessionMsg.agent || "opencode"}"`);
-        clearSessionListCache(transport);
-        enqueueWsOp(transport, () => handleLoadSession(transport, sessionMsg));
+        sessionManager.enqueueWsOp(transport, () => handleLoadSession(transport, sessionMsg));
         break;
 
       case "resume_session":
         console.log(`[server] handleResumeSession target="${sessionMsg.sessionId?.slice(0, 20)}" agent="${sessionMsg.agent || "opencode"}"`);
-        clearSessionListCache(transport);
-        enqueueWsOp(transport, () => handleResumeSession(transport, sessionMsg));
+        sessionManager.enqueueWsOp(transport, () => handleResumeSession(transport, sessionMsg));
         break;
 
       case "close_session":
         console.log(`[server] handleCloseSession session="${sessionMsg.sessionId?.slice(0, 20)}"`);
-        enqueueWsOp(transport, () => handleCloseSession(transport, sessionMsg.sessionId));
+        sessionManager.enqueueWsOp(transport, () => handleCloseSession(transport, sessionMsg.sessionId));
         break;
+
+      case "rename_session": {
+        const sid = sessionMsg.sessionId as string;
+        const text = sessionMsg.text as string;
+        console.log(`[server] rename_session session="${sid?.slice(0, 20)}" title="${text?.slice(0, 60)}"`);
+        if (sid && text && text.trim().length > 0) {
+          try {
+            sessionManager.assertOwner(sid, transport);
+            setSessionTitle(sid, text.trim());
+            transport.send(JSON.stringify({ type: "session_renamed", sessionId: sid, title: text.trim() }));
+          } catch (err: unknown) {
+            const code = err instanceof SessionOwnerError ? err.code : "SESSION_ACCESS_DENIED";
+            const message = err instanceof Error ? err.message : String(err);
+            transport.send(JSON.stringify({ type: "error", sessionId: sid, code, text: message }));
+          }
+        }
+        break;
+      }
 
       case "permission_response":
         console.log(`[server] handlePermissionResponse session="${sessionMsg.sessionId?.slice(0, 20)}" outcome="${sessionMsg.outcome}"`);
@@ -472,28 +538,28 @@ function handleIncomingConnection(transport: any) {
 
       case "list_workspace_files":
         console.log(`[server] list_workspace_files cwd="${sessionMsg.cwd || ""}"`);
-        enqueueWsOp(transport, () => handleListWorkspaceFiles(transport, { cwd: sessionMsg.cwd || process.cwd() }));
+        sessionManager.enqueueWsOp(transport, () => handleListWorkspaceFiles(transport, { cwd: sessionMsg.cwd || process.cwd() }));
         break;
 
       case "get_file_diff":
-        enqueueWsOp(transport, () => handleFileDiff(transport, { cwd: sessionMsg.cwd || process.cwd(), path: sessionMsg.text || sessionMsg.path || "" }));
+        sessionManager.enqueueWsOp(transport, () => handleFileDiff(transport, { cwd: sessionMsg.cwd || process.cwd(), path: sessionMsg.text || sessionMsg.path || "" }));
         break;
 
       case "get_file_log":
-        enqueueWsOp(transport, () => handleFileLog(transport, { cwd: sessionMsg.cwd || process.cwd(), path: sessionMsg.text || sessionMsg.path || "" }));
+        sessionManager.enqueueWsOp(transport, () => handleFileLog(transport, { cwd: sessionMsg.cwd || process.cwd(), path: sessionMsg.text || sessionMsg.path || "" }));
         break;
 
       case "get_file_content":
-        enqueueWsOp(transport, () => handleFileRead(transport, { cwd: sessionMsg.cwd || process.cwd(), path: sessionMsg.text || sessionMsg.path || "" }));
+        sessionManager.enqueueWsOp(transport, () => handleFileRead(transport, { cwd: sessionMsg.cwd || process.cwd(), path: sessionMsg.text || sessionMsg.path || "" }));
         break;
 
       case "sync_request": {
         const syncSessionId = sessionMsg.sessionId as string;
         const lastMessageId = sessionMsg.lastMessageId as string || '';
         console.log(`[server] sync_request session="${syncSessionId?.slice(0, 20)}" lastMessageId="${lastMessageId?.slice(0, 20)}"`);
-        const sess = getSession(syncSessionId);
+        const sess = sessionManager.reclaimOrphanedSession(syncSessionId, transport);
         if (sess) {
-          const syncResult = getBufferedAfter(syncSessionId, lastMessageId);
+          const syncResult = sessionManager.replayBuffer(syncSessionId, lastMessageId, transport);
           const safeEntries = syncResult.entries
             .map(e => {
               try {
@@ -515,15 +581,17 @@ function handleIncomingConnection(transport: any) {
             sessionId: syncSessionId,
             entries: safeEntries,
             overflow: syncResult.overflow,
+            turnActive: sess.turnActive,
           }));
           console.log(`[server] sync_response ${safeEntries.length} entries for ${syncSessionId?.slice(0, 20)} overflow=${syncResult.overflow}`);
         } else {
-          transport.send(JSON.stringify({
-            type: "sync_response",
-            sessionId: syncSessionId,
-            entries: [],
-            error: "session not found",
-          }));
+          try {
+            sessionManager.assertOwner(syncSessionId, transport);
+          } catch (err: unknown) {
+            const code = err instanceof SessionOwnerError ? err.code : "SESSION_ACCESS_DENIED";
+            const message = err instanceof Error ? err.message : String(err);
+            transport.send(JSON.stringify({ type: "error", sessionId: syncSessionId, code, text: message }));
+          }
         }
         break;
       }
@@ -541,9 +609,9 @@ function handleIncomingConnection(transport: any) {
   }
 
   function onClose(): void {
+    clearInterval(heartbeatTimer);
     console.log(`[server] Local client disconnected, cleaning up sessions`);
-    clearSessionListCache(transport);
-    cleanupWsSessions(transport);
+    sessionManager.cleanupWsSessions(transport);
   }
 
   // Wire up message delivery
@@ -554,9 +622,9 @@ function handleIncomingConnection(transport: any) {
 if (isMainModule) {
   // Legacy standalone path: create HTTP + WSS server
   const httpServer = http.createServer((req: IncomingMessage, res: ServerResponse) => {
-    handleHttpRequest(req, res);
+    handleHttpRequest(req, res, HOST_ID);
   });
-  const wss = new WebSocketServer({ server: httpServer });
+  const wss = createAuthenticatedWebSocketServer(httpServer);
   httpServer.listen(PORT, () => {
     console.log(`[server] listening on ws://0.0.0.0:${PORT} and IPv6 if available`);
   });
@@ -575,7 +643,7 @@ if (isMainModule) {
   });
 
   wss.on("connection", (ws: WebSocket) => {
-    handleIncomingConnection(ws);
+    handleIncomingConnection(ws, HOST_ID);
   });
 
   console.log('[server] started (legacy mode: node server.mjs)');

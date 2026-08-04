@@ -26,7 +26,10 @@ try {
 } catch (err) {
   console.log(`[host-identity] migration check failed: ${err}`);
 }
-fs.mkdirSync(ANYWHERE_DIR, { recursive: true });
+fs.mkdirSync(ANYWHERE_DIR, { recursive: true, mode: 0o700 });
+try {
+  fs.chmodSync(ANYWHERE_DIR, 0o700);
+} catch {}
 
 
 function generateHostId(): string {
@@ -108,7 +111,13 @@ export function getOrCreateHostIdentity(): HostIdentityData {
     ed25519PublicKeyHex,
     ed25519PrivateKeyHex,
   };
-  fs.writeFileSync(IDENTITY_PATH, JSON.stringify(data, null, 2), 'utf-8');
+  fs.writeFileSync(IDENTITY_PATH, JSON.stringify(data, null, 2), {
+    encoding: 'utf-8',
+    mode: 0o600,
+  });
+  try {
+    fs.chmodSync(IDENTITY_PATH, 0o600);
+  } catch {}
   return data;
 }
 

@@ -35,33 +35,39 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
     BuildContext context,
     ChatProvider chatProvider,
   ) async {
+    if (!mounted) return;
     final session = widget.session;
     final controller = TextEditingController(text: session.title ?? '');
-    final newTitle = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('重命名会话'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(
-            hintText: '输入新名称',
+    try {
+      final newTitle = await showDialog<String>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('重命名会话'),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            decoration: const InputDecoration(
+              hintText: '输入新名称',
+            ),
           ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('取消'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, controller.text),
+              child: const Text('确认'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('取消'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, controller.text),
-            child: const Text('确认'),
-          ),
-        ],
-      ),
-    );
-    if (newTitle != null && newTitle.trim().isNotEmpty) {
-      chatProvider.renameSession(session.sessionId, newTitle.trim());
+      );
+      if (!mounted) return;
+      if (newTitle != null && newTitle.trim().isNotEmpty) {
+        chatProvider.renameSession(session.sessionId, newTitle.trim());
+      }
+    } finally {
+      controller.dispose();
     }
   }
 
@@ -69,6 +75,7 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
     BuildContext context,
     ChatProvider chatProvider,
   ) async {
+    if (!mounted) return;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -89,9 +96,10 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
         ],
       ),
     );
+    if (!mounted) return;
     if (confirmed == true) {
       chatProvider.closeSession(widget.session.sessionId);
-      if (context.mounted) Navigator.pop(context);
+      Navigator.pop(context);
     }
   }
 

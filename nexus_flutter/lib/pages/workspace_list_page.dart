@@ -37,7 +37,7 @@ class _WorkspaceListPageState extends State<WorkspaceListPage> {
   }
 
   void _showNewWorkspaceDialog() {
-    final nameController = TextEditingController();
+    if (!mounted) return;
     final pathController = TextEditingController();
 
     showDialog(
@@ -45,7 +45,10 @@ class _WorkspaceListPageState extends State<WorkspaceListPage> {
       builder: (dialogCtx) => AlertDialog(
         backgroundColor: AppColors.surface1(context),
         titlePadding: const EdgeInsets.fromLTRB(
-          AppSpacing.xl, AppSpacing.xl, AppSpacing.xl, 0,
+          AppSpacing.xl,
+          AppSpacing.xl,
+          AppSpacing.xl,
+          0,
         ),
         title: Text(
           '新建工作区',
@@ -56,25 +59,23 @@ class _WorkspaceListPageState extends State<WorkspaceListPage> {
           ),
         ),
         contentPadding: const EdgeInsets.fromLTRB(
-          AppSpacing.xl, AppSpacing.md, AppSpacing.xl, 0,
+          AppSpacing.xl,
+          AppSpacing.md,
+          AppSpacing.xl,
+          0,
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             TextField(
-              controller: nameController,
-              autofocus: true,
-              decoration: const InputDecoration(hintText: '工作区名称'),
-            ),
-            const SizedBox(height: AppSpacing.md),
-            TextField(
               controller: pathController,
+              autofocus: true,
               decoration: const InputDecoration(hintText: '工作区路径'),
             ),
           ],
         ),
-        actionsPadding:
-            const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+        actionsPadding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.md, vertical: AppSpacing.sm),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogCtx),
@@ -85,9 +86,10 @@ class _WorkspaceListPageState extends State<WorkspaceListPage> {
           ),
           TextButton(
             onPressed: () {
-              final name = nameController.text.trim();
+              if (!mounted) return;
               final path = pathController.text.trim();
-              if (name.isNotEmpty && path.isNotEmpty) {
+              if (path.isNotEmpty) {
+                final name = path.split(RegExp(r'[/\\]')).last;
                 context.read<WorkspaceProvider>().addWorkspace(name, path);
                 Navigator.pop(dialogCtx);
               }
@@ -96,7 +98,7 @@ class _WorkspaceListPageState extends State<WorkspaceListPage> {
           ),
         ],
       ),
-    );
+    ).whenComplete(pathController.dispose);
   }
 
   @override
@@ -111,18 +113,22 @@ class _WorkspaceListPageState extends State<WorkspaceListPage> {
     // Derive workspace card data
     final workspaceCards = workspaces.map((w) {
       final path = w['path'] ?? '';
-      final name = w['name'] ?? (path.split(RegExp(r'[/\\]')).lastOrNull ?? '未命名');
+      final name =
+          w['name'] ?? (path.split(RegExp(r'[/\\]')).lastOrNull ?? '未命名');
       final isActive = path == chatProvider.state.currentWorkspace;
-      final sessionsForWs = chatProvider.state.sessions
-          .where((s) => s.cwd == path)
-          .toList();
+      final sessionsForWs =
+          chatProvider.state.sessions.where((s) => s.cwd == path).toList();
       final sessionCount = sessionsForWs.length;
       final lastTime = sessionsForWs.isNotEmpty
-          ? sessionsForWs.map((s) => s.createdAt).reduce((a, b) => a > b ? a : b)
+          ? sessionsForWs
+              .map((s) => s.createdAt)
+              .reduce((a, b) => a > b ? a : b)
           : 0;
 
       final matchedDevice = hostStore.devices
-          .where((d) => d.hostId == chatProvider.state.currentDeviceId || d.name == chatProvider.state.currentDeviceId)
+          .where((d) =>
+              d.hostId == chatProvider.state.currentDeviceId ||
+              d.name == chatProvider.state.currentDeviceId)
           .firstOrNull;
       var deviceName = (matchedDevice != null && matchedDevice.name.isNotEmpty)
           ? matchedDevice.name
@@ -131,7 +137,9 @@ class _WorkspaceListPageState extends State<WorkspaceListPage> {
               : '—');
       if (deviceName.startsWith('host_')) {
         if (matchedDevice?.urls.isNotEmpty == true) {
-          deviceName = matchedDevice!.urls.first.replaceFirst('ws://', '').replaceFirst('wss://', '');
+          deviceName = matchedDevice!.urls.first
+              .replaceFirst('ws://', '')
+              .replaceFirst('wss://', '');
         } else {
           deviceName = '远程主机';
         }
@@ -151,7 +159,8 @@ class _WorkspaceListPageState extends State<WorkspaceListPage> {
     var filtered = workspaceCards;
     if (_searchQuery.isNotEmpty) {
       filtered = filtered
-          .where((w) => w.name.toLowerCase().contains(_searchQuery.toLowerCase()))
+          .where(
+              (w) => w.name.toLowerCase().contains(_searchQuery.toLowerCase()))
           .toList();
     }
 
@@ -189,14 +198,19 @@ class _WorkspaceListPageState extends State<WorkspaceListPage> {
           // Search bar
           Padding(
             padding: const EdgeInsets.fromLTRB(
-              AppSpacing.lg, AppSpacing.sm, AppSpacing.lg, 0,
+              AppSpacing.lg,
+              AppSpacing.sm,
+              AppSpacing.lg,
+              0,
             ),
             child: Container(
               decoration: BoxDecoration(
                 color: dark ? const Color(0x15FFFFFF) : const Color(0x0A000000),
                 borderRadius: BorderRadius.circular(AppRadius.full),
                 border: Border.all(
-                  color: dark ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.05),
+                  color: dark
+                      ? Colors.white.withOpacity(0.06)
+                      : Colors.black.withOpacity(0.05),
                   width: 0.8,
                 ),
               ),
@@ -209,7 +223,8 @@ class _WorkspaceListPageState extends State<WorkspaceListPage> {
                   hintText: '搜索工作区...',
                   hintStyle: TextStyle(fontSize: AppFontSize.sm, color: muted),
                   border: InputBorder.none,
-                  contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: AppSpacing.md),
+                  contentPadding: const EdgeInsets.symmetric(
+                      vertical: 10, horizontal: AppSpacing.md),
                   prefixIcon: Icon(
                     Icons.search_rounded,
                     size: 18,
@@ -248,10 +263,13 @@ class _WorkspaceListPageState extends State<WorkspaceListPage> {
           // Workspace list
           Expanded(
             child: filtered.isEmpty
-                ? _buildEmptyState('暂无工作区\n点击右下角 + 添加工作区')
+                ? _buildEmptyState('暂无工作区')
                 : ListView.builder(
                     padding: const EdgeInsets.fromLTRB(
-                      AppSpacing.lg, 0, AppSpacing.lg, 80,
+                      AppSpacing.lg,
+                      0,
+                      AppSpacing.lg,
+                      80,
                     ),
                     itemCount: filtered.length,
                     itemBuilder: (context, index) {
@@ -260,18 +278,6 @@ class _WorkspaceListPageState extends State<WorkspaceListPage> {
                   ),
           ),
         ],
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _showNewWorkspaceDialog,
-        backgroundColor: dark ? Colors.white : Colors.black,
-        icon: Icon(Icons.add_rounded, color: dark ? Colors.black : Colors.white),
-        label: Text(
-          '添加工作区',
-          style: TextStyle(
-            color: dark ? Colors.black : Colors.white,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
       ),
     );
   }
@@ -293,9 +299,7 @@ class _WorkspaceListPageState extends State<WorkspaceListPage> {
       backgroundColor: dark ? const Color(0x15FFFFFF) : const Color(0x0A000000),
       labelStyle: TextStyle(
         fontSize: AppFontSize.xs,
-        color: selected
-            ? (dark ? Colors.black : Colors.white)
-            : muted,
+        color: selected ? (dark ? Colors.black : Colors.white) : muted,
         fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
       ),
       side: BorderSide.none,
@@ -315,7 +319,7 @@ class _WorkspaceListPageState extends State<WorkspaceListPage> {
         Navigator.pushNamed(
           context,
           '/workspace-detail',
-          arguments: card.name,
+          arguments: {'name': card.name, 'path': card.path},
         );
       },
       borderRadius: BorderRadius.circular(AppRadius.md),
@@ -455,7 +459,8 @@ class _WorkspaceListPageState extends State<WorkspaceListPage> {
             style: TextStyle(
               fontSize: AppFontSize.xxs,
               fontWeight: FontWeight.w500,
-              color: isActive ? AppColors.success : AppColors.foregroundM(context),
+              color:
+                  isActive ? AppColors.success : AppColors.foregroundM(context),
             ),
           ),
         ],

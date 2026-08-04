@@ -1,10 +1,10 @@
 import type { WebSocket } from "ws";
 import { sessionManager } from "../session-manager.mjs";
 import { isValidAgent } from "../discovery/agents.mjs";
-import { scanLocalSessionStatuses } from "../discovery/session-watcher.mjs";
+import { scanLocalSessionStatuses, mergeSessionStatus } from "../discovery/session-watcher.mjs";
 import { agentRegistry } from "../agent-registry-service.mjs";
-
-export const sessionTitleOverrides = new Map<string, string>();
+import { applyTitles } from "../session-titles.mjs";
+import { resolveWorkspacePath } from "../path-utils.mjs";
 
 export async function handleListSessions(
   ws: WebSocket,
@@ -12,6 +12,7 @@ export async function handleListSessions(
   agent?: string,
 ): Promise<void> {
   const sess = sessionManager.findSessionForWs(ws);
+  const resolvedCwd = resolveWorkspacePath(cwd);
   let sessions: any[];
 
   if (agent) {
@@ -22,12 +23,13 @@ export async function handleListSessions(
       return;
     }
     if (sess?.client?.connected && sess.agent === agent) {
+      let timeout: ReturnType<typeof setTimeout> | undefined;
       try {
         const result = await Promise.race([
-          sess.client.listSessions(cwd),
-          new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error("listSessions timeout")), 12000),
-          ),
+          sess.client.listSessions(resolvedCwd),
+          new Promise<never>((_, reject) => {
+            timeout = setTimeout(() => reject(new Error("listSessions timeout")), 12000);
+          }),
         ]);
         sessions = ((result as any).sessions || []).map((s: any) => ({
           ...s,
@@ -36,25 +38,32 @@ export async function handleListSessions(
       } catch {
         ws.send(JSON.stringify({ type: "session_list", sessions: [] }));
         return;
+      } finally {
+        clearTimeout(timeout);
       }
     } else {
-      sessions = await agentRegistry.queryAggregateSessions(cwd, agent);
+      sessions = await agentRegistry.queryAggregateSessions(resolvedCwd, agent);
     }
   } else {
-    sessions = await agentRegistry.queryAggregateSessions(cwd);
+    sessions = await agentRegistry.queryAggregateSessions(resolvedCwd);
   }
 
-  // Apply title overrides and local session statuses
+  // Apply persisted title overrides and local session statuses
+  applyTitles(sessions);
   const localStatuses = await scanLocalSessionStatuses();
+  // Filter filesystem statuses through canonical session identity so static
+  // labels (e.g. "opencode-active") never attach to unrelated ACP session IDs.
+  const knownIds = new Set(sessionManager.getAllSessions().keys());
+  const activeIds = sessionManager.getActiveSessionIds();
+  const canonicalStatuses = mergeSessionStatus(localStatuses, activeIds, knownIds);
   const statusMap = new Map(
-    localStatuses.map((ls: any) => [ls.sessionId, ls.status]),
+    canonicalStatuses.map((ls: any) => [ls.sessionId, ls]),
   );
   for (const s of sessions) {
-    if (sessionTitleOverrides.has(s.sessionId)) {
-      s.title = sessionTitleOverrides.get(s.sessionId);
-    }
-    if (statusMap.has(s.sessionId)) {
-      s.status = statusMap.get(s.sessionId);
+    const localStatus = statusMap.get(s.sessionId);
+    if (localStatus) {
+      s.status = localStatus.status;
+      s.lastActivity = localStatus.lastActivity;
     } else if (!s.status) {
       s.status = "idle";
     }
@@ -64,13 +73,4 @@ export async function handleListSessions(
   }
 
   ws.send(JSON.stringify({ type: "session_list", sessions }));
-}
-
-/**
- * Clears the per-WebSocket session list cache.
- * Previously used by the cache layer; kept as no-op for backward compatibility
- * with server.mts and start.mts callers.
- */
-export function clearSessionListCache(_ws: WebSocket): void {
-  // no-op — caching moved to agent-registry-service
 }

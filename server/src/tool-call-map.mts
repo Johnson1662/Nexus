@@ -1,6 +1,6 @@
 import path from "node:path";
 import type { SessionState } from "./acp/types.mjs";
-import { trimToolCallIds } from "./session.mjs";
+import { sessionManager } from "./session-manager.mjs";
 
 function resolveToolPath(cwd: string, toolPath: string): string {
   return path.isAbsolute(toolPath)
@@ -37,5 +37,5 @@ export function recordToolCallIds(sess: SessionState, update: unknown): void {
   }
 
   sess.lastToolCallId = rawId;
-  trimToolCallIds(sess);
+  sessionManager.trimToolCallIds(sess);
 }

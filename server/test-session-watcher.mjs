@@ -43,47 +43,63 @@ function assert(condition, message) {
 
 function testMergeSessionStatus() {
  console.log("\n--- Test 7: mergeSessionStatus Pure Function ---");
+ const allKnown = new Set(["s1", "s2", "s3", "s4"]);
  const base = [
   { sessionId: "s1", agentName: "opencode", status: "idle", lastActivity: 0 },
   { sessionId: "s2", agentName: "omp", status: "idle", lastActivity: 0 },
   { sessionId: "s3", agentName: "claude-code", status: "running", lastActivity: Date.now() },
+  { sessionId: "unmatched-label", agentName: "opencode", status: "running", lastActivity: Date.now() },
  ];
 
- // 7a. No active IDs → unchanged
- const r1 = mergeSessionStatus(base, new Set());
+ // 7a. No active IDs, all known → unchanged (but unknown filtered out)
+ const r1 = mergeSessionStatus(base, new Set(), allKnown);
+ assert(r1.length === 3, "Unknown static label filtered out (sessions: s1,s2,s3)");
  assert(r1[0].status === "idle", "No active IDs: idle stays idle");
  assert(r1[1].status === "idle", "No active IDs: second stays idle");
  assert(r1[2].status === "running", "No active IDs: running stays running");
 
  // 7b. Active ID overrides idle → "running"
- const r2 = mergeSessionStatus(base, new Set(["s1"]));
+ const r2 = mergeSessionStatus(base, new Set(["s1"]), allKnown);
+ assert(r2.length === 3, "Unknown label still filtered");
  assert(r2[0].status === "running", "s1 in activeIds: idle→running");
  assert(r2[1].status === "idle", "s2 not active: stays idle");
  assert(r2[2].status === "running", "s3 not in activeIds but already running");
 
  // 7c. Active ID does not override running → stays "running"
- const r3 = mergeSessionStatus(base, new Set(["s3"]));
+ const r3 = mergeSessionStatus(base, new Set(["s3"]), allKnown);
  assert(r3[2].status === "running", "s3 active: running stays running");
 
  // 7d. Multiple active IDs
- const r4 = mergeSessionStatus(base, new Set(["s1", "s2"]));
+ const r4 = mergeSessionStatus(base, new Set(["s1", "s2"]), allKnown);
  assert(r4[0].status === "running", "s1 active: idle→running");
  assert(r4[1].status === "running", "s2 active: idle→running");
  assert(r4[2].status === "running", "s3 not active but already running");
 
- // 7e. Active IDs not in disk results → no entries added
- const r5 = mergeSessionStatus(base, new Set(["s99"]));
- assert(r5.length === 3, "active IDs not in disk: no extra entries");
+ // 7e. knownIds covers all base entries → no filtering beyond unmatched-label
+ const r5 = mergeSessionStatus(base, new Set(["s99"]), allKnown);
+ assert(r5.length === 3, "active IDs not in disk: no extra entries, unknown filtered");
  assert(r5[0].status === "idle", "s1 unchanged");
 
  // 7f. Original array not mutated (pure function)
  const originalStatus = base[0].status;
- mergeSessionStatus(base, new Set(["s1"]));
+ mergeSessionStatus(base, new Set(["s1"]), allKnown);
  assert(base[0].status === originalStatus, "original array not mutated");
 
  // 7g. Empty disk → empty output
- const r6 = mergeSessionStatus([], new Set(["s1"]));
+ const r6 = mergeSessionStatus([], new Set(["s1"]), allKnown);
  assert(r6.length === 0, "empty disk: empty output");
+
+ // 7h. No knownIds → empty output (no unresolvable identity leaks)
+ const r7 = mergeSessionStatus(base, new Set(), new Set());
+ assert(r7.length === 0, "no known IDs: empty output, no identity leak");
+
+ // 7i. Disk entry not in knownIds → filtered out (static e.g. opencode-active)
+ const r8 = mergeSessionStatus(
+  [{ sessionId: "opencode-active", agentName: "opencode", status: "running", lastActivity: Date.now() }],
+  new Set(),
+  new Set(["real-ses-123"]),
+ );
+ assert(r8.length === 0, "static label 'opencode-active' filtered when no SessionManager session matches");
 }
 
 // ── Test 1: Unit Test (scanLocalSessionStatuses) ────────────────────
@@ -209,7 +225,8 @@ async function testWatcherDiffEngine() {
 async function testWebSocketBroadcast() {
  console.log("\n--- Test 4: WebSocket Broadcast Payload Verification ---");
 
- // Mock WebSocket Client & Server broadcast simulation
+ // Mock WebSocket Client & Server broadcast simulation.
+ // Uses the actual production protocol: { type: "session_status_update", sessions }.
  const mockWsMessages = [];
  const mockClients = [
   {
@@ -220,13 +237,11 @@ async function testWebSocketBroadcast() {
   },
  ];
 
- // Simulating server.mts startSessionWatcher handler
- const mockBroadcastHandler = (added, removed, changed) => {
+ // Simulating server.mts startSessionWatcher's flushPending
+ const mockBroadcast = (sessions) => {
   const payload = JSON.stringify({
    type: "session_status_update",
-   added,
-   removed,
-   changed,
+   sessions,
   });
   for (const ws of mockClients) {
    if (ws.readyState === 1) {
@@ -242,15 +257,20 @@ async function testWebSocketBroadcast() {
   lastActivity: Date.now(),
  };
 
- // Simulate watcher triggering callback
- mockBroadcastHandler([sampleSession], [], []);
+ // Simulate a flush with one session
+ mockBroadcast([sampleSession]);
 
  assert(mockWsMessages.length === 1, "Mock WebSocket client received 1 message");
  const msg = mockWsMessages[0];
  assert(msg.type === "session_status_update", `Received correct WS message type: ${msg.type}`);
- assert(Array.isArray(msg.added) && msg.added.length === 1, "Payload contains added array");
- assert(msg.added[0].sessionId === sampleSession.sessionId, `Session ID matches: ${msg.added[0].sessionId}`);
- assert(msg.added[0].status === "running", `Session status matches: ${msg.added[0].status}`);
+ assert(Array.isArray(msg.sessions), "Payload contains sessions array");
+ assert(msg.sessions.length === 1, "sessions array has 1 entry");
+ assert(msg.sessions[0].sessionId === sampleSession.sessionId, `Session ID matches: ${msg.sessions[0].sessionId}`);
+ assert(msg.sessions[0].status === "running", `Session status matches: ${msg.sessions[0].status}`);
+ // Verify no legacy top-level arrays leak
+ assert(msg.added === undefined, "No legacy 'added' field in payload");
+ assert(msg.removed === undefined, "No legacy 'removed' field in payload");
+ assert(msg.changed === undefined, "No legacy 'changed' field in payload");
 }
 
 // ── Test 5: computeSessionDiff Pure Function ─────────────────────────
@@ -361,6 +381,53 @@ async function testWatcherScanOnce() {
  console.log(`  scanOnce found ${results.length} sessions.`);
 }
 
+// ── Test 8: Identity regression — static labels filtered from mergeSessionStatus ──
+
+function testIdentityRegression() {
+ console.log("\n--- Test 8: Identity Regression (static labels never leak) ---");
+
+ // 8a. Static filesystem label with no matching SessionManager session → empty
+ const staticLabel = [
+  { sessionId: "opencode-active", agentName: "opencode", status: "running", lastActivity: Date.now() },
+  { sessionId: "omp-active", agentName: "omp", status: "running", lastActivity: Date.now() },
+ ];
+ const emptyKnown = new Set();
+ const r1 = mergeSessionStatus(staticLabel, new Set(), emptyKnown);
+ assert(r1.length === 0, "opencode-active + omp-active with no known IDs → empty");
+
+ // 8b. Static label alongside real session ID — only real ID survives
+ const mixed = [
+  { sessionId: "opencode-active", agentName: "opencode", status: "running", lastActivity: Date.now() },
+  { sessionId: "ses_abc123", agentName: "opencode", status: "idle", lastActivity: 1000 },
+ ];
+ const known = new Set(["ses_abc123"]);
+ const r2 = mergeSessionStatus(mixed, new Set(), known);
+ assert(r2.length === 1, "Only known session ID survives (opencode-active filtered)");
+ assert(r2[0].sessionId === "ses_abc123", "Surviving entry is the canonical session");
+ assert(r2[0].status === "idle", "Canonical session status preserved");
+
+ // 8c. Static label never overrides active session status
+ const active = new Set(["ses_xyz789"]);
+ const mixed2 = [
+  { sessionId: "opencode-active", agentName: "opencode", status: "running", lastActivity: Date.now() },
+  { sessionId: "ses_xyz789", agentName: "opencode", status: "idle", lastActivity: 1000 },
+ ];
+ const known2 = new Set(["ses_xyz789"]);
+ const r3 = mergeSessionStatus(mixed2, active, known2);
+ assert(r3.length === 1, "Static label filtered even with activeIds");
+ assert(r3[0].sessionId === "ses_xyz789", "Only canonical session in result");
+ assert(r3[0].status === "running", "Canonical session status overridden to running (turnActive)");
+
+ // 8d. Empty disk + empty known → empty (no crash)
+ const r4 = mergeSessionStatus([], new Set(), new Set());
+ assert(r4.length === 0, "empty disk + empty known → empty");
+
+ // 8e. Real session not on disk but in knownIds → not in result (mergeSessionStatus
+ //     only filters, it doesn't inject — server.mts startSessionWatcher supplements)
+ const r5 = mergeSessionStatus([], new Set(), new Set(["ses_only_in_memory"]));
+ assert(r5.length === 0, "Session only in memory is not injected by mergeSessionStatus (caller's job)");
+}
+
 // ── Runner ─────────────────────────────────────────────────────────
 
 async function main() {
@@ -372,6 +439,7 @@ async function main() {
   // Pure function tests run first (synchronous, no I/O)
   testComputeSessionDiff();
   testMergeSessionStatus();
+  testIdentityRegression();
 
   // Async tests
   await testScanLocalSessionStatuses();

@@ -1,5 +1,5 @@
 import type { WebSocket } from "ws";
-import { sessionManager } from "../session-manager.mjs";
+import { SessionOwnerError, sessionManager } from "../session-manager.mjs";
 
 export async function handleSetConfig(
   ws: WebSocket,
@@ -8,7 +8,7 @@ export async function handleSetConfig(
   value: string,
 ): Promise<void> {
   try {
-    const result = await sessionManager.setConfig(sessionId, configId, value);
+    const result = await sessionManager.setConfig(sessionId, configId, value, ws);
     try {
       ws.send(JSON.stringify({
         type: "config_option_updated",
@@ -18,6 +18,7 @@ export async function handleSetConfig(
     } catch {}
   } catch (err: any) {
     const msg = err instanceof Error ? err.message : String(err);
-    try { ws.send(JSON.stringify({ type: "error", text: `set_config failed: ${msg}` })); } catch {}
+    const code = err instanceof SessionOwnerError ? err.code : "SESSION_ACCESS_DENIED";
+    try { ws.send(JSON.stringify({ type: "error", sessionId, code, text: `set_config failed: ${msg}` })); } catch {}
   }
 }

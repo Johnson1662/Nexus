@@ -1,15 +1,14 @@
 {
   "name": "nexus",
   "version": "0.1.0",
-  "description": "Agent bridge - WebSocket server + terminal chat client",
+  "description": "Agent bridge - WebSocket server for the Nexus app",
   "scripts": {
     "build": "cd server && tsc && node -e \"require('fs').cpSync('src/registry/agents.json','dist/registry/agents.json',{dereference:true});console.log('[build] copied agents.json')\" && node -e \"const f=require('fs'),c=f.readFileSync('dist/cli.mjs','utf8');if(!c.startsWith('#!')){f.writeFileSync('dist/cli.mjs','#!/usr/bin/env node\\n'+c);console.log('[build] added shebang to cli.mjs')}\"",
     "start": "node server/dist/cli.mjs start",
     "stop": "node server/dist/cli.mjs stop",
     "status": "node server/dist/cli.mjs status",
     "server:old": "node server/server.js",
-    "chat": "node client.js",
-    "demo": "echo '1. Run: npm run start   (in terminal 1)\n2. Run: npm run chat    (in terminal 2)\n3. Type a prompt to start opencode\n4. Commands: /quit /cancel /model <name>\n5. Prefix with claude/codex to use other agents'"
+    "demo": "node -e \"console.log('1. Run: npm run build && npm run start'); console.log('2. Connect the Nexus app to the authenticated bridge'); console.log('3. Use npm run status / npm run stop to manage the daemon')\""
   },
   "dependencies": {
     "@agentclientprotocol/claude-agent-acp": "^0.35.0",

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../constants/theme.dart';
+import 'agent_logo.dart';
 
 class ChatInputBar extends StatefulWidget {
   final bool disabled;
@@ -57,11 +58,13 @@ class _ChatInputBarState extends State<ChatInputBar>
   }
 
   void _send() {
+    if (!mounted) return;
     final text = _controller.text.trim();
     if (text.isEmpty) return;
-    widget.onSend(text);
     _controller.clear();
-    setState(() => _hasText = false);
+    if (!mounted) return;
+    widget.onSend(text);
+    if (mounted) setState(() => _hasText = false);
   }
 
   @override
@@ -261,12 +264,12 @@ class _ChatInputBarState extends State<ChatInputBar>
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
-                Icons.memory_outlined,
+              AgentLogo(
+                agentName: label,
                 size: 13,
                 color: muted,
               ),
-              const SizedBox(width: AppSpacing.xxs),
+              const SizedBox(width: AppSpacing.xxs + 2),
               Flexible(
                 child: Text(
                   label,
@@ -292,8 +295,6 @@ class _ChatInputBarState extends State<ChatInputBar>
   Widget _buildAddActionSheet(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final fg = AppColors.foregroundCtx(context);
-    final muted = AppColors.foregroundMutedCtx(context);
-
     return Container(
       constraints: const BoxConstraints(maxHeight: 300),
       decoration: BoxDecoration(

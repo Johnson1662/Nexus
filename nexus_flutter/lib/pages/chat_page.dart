@@ -4,9 +4,10 @@ import 'package:provider/provider.dart';
 import '../constants/theme.dart';
 import '../models/chat_state.dart';
 import '../models/ws_protocol.dart';
-import '../models/host_runtime_state.dart';
 import '../providers/chat_provider.dart';
 import '../services/host_store.dart';
+import '../utils/agent_utils.dart';
+import '../widgets/agent_logo.dart';
 import '../widgets/message_bubble.dart';
 import '../widgets/chat_input_bar.dart';
 import '../widgets/thinking_section.dart';
@@ -14,7 +15,6 @@ import '../widgets/config_panel.dart';
 import '../widgets/permission_sheet.dart';
 import '../widgets/reconnect_banner.dart';
 import '../widgets/typing_indicator.dart';
-import '../widgets/diff_view.dart';
 
 // ── Internal item types for list view construction ──
 
@@ -23,9 +23,7 @@ enum _ItemType { message, streamingThinking, streamingText, agentReplyingIndicat
 class _ListItem {
   final _ItemType type;
   final int? messageIndex;
-  final int? previousMessageIndex;
-
-  _ListItem({required this.type, this.messageIndex, this.previousMessageIndex});
+  _ListItem({required this.type, this.messageIndex});
 }
 
 // ── ChatPage ──
@@ -40,6 +38,8 @@ class ChatPage extends StatefulWidget {
 class _ChatPageState extends State<ChatPage> {
   final ScrollController _scrollController = ScrollController();
   bool _showScrollToBottom = false;
+  bool _scrollCallbackScheduled = false;
+  String _lastScrollSignature = '';
   PendingPermission? _lastPermission;
   bool _fileDrawerOpen = false;
 
@@ -59,7 +59,7 @@ class _ChatPageState extends State<ChatPage> {
   // ── Scroll helpers ──
 
   void _onScroll() {
-    if (!_scrollController.hasClients) return;
+    if (!mounted || !_scrollController.hasClients) return;
     final atBottom = _scrollController.position.pixels >=
         _scrollController.position.maxScrollExtent - 80;
     if (atBottom == _showScrollToBottom) {
@@ -68,7 +68,7 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   void _scrollToBottom() {
-    if (!_scrollController.hasClients) return;
+    if (!mounted || !_scrollController.hasClients) return;
     _scrollController.animateTo(
       _scrollController.position.maxScrollExtent,
       duration: const Duration(milliseconds: 250),
@@ -77,10 +77,18 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   void _autoScrollToBottom() {
+    _scheduleAutoScroll();
+  }
+
+  void _scheduleAutoScroll() {
+    if (_scrollCallbackScheduled) return;
+    _scrollCallbackScheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scrollController.hasClients && !_showScrollToBottom) {
-        _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+      _scrollCallbackScheduled = false;
+      if (!mounted || !_scrollController.hasClients || _showScrollToBottom) {
+        return;
       }
+      _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
     });
   }
 
@@ -120,30 +128,34 @@ class _ChatPageState extends State<ChatPage> {
   // ── Permission modal ──
 
   void _showPermissionModal(PendingPermission permission) {
+    if (!mounted) return;
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => PermissionSheetWidget(
+      builder: (sheetContext) => PermissionSheetWidget(
         permission: permission,
         onSelect: (optionId) {
+          if (!mounted) return;
           context.read<ChatProvider>().permissionResponse(
                 permission.requestId,
-                'accept',
+                'selected',
                 optionId: optionId,
               );
-          Navigator.pop(context);
+          if (sheetContext.mounted) Navigator.pop(sheetContext);
         },
       ),
     ).then((_) {
-      // Auto-reject on dismiss (user closed sheet without choosing)
+      if (!mounted) return;
+      // Auto-cancel on dismiss (user closed sheet without choosing)
       _lastPermission = null;
-      final current = context.read<ChatProvider>().state.pendingPermission;
+      final chatProvider = context.read<ChatProvider>();
+      final current = chatProvider.state.pendingPermission;
       if (current != null && current.requestId == permission.requestId) {
-        context.read<ChatProvider>().permissionResponse(
-              permission.requestId,
-              'reject_once',
-            );
+        chatProvider.permissionResponse(
+          permission.requestId,
+          'cancelled',
+        );
       }
     });
   }
@@ -151,17 +163,21 @@ class _ChatPageState extends State<ChatPage> {
   // ── Config panel ──
 
   void _openConfigPanel() {
+    if (!mounted) return;
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       builder: (_) => ConfigPanel(
         onSelectAgent: (name) {
+          if (!mounted) return;
           context.read<ChatProvider>().selectAgent(name);
         },
         onSelectModel: (index) {
+          if (!mounted) return;
           context.read<ChatProvider>().selectModel(index);
         },
         onSelectMode: (index) {
+          if (!mounted) return;
           context.read<ChatProvider>().selectMode(index);
         },
       ),
@@ -192,12 +208,21 @@ class _ChatPageState extends State<ChatPage> {
       _lastPermission = null;
     }
 
-    // Auto-scroll when messages/streaming change
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scrollController.hasClients && !_showScrollToBottom) {
-        _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
-      }
-    });
+    // Schedule only when visible content changes; unrelated provider rebuilds
+    // must not enqueue a post-frame callback.
+    final lastMessage = state.messages.isEmpty ? null : state.messages.last;
+    final scrollSignature = [
+      state.messages.length,
+      lastMessage?.id ?? '',
+      lastMessage?.content.length ?? 0,
+      state.streamingThinking.length,
+      state.streamingText.length,
+      state.turnActive,
+    ].join(':');
+    if (_lastScrollSignature != scrollSignature) {
+      _lastScrollSignature = scrollSignature;
+      _scheduleAutoScroll();
+    }
 
     final items = _buildItemList(state);
 
@@ -483,6 +508,9 @@ class _ChatPageState extends State<ChatPage> {
         ? state.currentWorkspace.split('/').last
         : '';
 
+    final agentName = state.selectedAgentName.isNotEmpty
+        ? AgentUtils.getDisplayName(state.selectedAgentName)
+        : '';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -521,6 +549,35 @@ class _ChatPageState extends State<ChatPage> {
                 overflow: TextOverflow.ellipsis,
               ),
             ),
+            if (agentName.isNotEmpty) ...[
+              const SizedBox(width: AppSpacing.xs),
+              Text(
+                '/',
+                style: TextStyle(
+                  fontSize: AppFontSize.xxs,
+                  color: AppColors.foregroundMutedCtx(context).withOpacity(0.5),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.xs),
+              AgentLogo(
+                agentName: state.selectedAgentName,
+                size: 10,
+                color: AppColors.foregroundMutedCtx(context),
+              ),
+              const SizedBox(width: 2),
+              Flexible(
+                child: Text(
+                  agentName,
+                  style: TextStyle(
+                    fontSize: AppFontSize.xxs,
+                    color: AppColors.foregroundMutedCtx(context),
+                    fontWeight: FontWeight.w500,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
             if (workspaceName.isNotEmpty) ...[
               const SizedBox(width: AppSpacing.xs),
               Text(
