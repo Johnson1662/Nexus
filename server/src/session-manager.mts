@@ -320,6 +320,7 @@ export class SessionManager {
         const current = this.sessions.get(sessionId);
         if (current === sess) {
           this.killTerminalProcesses(sess);
+          this.cancelPendingPermissions(sess);
           this.sessions.delete(sessionId);
           this.sessionSeqCounter.delete(sessionId);
         }
@@ -331,6 +332,7 @@ export class SessionManager {
         const s = this.sessions.get(sessionId);
         if (s) {
           this.killTerminalProcesses(s);
+          this.cancelPendingPermissions(s);
           this.sessions.delete(sessionId);
           this.sessionSeqCounter.delete(sessionId);
         }
@@ -440,11 +442,7 @@ export class SessionManager {
       run: () => this.runPromptTurn(sessionId, text).catch((err: unknown) => {
         const msg = err instanceof Error ? err.message : String(err);
         console.log(`[session-manager] prompt turn error: ${msg}`);
-        const s = this.sessions.get(sessionId);
-        if (s) {
-          s.turnActive = false;
-          delete s.resetTimeout;
-        }
+        this.finishTurn(sessionId, "error");
         this.sendToOwner(sessionId, {
           type: "error",
           sessionId,
@@ -471,8 +469,7 @@ export class SessionManager {
       if (!ok) {
         liveSess = this.sessions.get(sessionId);
         if (liveSess) {
-          liveSess.turnActive = false;
-          delete liveSess.resetTimeout;
+          this.finishTurn(sessionId, "error");
         }
         this.sendToOwner(sessionId, {
           type: "error",
@@ -514,21 +511,7 @@ export class SessionManager {
             `[session-manager] model error detected: ${stderrText.slice(0, 200)}`,
           );
           liveSess.client.cancel(liveSess.sessionId!).catch(() => {});
-          liveSess.turnActive = false;
-          delete liveSess.resetTimeout;
-          this.bufferAgentEvent(sessionId, {
-            type: "agent_event",
-            sessionId,
-            event: {
-              sessionUpdate: "turn_ended",
-              stopReason: "error",
-            },
-          });
-          this.sendToOwner(sessionId, {
-            type: "turn_ended",
-            sessionId,
-            stopReason: "error",
-          });
+          this.finishTurn(sessionId, "error");
           this.sendToOwner(sessionId, {
             type: "error",
             sessionId,
@@ -559,18 +542,7 @@ export class SessionManager {
           } catch { /* ok */ }
         }
         liveSess.client.cancel(liveSess.sessionId!).catch(() => {});
-        liveSess.turnActive = false;
-        delete liveSess.resetTimeout;
-        this.bufferAgentEvent(sessionId, {
-          type: "agent_event",
-          sessionId,
-          event: { sessionUpdate: "turn_ended", stopReason: "timeout" },
-        });
-        this.sendToOwner(sessionId, {
-          type: "turn_ended",
-          sessionId,
-          stopReason: "timeout",
-        });
+        this.finishTurn(sessionId, "timeout");
         this.sendToOwner(sessionId, {
           type: "error",
           sessionId,
@@ -595,25 +567,10 @@ export class SessionManager {
           liveSess.process.stderr.removeListener("data", stderrHandler);
         } catch { /* ok */ }
       }
-      liveSess.turnActive = false;
-      delete liveSess.resetTimeout;
-
       console.log(
         `[session-manager] turn ended after ${Math.floor((Date.now() - startTime) / 1_000)}s: ${result?.stopReason}`,
       );
-      this.bufferAgentEvent(sessionId, {
-        type: "agent_event",
-        sessionId,
-        event: {
-          sessionUpdate: "turn_ended",
-          stopReason: result?.stopReason,
-        },
-      });
-      this.sendToOwner(sessionId, {
-        type: "turn_ended",
-        sessionId,
-        stopReason: result?.stopReason,
-      });
+      this.finishTurn(sessionId, result?.stopReason);
     } catch (err: unknown) {
       if (timedOut || errorDetected) return;
 
@@ -624,23 +581,11 @@ export class SessionManager {
           liveSess.process.stderr.removeListener("data", stderrHandler);
         } catch { /* ok */ }
       }
-      liveSess.turnActive = false;
-      delete liveSess.resetTimeout;
-
       const msg = err instanceof Error ? err.message : String(err);
       console.log(
         `[session-manager] prompt error after ${Math.floor((Date.now() - startTime) / 1_000)}s: ${msg}`,
       );
-      this.bufferAgentEvent(sessionId, {
-        type: "agent_event",
-        sessionId,
-        event: { sessionUpdate: "turn_ended", stopReason: "error" },
-      });
-      this.sendToOwner(sessionId, {
-        type: "turn_ended",
-        sessionId,
-        stopReason: "error",
-      });
+      this.finishTurn(sessionId, "error");
       const displayMsg =
         msg.includes("closed") || msg.includes("abort")
           ? "[Session expired] Send a message to auto-restart."
@@ -728,6 +673,7 @@ export class SessionManager {
       );
       this.killTerminalProcesses(sess);
       this.killSessionProcess(sess);
+      this.cancelPendingPermissions(sess);
       this.sessions.delete(id);
       this.sessionSeqCounter.delete(id);
     }
@@ -748,6 +694,7 @@ export class SessionManager {
    */
   async close(sessionId: string, ownerTransport: WebSocket): Promise<void> {
     const sess = this.assertOwner(sessionId, ownerTransport);
+    this.cancelPendingPermissions(sess);
 
     try {
       await sess.client.closeSession(sess.sessionId);
@@ -771,6 +718,7 @@ export class SessionManager {
     const sess = this.assertOwner(sessionId, ownerTransport);
     if (!sess.sessionId) return;
     sess.client.cancel(sess.sessionId).catch(() => {});
+    this.cancelPendingPermissions(sess);
   }
 
   /** ── switchModel ────────────────────────────────────────────
@@ -987,6 +935,32 @@ export class SessionManager {
       });
   }
 
+  private cancelPendingPermissions(sess: SessionState): void {
+    if (sess.pendingPermissions.size === 0) return;
+    for (const pending of sess.pendingPermissions.values()) {
+      pending.resolve({ outcome: { outcome: "cancelled" } });
+    }
+    sess.pendingPermissions.clear();
+  }
+
+  private finishTurn(sessionId: string, reason?: string): void {
+    const sess = this.sessions.get(sessionId);
+    if (!sess) return;
+    sess.turnActive = false;
+    delete sess.resetTimeout;
+    this.cancelPendingPermissions(sess);
+    this.bufferAgentEvent(sessionId, {
+      type: "agent_event",
+      sessionId,
+      event: { sessionUpdate: "turn_ended", stopReason: reason },
+    });
+    this.sendToOwner(sessionId, {
+      type: "turn_ended",
+      sessionId,
+      stopReason: reason,
+    });
+  }
+
   /** Touch lastActivity and slide the prompt inactivity timer. */
   private updateSessionActivity(sessionId: string): void {
     const sess = this.sessions.get(sessionId);
@@ -1039,12 +1013,7 @@ export class SessionManager {
       sess.ownerTransport = null;
       sess.ownerId = null;
       sess.ws = null;
-      if (sess.pendingPermissions.size > 0) {
-        for (const pending of sess.pendingPermissions.values()) {
-          pending.resolve({ outcome: { outcome: "cancelled" } });
-        }
-        sess.pendingPermissions.clear();
-      }
+      this.cancelPendingPermissions(sess);
       this.updateSessionActivity(id);
       console.log(
         `[session-manager] session ${id.slice(0, 20)} orphaned (process kept alive)`,
@@ -1063,6 +1032,9 @@ export class SessionManager {
     }
     this.wsOpQueues.clear();
     this.pendingCreates.clear();
+    for (const sess of this.sessions.values()) {
+      this.cancelPendingPermissions(sess);
+    }
     this.sessions.clear();
     this.sessionSeqCounter.clear();
   }
@@ -1157,6 +1129,7 @@ export class SessionManager {
       );
       this.killTerminalProcesses(sess);
       this.killSessionProcess(sess);
+      this.cancelPendingPermissions(sess);
       this.sessions.delete(id);
       this.sessionSeqCounter.delete(id);
     }
@@ -1260,6 +1233,7 @@ export class SessionManager {
       if (this.sessions.has(sessionId)) {
         const s = this.sessions.get(sessionId)!;
         this.killTerminalProcesses(s);
+        this.cancelPendingPermissions(s);
         this.sessions.delete(sessionId);
         this.sessionSeqCounter.delete(sessionId);
       }
@@ -1302,7 +1276,7 @@ export class SessionManager {
     sess.process = proc;
     sess.client = client;
     sess.sessionId = acpSessionId;
-    sess.pendingPermissions.clear();
+    this.cancelPendingPermissions(sess);
     sess.restartCount = 0;
 
     const lastModel = getLastModel(sess.agent);

@@ -20,6 +20,7 @@ class WSClient {
   bool _intentionalClose = false;
   bool _ready = false;
   int _reconnectAttempt = 0;
+  int _connectionGeneration = 0;
   final Set<String> _seenMessageIds = <String>{};
 
   // Callback sets
@@ -49,6 +50,7 @@ class WSClient {
   // ── Public API ──
 
   void connect(String url, String hostKey, {String? authToken}) {
+    final oldHostKey = _currentHostKey;
     final normalizedToken = _normalizeToken(authToken);
     if (_currentUrl == url &&
         _currentHostKey == hostKey &&
@@ -65,6 +67,9 @@ class WSClient {
     _currentUrl = url;
     _currentHostKey = hostKey;
     _authToken = normalizedToken;
+    if (changedEndpoint && oldHostKey.isNotEmpty && oldHostKey != hostKey) {
+      HostRuntimeStore().setPhase(oldHostKey, HostPhase.offline);
+    }
     _reconnectAttempt = 0;
     if (changedEndpoint) _clearSeenMessageIds();
     _notifyPhase(HostPhase.connecting);
@@ -74,26 +79,22 @@ class WSClient {
   Future<void> connectBest(List<String> candidates, String hostKey,
       {String? authToken}) async {
     final normalizedToken = _normalizeToken(authToken);
-    final changedEndpoint = _currentHostKey != hostKey ||
-        (_authToken != normalizedToken && _currentUrl.isNotEmpty);
-    if (changedEndpoint) _clearSeenMessageIds();
-    _notifyPhase(HostPhase.connecting);
-    _currentHostKey = hostKey;
-    _authToken = normalizedToken;
+    _notifyPhase(HostPhase.connecting, hostKey: hostKey);
     for (final url in candidates) {
       try {
-        if (await probeCandidate(url, authToken: _authToken)) {
-          connect(url, hostKey, authToken: _authToken);
+        if (await probeCandidate(url, authToken: normalizedToken)) {
+          connect(url, hostKey, authToken: normalizedToken);
           return;
         }
       } catch (_) {}
     }
     // All candidates probe failed — mark offline gracefully, do NOT force WebSocket connect
     _notifyStateChange(false, candidates.isNotEmpty ? candidates.first : '');
-    _notifyPhase(HostPhase.offline);
+    _notifyPhase(HostPhase.offline, hostKey: hostKey);
   }
 
   void disconnect() {
+    _connectionGeneration++;
     _intentionalClose = true;
     _notifyPhase(HostPhase.offline);
     _clearSeenMessageIds();
@@ -170,6 +171,8 @@ class WSClient {
 
   // ── Connection ──
   void _doConnect(String url) {
+    _lastMsgReceived = DateTime.now();
+    _connectionGeneration++;
     _cleanup();
     try {
       final uri = Uri.parse(url);
@@ -184,16 +187,21 @@ class WSClient {
         connectTimeout: const Duration(seconds: 10),
       );
       final channel = _channel!;
+      final gen = _connectionGeneration;
 
       // Catch channel.ready Future exception to prevent bubbling to runZonedGuarded
       _readyTimer = Timer(const Duration(milliseconds: _readyTimeoutMs), () {
-        if (_channel != channel || _intentionalClose) return;
+        if (gen != _connectionGeneration ||
+            _channel != channel ||
+            _intentionalClose) return;
         _notifyError('连接就绪超时');
         _cleanup();
         _scheduleReconnect();
       });
       channel.ready.then((_) {
-        if (_channel != channel || _intentionalClose) return;
+        if (gen != _connectionGeneration ||
+            _channel != channel ||
+            _intentionalClose) return;
         _readyTimer?.cancel();
         _readyTimer = null;
         _ready = true;
@@ -201,7 +209,7 @@ class WSClient {
         _reconnectAttempt = 0;
         if (_channel != null) _notifyStateChange(true, url);
       }).catchError((error) {
-        if (_channel != channel) return;
+        if (gen != _connectionGeneration || _channel != channel) return;
         _ready = false;
         _readyTimer?.cancel();
         _readyTimer = null;
@@ -216,12 +224,12 @@ class WSClient {
 
       channel.stream.listen(
         (data) {
-          if (_channel != channel) return;
+          if (gen != _connectionGeneration || _channel != channel) return;
           _lastMsgReceived = DateTime.now();
           _handleRaw(data as String);
         },
         onError: (error) {
-          if (_channel != channel) return;
+          if (gen != _connectionGeneration || _channel != channel) return;
           _ready = false;
           _notifyStateChange(false, url);
           _notifyPhase(HostPhase.error);
@@ -229,7 +237,7 @@ class WSClient {
           _scheduleReconnect();
         },
         onDone: () {
-          if (_channel != channel) return;
+          if (gen != _connectionGeneration || _channel != channel) return;
           _ready = false;
           _notifyStateChange(false, url);
           _scheduleReconnect();
@@ -247,11 +255,13 @@ class WSClient {
 
   void _scheduleReconnect() {
     if (_intentionalClose) return;
+    final gen = _connectionGeneration;
     _notifyPhase(HostPhase.reconnecting);
     final delay = (_reconnectBaseMs * (1 << _reconnectAttempt.clamp(0, 5)))
         .clamp(_reconnectBaseMs, _reconnectMaxMs);
     _reconnectTimer?.cancel();
     _reconnectTimer = Timer(Duration(milliseconds: delay), () {
+      if (gen != _connectionGeneration) return;
       if (_currentUrl.isNotEmpty && !_intentionalClose) {
         _reconnectAttempt++;
         if (_reconnectAttempt > 12) {
@@ -266,22 +276,37 @@ class WSClient {
   // ── Heartbeat & Watchdog ──
   void _startHeartbeat() {
     _heartbeatTimer?.cancel();
+    final gen = _connectionGeneration;
     _heartbeatTimer = Timer.periodic(
       const Duration(milliseconds: _heartbeatMs),
-      (_) => send(ClientMessage(type: 'heartbeat')),
+      (timer) {
+        if (gen != _connectionGeneration) {
+          timer.cancel();
+          return;
+        }
+        send(ClientMessage(type: 'heartbeat'));
+      },
     );
   }
 
   void _startWatchdog() {
     _watchdogTimer?.cancel();
-    _watchdogTimer = Timer.periodic(const Duration(milliseconds: _watchdogMs), (_) {
-      final elapsed = DateTime.now().difference(_lastMsgReceived).inMilliseconds;
-      if (elapsed > _watchdogTimeoutMs && !_intentionalClose) {
-        _notifyError('heartbeat timeout');
-        _cleanup();
-        _scheduleReconnect();
-      }
-    });
+    final gen = _connectionGeneration;
+    _watchdogTimer = Timer.periodic(
+      const Duration(milliseconds: _watchdogMs),
+      (timer) {
+        if (gen != _connectionGeneration) {
+          timer.cancel();
+          return;
+        }
+        final elapsed = DateTime.now().difference(_lastMsgReceived).inMilliseconds;
+        if (elapsed > _watchdogTimeoutMs && !_intentionalClose) {
+          _notifyError('heartbeat timeout');
+          _cleanup();
+          _scheduleReconnect();
+        }
+      },
+    );
   }
 
   // ── Message handling with dedup ──
@@ -345,10 +370,11 @@ class WSClient {
   void _notifyRegistryList(List<RegistryAgentInfo> list) {
     for (final cb in _onRegistryList) { cb(list); }
   }
-  void _notifyPhase(HostPhase phase) {
+  void _notifyPhase(HostPhase phase, {String? hostKey}) {
     final s = phase.name;
-    if (_currentHostKey.isNotEmpty) {
-      HostRuntimeStore().setPhase(_currentHostKey, phase);
+    final targetHostKey = hostKey ?? _currentHostKey;
+    if (targetHostKey.isNotEmpty) {
+      HostRuntimeStore().setPhase(targetHostKey, phase);
     }
     for (final cb in _onPhaseChange) { cb(s); }
   }

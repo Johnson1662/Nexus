@@ -15,6 +15,7 @@ import '../services/notification_service.dart';
 /// Core chat state provider — mirrors ArkTS ChatStore + Index.ets logic
 class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
   final WSClient _ws;
+  final WorkspaceProvider? _workspaceProvider;
   final ChatState _state = ChatState();
   ChatState get state => _state;
   bool _isInBackground = false;
@@ -23,6 +24,7 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
   bool _inputInFlight = false;
   bool _syncInFlight = false;
   Timer? _turnRequestTimer;
+  Timer? _cancelTimer;
   Timer? _cursorPersistTimer;
   String _cursorSessionId = '';
   String _lastConnectionHostKey = '';
@@ -30,7 +32,8 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
   static const int _turnRequestTimeoutMs = 15000;
   static const int _maxProcessedMessageIds = 4096;
 
-  ChatProvider(this._ws) {
+  ChatProvider(this._ws, {WorkspaceProvider? workspaceProvider})
+      : _workspaceProvider = workspaceProvider {
     _ws.onMessage(_handleServerMessage);
     _ws.onStateChange((connected, _) {
       _state.connected = connected;
@@ -218,17 +221,31 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
   // ── Messaging ──
   void sendMessage(String text) {
     if (text == '__cancel__') {
-      _ws.send(ClientMessage(type: 'cancel', sessionId: _state.sessionId));
-      _clearTurnRequest();
-      _state.turnActive = false;
-      _setCurrentSessionStatus('idle');
-      notifyListeners();
+      if (_state.turnActive && !_state.cancelling) {
+        _state.cancelling = true;
+        _clearTurnRequest();
+        _ws.send(ClientMessage(type: 'cancel', sessionId: _state.sessionId));
+        _cancelTimer?.cancel();
+        _cancelTimer = Timer(const Duration(seconds: 10), () {
+          _cancelTimer = null;
+          _state.cancelling = false;
+          _state.turnActive = false;
+          _setCurrentSessionStatus('idle');
+          notifyListeners();
+        });
+        notifyListeners();
+      }
       return;
     }
 
     if (text.trim().isEmpty) return;
     if (!_ws.isConnected) {
       _state.errorMessage = '连接未就绪，请稍后重试';
+      notifyListeners();
+      return;
+    }
+    if (_state.cancelling) {
+      _state.errorMessage = '正在取消当前回合，请稍候';
       notifyListeners();
       return;
     }
@@ -306,6 +323,12 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
     _inputInFlight = false;
     _turnRequestTimer?.cancel();
     _turnRequestTimer = null;
+  }
+
+  void _clearCancelling() {
+    _cancelTimer?.cancel();
+    _cancelTimer = null;
+    _state.cancelling = false;
   }
 
   void _markInputStarted() {
@@ -773,6 +796,14 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
         }
         _handleAgentEvent(msg);
         break;
+      case 'session_cancelled':
+        if (msg.sessionId != null &&
+            !_isEventForCurrentSession(msg.sessionId)) {
+          break;
+        }
+        _clearCancelling();
+        notifyListeners();
+        break;
       case 'turn_ended':
         if (!_isEventForCurrentSession(msg.sessionId)) {
           break;
@@ -837,12 +868,15 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
         _loadingSessionId = '';
         _syncInFlight = false;
         _clearTurnRequest();
+        _clearCancelling();
         _state.turnActive = false;
+        _state.pendingPermissions.clear();
+        NotificationService.cancelAll();
         if (msg.text != null) {
           _state.errorMessage = msg.text!;
           _setCurrentSessionStatus('idle');
-          notifyListeners();
         }
+        notifyListeners();
         break;
       case 'permission_request':
         if (msg.requestId != null) {
@@ -878,9 +912,12 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
           break;
         }
         _clearTurnRequest();
+        _clearCancelling();
         _resetCursor(clearPersisted: true);
         _processedMessageIds.clear();
         _state.turnActive = false;
+        _state.pendingPermissions.clear();
+        NotificationService.cancelAll();
         _state.sessionId = '';
         notifyListeners();
         break;
@@ -1008,8 +1045,15 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
     _state.errorMessage = '';
     _state.currentDeviceId = actualHostId;
 
-    if (msg.workspaces != null && msg.workspaces!.isNotEmpty) {
-      _state.currentWorkspace = msg.workspaces!.first;
+    if (msg.workspaces != null) {
+      _workspaceProvider?.setActiveHost(actualHostId);
+      _workspaceProvider?.syncFromServer(msg.workspaces!);
+      final providerWorkspace = _workspaceProvider?.currentWorkspace ?? '';
+      if (providerWorkspace.isNotEmpty) {
+        _state.currentWorkspace = providerWorkspace;
+      } else if (msg.workspaces!.isNotEmpty) {
+        _state.currentWorkspace = msg.workspaces!.first;
+      }
     }
 
     // Persist/update device in HostStore — matching ArkTS WSClient.handleServerInfo
@@ -1371,19 +1415,20 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
     _state.sessions = sessions;
   }
 
-  /// 事件是否属于当前会话：加载历史中只放行加载会话的事件；
-  /// 否则放行当前会话；事件/当前会话 id 为空（旧协议或启动早期）时放行。
+  /// 事件是否属于当前会话：加载历史中允许当前会话或加载会话的事件；
+  /// 事件/当前会话 id 为空（旧协议或启动早期）时放行。
   bool _isEventForCurrentSession(String? eventSessionId) {
-    final esid = eventSessionId ?? '';
-    if (esid.isEmpty) return true;
-    if (_loadingSessionId.isNotEmpty) return esid == _loadingSessionId;
     final current = _state.sessionId;
-    if (current.isEmpty) return true;
-    return esid == current;
+    return eventSessionId == null ||
+        eventSessionId.isEmpty ||
+        current.isEmpty ||
+        eventSessionId == current ||
+        eventSessionId == _loadingSessionId;
   }
 
   void _handleTurnEnded() {
     _clearTurnRequest();
+    _clearCancelling();
     _state.turnActive = false;
     _setCurrentSessionStatus('idle');
     _finishRunningTools();
@@ -1416,6 +1461,7 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
   @override
   void dispose() {
     _turnRequestTimer?.cancel();
+    _cancelTimer?.cancel();
     _cursorPersistTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
@@ -1427,65 +1473,164 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
       : '';
 }
 
-/// Simple workspace provider — mirrors ArkTS WorkspaceStore
-class WorkspaceProvider extends ChangeNotifier {
-  int _currentIndex = 0;
-  List<Map<String, String>> _workspaces = [];
+class HostWorkspaceState {
+  List<Map<String, String>> workspaces;
+  int selectedIndex;
 
-  int get selectedIndex => _currentIndex;
-  List<Map<String, String>> get workspaces => _workspaces;
-  String get currentWorkspace =>
-      _workspaces.isNotEmpty && _currentIndex < _workspaces.length
-          ? _workspaces[_currentIndex]['path'] ?? ''
-          : '';
+  HostWorkspaceState({
+    List<Map<String, String>>? workspaces,
+    this.selectedIndex = 0,
+  }) : workspaces = workspaces ?? <Map<String, String>>[];
+}
+
+class WorkspaceProvider extends ChangeNotifier {
+  final Map<String, HostWorkspaceState> _byHost = {};
+  String _activeHostId = '';
+
+  HostWorkspaceState _stateFor(String hostId) =>
+      _byHost.putIfAbsent(hostId, HostWorkspaceState.new);
+
+  HostWorkspaceState get _activeState => _stateFor(_activeHostId);
+
+  int get selectedIndex => _activeState.selectedIndex;
+  List<Map<String, String>> get workspaces => _activeState.workspaces;
+  String get currentWorkspace {
+    final state = _activeState;
+    return state.selectedIndex >= 0 &&
+            state.selectedIndex < state.workspaces.length
+        ? state.workspaces[state.selectedIndex]['path'] ?? ''
+        : '';
+  }
+
+  void setActiveHost(String hostId) {
+    if (hostId == _activeHostId) return;
+    _persistWorkspaces();
+    _activeHostId = hostId;
+    _stateFor(hostId);
+    notifyListeners();
+    _loadHostState(hostId);
+  }
 
   void setWorkspaces(List<String> paths) {
-    _workspaces = paths
-        .map((p) => {'path': p, 'name': p.split(RegExp(r'[/\\]')).last})
-        .toList();
-    if (_currentIndex >= _workspaces.length) _currentIndex = 0;
+    final state = _activeState;
+    state.workspaces = _entriesFor(paths);
+    if (state.selectedIndex >= state.workspaces.length) {
+      state.selectedIndex = 0;
+    }
     notifyListeners();
     _persistWorkspaces();
   }
 
   void addWorkspace(String name, String path) {
-    if (_workspaces.any((w) => w['path'] == path)) return;
-    _workspaces.add({'name': name, 'path': path});
+    final state = _activeState;
+    if (state.workspaces.any((w) => w['path'] == path)) return;
+    state.workspaces.add({'name': name, 'path': path});
     notifyListeners();
     _persistWorkspaces();
   }
 
   /// Called by server_info to sync workspaces from server
   void syncFromServer(List<String> paths) {
+    final state = _activeState;
     for (final path in paths) {
-      if (_workspaces.any((w) => w['path'] == path)) continue;
-      _workspaces
+      if (state.workspaces.any((w) => w['path'] == path)) continue;
+      state.workspaces
           .add({'name': path.split(RegExp(r'[/\\]')).last, 'path': path});
+    }
+    if (state.selectedIndex >= state.workspaces.length) {
+      state.selectedIndex = 0;
     }
     notifyListeners();
     _persistWorkspaces();
   }
 
   Future<void> _persistWorkspaces() async {
-    final storage = await StorageService.getInstance();
-    final paths = _workspaces
+    final hostId = _activeHostId;
+    final state = _byHost[hostId];
+    if (state == null) return;
+    final paths = state.workspaces
         .map((w) => w['path'] ?? '')
         .where((p) => p.isNotEmpty)
         .toList();
-    storage.putString('workspaces', paths.join('\n'));
+    final index = state.selectedIndex;
+    final storage = await StorageService.getInstance();
+    await storage.saveWorkspaces(hostId, paths);
+    await storage.saveWorkspaceIndex(hostId, index);
+  }
+
+  Future<void> _loadHostState(String hostId) async {
+    final storage = await StorageService.getInstance();
+    if (hostId != _activeHostId) return;
+
+    final hasPartition =
+        storage.getObject('workspaces_$hostId') != null ||
+            storage.getObject('workspace_index_$hostId') != null;
+    var paths = storage.loadWorkspaces(hostId);
+    var index = storage.loadWorkspaceIndex(hostId);
+    if (!hasPartition) {
+      final legacy = storage.getString('workspaces');
+      if (legacy != null) {
+        paths = legacy
+            .split('\n')
+            .where((path) => path.isNotEmpty)
+            .toList();
+        index = 0;
+        await storage.saveWorkspaces(hostId, paths);
+        await storage.saveWorkspaceIndex(hostId, index);
+        await storage.remove('workspaces');
+      }
+    }
+    if (hostId != _activeHostId) return;
+
+    final state = _stateFor(hostId);
+    final existingPaths = state.workspaces
+        .map((workspace) => workspace['path'] ?? '')
+        .where((path) => path.isNotEmpty)
+        .toSet();
+    for (final path in paths) {
+      if (existingPaths.add(path)) {
+        state.workspaces.add({
+          'name': path.split(RegExp(r'[/\\]')).last,
+          'path': path,
+        });
+      }
+    }
+    if (state.workspaces.isEmpty) {
+      state.selectedIndex = 0;
+    } else if (state.selectedIndex == 0 && index > 0) {
+      state.selectedIndex = index < state.workspaces.length ? index : 0;
+    } else if (state.selectedIndex >= state.workspaces.length) {
+      state.selectedIndex = 0;
+    }
+    notifyListeners();
   }
 
   Future<void> loadWorkspaces() async {
     final storage = await StorageService.getInstance();
-    final raw = storage.getString('workspaces') ?? '';
-    if (raw.isNotEmpty) {
-      final paths = raw.split('\n').where((p) => p.isNotEmpty).toList();
-      setWorkspaces(paths);
+    final state = _stateFor('');
+    final raw = storage.getString('workspaces');
+    if (raw != null && raw.isNotEmpty) {
+      state.workspaces = _entriesFor(
+        raw.split('\n').where((path) => path.isNotEmpty).toList(),
+      );
+      final index = storage.loadWorkspaceIndex('');
+      state.selectedIndex = index < state.workspaces.length ? index : 0;
     }
+    if (_activeHostId == '') notifyListeners();
   }
 
   void selectWorkspace(int index) {
-    _currentIndex = index;
+    final state = _activeState;
+    if (index < 0 || index >= state.workspaces.length) return;
+    state.selectedIndex = index;
     notifyListeners();
+    _persistWorkspaces();
   }
+
+  List<Map<String, String>> _entriesFor(List<String> paths) => paths
+      .map((path) => {
+            'path': path,
+            'name': path.split(RegExp(r'[/\\]')).last,
+          })
+      .toList();
 }

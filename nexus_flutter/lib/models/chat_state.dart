@@ -11,6 +11,7 @@ class ChatState {
 
   // Turn / streaming
   bool turnActive = false;
+  bool cancelling = false;
   String streamingThinking = '';
   String streamingText = '';
   String accumulatorType = ''; // 'thinking' | 'text' | 'tool'
@@ -73,6 +74,7 @@ class ChatState {
     sessionTitle = '';
     loadingSession = false;
     turnActive = false;
+    cancelling = false;
     messages = [];
     streamingThinking = '';
     streamingText = '';

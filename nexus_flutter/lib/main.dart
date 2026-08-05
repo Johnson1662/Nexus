@@ -51,18 +51,18 @@ void main() {
       hostStore = HostStore();
     }
 
+    final workspaceProvider = WorkspaceProvider();
     late ChatProvider chatProvider;
     try {
       final ws = WSClient();
-      chatProvider = ChatProvider(ws);
+      chatProvider = ChatProvider(ws, workspaceProvider: workspaceProvider);
       await chatProvider.initFromDisk();
     } catch (e) {
       debugPrint('ChatProvider init failed: $e');
       final ws = WSClient();
-      chatProvider = ChatProvider(ws);
+      chatProvider = ChatProvider(ws, workspaceProvider: workspaceProvider);
     }
 
-    final workspaceProvider = WorkspaceProvider();
     try {
       await workspaceProvider.loadWorkspaces();
     } catch (e) {

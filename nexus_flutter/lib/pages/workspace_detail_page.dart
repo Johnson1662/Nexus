@@ -94,10 +94,13 @@ class WorkspaceDetailPage extends StatelessWidget {
   String _findWorkspacePath(BuildContext context, String name) {
     final workspaces = context.read<WorkspaceProvider>().workspaces;
     for (final workspace in workspaces) {
-      final path = workspace['path'] ?? '';
-      if (workspace['name'] == name ||
-          path.split(RegExp(r'[/\\]')).lastOrNull == name) {
-        return path;
+      if (workspace['path'] == name) {
+        return workspace['path'] ?? '';
+      }
+    }
+    for (final workspace in workspaces) {
+      if (workspace['name'] == name) {
+        return workspace['path'] ?? '';
       }
     }
     return '';
