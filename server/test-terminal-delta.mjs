@@ -47,6 +47,13 @@ function terminalText(message, terminalId) {
   return content?.content?.text ?? "";
 }
 
+function terminalFinalStatuses(messages, terminalId) {
+  return terminalMessages(messages, terminalId).filter((message) => {
+    const status = message.event.status;
+    return status === "completed" || status === "failed";
+  });
+}
+
 async function waitForExit(callbacks, terminalId) {
   let timeout;
   try {
@@ -116,41 +123,79 @@ try {
   const cappedOutput = await callbacks.onTerminalOutput({ terminalId: hardCapResult.terminalId });
   const cappedUpdates = terminalMessages(messages, hardCapResult.terminalId);
   const cappedText = cappedUpdates.map((message) => terminalText(message, hardCapResult.terminalId)).join("");
-  assert(cappedOutput.output.length <= 256 * 1024, "terminal output obeys the 256KB hard cap");
-  assert(Buffer.byteLength(cappedOutput.output, "utf8") <= 256 * 1024, "terminal retained output uses UTF-8 byte cap");
-  assert(cappedOutput.truncated === true, "terminal output marks truncation");
-  assert(Buffer.byteLength(cappedText, "utf8") > 0, "truncated terminal sends retained delta to the client");
-  assert(
-    cappedUpdates.some((message) => message.event.status === "completed" || message.event.status === "failed"),
-    "truncated terminal still sends a final status event",
-  );
+  assert(cappedText === cappedOutput.output, "single oversized callback delta equals retained output");
+  assert(cappedText === "y".repeat(256 * 1024), "single oversized chunk retains the first 256KB");
+  assert(Buffer.byteLength(cappedOutput.output, "utf8") <= 256 * 1024, "single oversized output uses UTF-8 byte cap");
+  assert(cappedOutput.truncated === true, "single oversized output marks truncation");
+  assert(terminalFinalStatuses(messages, hardCapResult.terminalId).length === 1, "single oversized terminal finalizes once");
   assert(
     cappedUpdates.some((message) => message.event.toolCallContent?.some((item) => item.truncated === true)),
     "terminal update exposes truncation state",
   );
 
+  const multiResult = await callbacks.onCreateTerminal({
+    command: process.execPath,
+    args: [
+      "-e",
+      "process.stdout.write(\"o\".repeat(200 * 1024)); setTimeout(() => process.stdout.write(\"e\".repeat(100 * 1024)), 20);",
+    ],
+    outputByteLimit: 1024 * 1024,
+  });
+  await waitForExit(callbacks, multiResult.terminalId);
+  const multiOutput = await callbacks.onTerminalOutput({ terminalId: multiResult.terminalId });
+  const multiUpdates = terminalMessages(messages, multiResult.terminalId);
+  const multiText = multiUpdates.map((message) => terminalText(message, multiResult.terminalId)).join("");
+  assert(multiText === multiOutput.output, "multi-chunk callback deltas equal retained output");
+  assert(multiText.startsWith("o".repeat(200 * 1024)), "multi-chunk output keeps its first chunk");
+  assert(multiText.endsWith("e".repeat(56 * 1024)), "multi-chunk output keeps only the remaining budget");
+  assert(Buffer.byteLength(multiText, "utf8") <= 256 * 1024, "multi-chunk output stays within UTF-8 byte cap");
+  assert(multiOutput.truncated === true, "multi-chunk output marks truncation");
+  assert(terminalFinalStatuses(messages, multiResult.terminalId).length === 1, "multi-chunk terminal finalizes once");
+
+  const missingResult = await callbacks.onCreateTerminal({
+    command: "__nexus_terminal_command_does_not_exist__",
+    args: [],
+  });
+  await waitForExit(callbacks, missingResult.terminalId);
+  const missingOutput = await callbacks.onTerminalOutput({ terminalId: missingResult.terminalId });
+  const missingFinalStatuses = terminalFinalStatuses(messages, missingResult.terminalId);
+  assert(missingFinalStatuses.length === 1, "spawn error followed by close emits one final status");
+  assert(missingFinalStatuses[0]?.event.status === "failed", "spawn error followed by close is failed");
+  assert(missingOutput.exitStatus?.exitCode === -1, "spawn error keeps the legacy exit code");
+
   const oneChunk = { output: "", pendingDelta: "", truncated: false, outputByteLimit: 256 * 1024 };
   appendTerminalOutput(oneChunk, "x".repeat(300 * 1024));
-  assert(Buffer.byteLength(oneChunk.output, "utf8") <= 256 * 1024, "single oversized chunk retains the byte-limited suffix");
-  assert(Buffer.byteLength(oneChunk.pendingDelta, "utf8") === Buffer.byteLength(oneChunk.output, "utf8"), "single oversized chunk keeps retained delta pending");
-  assert(oneChunk.truncated === true, "single oversized chunk marks truncation");
+  assert(oneChunk.output === "x".repeat(256 * 1024), "single oversized helper input keeps the first 256KB");
+  assert(oneChunk.pendingDelta === oneChunk.output, "single oversized helper input keeps all accepted delta pending");
+  assert(oneChunk.truncated === true, "single oversized helper input marks truncation");
 
   const multiChunk = { output: "", pendingDelta: "", truncated: false, outputByteLimit: 256 * 1024 };
   appendTerminalOutput(multiChunk, "o".repeat(200 * 1024));
+  const firstDelta = multiChunk.pendingDelta;
   multiChunk.pendingDelta = "";
   appendTerminalOutput(multiChunk, "e".repeat(100 * 1024));
-  assert(Buffer.byteLength(multiChunk.output, "utf8") <= 256 * 1024, "mixed output shares the byte limit");
-  assert(multiChunk.pendingDelta === "e".repeat(100 * 1024), "already flushed output does not erase the new pending tail");
-  assert(multiChunk.truncated === true, "mixed output marks truncation");
+  const secondDelta = multiChunk.pendingDelta;
+  assert(multiChunk.output === firstDelta + secondDelta, "multi-chunk helper output equals cumulative accepted deltas");
+  assert(secondDelta === "e".repeat(56 * 1024), "multi-chunk helper keeps only remaining bytes");
+  assert(Buffer.byteLength(multiChunk.output, "utf8") <= 256 * 1024, "multi-chunk helper uses the UTF-8 byte cap");
+  assert(multiChunk.truncated === true, "multi-chunk helper marks truncation");
+
+  const boundary = { output: "", pendingDelta: "", truncated: false, outputByteLimit: 4 };
+  appendTerminalOutput(boundary, "中🙂");
+  assert(boundary.output === "中", "UTF-8 cap never splits a Chinese code point");
+  assert(boundary.pendingDelta === boundary.output, "Unicode boundary delta contains complete code points");
+  assert(boundary.truncated === true, "Unicode overflow marks truncation");
 
   const unicode = "你好🙂世界";
   const unicodeTerminal = { output: "", pendingDelta: "", truncated: false, outputByteLimit: 256 * 1024 };
   const unicodeDecoder = new StringDecoder("utf8");
   const unicodeBytes = Buffer.from(unicode);
   appendTerminalOutput(unicodeTerminal, unicodeDecoder.write(unicodeBytes.subarray(0, 2)));
-  appendTerminalOutput(unicodeTerminal, unicodeDecoder.write(unicodeBytes.subarray(2)));
+  appendTerminalOutput(unicodeTerminal, unicodeDecoder.write(unicodeBytes.subarray(2, 7)));
+  appendTerminalOutput(unicodeTerminal, unicodeDecoder.write(unicodeBytes.subarray(7)));
   appendTerminalOutput(unicodeTerminal, unicodeDecoder.end());
   assert(unicodeTerminal.output === unicode, "split UTF-8 chunks decode without replacement characters");
+  assert([...unicodeTerminal.output].join("") === unicode, "split UTF-8 chunks preserve Unicode code points");
 } catch (error) {
   failed += 1;
   console.error(`FAIL: terminal callback integration: ${error instanceof Error ? error.message : String(error)}`);

@@ -27,53 +27,32 @@ import type {
 const MAX_TERMINAL_OUTPUT_BYTES = 256 * 1024;
 const TERMINAL_FLUSH_INTERVAL_MS = 75;
 
-function truncateUtf8Suffix(value: string, maxBytes: number): string {
-  if (Buffer.byteLength(value, "utf8") <= maxBytes) return value;
-  let start = value.length;
-  let retainedBytes = 0;
-  while (start > 0) {
-    const codePointStart = start - 1;
-    const codeUnit = value.charCodeAt(codePointStart);
-    const width = codeUnit >= 0xdc00 && codeUnit <= 0xdfff
-      && codePointStart > 0
-      && value.charCodeAt(codePointStart - 1) >= 0xd800
-      && value.charCodeAt(codePointStart - 1) <= 0xdbff
-      ? 2
-      : 1;
-    const characterBytes = Buffer.byteLength(value.slice(start - width, start), "utf8");
-    if (retainedBytes + characterBytes > maxBytes) break;
-    retainedBytes += characterBytes;
-    start -= width;
-  }
-  return value.slice(start);
-}
-
-function dropHeadCodePoints(value: string, codeUnits: number): string {
-  let index = 0;
-  while (index < codeUnits && index < value.length) {
-    const codePoint = value.codePointAt(index)!;
-    index += codePoint > 0xffff ? 2 : 1;
-  }
-  return value.slice(index);
-}
-
 export function appendTerminalOutput(t: TerminalState, text: string): void {
   if (!text || t.truncated) return;
-  const output = t.output + text;
-  const pendingDelta = t.pendingDelta + text;
-  if (Buffer.byteLength(output, "utf8") <= t.outputByteLimit) {
-    t.output = output;
-    t.pendingDelta = pendingDelta;
+
+  let remainingBytes = t.outputByteLimit - Buffer.byteLength(t.output, "utf8");
+  if (remainingBytes <= 0) {
+    t.truncated = true;
     return;
   }
 
-  const retained = truncateUtf8Suffix(output, t.outputByteLimit);
-  const removedUnits = output.length - retained.length;
-  const pendingStart = output.length - pendingDelta.length;
-  const pendingDrop = Math.max(0, removedUnits - pendingStart);
-  t.output = retained;
-  t.pendingDelta = dropHeadCodePoints(pendingDelta, pendingDrop);
-  t.truncated = true;
+  const accepted: string[] = [];
+  for (const codePoint of text) {
+    const codePointBytes = Buffer.byteLength(codePoint, "utf8");
+    if (codePointBytes > remainingBytes) {
+      t.truncated = true;
+      break;
+    }
+    accepted.push(codePoint);
+    remainingBytes -= codePointBytes;
+  }
+
+  if (accepted.length > 0) {
+    const delta = accepted.join("");
+    t.output += delta;
+    t.pendingDelta += delta;
+  }
+  if (remainingBytes === 0) t.truncated = true;
 }
 
 export function resolvePathWithinCwd(target: string, cwd: string, allowMissing = false): string {
@@ -306,22 +285,17 @@ export function createAcpCallbacks(config: AcpCallbacksConfig): {
       }
     });
 
-    termProc.on("exit", (code: number | null, sig: string | null) => {
-      const sess = sessionManager.getSession(getSessionId());
-      const t = sess?.terminals.get(terminalId);
-      if (t) {
-        flushDecoder(t);
-        if (t.flushTimer) {
-          clearTimeout(t.flushTimer);
-          t.flushTimer = null;
-        }
-        t.exitStatus = { exitCode: code, signal: sig ?? null };
-        if (t.resolveExit) t.resolveExit();
-      }
-      sendTerminalUpdate(code === 0 ? "completed" : "failed", true);
+    let spawnError: Error | null = null;
+    let finalized = false;
+
+    termProc.once("error", (error: Error) => {
+      spawnError = error;
     });
 
-    termProc.on("error", () => {
+    termProc.once("close", (code: number | null, sig: string | null) => {
+      if (finalized) return;
+      finalized = true;
+
       const sess = sessionManager.getSession(getSessionId());
       const t = sess?.terminals.get(terminalId);
       if (t) {
@@ -330,10 +304,13 @@ export function createAcpCallbacks(config: AcpCallbacksConfig): {
           clearTimeout(t.flushTimer);
           t.flushTimer = null;
         }
-        t.exitStatus = { exitCode: -1, signal: null };
+        t.exitStatus = {
+          exitCode: spawnError ? -1 : code,
+          signal: spawnError ? null : sig ?? null,
+        };
         if (t.resolveExit) t.resolveExit();
       }
-      sendTerminalUpdate("failed", true);
+      sendTerminalUpdate(spawnError || code !== 0 ? "failed" : "completed", true);
     });
 
     return { terminalId };
