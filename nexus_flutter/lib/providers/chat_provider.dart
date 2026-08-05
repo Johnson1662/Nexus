@@ -60,11 +60,12 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
     // Route native permission notification actions into our permission flow
     NotificationService.onPermissionAction = (String requestId, bool allow) {
       if (allow) {
-        // Pick first allow-kind option from the pending permission
+        // 最小权限优先：通知栏只能安全地选择 allow_once；
+        // 无 allow_once 选项时拒绝并让用户进应用选择
         final perm = _state.pendingPermission;
         final optionId = (perm != null && perm.options.isNotEmpty
             ? perm.options
-                .where((o) => o.kind.startsWith('allow'))
+                .where((o) => o.kind.startsWith('allow_once'))
                 .firstOrNull
                 ?.optionId
             : null);
@@ -555,9 +556,11 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
   // ── Permissions ──
   void permissionResponse(String requestId, String outcome,
       {String? optionId}) {
+    // 优先用请求来源会话的 sessionId（可能与当前会话不同）
+    final permSessionId = _state.pendingPermission?.sessionId ?? '';
     _ws.send(ClientMessage(
       type: 'permission_response',
-      sessionId: _state.sessionId,
+      sessionId: permSessionId.isNotEmpty ? permSessionId : _state.sessionId,
       requestId: requestId,
       outcome: outcome,
       optionId: optionId,
@@ -760,13 +763,15 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
         notifyListeners();
         break;
       case 'agent_event':
-        if (_loadingSessionId.isNotEmpty &&
-            msg.sessionId != _loadingSessionId) {
+        if (!_isEventForCurrentSession(msg.sessionId)) {
           break;
         }
         _handleAgentEvent(msg);
         break;
       case 'turn_ended':
+        if (!_isEventForCurrentSession(msg.sessionId)) {
+          break;
+        }
         _handleTurnEnded();
         // Remove live view when turn completes
         LiveViewService.stop();
@@ -835,6 +840,7 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
           _state.pendingPermission = PendingPermission(
             requestId: msg.requestId!,
             toolCall: msg.toolCall?.toString() ?? '',
+            sessionId: msg.sessionId ?? '',
             options: (msg.options ?? [])
                 .map((o) => PermissionOption(
                       optionId: o['optionId']?.toString() ?? '',
@@ -1349,6 +1355,17 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
       status: status,
     );
     _state.sessions = sessions;
+  }
+
+  /// 事件是否属于当前会话：加载历史中只放行加载会话的事件；
+  /// 否则放行当前会话；事件/当前会话 id 为空（旧协议或启动早期）时放行。
+  bool _isEventForCurrentSession(String? eventSessionId) {
+    final esid = eventSessionId ?? '';
+    if (esid.isEmpty) return true;
+    if (_loadingSessionId.isNotEmpty) return esid == _loadingSessionId;
+    final current = _state.sessionId;
+    if (current.isEmpty) return true;
+    return esid == current;
   }
 
   void _handleTurnEnded() {

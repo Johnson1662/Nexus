@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'storage_service.dart';
 
 /// Manages app-level preferences — mirrors ArkTS AppPreferenceService
-class AppPreferenceService {
+class AppPreferenceService extends ChangeNotifier {
   static final AppPreferenceService _instance = AppPreferenceService._();
   factory AppPreferenceService() => _instance;
   AppPreferenceService._();
@@ -54,12 +54,14 @@ class AppPreferenceService {
     _language = normalizeLanguage(lang);
     final storage = await StorageService.getInstance();
     storage.putString('pref_language', _language);
+    notifyListeners();
   }
 
   Future<void> setColorMode(String mode) async {
     _colorMode = normalizeColorMode(mode);
     final storage = await StorageService.getInstance();
     storage.putString('pref_color_mode', _colorMode);
+    notifyListeners();
   }
 
   Future<void> setThinkingExpanded(bool value) async {

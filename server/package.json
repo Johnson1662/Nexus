@@ -5,6 +5,6 @@
     "nexus": "./dist/cli.mjs"
   },
   "dependencies": {
-    "@agentclientprotocol/sdk": "^1.2.1"
+    "@agentclientprotocol/sdk": "^0.21.1"
   }
 }

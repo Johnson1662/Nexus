@@ -58,29 +58,42 @@ class StorageService {
     if (file == null) return;
     try {
       final json = jsonEncode(_data);
-      await file.writeAsString(json, flush: true);
+      // 先写临时文件再原子 rename，避免崩溃/中断导致半写文件
+      final tmp = io.File('${file.path}.tmp');
+      await tmp.writeAsString(json, flush: true);
+      await tmp.rename(file.path);
       debugPrint('[Storage] Flushed ${_data.length} keys (${json.length} bytes)');
     } catch (e) {
       debugPrint('[Storage] Write failed: $e');
+      /* not rethrown — best-effort persistence */
     }
+  }
+
+  // 写队列：串行化 flush，避免并发写乱序覆盖
+  Future<void> _writeQueue = Future.value();
+
+  Future<void> _enqueueFlush() {
+    final next = _writeQueue.then((_) => _flush());
+    _writeQueue = next;
+    return next;
   }
 
   // ── Unified get/set ──
   String? getString(String key) => _data[key] as String?;
   Future<void> putString(String key, String value) async {
     _data[key] = value;
-    await _flush();
+    await _enqueueFlush();
   }
 
   dynamic getObject(String key) => _data[key];
   Future<void> putObject(String key, dynamic value) async {
     _data[key] = value;
-    await _flush();
+    await _enqueueFlush();
   }
 
   Future<void> remove(String key) async {
     _data.remove(key);
-    await _flush();
+    await _enqueueFlush();
   }
 
   // ── Devices (matches ArkTS host_list) ──
@@ -97,7 +110,7 @@ class StorageService {
 
   Future<void> saveDevices(List<DeviceEntry> devices) async {
     _data['host_list'] = devices.map((d) => d.toJson()).toList();
-    await _flush();
+    await _enqueueFlush();
   }
 
   // ── Server URL (matches ArkTS server_url) ──
@@ -105,7 +118,7 @@ class StorageService {
   Future<String?> getServerUrl() async => _data['server_url'] as String?;
   Future<void> setServerUrl(String url) async {
     _data['server_url'] = url;
-    await _flush();
+    await _enqueueFlush();
   }
 
   // ── Last Agent / Model (matches ArkTS) ──
@@ -113,11 +126,11 @@ class StorageService {
   String getLastModelIdSync() => _data['last_model_id'] as String? ?? '';
   Future<void> setLastAgent(String agent) async {
     _data['last_agent'] = agent;
-    await _flush();
+    await _enqueueFlush();
   }
   Future<void> setLastModelId(String id) async {
     _data['last_model_id'] = id;
-    await _flush();
+    await _enqueueFlush();
   }
 
   // ── Last Message ID ──
@@ -128,7 +141,7 @@ class StorageService {
     } else {
       _data['last_message_id'] = id;
     }
-    await _flush();
+    await _enqueueFlush();
   }
 
   // ── Workspaces (matches ArkTS workspaces_<scope>) ──
@@ -141,7 +154,7 @@ class StorageService {
 
   Future<void> saveWorkspaces(String hostId, List<String> paths) async {
     _data['workspaces_$hostId'] = paths;
-    await _flush();
+    await _enqueueFlush();
   }
 
   int loadWorkspaceIndex(String hostId) {
@@ -152,13 +165,13 @@ class StorageService {
 
   Future<void> saveWorkspaceIndex(String hostId, int index) async {
     _data['workspace_index_$hostId'] = index;
-    await _flush();
+    await _enqueueFlush();
   }
 
   // ── Device Agent Cache ──
   String? getDeviceAgentCache() => _data['device_agents_cache'] as String?;
   Future<void> setDeviceAgentCache(String raw) async {
     _data['device_agents_cache'] = raw;
-    await _flush();
+    await _enqueueFlush();
   }
 }

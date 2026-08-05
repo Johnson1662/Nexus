@@ -39,7 +39,8 @@ class PermissionSheetWidget extends StatelessWidget {
   _RiskLevel _classifyRisk(String raw) {
     if (_highPatterns.hasMatch(raw)) return _RiskLevel.high;
     if (_mediumPatterns.hasMatch(raw)) return _RiskLevel.medium;
-    return _RiskLevel.low;
+    // 未知命令默认高风险（fail-closed）
+    return _RiskLevel.high;
   }
 
   /// Parse the raw toolCall Map.toString() into a structured _ParsedCommand.

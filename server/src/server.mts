@@ -70,7 +70,7 @@ function sendUnauthorizedUpgrade(socket: { write: (data: string) => void; destro
 }
 
 function createAuthenticatedWebSocketServer(httpServer: http.Server): WebSocketServer {
-  const wss = new WebSocketServer({ noServer: true });
+  const wss = new WebSocketServer({ noServer: true, maxPayload: 10 * 1024 * 1024 });
   httpServer.on("upgrade", (req, socket, head) => {
     if (!isAuthorizedHeader(req.headers.authorization)) {
       sendUnauthorizedUpgrade(socket);
@@ -98,7 +98,12 @@ export function createBridgeServer(config: BridgeConfig): BridgeApp {
   // WebSocket keep-alive: ping all connected clients every 15s
   const pingInterval = setInterval(() => {
     wss.clients.forEach((sock: WebSocket) => {
-      if ((sock as any).isDead) return;
+      // 上一轮 ping 未收到 pong（isDead 仍为 true）→ 判定死连接并 terminate
+      if ((sock as any).isDead) {
+        try { sock.terminate(); } catch {}
+        return;
+      }
+      (sock as any).isDead = true;
       try { sock.ping(); } catch {}
     });
   }, 15000);
@@ -632,7 +637,12 @@ if (isMainModule) {
   // WebSocket keep-alive: ping all connected clients every 15s
   const pingInterval = setInterval(() => {
     wss.clients.forEach((sock: WebSocket) => {
-      if ((sock as any).isDead) return;
+      // 上一轮 ping 未收到 pong（isDead 仍为 true）→ 判定死连接并 terminate
+      if ((sock as any).isDead) {
+        try { sock.terminate(); } catch {}
+        return;
+      }
+      (sock as any).isDead = true;
       try { sock.ping(); } catch {}
     });
   }, 15000);

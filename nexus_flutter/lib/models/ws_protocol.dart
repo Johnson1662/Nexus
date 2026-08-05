@@ -576,11 +576,13 @@ class PermissionOption {
 class PendingPermission {
   final String requestId;
   final String toolCall;
+  final String sessionId;
   final List<PermissionOption> options;
 
   PendingPermission({
     required this.requestId,
     required this.toolCall,
+    this.sessionId = '',
     required this.options,
   });
 }

@@ -1,7 +1,8 @@
 import { MethodChannel, MethodCall, MethodResult, FlutterEngine } from '@ohos/flutter_ohos';
 import { liveViewManager } from '@kit.LiveViewKit';
-import { WantAgent, wantAgent } from '@kit.AbilityKit';
+import { WantAgent, wantAgent, common } from '@kit.AbilityKit';
 import { BusinessError } from '@kit.BasicServicesKit';
+import { image } from '@kit.ImageKit';
 
 const TAG = 'LiveViewHelper';
 const CHANNEL_NAME = 'com.nexus.remoteai/live_view';
@@ -91,6 +92,18 @@ export class LiveViewHelper {
   ): Promise<liveViewManager.LiveView> {
     const boundedProgress = Math.max(0, Math.min(1, progress));
     const percentage = Math.round(boundedProgress * 100);
+    // nodeIcons 接受 string | PixelMap，资源需转 PixelMap（$r 直接赋值类型不匹配）
+    let nodeIcons: Array<string | image.PixelMap> = [];
+    try {
+      // nodeIcons 仅接受 string | PixelMap，需把媒体资源转成 PixelMap
+      const context = getContext() as common.UIAbilityContext;
+      const data: Uint8Array = await context.resourceManager.getMediaContent($r('app.media.app_icon'));
+      const source: image.ImageSource = image.createImageSource(data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength));
+      const icon: image.PixelMap = await source.createPixelMap();
+      nodeIcons = [icon];
+    } catch (err) {
+      console.error(TAG, `load node icon failed: ${this.errorMessage(err)}`);
+    }
     return {
       id: LIVE_VIEW_ID,
       event: LIVE_VIEW_EVENT,
@@ -105,7 +118,7 @@ export class LiveViewHelper {
           layoutData: {
             layoutType: liveViewManager.LayoutType.LAYOUT_TYPE_PROGRESS,
             progress: percentage,
-            nodeIcons: []
+            nodeIcons: nodeIcons
           }
         }
       }

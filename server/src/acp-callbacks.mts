@@ -55,8 +55,7 @@ export function isPathWithinCwd(target: string, cwd: string): boolean {
 }
 
 interface AcpCallbacksConfig {
-  ws?: import("ws").WebSocket;
-  sessionId: string;
+  getSessionId: () => string;
   cwd: string;
   toolCallIdMap?: Map<string, string>;
 }
@@ -70,11 +69,11 @@ export function createAcpCallbacks(config: AcpCallbacksConfig): {
   onKillTerminal: (params: KillTerminalRequest) => Promise<KillTerminalResponse | void>;
   onReleaseTerminal: (params: ReleaseTerminalRequest) => Promise<ReleaseTerminalResponse | void>;
 } {
-  const { sessionId, cwd, toolCallIdMap } = config;
+  const { getSessionId, cwd, toolCallIdMap } = config;
   
   // Resolve WS dynamically from session map — supports session reclaim after reconnect
   function getSessionWs(): import("ws").WebSocket | undefined {
-    const sess = sessionManager.getSession(sessionId);
+    const sess = sessionManager.getSession(getSessionId());
     return sess?.ownerTransport || undefined;
   }
 
@@ -84,7 +83,7 @@ export function createAcpCallbacks(config: AcpCallbacksConfig): {
     try {
       const eventPayload = {
         type: "agent_event",
-        sessionId,
+        sessionId: getSessionId(),
         event: {
           sessionUpdate: "tool_call_update",
           toolCallId: effectiveId,
@@ -93,7 +92,7 @@ export function createAcpCallbacks(config: AcpCallbacksConfig): {
         },
       };
       const wss = getSessionWs();
-      const wsPayload = sessionManager.bufferAgentEvent(sessionId, eventPayload) ?? eventPayload;
+      const wsPayload = sessionManager.bufferAgentEvent(getSessionId(), eventPayload) ?? eventPayload;
       if (wss) wss.send(JSON.stringify(wsPayload));
     } catch {}
   }
@@ -103,7 +102,7 @@ export function createAcpCallbacks(config: AcpCallbacksConfig): {
   }
 
   const onReadTextFile = async (params: ReadTextFileRequest): Promise<ReadTextFileResponse> => {
-    const currentSess = sessionManager.getSession(sessionId);
+    const currentSess = sessionManager.getSession(getSessionId());
     if (!currentSess) throw new Error("session not found");
     const resolvedPath = resolvePathWithinCwd(params.path, cwd);
     let content: string;
@@ -131,7 +130,7 @@ export function createAcpCallbacks(config: AcpCallbacksConfig): {
   };
 
   const onWriteTextFile = async (params: WriteTextFileRequest): Promise<WriteTextFileResponse> => {
-    const currentSess = sessionManager.getSession(sessionId);
+    const currentSess = sessionManager.getSession(getSessionId());
     if (!currentSess) throw new Error("session not found");
     const resolvedPath = resolvePathWithinCwd(params.path, cwd, true);
     let oldText = "";
@@ -154,7 +153,7 @@ export function createAcpCallbacks(config: AcpCallbacksConfig): {
   };
 
   const onCreateTerminal = async (params: CreateTerminalRequest): Promise<CreateTerminalResponse> => {
-    const currentSess = sessionManager.getSession(sessionId);
+    const currentSess = sessionManager.getSession(getSessionId());
     if (!currentSess) throw new Error("session not found");
 
     const terminalId = `term-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -182,7 +181,7 @@ export function createAcpCallbacks(config: AcpCallbacksConfig): {
     currentSess.terminals.set(terminalId, terminal);
 
     const sendTerminalUpdate = (status: string): void => {
-      const sess = sessionManager.getSession(sessionId);
+      const sess = sessionManager.getSession(getSessionId());
       const t = sess?.terminals.get(terminalId);
       if (!t) return;
       sendToolCallUpdate(terminalId, status, [
@@ -210,7 +209,7 @@ export function createAcpCallbacks(config: AcpCallbacksConfig): {
     terminal.process = termProc;
 
     termProc.stdout!.on("data", (chunk: Buffer) => {
-      const sess = sessionManager.getSession(sessionId);
+      const sess = sessionManager.getSession(getSessionId());
       const t = sess?.terminals.get(terminalId);
       if (!t || t.truncated) return;
       t.output += chunk.toString();
@@ -222,7 +221,7 @@ export function createAcpCallbacks(config: AcpCallbacksConfig): {
     });
 
     termProc.stderr!.on("data", (chunk: Buffer) => {
-      const sess = sessionManager.getSession(sessionId);
+      const sess = sessionManager.getSession(getSessionId());
       const t = sess?.terminals.get(terminalId);
       if (!t || t.truncated) return;
       t.output += chunk.toString();
@@ -234,7 +233,7 @@ export function createAcpCallbacks(config: AcpCallbacksConfig): {
     });
 
     termProc.on("exit", (code: number | null, sig: string | null) => {
-      const sess = sessionManager.getSession(sessionId);
+      const sess = sessionManager.getSession(getSessionId());
       const t = sess?.terminals.get(terminalId);
       if (t) {
         t.exitStatus = { exitCode: code, signal: sig ?? null };
@@ -244,7 +243,7 @@ export function createAcpCallbacks(config: AcpCallbacksConfig): {
     });
 
     termProc.on("error", () => {
-      const sess = sessionManager.getSession(sessionId);
+      const sess = sessionManager.getSession(getSessionId());
       const t = sess?.terminals.get(terminalId);
       if (t) {
         t.exitStatus = { exitCode: -1, signal: null };
@@ -257,7 +256,7 @@ export function createAcpCallbacks(config: AcpCallbacksConfig): {
   };
 
   const onTerminalOutput = async (params: TerminalOutputRequest): Promise<TerminalOutputResponse> => {
-    const currentSess = sessionManager.getSession(sessionId);
+    const currentSess = sessionManager.getSession(getSessionId());
     if (!currentSess) throw new Error("session not found");
     const term = currentSess.terminals.get(params.terminalId);
     if (!term) throw new Error(`terminal not found: ${params.terminalId}`);
@@ -269,7 +268,7 @@ export function createAcpCallbacks(config: AcpCallbacksConfig): {
   };
 
   const onWaitForTerminalExit = async (params: WaitForTerminalExitRequest): Promise<WaitForTerminalExitResponse> => {
-    const currentSess = sessionManager.getSession(sessionId);
+    const currentSess = sessionManager.getSession(getSessionId());
     if (!currentSess) throw new Error("session not found");
     const term = currentSess.terminals.get(params.terminalId);
     if (!term) throw new Error(`terminal not found: ${params.terminalId}`);
@@ -281,7 +280,7 @@ export function createAcpCallbacks(config: AcpCallbacksConfig): {
   };
 
   const onKillTerminal = async (params: KillTerminalRequest): Promise<KillTerminalResponse | void> => {
-    const currentSess = sessionManager.getSession(sessionId);
+    const currentSess = sessionManager.getSession(getSessionId());
     if (!currentSess) throw new Error("session not found");
     const term = currentSess.terminals.get(params.terminalId);
     if (!term) throw new Error(`terminal not found: ${params.terminalId}`);
@@ -294,7 +293,7 @@ export function createAcpCallbacks(config: AcpCallbacksConfig): {
   };
 
   const onReleaseTerminal = async (params: ReleaseTerminalRequest): Promise<ReleaseTerminalResponse | void> => {
-    const currentSess = sessionManager.getSession(sessionId);
+    const currentSess = sessionManager.getSession(getSessionId());
     if (!currentSess) throw new Error("session not found");
     const term = currentSess.terminals.get(params.terminalId);
     if (!term) throw new Error(`terminal not found: ${params.terminalId}`);

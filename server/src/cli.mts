@@ -86,11 +86,17 @@ async function main(): Promise<void> {
     case 'restart': {
       const port = parsePortFromArgs(args);
       await stopDaemon();
-      // Wait for shutdown to complete (poll /health until unreachable)
-      for (let i = 0; i < 10; i++) {
+      // Wait for shutdown to complete (poll control server /health until unreachable)
+      const CONTROL_PORT_FILE = join(homedir(), '.nexus', 'daemon.control.port');
+      let controlPort = 0;
+      try {
+        const { readFile } = await import('fs/promises');
+        controlPort = parseInt((await readFile(CONTROL_PORT_FILE, 'utf-8')).trim(), 10);
+      } catch { /* no control port file — skip polling */ }
+      for (let i = 0; i < 10 && controlPort > 0; i++) {
         await new Promise((resolve) => setTimeout(resolve, 500));
         try {
-          const res = await fetch(`http://127.0.0.1:${port}/health`);
+          const res = await fetch(`http://127.0.0.1:${controlPort}/health`);
           if (!res.ok) break;
         } catch {
           break; // Daemon stopped

@@ -21,6 +21,7 @@ import {
 } from "./pid-lock.mjs";
 import { createDaemonShutdownController } from "./shutdown.mjs";
 import { startControlServer } from "./control-server.mjs";
+import { sessionManager } from "../session-manager.mjs";
 import type { DaemonLockPayload } from "./pid-lock.mjs";
 
 // ── Paths ─────────────────────────────────────────────────────────
@@ -90,7 +91,7 @@ export async function startDaemon(config: DaemonStartConfig): Promise<void> {
       pid: process.pid,
       port: config.port,
       uptime: Math.floor((Date.now() - startedAt) / 1000),
-      activeSessions: 0,
+      activeSessions: sessionManager.getActiveSessionIds().size,
     }),
   });
 
@@ -107,6 +108,16 @@ export async function startDaemon(config: DaemonStartConfig): Promise<void> {
   shutdown.registerCleanupTask(async () => {
     console.log("[nexus] Releasing PID lock...");
     await releaseDaemonLock(LOCK_FILE);
+  });
+  shutdown.registerCleanupTask(async () => {
+    console.log("[nexus] Closing control server...");
+    try {
+      await new Promise<void>((resolve) => ctrl.server.close(() => resolve()));
+    } catch { /* already closed */ }
+    try {
+      const { rm } = await import('fs/promises');
+      await rm(CONTROL_PORT_FILE, { force: true });
+    } catch { /* ignore */ }
   });
 
   // 6. Log success
@@ -172,8 +183,10 @@ export async function stopDaemon(port?: number): Promise<void> {
 
   return new Promise<void>((resolve) => {
     const req = http.request(options, (res) => {
-      if (res.statusCode === 200 || res.statusCode === 401) {
+      if (res.statusCode === 200) {
         console.log("[nexus] Stop signal sent");
+      } else if (res.statusCode === 401) {
+        console.error("[nexus] Stop rejected: unauthorized");
       } else {
         console.log(`[nexus] Unexpected response: ${res.statusCode}`);
       }
@@ -201,16 +214,23 @@ export async function getDaemonStatus(): Promise<DaemonStatus | null> {
   }
 
   // Try to get health/status from control server
+  // 统一走 daemon.control.port 的 /status（bridge 端口没有 /health）
+  const CONTROL_PORT_FILE = join(DATA_DIR, 'daemon.control.port');
   try {
-    const health = await fetch(`http://127.0.0.1:${lock.port}/health`);
-    if (health.ok) {
-      const data = await health.json();
-      return {
-        pid: lock.pid,
-        port: lock.port,
-        uptime: data.uptime || 0,
-        activeSessions: 0,
-      };
+    const { readFile } = await import('fs/promises');
+    const content = await readFile(CONTROL_PORT_FILE, 'utf-8');
+    const controlPort = parseInt(content.trim(), 10);
+    if (Number.isFinite(controlPort)) {
+      const res = await fetch(`http://127.0.0.1:${controlPort}/status`);
+      if (res.ok) {
+        const data = await res.json();
+        return {
+          pid: lock.pid,
+          port: controlPort,
+          uptime: data.uptime || 0,
+          activeSessions: data.activeSessions || 0,
+        };
+      }
     }
   } catch {
     // Control server may not respond; return basic info from lock

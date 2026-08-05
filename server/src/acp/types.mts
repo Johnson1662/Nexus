@@ -2,6 +2,8 @@ import type { RequestPermissionResponse } from "@agentclientprotocol/sdk";
 
 export interface PendingPermission {
   requestId: string;
+  /** 请求来源会话（permission_response 校验用） */
+  sessionId: string;
   resolve: (value: RequestPermissionResponse) => void;
 }
 
@@ -34,7 +36,7 @@ export interface SessionState {
   cwd: string;
   process: import("child_process").ChildProcess;
   agent: string;
-  pendingPermission: PendingPermission | null;
+  pendingPermissions: Map<string, PendingPermission>;
   terminals: Map<string, TerminalState>;
   restartCount: number;
   /** Maps bridge-generated tool call IDs → agent's original toolCallId */

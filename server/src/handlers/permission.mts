@@ -19,14 +19,15 @@ export function handlePermissionResponse(
     ws.send(JSON.stringify({ type: "error", sessionId, code, text: message }));
     return;
   }
-  if (!sess.pendingPermission) {
+  const pending = sess.pendingPermissions.get(requestId);
+  if (!pending) {
     ws.send(
       JSON.stringify({ type: "error", text: "no pending permission request" }),
     );
     return;
   }
 
-  if (sess.pendingPermission.requestId !== requestId) {
+  if (pending.sessionId !== sessionId) {
     ws.send(
       JSON.stringify({ type: "error", text: "requestId mismatch" }),
     );
@@ -49,13 +50,11 @@ export function handlePermissionResponse(
       );
       return;
     }
-    const { resolve } = sess.pendingPermission;
-    sess.pendingPermission = null;
-    resolve({ outcome: { outcome: "selected" as const, optionId: selectedOptionId } });
+    sess.pendingPermissions.delete(requestId);
+    pending.resolve({ outcome: { outcome: "selected" as const, optionId: selectedOptionId } });
     return;
   }
 
-  const { resolve } = sess.pendingPermission;
-  sess.pendingPermission = null;
-  resolve({ outcome: { outcome: "cancelled" as const } });
+  sess.pendingPermissions.delete(requestId);
+  pending.resolve({ outcome: { outcome: "cancelled" as const } });
 }

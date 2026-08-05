@@ -20,6 +20,8 @@ import 'pages/agent_manage_page.dart';
 import 'pages/new_session_wizard.dart';
 import 'pages/search_page.dart';
 import 'pages/kit_test_page.dart';
+import 'pages/session_detail_page.dart';
+import 'models/ws_protocol.dart';
 
 void main() {
   FlutterError.onError = (details) {
@@ -116,12 +118,15 @@ class NexusApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Nexus',
-      debugShowCheckedModeBanner: false,
-      theme: AppTheme.light(),
-      darkTheme: AppTheme.dark(),
-      themeMode: AppPreferenceService().themeMode,
+    // 监听主题偏好变化，设置页切换深浅色时实时刷新根组件
+    return ListenableBuilder(
+      listenable: AppPreferenceService(),
+      builder: (context, _) => MaterialApp(
+        title: 'Nexus',
+        debugShowCheckedModeBanner: false,
+        theme: AppTheme.light(),
+        darkTheme: AppTheme.dark(),
+        themeMode: AppPreferenceService().themeMode,
       home: const HomePage(),
       builder: (context, widget) {
         ErrorWidget.builder = (details) {
@@ -153,11 +158,18 @@ class NexusApp extends StatelessWidget {
         '/workspace-detail': (context) => const WorkspaceDetailPage(),
         '/agent-detail': (context) => const AgentDetailPage(),
         '/agent-manage': (context) => const AgentManagePage(),
-        '/session-detail': (context) => const SizedBox(),
+        '/session-detail': (context) {
+          final session = ModalRoute.of(context)?.settings.arguments;
+          if (session is ServerSessionData) {
+            return SessionDetailPage(session: session);
+          }
+          return const SizedBox();
+        },
         '/new-session': (context) => const NewSessionWizard(),
         '/search': (context) => const SearchPage(),
         '/test-kits': (context) => const KitTestPage(),
       },
+      ),
     );
   }
 }

@@ -266,6 +266,8 @@ export class SessionStatusWatcher {
   private lastResults: ActiveSessionStatus[] = [];
   private baselinePromise: Promise<void> | null = null;
   private listeners: Array<(diff: SessionDiff) => void> = [];
+  // 防重叠：scanOnce 超过 intervalMs 时跳过本轮，避免并发写 lastResults
+  private scanning = false;
   private intervalMs: number;
 
   constructor(intervalMs: number = 5000) {
@@ -303,6 +305,8 @@ export class SessionStatusWatcher {
 
     this.timer = setInterval(async () => {
       try {
+        if (this.scanning) return;
+        this.scanning = true;
         if (this.baselinePromise) {
           await this.baselinePromise;
           this.baselinePromise = null;
@@ -319,6 +323,8 @@ export class SessionStatusWatcher {
         this.lastResults = current;
       } catch (err: any) {
         console.warn(`[session-watcher] watch interval error:`, err.message);
+      } finally {
+        this.scanning = false;
       }
     }, this.intervalMs);
   }

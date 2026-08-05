@@ -1,5 +1,6 @@
 import { EventEmitter } from "node:events";
 import { sessionManager } from "./dist/session-manager.mjs";
+import { createAcpCallbacks } from "./dist/acp-callbacks.mjs";
 
 let passed = 0;
 let failed = 0;
@@ -77,6 +78,32 @@ async function main() {
   await new Promise((resolve) => setTimeout(resolve, 20));
   assert(orderA.join(",") === "a1,a2", "separate WS queue A ordering");
   assert(orderB.join(",") === "b1,b2", "separate WS queue B ordering");
+
+  // ── P0-1: getSessionId thunk resolves dynamically ──────────
+  // createAcpCallbacks must read the session id at call time (thunk),
+  // never capture an empty/early value — new-session callbacks get the
+  // real ACP id once createSession completes.
+  {
+    const realGetSession = sessionManager.getSession;
+    const seen = [];
+    let sid = "";
+    sessionManager.getSession = (id) => {
+      seen.push(id);
+      return { terminals: new Map(), toolCallIdMap: new Map() };
+    };
+    try {
+      const callbacks = createAcpCallbacks({ getSessionId: () => sid, cwd: process.cwd() });
+      // force the secret getter off the compiled export by reading through the returned handlers:
+      // subscription functions capture the module-internal closure, so exercise via a real path read
+      sid = "";
+      await callbacks.onReadTextFile({ path: "package.json" });
+      sid = "ses_after_create";
+      await callbacks.onReadTextFile({ path: "package.json" });
+    } finally {
+      sessionManager.getSession = realGetSession;
+    }
+    assert(seen.indexOf("") !== -1 && seen.indexOf("ses_after_create") !== -1 && seen.indexOf("") < seen.indexOf("ses_after_create"), "getSessionId reads current value at call time, not capture time");
+  }
 
   console.log(`Session ownership: ${passed} passed, ${failed} failed`);
   process.exit(failed === 0 ? 0 : 1);

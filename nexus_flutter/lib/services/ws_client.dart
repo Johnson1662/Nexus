@@ -197,6 +197,8 @@ class WSClient {
         _readyTimer?.cancel();
         _readyTimer = null;
         _ready = true;
+        // 连接成功即重置指数退避，避免长稳连接后偶发断开直接进入长退避
+        _reconnectAttempt = 0;
         if (_channel != null) _notifyStateChange(true, url);
       }).catchError((error) {
         if (_channel != channel) return;
@@ -305,7 +307,10 @@ class WSClient {
   void _routeMessage(ServerMessage msg) {
     for (final cb in _onMessage) { cb(msg); }
     switch (msg.type) {
-      case 'server_info': _notifyServerInfo(); break;
+      case 'server_info':
+        _reconnectAttempt = 0;
+        _notifyServerInfo();
+        break;
       case 'agent_list': if (msg.agents != null) _notifyAgentList(msg.agents!); break;
       case 'registry_agents_list': if (msg.registryAgents != null) _notifyRegistryList(msg.registryAgents!); break;
       case 'error': if (msg.text != null) _notifyError(msg.text!); break;

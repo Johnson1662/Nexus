@@ -253,7 +253,7 @@ export class SessionManager {
       cwd: resolvedCwd,
       process: proc,
       agent,
-      pendingPermission: null,
+      pendingPermissions: new Map(),
       terminals: new Map(),
       restartCount: 0,
       toolCallIdMap: new Map(),
@@ -283,13 +283,16 @@ export class SessionManager {
           wsPayload = eventPayload;
         }
         try {
-          const currentWs = this.sessions.get(sessionId)?.ownerTransport ?? wsRef;
-          currentWs.send(JSON.stringify(wsPayload));
+          // orphan（s 存在但 ownerTransport 为 null）时事件已缓冲，等 reclaim 后 sync 补齐，
+          // 不再向旧连接实时发送；创建初期（map 无此 key）仍发当前 wsRef。
+          const s = this.sessions.get(sessionId);
+          const currentWs = s ? s.ownerTransport : wsRef;
+          if (currentWs) currentWs.send(JSON.stringify(wsPayload));
         } catch { /* WS disconnected — event buffered */ }
       },
       onPermissionRequest: this.buildPermissionRequestCallback(wsRef, () => sessionId),
       ...createAcpCallbacks({
-        sessionId,
+        getSessionId: () => sessionId,
         cwd: resolvedCwd,
         toolCallIdMap: sess.toolCallIdMap,
       }),
@@ -933,9 +936,10 @@ export class SessionManager {
         const requestId = randomUUID();
         const sid = sessionIdRef();
         const s = this.sessions.get(sid);
-        if (s) s.pendingPermission = { requestId, resolve };
+        if (s) s.pendingPermissions.set(requestId, { requestId, sessionId: sid, resolve });
         try {
-          const currentWs = this.sessions.get(sid)?.ownerTransport ?? wsRef;
+          // orphan 时不向旧连接发权限请求（cleanupWsSessions 已取消该会话的 pending）
+          const currentWs = s ? s.ownerTransport : wsRef;
           currentWs?.send(
             JSON.stringify({
               type: "permission_request",
@@ -1001,10 +1005,11 @@ export class SessionManager {
       sess.ownerTransport = null;
       sess.ownerId = null;
       sess.ws = null;
-      if (sess.pendingPermission) {
-        const pending = sess.pendingPermission;
-        sess.pendingPermission = null;
-        pending.resolve({ outcome: { outcome: "cancelled" } });
+      if (sess.pendingPermissions.size > 0) {
+        for (const pending of sess.pendingPermissions.values()) {
+          pending.resolve({ outcome: { outcome: "cancelled" } });
+        }
+        sess.pendingPermissions.clear();
       }
       this.updateSessionActivity(id);
       console.log(
@@ -1190,13 +1195,14 @@ export class SessionManager {
           wsPayload = eventPayload;
         }
         try {
-          const currentWs = this.sessions.get(sessionId)?.ownerTransport ?? wsRef;
-          currentWs?.send(JSON.stringify(wsPayload));
+          const s = this.sessions.get(sessionId);
+          const currentWs = s ? s.ownerTransport : wsRef;
+          if (currentWs) currentWs.send(JSON.stringify(wsPayload));
         } catch { /* WS gone */ }
       },
       onPermissionRequest: this.buildPermissionRequestCallback(wsRef, () => sessionId),
       ...createAcpCallbacks({
-        sessionId,
+        getSessionId: () => sessionId,
         cwd,
         toolCallIdMap: sess.toolCallIdMap,
       }),
@@ -1262,7 +1268,7 @@ export class SessionManager {
     sess.process = proc;
     sess.client = client;
     sess.sessionId = acpSessionId;
-    sess.pendingPermission = null;
+    sess.pendingPermissions.clear();
     sess.restartCount = 0;
 
     const lastModel = getLastModel(sess.agent);
