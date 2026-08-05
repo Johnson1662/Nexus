@@ -92,22 +92,13 @@ class WSClient {
   Future<String?> probeBest(List<String> candidates, String hostKey,
       {String? authToken}) async {
     final normalizedToken = _normalizeToken(authToken);
-    final initialUrl = candidates.isNotEmpty ? candidates.first : null;
-    _notifyPhase(HostPhase.connecting, hostKey: hostKey, url: initialUrl);
-    String? lastProbeUrl;
     for (final url in candidates) {
-      lastProbeUrl = url;
       try {
         if (await probeCandidate(url, authToken: normalizedToken)) {
           return url;
         }
       } catch (_) {}
     }
-    // 全部探测失败时，不能让 B 的失败状态把仍在线的 A 全局置离线。
-    if (!isConnected || hostKey == _currentHostKey) {
-      _notifyStateChange(false, lastProbeUrl ?? '');
-    }
-    _notifyPhase(HostPhase.offline, hostKey: hostKey, url: lastProbeUrl);
     return null;
   }
 

@@ -84,7 +84,8 @@ class _ToolCallCardState extends State<ToolCallCard> {
     final hasContent = msg.toolContent.isNotEmpty ||
         msg.toolOldText.isNotEmpty ||
         msg.toolNewText.isNotEmpty ||
-        msg.toolTerminalId.isNotEmpty;
+        msg.toolTerminalId.isNotEmpty ||
+        msg.toolTruncated;
 
     // Auto-expand while running / streaming
     if (isRunning && !_expanded) _expanded = true;
@@ -195,6 +196,14 @@ class _ToolCallCardState extends State<ToolCallCard> {
             ],
           ),
           const SizedBox(height: 6),
+          if (msg.toolTruncated)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Text(
+                '输出已截断，仅显示前 256KB',
+                style: TextStyle(fontSize: 11, color: AppColors.warning),
+              ),
+            ),
 
           // ── Old/New diff block ──
           if (hasDiff)

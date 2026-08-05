@@ -23,7 +23,7 @@ void main() {
   tearDown(() async {
     StorageService.resetForTest();
     StorageService.sandboxForTest = null;
-    if (await sandbox.exists()) await sandbox.delete(recursive: true);
+    if (await sandbox.exists()) await _deleteSandbox(sandbox);
   });
 
   test('probeBest 只探测并保留当前连接', () async {
@@ -53,10 +53,40 @@ void main() {
       expect(ws.currentHostKey, 'host-a');
       expect(ws.currentUrl, aUrl);
       expect(ws.isConnected, isTrue);
-      expect(phases, contains('host-b:connecting:$bUrl'));
+      expect(phases.where((phase) => phase.startsWith('host-b:')), isEmpty);
     }, createHttpClient: _NetworkHttpOverrides().createHttpClient);
   });
 
+  test('当前在线 Host 探测失败不改变在线状态', () async {
+    final aServer = await _startHost(
+      hostId: 'host-a',
+      probeStatus: HttpStatus.serviceUnavailable,
+    );
+    final ws = WSClient();
+    final provider = ChatProvider(ws);
+    final hostStore = HostStore();
+    addTearDown(() async {
+      provider.dispose();
+      ws.dispose();
+      await aServer.close(force: true);
+    });
+
+    final aKey = 'host-a';
+    final aUrl = 'ws://127.0.0.1:${aServer.port}';
+    await HttpOverrides.runZoned(() async {
+      await provider.connectToUrl(aUrl, hostKey: aKey);
+      await _waitUntil(() =>
+          ws.isConnected &&
+          provider.state.connected &&
+          hostStore.getPhase(aKey) == 'online');
+
+      await provider.connectBest([aUrl], hostKey: aKey);
+
+      expect(ws.isConnected, isTrue);
+      expect(provider.state.connected, isTrue);
+      expect(hostStore.getPhase(aKey), 'online');
+    }, createHttpClient: _NetworkHttpOverrides().createHttpClient);
+  });
   test('探测失败不会改变已连接 Host 的会话、游标和地址', () async {
     final aServer = await _startHost(hostId: 'host-a');
     final bServer =
@@ -97,6 +127,7 @@ void main() {
       expect(storage.getString('server_url'), aUrl);
       expect(hostStore.getPhase(aKey), 'online');
       expect(hostStore.getPhase(bKey), 'offline');
+      expect(provider.state.connected, isTrue);
       expect(ws.currentHostKey, aKey);
       expect(ws.isConnected, isTrue);
     }, createHttpClient: _NetworkHttpOverrides().createHttpClient);
@@ -164,6 +195,7 @@ void main() {
       expect(provider.state.lastMessageId, lastMessageId);
       expect(provider.state.currentDeviceId, cKey);
       expect(storage.getString('server_url'), cUrl);
+      expect(hostStore.getPhase(bKey), isNot('connecting'));
     }, createHttpClient: _NetworkHttpOverrides().createHttpClient);
   });
 }
@@ -208,7 +240,16 @@ class _NetworkHttpOverrides extends HttpOverrides {
   }
 }
 
-Future<void> _waitUntil(bool Function() condition) async {
+Future<void> _deleteSandbox(Directory sandbox) async {
+  for (var attempt = 0; attempt < 50; attempt++) {
+    try {
+      await sandbox.delete(recursive: true);
+      return;
+    } on FileSystemException {
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+    }
+  }
+}Future<void> _waitUntil(bool Function() condition) async {
   for (var attempt = 0; attempt < 200; attempt++) {
     if (condition()) return;
     await Future<void>.delayed(const Duration(milliseconds: 10));

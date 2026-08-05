@@ -29,6 +29,7 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
   String _cursorSessionId = '';
   String _lastConnectionHostKey = '';
   int _selectionGeneration = 0;
+  final Map<String, int> _probePhaseGenerations = <String, int>{};
   final Set<String> _processedMessageIds = <String>{};
   final List<ListenerDisposer> _listenerDisposers = [];
   late final OnPermissionActionCallback _permissionAction;
@@ -132,6 +133,7 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
     if (normalizedUrl.isEmpty) return;
 
     final hk = hostKey ?? _getHostKeyForUrl(normalizedUrl);
+    _probePhaseGenerations.remove(hk);
     _beginConnectionBoundary(hk);
     _state.currentDeviceId = hk;
     final token = authToken ?? _authTokenForHost(hk, normalizedUrl);
@@ -156,6 +158,20 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
     if (normalized.isEmpty) return;
 
     final hk = hostKey ?? _getHostKeyForUrl(normalized.first);
+    final phaseGeneration = selectionGeneration;
+    _probePhaseGenerations[hk] = phaseGeneration;
+    final protectsCurrentHost = _ws.isConnected && _ws.currentHostKey == hk;
+    if (!protectsCurrentHost) {
+      HostStore().setPhase(hk, 'connecting', url: normalized.first);
+    }
+    void clearProbePhase() {
+      if (_probePhaseGenerations[hk] != phaseGeneration) return;
+      _probePhaseGenerations.remove(hk);
+      if (!protectsCurrentHost && HostStore().getPhase(hk) == 'connecting') {
+        HostStore().setPhase(hk, 'offline');
+      }
+    }
+
     final token = authToken ?? _authTokenForHost(hk, normalized.first);
     final selectedUrl = await _ws.probeBest(
       normalized,
@@ -163,14 +179,19 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
       authToken: token,
     );
     if (selectedUrl == null || selectionGeneration != _selectionGeneration) {
+      clearProbePhase();
       return;
     }
 
     final storage = await StorageService.getInstance();
-    if (selectionGeneration != _selectionGeneration) return;
+    if (selectionGeneration != _selectionGeneration) {
+      clearProbePhase();
+      return;
+    }
 
     _beginConnectionBoundary(hk);
     _state.currentDeviceId = hk;
+    _probePhaseGenerations.remove(hk);
     HostRuntimeStore().setPhase(hk, HostPhase.connecting, url: selectedUrl);
     final persistence = storage.putString('server_url', selectedUrl);
     _ws.connect(selectedUrl, hk, authToken: token);
@@ -229,6 +250,7 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   void disconnect() {
     _selectionGeneration++;
+    _probePhaseGenerations.clear();
     _ws.disconnect();
     _turnRequestTimer?.cancel();
     _turnRequestTimer = null;
@@ -1233,6 +1255,7 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
                     m.toolNewText = event.newText!;
                   if (event.terminalId != null && event.terminalId!.isNotEmpty)
                     m.toolTerminalId = event.terminalId!;
+                  if (event.terminalTruncated) m.toolTruncated = true;
                   m.toolStatus = status;
                   toolName = m.toolName;
                   found = true;
@@ -1261,6 +1284,7 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
                     m.toolNewText = event.newText!;
                   if (event.terminalId != null && event.terminalId!.isNotEmpty)
                     m.toolTerminalId = event.terminalId!;
+                  if (event.terminalTruncated) m.toolTruncated = true;
                   m.toolStatus = status;
                   toolName = m.toolName;
                   found = true;
@@ -1500,6 +1524,7 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
   @override
   void dispose() {
     _selectionGeneration++;
+    _probePhaseGenerations.clear();
     for (final dispose in _listenerDisposers) {
       dispose();
     }

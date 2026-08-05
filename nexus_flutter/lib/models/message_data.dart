@@ -15,6 +15,7 @@ class MessageData {
   String toolOldText;
   String toolNewText;
   String toolTerminalId;
+  bool toolTruncated;
   int timestamp;
 
   static int _counter = 0;
@@ -35,6 +36,7 @@ class MessageData {
     this.toolOldText = '',
     this.toolNewText = '',
     this.toolTerminalId = '',
+    this.toolTruncated = false,
     int? timestamp,
   })  : id = (id != null && id.isNotEmpty)
             ? id

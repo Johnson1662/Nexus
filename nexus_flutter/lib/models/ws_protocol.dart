@@ -191,6 +191,7 @@ class ServerMessage {
       String? toolOldText;
       String? toolNewText;
       String? toolTerminalId;
+      bool toolTerminalTruncated = false;
       final rawContent = e['content'] ?? e['toolCallContent'];
       if (rawContent is List) {
         final sb = StringBuffer();
@@ -218,6 +219,7 @@ class ServerMessage {
           } else if (type == 'terminal') {
             toolContentType = 'terminal';
             toolTerminalId = item['terminalId'] as String?;
+            if (item['truncated'] == true) toolTerminalTruncated = true;
             // terminal 块文本（{type:'text', text}）同样累积进 toolContent
             final nested = item['content'];
             if (nested is Map && nested['text'] != null) {
@@ -245,6 +247,7 @@ class ServerMessage {
         oldText: e['oldText'] as String? ?? toolOldText,
         newText: e['newText'] as String? ?? toolNewText,
         terminalId: e['terminalId'] as String? ?? toolTerminalId,
+        terminalTruncated: toolTerminalTruncated,
         title: e['title'] as String?,
         kind: e['kind'] as String?,
         messageRole: e['role'] as String?,
@@ -321,6 +324,7 @@ class AcpUpdate {
   final String? oldText;
   final String? newText;
   final String? terminalId;
+  final bool terminalTruncated;
   final String? title;
   final String? kind;
   final String? messageRole;
@@ -343,6 +347,7 @@ class AcpUpdate {
     this.oldText,
     this.newText,
     this.terminalId,
+    this.terminalTruncated = false,
     this.title,
     this.kind,
     this.messageRole,
