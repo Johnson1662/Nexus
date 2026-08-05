@@ -28,6 +28,7 @@ export class LiveViewHelper {
   private isLiveViewActive: boolean = false;
   private disposed: boolean = false;
   private operationTail: Promise<void> = Promise.resolve();
+  private nodeIconCache: image.PixelMap | null = null;
 
   constructor(flutterEngine: FlutterEngine) {
     this.wantAgentInfo = {
@@ -52,6 +53,12 @@ export class LiveViewHelper {
     if (this.disposed) return;
     this.disposed = true;
     this.channel.setMethodCallHandler(null);
+    if (this.nodeIconCache) {
+      try {
+        this.nodeIconCache.release();
+      } catch { /* ignore */ }
+      this.nodeIconCache = null;
+    }
     this.resetState();
   }
 
@@ -84,6 +91,24 @@ export class LiveViewHelper {
     return await wantAgent.getWantAgent(this.wantAgentInfo);
   }
 
+  /** 懒加载并缓存应用图标 PixelMap（每次更新都重新解码很浪费）。 */
+  private async loadNodeIcons(): Promise<Array<string | image.PixelMap>> {
+    if (this.nodeIconCache) {
+      return [this.nodeIconCache];
+    }
+    try {
+      // nodeIcons 仅接受 string | PixelMap，需把媒体资源转成 PixelMap
+      const context = getContext() as common.UIAbilityContext;
+      const data: Uint8Array = await context.resourceManager.getMediaContent($r('app.media.app_icon'));
+      const source: image.ImageSource = image.createImageSource(data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength));
+      this.nodeIconCache = await source.createPixelMap();
+      return [this.nodeIconCache];
+    } catch (err) {
+      console.error(TAG, `load node icon failed: ${this.errorMessage(err)}`);
+      return [];
+    }
+  }
+
   private async buildConfig(
     progress: number,
     statusText: string,
@@ -92,18 +117,7 @@ export class LiveViewHelper {
   ): Promise<liveViewManager.LiveView> {
     const boundedProgress = Math.max(0, Math.min(1, progress));
     const percentage = Math.round(boundedProgress * 100);
-    // nodeIcons 接受 string | PixelMap，资源需转 PixelMap（$r 直接赋值类型不匹配）
-    let nodeIcons: Array<string | image.PixelMap> = [];
-    try {
-      // nodeIcons 仅接受 string | PixelMap，需把媒体资源转成 PixelMap
-      const context = getContext() as common.UIAbilityContext;
-      const data: Uint8Array = await context.resourceManager.getMediaContent($r('app.media.app_icon'));
-      const source: image.ImageSource = image.createImageSource(data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength));
-      const icon: image.PixelMap = await source.createPixelMap();
-      nodeIcons = [icon];
-    } catch (err) {
-      console.error(TAG, `load node icon failed: ${this.errorMessage(err)}`);
-    }
+    const nodeIcons = await this.loadNodeIcons();
     return {
       id: LIVE_VIEW_ID,
       event: LIVE_VIEW_EVENT,

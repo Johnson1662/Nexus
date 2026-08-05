@@ -4,6 +4,8 @@ export interface PendingPermission {
   requestId: string;
   /** 请求来源会话（permission_response 校验用） */
   sessionId: string;
+  /** 该请求实际提供的 option ID 集合（响应校验用） */
+  optionIds?: string[];
   resolve: (value: RequestPermissionResponse) => void;
 }
 

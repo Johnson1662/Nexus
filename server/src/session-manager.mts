@@ -401,13 +401,30 @@ export class SessionManager {
     return sess;
   }
 
-  /** ── dispatchPrompt ──────────────────────────────────────────
-   *  Send a prompt to the ACP agent with MODEL_ERROR_PATTERNS
-   *  stderr monitoring and a 5‑minute sliding inactivity timeout.
-   *
-   *  Sends `turn_ended` / `error` events via the session's WebSocket.
+  /** Send a payload to the session's CURRENT owner transport.
+   *  Resolved at send time so a stale turn can never leak
+   *  turn_ended/error frames onto a WebSocket that a newer session
+   *  has since reclaimed. */
+  private sendToOwner(sessionId: string, payload: object): void {
+    const owner = this.sessions.get(sessionId)?.ownerTransport;
+    if (!owner) return;
+    try {
+      owner.send(JSON.stringify(payload));
+    } catch { /* WS gone */ }
+  }
+
+  /** ── beginPrompt ────────────────────────────────────────────
+   *  Atomically claim the turn for a prompt — synchronous validation
+   *  (ownership, turn-active, initialized). On success the caller
+   *  MUST send `input_ack` immediately, then run the returned handle.
+   *  Throws SessionOwnerError / Error: the caller sends the error
+   *  reply back to the requesting transport.
    */
-  async dispatchPrompt(sessionId: string, text: string, ownerTransport: WebSocket): Promise<void> {
+  beginPrompt(
+    sessionId: string,
+    text: string,
+    ownerTransport: WebSocket,
+  ): { run: () => Promise<void> } {
     const sess = this.assertOwner(sessionId, ownerTransport);
     if (sess.turnActive) {
       throw new Error("session turn already active");
@@ -415,26 +432,62 @@ export class SessionManager {
     if (!sess.sessionId) {
       throw new SessionOwnerError("SESSION_NOT_FOUND", "session is not initialized");
     }
+    // Claim the turn BEFORE any await so concurrent inputs are
+    // rejected atomically (input_ack is only sent on success).
+    sess.turnActive = true;
+    this.updateSessionActivity(sessionId);
+    return {
+      run: () => this.runPromptTurn(sessionId, text).catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.log(`[session-manager] prompt turn error: ${msg}`);
+        const s = this.sessions.get(sessionId);
+        if (s) {
+          s.turnActive = false;
+          delete s.resetTimeout;
+        }
+        this.sendToOwner(sessionId, {
+          type: "error",
+          sessionId,
+          text: `Agent error: ${msg}`,
+        });
+      }),
+    };
+  }
 
+  /** ── runPromptTurn ──────────────────────────────────────────
+   *  Async prompt body: auto-restart of a dead ACP connection,
+   *  keep-alive heartbeat, sliding inactivity timeout and stderr
+   *  model-error monitoring. All turn_ended / error frames go
+   *  through sendToOwner — never a captured transport.
+   */
+  private async runPromptTurn(sessionId: string, text: string): Promise<void> {
     // Auto-recover dead ACP connection by restarting the session
-    if (!sess.client?.connected) {
+    let liveSess = this.sessions.get(sessionId);
+    if (!liveSess || !liveSess.sessionId || !liveSess.client) {
+      return;
+    }
+    if (!liveSess.client.connected) {
       const ok = await this.restartSession(sessionId);
       if (!ok) {
-        throw new Error(`failed to restart session: ${sessionId}`);
+        liveSess = this.sessions.get(sessionId);
+        if (liveSess) {
+          liveSess.turnActive = false;
+          delete liveSess.resetTimeout;
+        }
+        this.sendToOwner(sessionId, {
+          type: "error",
+          sessionId,
+          text: `Failed to restart session: ${sessionId}`,
+        });
+        return;
       }
     }
 
     // Guard: session may have been cleaned up during restart
-    const liveSess = this.sessions.get(sessionId);
+    liveSess = this.sessions.get(sessionId);
     if (!liveSess || !liveSess.sessionId || !liveSess.client) {
-      throw new Error(`session lost after restart: ${sessionId}`);
+      return;
     }
-
-    const ws = liveSess.ownerTransport;
-    this.updateSessionActivity(sessionId);
-
-    // Mark turn active
-    liveSess.turnActive = true;
 
     const startTime = Date.now();
     let timedOut = false;
@@ -443,11 +496,7 @@ export class SessionManager {
     // Heartbeat keep-alive during prompt
     const keepAlive = setInterval(() => {
       if (timedOut || errorDetected) return;
-      try {
-        ws?.send(
-          JSON.stringify({ type: "heartbeat", sessionId, ts: Date.now() }),
-        );
-      } catch { /* WS gone */ }
+      this.sendToOwner(sessionId, { type: "heartbeat", sessionId, ts: Date.now() });
     }, 3_000);
 
     // ── stderr model-error monitoring ─────────────────────────
@@ -475,24 +524,16 @@ export class SessionManager {
               stopReason: "error",
             },
           });
-          try {
-            ws?.send(
-              JSON.stringify({
-                type: "turn_ended",
-                sessionId,
-                stopReason: "error",
-              }),
-            );
-          } catch { /* WS gone */ }
-          try {
-            ws?.send(
-              JSON.stringify({
-                type: "error",
-                sessionId,
-                text: `Model error: ${stderrText.slice(0, 300).trim()}`,
-              }),
-            );
-          } catch { /* WS gone */ }
+          this.sendToOwner(sessionId, {
+            type: "turn_ended",
+            sessionId,
+            stopReason: "error",
+          });
+          this.sendToOwner(sessionId, {
+            type: "error",
+            sessionId,
+            text: `Model error: ${stderrText.slice(0, 300).trim()}`,
+          });
           break;
         }
       };
@@ -525,24 +566,16 @@ export class SessionManager {
           sessionId,
           event: { sessionUpdate: "turn_ended", stopReason: "timeout" },
         });
-        try {
-          ws?.send(
-            JSON.stringify({
-              type: "turn_ended",
-              sessionId,
-              stopReason: "timeout",
-            }),
-          );
-        } catch { /* WS gone */ }
-        try {
-          ws?.send(
-            JSON.stringify({
-              type: "error",
-              sessionId,
-              text: "[Timeout] 连续 5 分钟未收到任何输出或工具回调。",
-            }),
-          );
-        } catch { /* WS gone */ }
+        this.sendToOwner(sessionId, {
+          type: "turn_ended",
+          sessionId,
+          stopReason: "timeout",
+        });
+        this.sendToOwner(sessionId, {
+          type: "error",
+          sessionId,
+          text: "[Timeout] 连续 5 分钟未收到任何输出或工具回调。",
+        });
       }, PROMPT_TIMEOUT);
     };
 
@@ -576,15 +609,11 @@ export class SessionManager {
           stopReason: result?.stopReason,
         },
       });
-      try {
-        ws?.send(
-          JSON.stringify({
-            type: "turn_ended",
-            sessionId,
-            stopReason: result?.stopReason,
-          }),
-        );
-      } catch { /* WS gone */ }
+      this.sendToOwner(sessionId, {
+        type: "turn_ended",
+        sessionId,
+        stopReason: result?.stopReason,
+      });
     } catch (err: unknown) {
       if (timedOut || errorDetected) return;
 
@@ -607,28 +636,20 @@ export class SessionManager {
         sessionId,
         event: { sessionUpdate: "turn_ended", stopReason: "error" },
       });
-      try {
-        ws?.send(
-          JSON.stringify({
-            type: "turn_ended",
-            sessionId,
-            stopReason: "error",
-          }),
-        );
-      } catch { /* WS gone */ }
+      this.sendToOwner(sessionId, {
+        type: "turn_ended",
+        sessionId,
+        stopReason: "error",
+      });
       const displayMsg =
         msg.includes("closed") || msg.includes("abort")
           ? "[Session expired] Send a message to auto-restart."
           : `Agent error: ${msg}`;
-      try {
-        ws?.send(
-          JSON.stringify({
-            type: "error",
-            sessionId,
-            text: displayMsg,
-          }),
-        );
-      } catch { /* WS gone */ }
+      this.sendToOwner(sessionId, {
+        type: "error",
+        sessionId,
+        text: displayMsg,
+      });
     }
   }
 
@@ -936,7 +957,20 @@ export class SessionManager {
         const requestId = randomUUID();
         const sid = sessionIdRef();
         const s = this.sessions.get(sid);
-        if (s) s.pendingPermissions.set(requestId, { requestId, sessionId: sid, resolve });
+        // orphan（会话存在但无 owner）时立即取消，避免 ACP Promise 永久挂起
+        if (s && !s.ownerTransport) {
+          resolve({ outcome: { outcome: "cancelled" } });
+          return;
+        }
+        if (s) {
+          s.pendingPermissions.set(requestId, {
+            requestId,
+            sessionId: sid,
+            // 该请求实际提供的 option ID 集合，响应校验用
+            optionIds: permParams.options.map((o) => o.optionId),
+            resolve,
+          });
+        }
         try {
           // orphan 时不向旧连接发权限请求（cleanupWsSessions 已取消该会话的 pending）
           const currentWs = s ? s.ownerTransport : wsRef;

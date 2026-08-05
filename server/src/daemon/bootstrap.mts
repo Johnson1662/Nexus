@@ -226,7 +226,8 @@ export async function getDaemonStatus(): Promise<DaemonStatus | null> {
         const data = await res.json();
         return {
           pid: lock.pid,
-          port: controlPort,
+          // /status 的 port 是 Bridge 端口（手机连接用），controlPort 是随机 IPC 端口
+          port: typeof data.port === "number" ? data.port : lock.port,
           uptime: data.uptime || 0,
           activeSessions: data.activeSessions || 0,
         };

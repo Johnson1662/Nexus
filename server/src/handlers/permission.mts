@@ -50,6 +50,13 @@ export function handlePermissionResponse(
       );
       return;
     }
+    // 只接受该请求实际提供的选项，拒绝任意非空 optionId
+    if (pending.optionIds && !pending.optionIds.includes(selectedOptionId)) {
+      ws.send(
+        JSON.stringify({ type: "error", text: "optionId was not offered by this request" }),
+      );
+      return;
+    }
     sess.pendingPermissions.delete(requestId);
     pending.resolve({ outcome: { outcome: "selected" as const, optionId: selectedOptionId } });
     return;

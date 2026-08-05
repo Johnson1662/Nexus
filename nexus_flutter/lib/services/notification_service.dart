@@ -55,8 +55,40 @@ class NotificationService {
     }
   }
 
-  /// Cancel the notification with [id] (default 1001).
-  static Future<bool> cancel({int id = 1001}) async {
+  /// 由 [requestId] 稳定派生的通知 ID（1000..1000999）。
+  /// 与原生 NotificationHelper 同算法，多请求互不覆盖。
+  static int notificationIdFor(String requestId) {
+    var h = 0;
+    for (final c in requestId.codeUnits) {
+      h = (h * 31 + c) & 0x7fffffff;
+    }
+    return 1000 + (h % 1000000);
+  }
+
+  /// Cancel the notification for [requestId].
+  static Future<bool> cancelForRequest(String requestId) async {
+    await _init();
+    return cancel(id: notificationIdFor(requestId));
+  }
+
+  /// Cancel ALL permission notifications (e.g. when the app returns to foreground).
+  static Future<bool> cancelAll() async {
+    await _init();
+    try {
+      final result = await _channel.invokeMethod<bool>('cancelNotification', {
+        'id': -1,
+      });
+      return result == true;
+    } on MissingPluginException {
+      return false;
+    } catch (e) {
+      debugPrint('[NotificationService] cancelAll error: $e');
+      return false;
+    }
+  }
+
+  /// Cancel the notification with [id].
+  static Future<bool> cancel({required int id}) async {
     await _init();
     try {
       final result = await _channel.invokeMethod<bool>('cancelNotification', {

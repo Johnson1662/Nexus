@@ -1,3 +1,5 @@
+import 'dart:collection';
+
 import 'message_data.dart';
 import 'ws_protocol.dart';
 
@@ -59,7 +61,12 @@ class ChatState {
 
   // Permissions / Usage
   UsageInfo? lastUsage;
-  PendingPermission? pendingPermission;
+  final LinkedHashMap<String, PendingPermission> pendingPermissions =
+      LinkedHashMap();
+
+  /// 队首待处理权限（UI 一次展示一个，响应后展示下一个）。
+  PendingPermission? get pendingPermission =>
+      pendingPermissions.isEmpty ? null : pendingPermissions.values.first;
 
   void resetForNewChat() {
     sessionId = '';
@@ -71,6 +78,6 @@ class ChatState {
     streamingText = '';
     accumulatorType = '';
     lastUsage = null;
-    pendingPermission = null;
+    pendingPermissions.clear();
   }
 }

@@ -65,6 +65,15 @@ export class NotificationHelper {
     this.slotCreated = true;
   }
 
+  /** 由 requestId 稳定派生通知 ID（1000..1000999），与 Flutter 端同算法。 */
+  private notificationIdFor(requestId: string): number {
+    let h = 0;
+    for (let i = 0; i < requestId.length; i++) {
+      h = (h * 31 + requestId.charCodeAt(i)) & 0x7fffffff;
+    }
+    return 1000 + (h % 1000000);
+  }
+
   private async showPermissionNotification(call: MethodCall, result: MethodResult): Promise<void> {
     if (this.disposed) {
       result.success(false);
@@ -83,6 +92,11 @@ export class NotificationHelper {
       const command = (args['command'] as string) ?? '';
       const requestId = (args['requestId'] as string) ?? '';
 
+      // 通知 ID 与 WantAgent requestCode 由 requestId 稳定派生，
+      // 并发权限请求互不覆盖（拒绝/允许各占一个相邻 code）。
+      const notificationId = this.notificationIdFor(requestId);
+      const denyCode = notificationId;
+
       const denyWantAgent = await wantAgent.getWantAgent({
         wants: [{
           bundleName: 'com.nexus.remoteai',
@@ -90,7 +104,7 @@ export class NotificationHelper {
           parameters: { nexus_action: 'permission_response', requestId: requestId, allow: false }
         }],
         actionType: wantAgent.OperationType.START_ABILITIES,
-        requestCode: 200,
+        requestCode: denyCode,
         actionFlags: [wantAgent.WantAgentFlags.UPDATE_PRESENT_FLAG]
       });
 
@@ -101,7 +115,7 @@ export class NotificationHelper {
           parameters: { nexus_action: 'permission_response', requestId: requestId, allow: true }
         }],
         actionType: wantAgent.OperationType.START_ABILITIES,
-        requestCode: 100,
+        requestCode: denyCode + 1,
         actionFlags: [wantAgent.WantAgentFlags.UPDATE_PRESENT_FLAG]
       });
 
@@ -116,7 +130,7 @@ export class NotificationHelper {
       };
 
       const reqConfig: NotificationRequestConfig = {
-        id: 1001,
+        id: notificationId,
         content: contentDetails,
         actionButtons: [
           { title: '拒绝', wantAgent: denyWantAgent },
@@ -153,7 +167,13 @@ export class NotificationHelper {
       return;
     }
     try {
-      await notificationManager.cancel(1001);
+      const args = call.args as Record<string, Object>;
+      const id = (args['id'] as number) ?? 1001;
+      if (id < 0) {
+        await notificationManager.cancelAll();
+      } else {
+        await notificationManager.cancel(id);
+      }
       result.success(true);
     } catch (e) {
       console.error(TAG, `cancelNotification failed: ${(e as BusinessError).message}`);

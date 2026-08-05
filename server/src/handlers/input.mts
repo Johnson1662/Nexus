@@ -14,9 +14,10 @@ export function handleInput(
     try { ws.send(JSON.stringify({ type: "error", sessionId, text: "text is required" })); } catch {}
     return;
   }
-  // 参数与所有权校验通过后立即 ACK，客户端收到即清除 15s 输入超时定时器
+  // 原子占用回合成功后立即 ACK，客户端收到即清除 15s 输入超时定时器
+  let handle;
   try {
-    sessionManager.assertOwner(sessionId, ws);
+    handle = sessionManager.beginPrompt(sessionId, text, ws);
   } catch (err: unknown) {
     const code = err instanceof SessionOwnerError ? err.code : "SESSION_ACCESS_DENIED";
     const message = err instanceof Error ? err.message : String(err);
@@ -26,11 +27,5 @@ export function handleInput(
   try {
     ws.send(JSON.stringify({ type: "input_ack", sessionId }));
   } catch { /* WS gone */ }
-  sessionManager.dispatchPrompt(sessionId, text, ws).catch((err: Error) => {
-    console.log(`[handler:input] dispatchPrompt error: ${err.message}`);
-    try {
-      const code = err instanceof SessionOwnerError ? err.code : "SESSION_ACCESS_DENIED";
-      ws.send(JSON.stringify({ type: "error", sessionId, code, text: `Failed to process input: ${err.message}` }));
-    } catch { /* WS gone */ }
-  });
+  void handle.run();
 }

@@ -1,10 +1,12 @@
 #!/usr/bin/env node
 
 import { spawn } from 'child_process';
+import { connect } from 'node:net';
 import { openSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
 import { startDaemon, stopDaemon, getDaemonStatus } from './daemon/bootstrap.mjs';
+import { isDaemonRunning } from './daemon/pid-lock.mjs';
 
 function printUsage(): void {
   console.log(`Usage: nexus <command> [options]
@@ -33,6 +35,17 @@ function parsePortFromArgs(args: string[]): number {
     }
   }
   return 12138;
+}
+
+/** TCP 连通性探测：成功连上即视为端口仍在监听。 */
+function tcpReachable(port: number, host = '127.0.0.1'): Promise<boolean> {
+  return new Promise((resolve) => {
+    const sock = connect({ port, host });
+    sock.setTimeout(500);
+    sock.once('connect', () => { sock.destroy(); resolve(true); });
+    sock.once('error', () => resolve(false));
+    sock.once('timeout', () => { sock.destroy(); resolve(false); });
+  });
 }
 
 async function main(): Promise<void> {
@@ -85,22 +98,31 @@ async function main(): Promise<void> {
 
     case 'restart': {
       const port = parsePortFromArgs(args);
-      await stopDaemon();
-      // Wait for shutdown to complete (poll control server /health until unreachable)
+      // 先读控制端口：daemon 清理任务会在 shutdown 时删除 daemon.control.port
       const CONTROL_PORT_FILE = join(homedir(), '.nexus', 'daemon.control.port');
+      const LOCK_FILE = join(homedir(), '.nexus', 'daemon.lock');
       let controlPort = 0;
       try {
         const { readFile } = await import('fs/promises');
         controlPort = parseInt((await readFile(CONTROL_PORT_FILE, 'utf-8')).trim(), 10);
       } catch { /* no control port file — skip polling */ }
-      for (let i = 0; i < 10 && controlPort > 0; i++) {
-        await new Promise((resolve) => setTimeout(resolve, 500));
-        try {
-          const res = await fetch(`http://127.0.0.1:${controlPort}/health`);
-          if (!res.ok) break;
-        } catch {
-          break; // Daemon stopped
+      await stopDaemon();
+      // 等待完全关闭：Control Server 不可访问 + PID lock 已释放 + Bridge 端口已关闭
+      const deadline = Date.now() + 10_000;
+      while (Date.now() < deadline) {
+        let controlUp = false;
+        if (controlPort > 0) {
+          try {
+            const res = await fetch(`http://127.0.0.1:${controlPort}/health`);
+            controlUp = res.ok;
+          } catch {
+            controlUp = false;
+          }
         }
+        const lockHeld = await isDaemonRunning(LOCK_FILE);
+        const bridgeUp = await tcpReachable(port);
+        if (!controlUp && !lockHeld && !bridgeUp) break;
+        await new Promise((resolve) => setTimeout(resolve, 500));
       }
       // Fork to background (same as start)
       const logDir = join(homedir(), '.nexus');

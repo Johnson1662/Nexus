@@ -52,7 +52,8 @@ export async function handleStart(
   // If prompt was provided, dispatch it now
   if (prompt) {
     try {
-      await sessionManager.dispatchPrompt(sessionId, prompt, ws);
+      const handle = sessionManager.beginPrompt(sessionId, prompt, ws);
+      void handle.run();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       console.log(`[handler:start] prompt dispatch error: ${msg}`);

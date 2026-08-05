@@ -62,13 +62,12 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
       if (allow) {
         // 最小权限优先：通知栏只能安全地选择 allow_once；
         // 无 allow_once 选项时拒绝并让用户进应用选择
-        final perm = _state.pendingPermission;
-        final optionId = (perm != null && perm.options.isNotEmpty
-            ? perm.options
-                .where((o) => o.kind.startsWith('allow_once'))
-                .firstOrNull
-                ?.optionId
-            : null);
+        final perm = _state.pendingPermissions[requestId];
+        if (perm == null) return; // 已响应/过期通知，忽略
+        final optionId = perm.options
+            .where((o) => o.kind.startsWith('allow_once'))
+            .firstOrNull
+            ?.optionId;
         if (optionId != null && optionId.isNotEmpty) {
           permissionResponse(requestId, 'selected', optionId: optionId);
         } else {
@@ -88,7 +87,7 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
       _isInBackground = true;
     } else if (state == AppLifecycleState.resumed) {
       _isInBackground = false;
-      NotificationService.cancel();
+      NotificationService.cancelAll();
     }
   }
 
@@ -556,23 +555,25 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
   // ── Permissions ──
   void permissionResponse(String requestId, String outcome,
       {String? optionId}) {
-    // 优先用请求来源会话的 sessionId（可能与当前会话不同）
-    final permSessionId = _state.pendingPermission?.sessionId ?? '';
+    // 按 requestId 精确查找并移除，并发请求互不串线；
+    // 已响应/不存在的请求直接忽略（过期通知、重复响应）。
+    final perm = _state.pendingPermissions.remove(requestId);
+    if (perm == null) return;
     _ws.send(ClientMessage(
       type: 'permission_response',
-      sessionId: permSessionId.isNotEmpty ? permSessionId : _state.sessionId,
+      sessionId: perm.sessionId.isNotEmpty ? perm.sessionId : _state.sessionId,
       requestId: requestId,
       outcome: outcome,
       optionId: optionId,
     ));
-    _state.pendingPermission = null;
-    NotificationService.cancel();
+    NotificationService.cancelForRequest(requestId);
     notifyListeners();
   }
 
   void rejectPermissionOnClose() {
-    if (_state.pendingPermission != null) {
-      permissionResponse(_state.pendingPermission!.requestId, 'cancelled');
+    final pending = _state.pendingPermission;
+    if (pending != null) {
+      permissionResponse(pending.requestId, 'cancelled');
     }
   }
 
@@ -739,6 +740,10 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
         notifyListeners();
         break;
       case 'session_ended':
+        if (msg.sessionId != null &&
+            !_isEventForCurrentSession(msg.sessionId)) {
+          break;
+        }
         _clearTurnRequest();
         _resetCursor(clearPersisted: true);
         _processedMessageIds.clear();
@@ -825,6 +830,10 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
         notifyListeners();
         break;
       case 'error':
+        if (msg.sessionId != null &&
+            !_isEventForCurrentSession(msg.sessionId)) {
+          break;
+        }
         _loadingSessionId = '';
         _syncInFlight = false;
         _clearTurnRequest();
@@ -837,7 +846,7 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
         break;
       case 'permission_request':
         if (msg.requestId != null) {
-          _state.pendingPermission = PendingPermission(
+          _state.pendingPermissions[msg.requestId!] = PendingPermission(
             requestId: msg.requestId!,
             toolCall: msg.toolCall?.toString() ?? '',
             sessionId: msg.sessionId ?? '',
@@ -849,7 +858,8 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
                     ))
                 .toList(),
           );
-          // Show OS notification only when app is in background
+          // Show OS notification only when app is in background；
+          // 每个请求独立通知（ID 由 requestId 派生，互不覆盖）
           if (_isInBackground) {
             final toolCallStr = msg.toolCall?.toString() ?? '';
             NotificationService.showPermissionNotification(
@@ -863,6 +873,10 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
         notifyListeners();
         break;
       case 'session_closed':
+        if (msg.sessionId != null &&
+            !_isEventForCurrentSession(msg.sessionId)) {
+          break;
+        }
         _clearTurnRequest();
         _resetCursor(clearPersisted: true);
         _processedMessageIds.clear();
