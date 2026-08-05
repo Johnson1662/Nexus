@@ -8,23 +8,33 @@ import '../models/device_entry.dart';
 class StorageService {
   static const String _fileName = '.nexus_store.json';
 
-  static StorageService? _instance;
+  static Future<StorageService>? _instanceFuture;
   Map<String, dynamic> _data = {};
   io.File? _file;
 
+  @visibleForTesting
+  static String? sandboxForTest;
+
+  @visibleForTesting
+  static void resetForTest() {
+    _instanceFuture = null;
+  }
+
   StorageService._();
 
-  static Future<StorageService> getInstance() async {
-    if (_instance == null) {
-      _instance = StorageService._();
-      await _instance!._init();
-    }
-    return _instance!;
+  static Future<StorageService> getInstance() {
+    return _instanceFuture ??= _create();
+  }
+
+  static Future<StorageService> _create() async {
+    final svc = StorageService._();
+    await svc._init();
+    return svc;
   }
 
   Future<void> _init() async {
     // OHOS has no path_provider implementation; use the app sandbox directly.
-    const sandbox = '/data/storage/el2/base/haps/entry/files';
+    final sandbox = sandboxForTest ?? '/data/storage/el2/base/haps/entry/files';
     final file = io.File('$sandbox/$_fileName');
     debugPrint('[Storage] Using OHOS sandbox: ${file.path}');
 

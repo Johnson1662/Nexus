@@ -181,7 +181,7 @@ Future<void> _probeAndAutoConnect(
   ChatProvider chatProvider,
 ) async {
   debugPrint('[Startup] Asynchronously probing ${hostStore.devices.length} saved hosts...');
-  await _probeAllHosts(hostStore);
+  await _probeAllHosts(hostStore, chatProvider: chatProvider);
   if (hostStore.devices.isNotEmpty) {
     final onlineDevice = hostStore.devices.firstWhere(
       (d) => hostStore.isOnline(d.hostId),
@@ -197,7 +197,10 @@ Future<void> _probeAndAutoConnect(
 }
 
 /// Probes all saved hosts via HTTP GET /probe and marks them online/offline.
-Future<void> _probeAllHosts(HostStore hostStore) async {
+Future<void> _probeAllHosts(
+  HostStore hostStore, {
+  ChatProvider? chatProvider,
+}) async {
   for (final device in hostStore.devices) {
     final hostKey = device.hostId.isNotEmpty ? device.hostId : device.name;
     if (hostKey.isEmpty) continue;
@@ -224,6 +227,7 @@ Future<void> _probeAllHosts(HostStore hostStore) async {
             final hostId = json['hostId'] as String? ?? '';
             final hostname = json['hostname'] as String? ?? '';
             if (hostId.isNotEmpty && hostId != device.hostId) {
+              final oldKey = hostKey;
               hostStore.devices[hostStore.devices.indexOf(device)] = DeviceEntry(
                 hostId: hostId,
                 name: hostname.isNotEmpty ? hostname : device.name,
@@ -232,8 +236,12 @@ Future<void> _probeAllHosts(HostStore hostStore) async {
                 relayPin: device.relayPin,
                 authToken: device.authToken,
               );
+              hostStore.migrateHostId(oldKey, hostId);
+              chatProvider?.migrateHostKey(oldKey, hostId);
+              hostStore.markOnline(hostId, url);
+            } else {
+              hostStore.markOnline(hostKey, url);
             }
-            hostStore.markOnline(hostKey, url);
             foundOnline = true;
             debugPrint('[Probe] $hostKey ONLINE via $url (hostname=$hostname)');
             break;

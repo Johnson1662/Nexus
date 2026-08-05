@@ -191,7 +191,7 @@ class ServerMessage {
       String? toolOldText;
       String? toolNewText;
       String? toolTerminalId;
-      final rawContent = e['content'];
+      final rawContent = e['content'] ?? e['toolCallContent'];
       if (rawContent is List) {
         final sb = StringBuffer();
         for (final item in rawContent.whereType<Map>()) {
@@ -218,6 +218,11 @@ class ServerMessage {
           } else if (type == 'terminal') {
             toolContentType = 'terminal';
             toolTerminalId = item['terminalId'] as String?;
+            // terminal 块文本（{type:'text', text}）同样累积进 toolContent
+            final nested = item['content'];
+            if (nested is Map && nested['text'] != null) {
+              sb.write(nested['text'] as String);
+            }
           }
         }
         if (sb.length > 0) toolContentText = sb.toString();

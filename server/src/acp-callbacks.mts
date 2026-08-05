@@ -22,6 +22,9 @@ import type {
   ReleaseTerminalResponse,
 } from "@agentclientprotocol/sdk";
 
+const MAX_TERMINAL_OUTPUT_BYTES = 256 * 1024;
+const TERMINAL_FLUSH_INTERVAL_MS = 75;
+
 export function resolvePathWithinCwd(target: string, cwd: string, allowMissing = false): string {
   const resolved = path.resolve(cwd, target);
   const realCwd = realpathSync(cwd);
@@ -161,7 +164,7 @@ export function createAcpCallbacks(config: AcpCallbacksConfig): {
     if (currentSess.lastToolCallId) {
       currentSess.toolCallIdMap.set(terminalId, currentSess.lastToolCallId);
     }
-    const outputByteLimit = params.outputByteLimit ?? 100000;
+    const outputByteLimit = Math.min(params.outputByteLimit ?? 100000, MAX_TERMINAL_OUTPUT_BYTES);
 
     let resolveExit: (() => void) | null = null;
     const exitPromise = new Promise<void>((resolve) => {
@@ -177,20 +180,25 @@ export function createAcpCallbacks(config: AcpCallbacksConfig): {
       exitPromise,
       resolveExit,
       outputByteLimit,
+      lastSentLen: 0,
+      flushTimer: null as ReturnType<typeof setTimeout> | null,
     };
     currentSess.terminals.set(terminalId, terminal);
 
-    const sendTerminalUpdate = (status: string): void => {
+    const sendTerminalUpdate = (status: string, final: boolean): void => {
       const sess = sessionManager.getSession(getSessionId());
       const t = sess?.terminals.get(terminalId);
       if (!t) return;
+      const delta = t.output.slice(t.lastSentLen);
+      t.lastSentLen = t.output.length;
+      if (!final && delta.length === 0) return;
       sendToolCallUpdate(terminalId, status, [
         {
           type: "terminal",
           terminalId,
           content: {
             type: "text",
-            text: t.output,
+            text: delta,
           },
         },
       ]);
@@ -216,8 +224,14 @@ export function createAcpCallbacks(config: AcpCallbacksConfig): {
       if (t.output.length > t.outputByteLimit) {
         t.output = t.output.slice(t.output.length - t.outputByteLimit);
         t.truncated = true;
+        t.lastSentLen = t.output.length;
       }
-      sendTerminalUpdate("in_progress");
+      if (!t.flushTimer) {
+        t.flushTimer = setTimeout(() => {
+          t.flushTimer = null;
+          sendTerminalUpdate("in_progress", false);
+        }, TERMINAL_FLUSH_INTERVAL_MS);
+      }
     });
 
     termProc.stderr!.on("data", (chunk: Buffer) => {
@@ -228,28 +242,42 @@ export function createAcpCallbacks(config: AcpCallbacksConfig): {
       if (t.output.length > t.outputByteLimit) {
         t.output = t.output.slice(t.output.length - t.outputByteLimit);
         t.truncated = true;
+        t.lastSentLen = t.output.length;
       }
-      sendTerminalUpdate("in_progress");
+      if (!t.flushTimer) {
+        t.flushTimer = setTimeout(() => {
+          t.flushTimer = null;
+          sendTerminalUpdate("in_progress", false);
+        }, TERMINAL_FLUSH_INTERVAL_MS);
+      }
     });
 
     termProc.on("exit", (code: number | null, sig: string | null) => {
       const sess = sessionManager.getSession(getSessionId());
       const t = sess?.terminals.get(terminalId);
       if (t) {
+        if (t.flushTimer) {
+          clearTimeout(t.flushTimer);
+          t.flushTimer = null;
+        }
         t.exitStatus = { exitCode: code, signal: sig ?? null };
         if (t.resolveExit) t.resolveExit();
       }
-      sendTerminalUpdate(code === 0 ? "completed" : "failed");
+      sendTerminalUpdate(code === 0 ? "completed" : "failed", true);
     });
 
     termProc.on("error", () => {
       const sess = sessionManager.getSession(getSessionId());
       const t = sess?.terminals.get(terminalId);
       if (t) {
+        if (t.flushTimer) {
+          clearTimeout(t.flushTimer);
+          t.flushTimer = null;
+        }
         t.exitStatus = { exitCode: -1, signal: null };
         if (t.resolveExit) t.resolveExit();
       }
-      sendTerminalUpdate("failed");
+      sendTerminalUpdate("failed", true);
     });
 
     return { terminalId };

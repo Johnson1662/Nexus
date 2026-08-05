@@ -18,6 +18,18 @@ class HostStore extends ChangeNotifier {
 
   String getPhase(String hostKey) => _hostPhases[hostKey] ?? 'unknown';
 
+  /// Probe 发现 canonical hostId 后，把旧 hostKey 的运行态身份迁移到新 hostId。
+  /// 迁移 phase；activeHostKey 指向旧 key 时改指新 key（connectedUrl 值不变，同一台机器）。
+  void migrateHostId(String oldKey, String newKey) {
+    if (oldKey.isEmpty || newKey.isEmpty || oldKey == newKey) return;
+    final phase = _hostPhases.remove(oldKey);
+    if (phase != null && !_hostPhases.containsKey(newKey)) {
+      _hostPhases[newKey] = phase;
+    }
+    if (activeHostKey == oldKey) activeHostKey = newKey;
+    notifyListeners();
+  }
+
   bool isOnline(String hostKey) => _hostPhases[hostKey] == 'online';
 
   bool isDeviceOnline(DeviceEntry d) {

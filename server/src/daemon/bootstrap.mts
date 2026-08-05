@@ -138,26 +138,26 @@ export async function startDaemon(config: DaemonStartConfig): Promise<void> {
 
 /** 发送 stop 信号；返回是否成功发出（200 = true，401/网络错误/无 daemon = false）。 */
 export async function stopDaemon(port?: number): Promise<boolean> {
-  // Find control port from saved file
-  const CONTROL_PORT_FILE = join(DATA_DIR, 'daemon.control.port');
-  let controlPort: number | null = null;
-  try {
-    const { readFile } = await import('fs/promises');
-    const content = await readFile(CONTROL_PORT_FILE, 'utf-8');
-    controlPort = parseInt(content.trim(), 10);
-  } catch {
-    // fall through
+  // Ensure a daemon lock exists before attempting control-plane shutdown.
+  if (!(await readDaemonLock(LOCK_FILE))) {
+    console.error("[nexus] Stop failed: no daemon lock (daemon not running)");
+    return false;
   }
 
-  // Fall back to bridge port from lock file
-  if (!controlPort) {
-    const lock = await readDaemonLock(LOCK_FILE);
-    if (lock) {
-      controlPort = lock.port;
-    } else {
-      console.log('[nexus] No running daemon found');
+  // Find control port from saved file; never fall back to the bridge port.
+  const CONTROL_PORT_FILE = join(DATA_DIR, 'daemon.control.port');
+  let controlPort: number;
+  try {
+    const { readFile } = await import('fs/promises');
+    const parsedPort = parseInt((await readFile(CONTROL_PORT_FILE, 'utf-8')).trim(), 10);
+    if (!Number.isFinite(parsedPort) || parsedPort <= 0) {
+      console.error(`[nexus] Stop failed: control metadata missing (daemon.control.port not found: ${CONTROL_PORT_FILE})`);
       return false;
     }
+    controlPort = parsedPort;
+  } catch {
+    console.error(`[nexus] Stop failed: control metadata missing (daemon.control.port not found: ${CONTROL_PORT_FILE})`);
+    return false;
   }
 
   if (!port) port = controlPort;
@@ -188,15 +188,15 @@ export async function stopDaemon(port?: number): Promise<boolean> {
         console.log("[nexus] Stop signal sent");
         resolve(true);
       } else if (res.statusCode === 401) {
-        console.error("[nexus] Stop rejected: unauthorized");
+        console.error("[nexus] Stop failed: unauthorized (token mismatch)");
         resolve(false);
       } else {
         console.log(`[nexus] Unexpected response: ${res.statusCode}`);
         resolve(false);
       }
     });
-    req.on("error", (err) => {
-      console.error(`[nexus] Failed to send stop: ${err.message}`);
+    req.on("error", () => {
+      console.error(`[nexus] Stop failed: daemon control unavailable (port ${port})`);
       resolve(false);
     });
     req.end("{}");

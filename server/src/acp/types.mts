@@ -23,6 +23,8 @@ export interface TerminalState {
   exitPromise: Promise<void>;
   resolveExit: (() => void) | null;
   outputByteLimit: number;
+  lastSentLen: number;
+  flushTimer: ReturnType<typeof setTimeout> | null;
 }
 
 export interface SessionState {
@@ -55,6 +57,8 @@ export interface SessionState {
   orphanedAt: number | null;
   /** Buffered messages for cursor sync replay (Phase 3a) */
   messageBuffer: Array<{ messageId: string; payload: string; timestamp: number }>;
+  /** Total serialized bytes retained in messageBuffer. */
+  replayBytes: number;
   /** Prevent concurrent load/resume requests from replaying history twice. */
   loadInFlight?: Promise<void>;
 }

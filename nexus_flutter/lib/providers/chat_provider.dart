@@ -84,6 +84,18 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   WSClient get ws => _ws;
 
+  /// Test-only: inject a server message as if received from WS.
+  @visibleForTesting
+  void receiveServerMessage(ServerMessage msg) => _handleServerMessage(msg);
+
+  /// Probe 发现 canonical hostId 变化时迁移旧 hostKey 的 workspace 分区。
+  /// Session cursor（last_message_id 全局 key）不迁移：同一设备场景由后续 sync_request 重新对齐。
+  void migrateHostKey(String oldKey, String newKey) {
+    if (oldKey.isEmpty || newKey.isEmpty || oldKey == newKey) return;
+    if (_state.currentDeviceId == oldKey) _state.currentDeviceId = newKey;
+    _workspaceProvider?.migrateHostId(oldKey, newKey);
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused) {
@@ -797,12 +809,14 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
         _handleAgentEvent(msg);
         break;
       case 'session_cancelled':
+        // Cancel ACK only: 服务端已受理取消请求，不代表回合结束。
+        // 不清 cancelling、不取消 10s 兜底 timer；由 turn_ended /
+        // 当前会话 error / session_closed / 10s 兜底结束取消状态
+        // （防止 ACP 永不发 turn_ended 时输入框永久锁死）。
         if (msg.sessionId != null &&
             !_isEventForCurrentSession(msg.sessionId)) {
           break;
         }
-        _clearCancelling();
-        notifyListeners();
         break;
       case 'turn_ended':
         if (!_isEventForCurrentSession(msg.sessionId)) {
@@ -1509,6 +1523,44 @@ class WorkspaceProvider extends ChangeNotifier {
     _stateFor(hostId);
     notifyListeners();
     _loadHostState(hostId);
+  }
+
+  Future<void> migrateHostId(String oldId, String newId) async {
+    if (oldId.isEmpty || newId.isEmpty || oldId == newId) return;
+
+    final state = _byHost.remove(oldId);
+    if (state != null && !_byHost.containsKey(newId)) {
+      _byHost[newId] = state;
+    }
+    if (_activeHostId == oldId) _activeHostId = newId;
+
+    final storage = await StorageService.getInstance();
+    final oldWorkspacesKey = 'workspaces_$oldId';
+    final oldIndexKey = 'workspace_index_$oldId';
+    final newPartitionExists =
+        storage.getObject('workspaces_$newId') != null ||
+            storage.getObject('workspace_index_$newId') != null;
+    if (newPartitionExists) {
+      await storage.remove(oldWorkspacesKey);
+      await storage.remove(oldIndexKey);
+    } else {
+      final oldWorkspaces = storage.getObject(oldWorkspacesKey);
+      final oldIndex = storage.getObject(oldIndexKey);
+      if (oldWorkspaces != null) {
+        final paths = oldWorkspaces is List
+            ? oldWorkspaces.whereType<String>().toList()
+            : storage.loadWorkspaces(oldId);
+        await storage.saveWorkspaces(newId, paths);
+      }
+      if (oldIndex != null) {
+        final index = oldIndex is int ? oldIndex : storage.loadWorkspaceIndex(oldId);
+        await storage.saveWorkspaceIndex(newId, index);
+      }
+      await storage.remove(oldWorkspacesKey);
+      await storage.remove(oldIndexKey);
+    }
+
+    if (_activeHostId == newId) notifyListeners();
   }
 
   void setWorkspaces(List<String> paths) {

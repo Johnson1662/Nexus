@@ -22,6 +22,7 @@ const IDLE_TIMEOUT_MS = 15 * 60 * 1_000;
 const MAX_ACP_PROCESSES = 5;
 const IDLE_CLEANUP_INTERVAL_MS = 30_000;
 const MAX_MESSAGE_BUFFER = 500;
+const MAX_REPLAY_BYTES_PER_SESSION = 2 * 1024 * 1024;
 const PROMPT_TIMEOUT = 300_000; // 5 minutes sliding inactivity
 const AGENT_INITIALIZE_TIMEOUT_MS = 30_000;
 
@@ -261,6 +262,7 @@ export class SessionManager {
       lastActivity: Date.now(),
       orphanedAt: null,
       messageBuffer: [],
+      replayBytes: 0,
     };
 
     // ── Build ACP callbacks ────────────────────────────────────
@@ -989,16 +991,23 @@ export class SessionManager {
 
     // Clone — never mutate the caller-owned object
     const buffered = { ...(eventPayload as Record<string, unknown>), messageId };
+    const payload = JSON.stringify(buffered);
     sess.messageBuffer.push({
       messageId,
-      payload: JSON.stringify(buffered),
+      payload,
       timestamp: Date.now(),
     });
+    sess.replayBytes = (sess.replayBytes ?? 0) + payload.length;
 
     // Sliding window trim
-    if (sess.messageBuffer.length > MAX_MESSAGE_BUFFER) {
-      const excess = sess.messageBuffer.length - MAX_MESSAGE_BUFFER;
-      sess.messageBuffer.splice(0, excess);
+    while (sess.messageBuffer.length > MAX_MESSAGE_BUFFER) {
+      const dropped = sess.messageBuffer.shift();
+      if (!dropped) break;
+      sess.replayBytes -= dropped.payload.length;
+    }
+    while (sess.replayBytes > MAX_REPLAY_BYTES_PER_SESSION && sess.messageBuffer.length > 1) {
+      const dropped = sess.messageBuffer.shift()!;
+      sess.replayBytes -= dropped.payload.length;
     }
     return buffered;
   }
