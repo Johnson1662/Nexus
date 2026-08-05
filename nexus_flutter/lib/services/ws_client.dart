@@ -1,12 +1,14 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:web_socket_channel/io.dart';
 import '../models/ws_protocol.dart';
 import '../models/host_runtime_state.dart';
 
 typedef MessageCallback = void Function(ServerMessage msg);
+typedef ListenerDisposer = void Function();
 
 class WSClient {
   WebSocketChannel? _channel;
@@ -344,15 +346,45 @@ class WSClient {
     }
   }
 
+  @visibleForTesting
+  void debugDispatch(ServerMessage msg) => _routeMessage(msg);
+
   // ── Callbacks ──
-  void onMessage(MessageCallback cb) => _onMessage.add(cb);
-  void removeMessageListener(MessageCallback cb) => _onMessage.remove(cb);
-  void onStateChange(void Function(bool, String) cb) => _onStateChange.add(cb);
-  void onServerInfo(void Function() cb) => _onServerInfo.add(cb);
-  void onAgentList(void Function(List<AgentInfo>) cb) => _onAgentList.add(cb);
-  void onError(void Function(String) cb) => _onError.add(cb);
-  void onRegistryList(void Function(List<RegistryAgentInfo>) cb) => _onRegistryList.add(cb);
-  void onPhaseChange(void Function(String phase) cb) => _onPhaseChange.add(cb);
+  ListenerDisposer onMessage(MessageCallback cb) {
+    _onMessage.add(cb);
+    return () => _onMessage.remove(cb);
+  }
+
+  ListenerDisposer onStateChange(void Function(bool, String) cb) {
+    _onStateChange.add(cb);
+    return () => _onStateChange.remove(cb);
+  }
+
+  ListenerDisposer onServerInfo(void Function() cb) {
+    _onServerInfo.add(cb);
+    return () => _onServerInfo.remove(cb);
+  }
+
+  ListenerDisposer onAgentList(void Function(List<AgentInfo>) cb) {
+    _onAgentList.add(cb);
+    return () => _onAgentList.remove(cb);
+  }
+
+  ListenerDisposer onError(void Function(String) cb) {
+    _onError.add(cb);
+    return () => _onError.remove(cb);
+  }
+
+  ListenerDisposer onRegistryList(
+      void Function(List<RegistryAgentInfo>) cb) {
+    _onRegistryList.add(cb);
+    return () => _onRegistryList.remove(cb);
+  }
+
+  ListenerDisposer onPhaseChange(void Function(String phase) cb) {
+    _onPhaseChange.add(cb);
+    return () => _onPhaseChange.remove(cb);
+  }
 
   void clearListeners() {
     _onMessage.clear(); _onStateChange.clear(); _onServerInfo.clear();

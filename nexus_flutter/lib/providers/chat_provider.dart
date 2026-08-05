@@ -29,6 +29,8 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
   String _cursorSessionId = '';
   String _lastConnectionHostKey = '';
   final Set<String> _processedMessageIds = <String>{};
+  final List<ListenerDisposer> _listenerDisposers = [];
+  late final OnPermissionActionCallback _permissionAction;
   static const int _turnRequestTimeoutMs = 15000;
   static const int _maxProcessedMessageIds = 4096;
   static const String _contextReplacedNotice =
@@ -36,8 +38,8 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   ChatProvider(this._ws, {WorkspaceProvider? workspaceProvider})
       : _workspaceProvider = workspaceProvider {
-    _ws.onMessage(_handleServerMessage);
-    _ws.onStateChange((connected, _) {
+    _listenerDisposers.add(_ws.onMessage(_handleServerMessage));
+    _listenerDisposers.add(_ws.onStateChange((connected, _) {
       _state.connected = connected;
       if (connected) {
         syncRequest();
@@ -45,25 +47,25 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
         _syncInFlight = false;
       }
       notifyListeners();
-    });
-    _ws.onServerInfo(_onServerInfo);
-    _ws.onError((error) {
+    }));
+    _listenerDisposers.add(_ws.onServerInfo(_onServerInfo));
+    _listenerDisposers.add(_ws.onError((error) {
       _state.errorMessage = error;
       notifyListeners();
-    });
-    _ws.onAgentList(_onAgentList);
+    }));
+    _listenerDisposers.add(_ws.onAgentList(_onAgentList));
     // Bridge WS connection phases to HostStore so UI shows online status
-    _ws.onPhaseChange((phase) {
+    _listenerDisposers.add(_ws.onPhaseChange((phase) {
       final hk = _ws.currentHostKey;
       if (hk.isEmpty) return;
       final hs = HostStore();
       hs.setPhase(hk, phase, url: _ws.currentUrl);
       notifyListeners();
-    });
+    }));
     // Observe app lifecycle for background notification decisions
     WidgetsBinding.instance.addObserver(this);
     // Route native permission notification actions into our permission flow
-    NotificationService.onPermissionAction = (String requestId, bool allow) {
+    _permissionAction = (String requestId, bool allow) {
       if (allow) {
         // 最小权限优先：通知栏只能安全地选择 allow_once；
         // 无 allow_once 选项时拒绝并让用户进应用选择
@@ -82,6 +84,7 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
         permissionResponse(requestId, 'cancelled');
       }
     };
+    NotificationService.onPermissionAction = _permissionAction;
   }
 
   WSClient get ws => _ws;
@@ -1491,10 +1494,17 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    for (final dispose in _listenerDisposers) {
+      dispose();
+    }
+    _listenerDisposers.clear();
     _turnRequestTimer?.cancel();
     _cancelTimer?.cancel();
     _cursorPersistTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
+    if (identical(NotificationService.onPermissionAction, _permissionAction)) {
+      NotificationService.onPermissionAction = null;
+    }
     super.dispose();
   }
 

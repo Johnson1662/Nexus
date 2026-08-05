@@ -20,7 +20,10 @@ class _FakeWSClient extends WSClient {
   String get currentUrl => 'ws://bridge';
 
   @override
-  void onMessage(MessageCallback callback) => messageListeners.add(callback);
+  ListenerDisposer onMessage(MessageCallback callback) {
+    messageListeners.add(callback);
+    return () => messageListeners.remove(callback);
+  }
 
   @override
   void send(ClientMessage message) => sent.add(message);

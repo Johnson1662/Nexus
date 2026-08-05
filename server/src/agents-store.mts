@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync, unlinkSync, chmodSync } from "node:fs";
 import path from "node:path";
 import { homedir } from "node:os";
 import { getRegistryAgent, resolveAgentCommand, getAgentDisplayName } from "./registry/registry.mjs";
@@ -21,7 +21,7 @@ interface InstalledAgentsFile {
 
 // ── State ─────────────────────────────────────────────────────────────
 
-const STORE_DIR = path.join(homedir(), ".nexus");
+const STORE_DIR = process.env.NEXUS_AGENTS_STORE_DIR ?? path.join(homedir(), ".nexus");
 const STORE_FILE = path.join(STORE_DIR, "installed-agents.json");
 
 let installed: InstalledAgent[] | null = null;
@@ -29,9 +29,36 @@ let installed: InstalledAgent[] | null = null;
 // ── Helpers ───────────────────────────────────────────────────────────
 
 function ensureDir(): void {
-  if (!existsSync(STORE_DIR)) {
-    mkdirSync(STORE_DIR, { recursive: true });
+  mkdirSync(STORE_DIR, { recursive: true });
+  if (process.platform !== "win32") {
+    try {
+      chmodSync(STORE_DIR, 0o700);
+    } catch {
+      // Unix 权限设置尽力而为，不阻断存储目录创建。
+    }
   }
+}
+
+function isValidStringRecord(value: unknown): value is Record<string, string> {
+  return typeof value === "object"
+    && value !== null
+    && !Array.isArray(value)
+    && Object.values(value).every((entry) => typeof entry === "string");
+}
+
+function isValidInstalledAgent(a: unknown): a is InstalledAgent {
+  if (!a || typeof a !== "object" || Array.isArray(a)) return false;
+  const agent = a as Record<string, unknown>;
+  if (typeof agent.agentId !== "string" || agent.agentId.trim().length === 0) return false;
+  if (agent.source !== "registry" && agent.source !== "custom") return false;
+  if (agent.installedAt !== undefined && typeof agent.installedAt !== "number") return false;
+  if (agent.customArgs !== undefined
+      && (!Array.isArray(agent.customArgs) || !agent.customArgs.every((arg) => typeof arg === "string"))) {
+    return false;
+  }
+  if (agent.customEnv !== undefined && !isValidStringRecord(agent.customEnv)) return false;
+  if (agent.installedAt === undefined) agent.installedAt = Date.now();
+  return true;
 }
 
 function loadFromDisk(): InstalledAgent[] {
@@ -42,19 +69,21 @@ function loadFromDisk(): InstalledAgent[] {
       // First run: auto-install default agents
       const defaults = getDefaultInstallations();
       saveToDisk(defaults);
-      installed = defaults;
       return defaults;
     }
     const raw = readFileSync(STORE_FILE, "utf-8");
-    const parsed: InstalledAgentsFile = JSON.parse(raw);
-    if (!parsed.agents || parsed.agents.length === 0) {
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || !Array.isArray((parsed as { agents?: unknown }).agents)) {
+      throw new Error("invalid installed agents file shape");
+    }
+    const entries = (parsed as { agents: unknown[] }).agents;
+    if (entries.length === 0) {
       // Empty file/migration: auto-install defaults
       const defaults = getDefaultInstallations();
       saveToDisk(defaults);
-      installed = defaults;
       return defaults;
     }
-    installed = parsed.agents;
+    installed = entries.filter(isValidInstalledAgent);
   } catch (err) {
     console.log(`[agents-store] failed to load installed agents: ${err}`);
     installed = [];
@@ -62,14 +91,33 @@ function loadFromDisk(): InstalledAgent[] {
   return installed;
 }
 
-function saveToDisk(agents: InstalledAgent[]): void {
-  ensureDir();
+function saveToDisk(agents: InstalledAgent[]): boolean {
+  const tmp = path.join(
+    STORE_DIR,
+    `.installed-agents-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.tmp`,
+  );
   try {
+    ensureDir();
     const data: InstalledAgentsFile = { agents };
-    writeFileSync(STORE_FILE, JSON.stringify(data, null, 2), "utf-8");
+    writeFileSync(tmp, JSON.stringify(data, null, 2), { encoding: "utf-8", mode: 0o600 });
+    renameSync(tmp, STORE_FILE);
+    if (process.platform !== "win32") {
+      try {
+        chmodSync(STORE_FILE, 0o600);
+      } catch {
+        // Unix 文件权限设置尽力而为，不影响已完成的原子写入。
+      }
+    }
     installed = agents;
+    return true;
   } catch (err) {
+    try {
+      if (existsSync(tmp)) unlinkSync(tmp);
+    } catch {
+      // 临时文件清理失败时保留主错误日志，避免覆盖原始故障。
+    }
     console.log(`[agents-store] failed to save: ${err}`);
+    return false;
   }
 }
 
@@ -104,7 +152,7 @@ export function installAgent(
   source: "registry" | "custom" = "registry",
   options?: { command?: string; args?: string[]; env?: Record<string, string> },
 ): void {
-  const agents = loadFromDisk();
+  const agents = loadFromDisk().map((agent) => ({ ...agent }));
   if (agents.some((a) => a.agentId === agentId)) {
     console.log(`[agents-store] agent ${agentId} already installed`);
     return;
@@ -120,22 +168,21 @@ export function installAgent(
     entry.customEnv = options?.env;
   }
   agents.push(entry);
-  saveToDisk(agents);
-  console.log(`[agents-store] installed agent: ${agentId}`);
+  if (saveToDisk(agents)) console.log(`[agents-store] installed agent: ${agentId}`);
 }
 
 export function uninstallAgent(agentId: string): boolean {
-  const agents = loadFromDisk();
+  const agents = loadFromDisk().map((agent) => ({ ...agent }));
   const idx = agents.findIndex((a) => a.agentId === agentId);
   if (idx < 0) return false;
   agents.splice(idx, 1);
-  saveToDisk(agents);
-  console.log(`[agents-store] uninstalled agent: ${agentId}`);
-  return true;
+  const saved = saveToDisk(agents);
+  if (saved) console.log(`[agents-store] uninstalled agent: ${agentId}`);
+  return saved;
 }
 
 export function setAgentPinned(agentId: string, pinned: boolean): void {
-  const agents = loadFromDisk();
+  const agents = loadFromDisk().map((agent) => ({ ...agent }));
   const agent = agents.find((a) => a.agentId === agentId);
   if (agent) {
     agent.pinned = pinned;
@@ -144,7 +191,7 @@ export function setAgentPinned(agentId: string, pinned: boolean): void {
 }
 
 export function setAgentEnvOverrides(agentId: string, env: Record<string, string>): void {
-  const agents = loadFromDisk();
+  const agents = loadFromDisk().map((agent) => ({ ...agent }));
   const agent = agents.find((a) => a.agentId === agentId);
   if (agent) {
     agent.customEnv = { ...(agent.customEnv || {}), ...env };
