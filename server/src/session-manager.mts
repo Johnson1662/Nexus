@@ -156,8 +156,13 @@ export class SessionManager {
   }
 
   // ═══════════════════════════════════════════════════════════════
-  // PUBLIC API — 8 methods
+  // PUBLIC API — 9 methods
   // ═══════════════════════════════════════════════════════════════
+
+  /** 该 WS 是否已有进行中的 Session 创建任务（用于 start 准入，拒绝重复 Start）。 */
+  public hasPendingCreate(ws: import("ws").WebSocket): boolean {
+    return this.pendingCreates.has(ws);
+  }
 
   /** ── getOrCreate ─────────────────────────────────────────────
    *  Return the session matching `params.sessionId` if already alive,
@@ -165,6 +170,7 @@ export class SessionManager {
    *  and register the session in the pool.
    */
   async getOrCreate(ws: WebSocket, params: CreateSessionParams): Promise<SessionState> {
+    // server 层已在 start 准入阶段拒绝重复请求；这里保留共享 in-flight 作为其他调用者的防御。
     const inFlight = this.pendingCreates.get(ws);
     if (inFlight) return inFlight;
     const pending = this.getOrCreateInternal(ws, params);
@@ -1267,6 +1273,20 @@ export class SessionManager {
         );
         const result = await client.createSession(cwd);
         acpSessionId = result.sessionId;
+        // 旧 ACP Session 加载失败，Agent 上下文已被新 Session 替换——通知客户端（不当作 error）
+        const contextEvent = {
+          type: "session_context_replaced",
+          sessionId,
+          reason: "reload_failed",
+          previousAgentSessionId: reloadSessionId,
+          newAgentSessionId: acpSessionId,
+        };
+        try {
+          const replayed = this.bufferAgentEvent(sessionId, contextEvent) ?? contextEvent;
+          const s = this.sessions.get(sessionId);
+          const currentWs = s ? s.ownerTransport : wsRef;
+          if (currentWs) currentWs.send(JSON.stringify(replayed));
+        } catch { /* WS gone */ }
       } finally {
         suppressingReplay = false;
       }

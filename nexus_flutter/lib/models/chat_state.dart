@@ -23,6 +23,7 @@ class ChatState {
   String reconnectPhase = '';
   int reconnectAttempt = 0;
   String errorMessage = '';
+  String contextReplacedNotice = '';
 
   // Sessions
   List<ServerSessionData> sessions = [];
@@ -75,6 +76,7 @@ class ChatState {
     loadingSession = false;
     turnActive = false;
     cancelling = false;
+    contextReplacedNotice = '';
     messages = [];
     streamingThinking = '';
     streamingText = '';

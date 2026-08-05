@@ -372,7 +372,13 @@ function handleIncomingConnection(transport: any, hostId: string = HOST_ID) {
     switch (sessionMsg.type) {
       case "start":
         console.log(`[server] handleStart agent="${sessionMsg.agent || "opencode"}" cwd="${sessionMsg.cwd || process.cwd()}"`);
-        // Send immediate ack before spawning agent to prevent WS timeout
+        // handleStart 到达 getOrCreate 的首个 await 前会同步设置 pendingCreates；WS 消息有序，下一条 Start 必然看到准入锁。
+        if (sessionManager.hasPendingCreate(transport)) {
+          // 拒绝重复 Start：已有创建任务进行中，不占准入锁也不发 start_ack
+          transport.send(JSON.stringify({ type: "start_failed", code: "START_ALREADY_IN_PROGRESS", text: "A session is already being created." }));
+          break;
+        }
+        // 仅在成功占用准入锁后发送 ack，避免拒绝请求先收到 start_ack。
         transport.send(JSON.stringify({ type: "start_ack" }));
         handleStart(transport, sessionMsg).catch((err: Error) => {
           console.log(`[server] handleStart error: ${err.message}`);

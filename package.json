@@ -9,7 +9,7 @@
     "status": "node server/dist/cli.mjs status",
     "server:old": "node server/server.js",
     "demo": "node -e \"console.log('1. Run: npm run build && npm run start'); console.log('2. Connect the Nexus app to the authenticated bridge'); console.log('3. Use npm run status / npm run stop to manage the daemon')\"",
-    "test": "npm run build && node server/test-auth.mjs && node server/test-session-ownership.mjs && node server/test-permission-delegation.mjs && node server/test-cancel-lifecycle.mjs && node server/test-session-callbacks.mjs && node server/test-terminal-delta.mjs && node server/test-session-titles.mjs && node server/test-session-watcher.mjs && node server/test-workspace-files.mjs"
+    "test": "npm run build && node server/test-auth.mjs && node server/test-session-ownership.mjs && node server/test-permission-delegation.mjs && node server/test-cancel-lifecycle.mjs && node server/test-session-callbacks.mjs && node server/test-terminal-delta.mjs && node server/test-session-titles.mjs && node server/test-session-watcher.mjs && node server/test-workspace-files.mjs && node server/test-start-gate.mjs && node server/test-context-replaced.mjs"
   },
   "dependencies": {
     "@agentclientprotocol/claude-agent-acp": "^0.35.0",

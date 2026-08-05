@@ -31,6 +31,8 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
   final Set<String> _processedMessageIds = <String>{};
   static const int _turnRequestTimeoutMs = 15000;
   static const int _maxProcessedMessageIds = 4096;
+  static const String _contextReplacedNotice =
+      'Agent 上下文已重新创建。此前消息仍可查看，但新任务不会继承旧 Agent 上下文。';
 
   ChatProvider(this._ws, {WorkspaceProvider? workspaceProvider})
       : _workspaceProvider = workspaceProvider {
@@ -174,6 +176,7 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
       _resetCursor(clearPersisted: true);
       _processedMessageIds.clear();
       _state.sessionId = '';
+      _state.contextReplacedNotice = '';
       _state.turnActive = false;
       _startInFlight = false;
       _inputInFlight = false;
@@ -269,6 +272,7 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
 
     final starting = _state.sessionId.isEmpty;
     if (starting) {
+      _state.contextReplacedNotice = '';
       _startInFlight = true;
       _state.turnActive = true;
       _resetCursor(clearPersisted: true);
@@ -465,6 +469,7 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
     if (_state.sessionId != sessionId) {
       _resetCursor(clearPersisted: true);
       _processedMessageIds.clear();
+      _state.contextReplacedNotice = '';
     }
     _state.sessionId = sessionId;
     _clearTurnRequest();
@@ -505,6 +510,7 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
       _processedMessageIds.clear();
       _state.sessionId = '';
       _state.sessionTitle = '';
+      _state.contextReplacedNotice = '';
       _state.turnActive = false;
     }
     notifyListeners();
@@ -720,9 +726,19 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
         _state.errorMessage = msg.text ?? 'Agent 启动失败';
         notifyListeners();
         break;
+      case 'session_context_replaced':
+        if (!_isEventForCurrentSession(msg.sessionId)) {
+          break;
+        }
+        _state.contextReplacedNotice = _contextReplacedNotice;
+        notifyListeners();
+        break;
       case 'session_started':
         final sessionId = msg.sessionId ?? '';
         if (sessionId.isEmpty) break;
+        if (_state.sessionId != sessionId) {
+          _state.contextReplacedNotice = '';
+        }
         if (_cursorSessionId.isNotEmpty && _cursorSessionId != sessionId) {
           _resetCursor(clearPersisted: true);
           _processedMessageIds.clear();
@@ -785,6 +801,7 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
         _state.turnActive = false;
         _state.sessionId = '';
         _state.sessionTitle = '';
+        _state.contextReplacedNotice = '';
         notifyListeners();
         break;
       case 'resumed_session':

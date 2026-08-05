@@ -248,6 +248,32 @@ class _ChatPageState extends State<ChatPage> {
               },
             ),
 
+          // ACP 上下文重建提示：保持显示到切换/新建会话。
+          if (state.contextReplacedNotice.isNotEmpty)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.md,
+                vertical: AppSpacing.sm,
+              ),
+              color: AppColors.warning.withOpacity(0.1),
+              child: Row(
+                children: [
+                  const Icon(Icons.info_outline, size: 16, color: AppColors.warning),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: Text(
+                      state.contextReplacedNotice,
+                      style: const TextStyle(
+                        fontSize: AppFontSize.sm,
+                        color: AppColors.warning,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
           // Chat content
           Expanded(
             child: state.messages.isEmpty && !state.turnActive
