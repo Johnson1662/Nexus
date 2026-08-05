@@ -23,7 +23,9 @@ export interface TerminalState {
   exitPromise: Promise<void>;
   resolveExit: (() => void) | null;
   outputByteLimit: number;
-  lastSentLen: number;
+  pendingDelta: string;
+  stdoutDecoder: import("node:string_decoder").StringDecoder;
+  stderrDecoder: import("node:string_decoder").StringDecoder;
   flushTimer: ReturnType<typeof setTimeout> | null;
 }
 
@@ -56,7 +58,7 @@ export interface SessionState {
   /** Timestamp when session was orphaned (WS disconnected), null if active */
   orphanedAt: number | null;
   /** Buffered messages for cursor sync replay (Phase 3a) */
-  messageBuffer: Array<{ messageId: string; payload: string; timestamp: number }>;
+  messageBuffer: Array<{ messageId: string; payload: string; payloadBytes: number; timestamp: number }>;
   /** Total serialized bytes retained in messageBuffer. */
   replayBytes: number;
   /** Prevent concurrent load/resume requests from replaying history twice. */

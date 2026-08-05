@@ -618,6 +618,7 @@ export class SessionManager {
     entries: Array<{
       messageId: string;
       payload: string;
+      payloadBytes: number;
       timestamp: number;
     }>;
     overflow: boolean;
@@ -889,7 +890,7 @@ export class SessionManager {
     sessionId: string,
     lastMessageId: string,
   ): {
-    entries: Array<{ messageId: string; payload: string; timestamp: number }>;
+    entries: Array<{ messageId: string; payload: string; payloadBytes: number; timestamp: number }>;
     overflow: boolean;
   } {
     return this.replayBuffer(sessionId, lastMessageId);
@@ -998,22 +999,24 @@ export class SessionManager {
     // Clone — never mutate the caller-owned object
     const buffered = { ...(eventPayload as Record<string, unknown>), messageId };
     const payload = JSON.stringify(buffered);
+    const payloadBytes = Buffer.byteLength(payload, "utf8");
     sess.messageBuffer.push({
       messageId,
       payload,
+      payloadBytes,
       timestamp: Date.now(),
     });
-    sess.replayBytes = (sess.replayBytes ?? 0) + payload.length;
+    sess.replayBytes = (sess.replayBytes ?? 0) + payloadBytes;
 
     // Sliding window trim
     while (sess.messageBuffer.length > MAX_MESSAGE_BUFFER) {
       const dropped = sess.messageBuffer.shift();
       if (!dropped) break;
-      sess.replayBytes -= dropped.payload.length;
+      sess.replayBytes -= dropped.payloadBytes;
     }
     while (sess.replayBytes > MAX_REPLAY_BYTES_PER_SESSION && sess.messageBuffer.length > 1) {
       const dropped = sess.messageBuffer.shift()!;
-      sess.replayBytes -= dropped.payload.length;
+      sess.replayBytes -= dropped.payloadBytes;
     }
     return buffered;
   }

@@ -2,9 +2,11 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import { lstatSync, realpathSync } from "node:fs";
 import { spawn } from "node:child_process";
+import { StringDecoder } from "node:string_decoder";
 import kill from "tree-kill";
 import type { WebSocket } from "ws";
 import { sessionManager } from "./session-manager.mjs";
+import type { TerminalState } from "./acp/types.mjs";
 import type {
   ReadTextFileRequest,
   ReadTextFileResponse,
@@ -24,6 +26,55 @@ import type {
 
 const MAX_TERMINAL_OUTPUT_BYTES = 256 * 1024;
 const TERMINAL_FLUSH_INTERVAL_MS = 75;
+
+function truncateUtf8Suffix(value: string, maxBytes: number): string {
+  if (Buffer.byteLength(value, "utf8") <= maxBytes) return value;
+  let start = value.length;
+  let retainedBytes = 0;
+  while (start > 0) {
+    const codePointStart = start - 1;
+    const codeUnit = value.charCodeAt(codePointStart);
+    const width = codeUnit >= 0xdc00 && codeUnit <= 0xdfff
+      && codePointStart > 0
+      && value.charCodeAt(codePointStart - 1) >= 0xd800
+      && value.charCodeAt(codePointStart - 1) <= 0xdbff
+      ? 2
+      : 1;
+    const characterBytes = Buffer.byteLength(value.slice(start - width, start), "utf8");
+    if (retainedBytes + characterBytes > maxBytes) break;
+    retainedBytes += characterBytes;
+    start -= width;
+  }
+  return value.slice(start);
+}
+
+function dropHeadCodePoints(value: string, codeUnits: number): string {
+  let index = 0;
+  while (index < codeUnits && index < value.length) {
+    const codePoint = value.codePointAt(index)!;
+    index += codePoint > 0xffff ? 2 : 1;
+  }
+  return value.slice(index);
+}
+
+export function appendTerminalOutput(t: TerminalState, text: string): void {
+  if (!text || t.truncated) return;
+  const output = t.output + text;
+  const pendingDelta = t.pendingDelta + text;
+  if (Buffer.byteLength(output, "utf8") <= t.outputByteLimit) {
+    t.output = output;
+    t.pendingDelta = pendingDelta;
+    return;
+  }
+
+  const retained = truncateUtf8Suffix(output, t.outputByteLimit);
+  const removedUnits = output.length - retained.length;
+  const pendingStart = output.length - pendingDelta.length;
+  const pendingDrop = Math.max(0, removedUnits - pendingStart);
+  t.output = retained;
+  t.pendingDelta = dropHeadCodePoints(pendingDelta, pendingDrop);
+  t.truncated = true;
+}
 
 export function resolvePathWithinCwd(target: string, cwd: string, allowMissing = false): string {
   const resolved = path.resolve(cwd, target);
@@ -171,7 +222,7 @@ export function createAcpCallbacks(config: AcpCallbacksConfig): {
       resolveExit = resolve;
     });
 
-    const terminal = {
+    const terminal: TerminalState = {
       id: terminalId,
       process: null as any,
       output: "",
@@ -180,7 +231,9 @@ export function createAcpCallbacks(config: AcpCallbacksConfig): {
       exitPromise,
       resolveExit,
       outputByteLimit,
-      lastSentLen: 0,
+      pendingDelta: "",
+      stdoutDecoder: new StringDecoder("utf8"),
+      stderrDecoder: new StringDecoder("utf8"),
       flushTimer: null as ReturnType<typeof setTimeout> | null,
     };
     currentSess.terminals.set(terminalId, terminal);
@@ -189,19 +242,30 @@ export function createAcpCallbacks(config: AcpCallbacksConfig): {
       const sess = sessionManager.getSession(getSessionId());
       const t = sess?.terminals.get(terminalId);
       if (!t) return;
-      const delta = t.output.slice(t.lastSentLen);
-      t.lastSentLen = t.output.length;
+      const delta = t.pendingDelta;
+      t.pendingDelta = "";
       if (!final && delta.length === 0) return;
       sendToolCallUpdate(terminalId, status, [
         {
           type: "terminal",
           terminalId,
+          truncated: t.truncated,
           content: {
             type: "text",
             text: delta,
           },
         },
       ]);
+    };
+
+    const flushDecoder = (t: TerminalState): void => {
+      if (t.truncated) {
+        t.stdoutDecoder.end();
+        t.stderrDecoder.end();
+        return;
+      }
+      appendTerminalOutput(t, t.stdoutDecoder.end());
+      appendTerminalOutput(t, t.stderrDecoder.end());
     };
 
     const terminalCwd = params.cwd ? resolvePathWithinCwd(params.cwd, cwd) : cwd;
@@ -220,12 +284,7 @@ export function createAcpCallbacks(config: AcpCallbacksConfig): {
       const sess = sessionManager.getSession(getSessionId());
       const t = sess?.terminals.get(terminalId);
       if (!t || t.truncated) return;
-      t.output += chunk.toString();
-      if (t.output.length > t.outputByteLimit) {
-        t.output = t.output.slice(t.output.length - t.outputByteLimit);
-        t.truncated = true;
-        t.lastSentLen = t.output.length;
-      }
+      appendTerminalOutput(t, t.stdoutDecoder.write(chunk));
       if (!t.flushTimer) {
         t.flushTimer = setTimeout(() => {
           t.flushTimer = null;
@@ -238,12 +297,7 @@ export function createAcpCallbacks(config: AcpCallbacksConfig): {
       const sess = sessionManager.getSession(getSessionId());
       const t = sess?.terminals.get(terminalId);
       if (!t || t.truncated) return;
-      t.output += chunk.toString();
-      if (t.output.length > t.outputByteLimit) {
-        t.output = t.output.slice(t.output.length - t.outputByteLimit);
-        t.truncated = true;
-        t.lastSentLen = t.output.length;
-      }
+      appendTerminalOutput(t, t.stderrDecoder.write(chunk));
       if (!t.flushTimer) {
         t.flushTimer = setTimeout(() => {
           t.flushTimer = null;
@@ -256,6 +310,7 @@ export function createAcpCallbacks(config: AcpCallbacksConfig): {
       const sess = sessionManager.getSession(getSessionId());
       const t = sess?.terminals.get(terminalId);
       if (t) {
+        flushDecoder(t);
         if (t.flushTimer) {
           clearTimeout(t.flushTimer);
           t.flushTimer = null;
@@ -270,6 +325,7 @@ export function createAcpCallbacks(config: AcpCallbacksConfig): {
       const sess = sessionManager.getSession(getSessionId());
       const t = sess?.terminals.get(terminalId);
       if (t) {
+        flushDecoder(t);
         if (t.flushTimer) {
           clearTimeout(t.flushTimer);
           t.flushTimer = null;

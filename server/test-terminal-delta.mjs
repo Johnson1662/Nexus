@@ -1,6 +1,7 @@
 import { EventEmitter } from "node:events";
 import process from "node:process";
-import { createAcpCallbacks } from "./dist/acp-callbacks.mjs";
+import { StringDecoder } from "node:string_decoder";
+import { appendTerminalOutput, createAcpCallbacks } from "./dist/acp-callbacks.mjs";
 import { sessionManager } from "./dist/session-manager.mjs";
 
 let passed = 0;
@@ -113,8 +114,43 @@ try {
   });
   await waitForExit(callbacks, hardCapResult.terminalId);
   const cappedOutput = await callbacks.onTerminalOutput({ terminalId: hardCapResult.terminalId });
+  const cappedUpdates = terminalMessages(messages, hardCapResult.terminalId);
+  const cappedText = cappedUpdates.map((message) => terminalText(message, hardCapResult.terminalId)).join("");
   assert(cappedOutput.output.length <= 256 * 1024, "terminal output obeys the 256KB hard cap");
+  assert(Buffer.byteLength(cappedOutput.output, "utf8") <= 256 * 1024, "terminal retained output uses UTF-8 byte cap");
   assert(cappedOutput.truncated === true, "terminal output marks truncation");
+  assert(Buffer.byteLength(cappedText, "utf8") > 0, "truncated terminal sends retained delta to the client");
+  assert(
+    cappedUpdates.some((message) => message.event.status === "completed" || message.event.status === "failed"),
+    "truncated terminal still sends a final status event",
+  );
+  assert(
+    cappedUpdates.some((message) => message.event.toolCallContent?.some((item) => item.truncated === true)),
+    "terminal update exposes truncation state",
+  );
+
+  const oneChunk = { output: "", pendingDelta: "", truncated: false, outputByteLimit: 256 * 1024 };
+  appendTerminalOutput(oneChunk, "x".repeat(300 * 1024));
+  assert(Buffer.byteLength(oneChunk.output, "utf8") <= 256 * 1024, "single oversized chunk retains the byte-limited suffix");
+  assert(Buffer.byteLength(oneChunk.pendingDelta, "utf8") === Buffer.byteLength(oneChunk.output, "utf8"), "single oversized chunk keeps retained delta pending");
+  assert(oneChunk.truncated === true, "single oversized chunk marks truncation");
+
+  const multiChunk = { output: "", pendingDelta: "", truncated: false, outputByteLimit: 256 * 1024 };
+  appendTerminalOutput(multiChunk, "o".repeat(200 * 1024));
+  multiChunk.pendingDelta = "";
+  appendTerminalOutput(multiChunk, "e".repeat(100 * 1024));
+  assert(Buffer.byteLength(multiChunk.output, "utf8") <= 256 * 1024, "mixed output shares the byte limit");
+  assert(multiChunk.pendingDelta === "e".repeat(100 * 1024), "already flushed output does not erase the new pending tail");
+  assert(multiChunk.truncated === true, "mixed output marks truncation");
+
+  const unicode = "你好🙂世界";
+  const unicodeTerminal = { output: "", pendingDelta: "", truncated: false, outputByteLimit: 256 * 1024 };
+  const unicodeDecoder = new StringDecoder("utf8");
+  const unicodeBytes = Buffer.from(unicode);
+  appendTerminalOutput(unicodeTerminal, unicodeDecoder.write(unicodeBytes.subarray(0, 2)));
+  appendTerminalOutput(unicodeTerminal, unicodeDecoder.write(unicodeBytes.subarray(2)));
+  appendTerminalOutput(unicodeTerminal, unicodeDecoder.end());
+  assert(unicodeTerminal.output === unicode, "split UTF-8 chunks decode without replacement characters");
 } catch (error) {
   failed += 1;
   console.error(`FAIL: terminal callback integration: ${error instanceof Error ? error.message : String(error)}`);
@@ -129,12 +165,17 @@ try {
   for (let index = 0; index < 30; index += 1) {
     sessionManager.bufferAgentEvent(replaySessionId, {
       type: "agent_event",
-      payload: "z".repeat(100 * 1024),
+      payload: "字".repeat(100 * 1024),
     });
   }
-  const retainedBytes = replaySession.messageBuffer.reduce((total, message) => total + message.payload.length, 0);
-  assert(retainedBytes <= 2 * 1024 * 1024, "replay buffer stays within the 2MB byte limit");
-  assert(replaySession.replayBytes === retainedBytes, "replay byte accounting matches retained payloads");
+  const retainedBytes = replaySession.messageBuffer.reduce((total, message) => total + Buffer.byteLength(message.payload, "utf8"), 0);
+  assert(retainedBytes <= 2 * 1024 * 1024, "replay buffer stays within the 2MB UTF-8 byte limit");
+  assert(replaySession.replayBytes === retainedBytes, "replay byte accounting matches retained UTF-8 payloads");
+  assert(
+    replaySession.messageBuffer.every((message) => message.payloadBytes === Buffer.byteLength(message.payload, "utf8")),
+    "replay entries store UTF-8 payload byte lengths",
+  );
+  assert(replaySession.messageBuffer.length < 30, "UTF-8 byte limit trims oversized replay history");
   assert(replaySession.messageBuffer.length >= 1, "replay buffer retains at least one message");
 } catch (error) {
   failed += 1;
