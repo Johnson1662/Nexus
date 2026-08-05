@@ -81,7 +81,8 @@ async function main(): Promise<void> {
     }
 
     case 'stop': {
-      await stopDaemon();
+      const stopped = await stopDaemon();
+      if (!stopped) process.exitCode = 1;
       break;
     }
 
@@ -100,14 +101,14 @@ async function main(): Promise<void> {
       const { port: explicitPort, explicit } = parsePortFromArgs(args);
       const LOCK_FILE = join(homedir(), '.nexus', 'daemon.lock');
       const CONTROL_PORT_FILE = join(homedir(), '.nexus', 'daemon.control.port');
-      // 未显式指定 --port 时沿用当前 daemon 的 Bridge 端口（lock 文件），不重置为默认 12138
-      let port = explicitPort;
-      if (!explicit) {
-        try {
-          const lock = await readDaemonLock(LOCK_FILE);
-          if (lock && lock.port > 0) port = lock.port;
-        } catch { /* 无 lock：保持默认 */ }
-      }
+      // 旧端口：等待旧 Daemon 关闭时探测的对象（lock 文件，无则回退显式/默认）
+      let oldBridgePort = explicitPort;
+      try {
+        const lock = await readDaemonLock(LOCK_FILE);
+        if (lock && lock.port > 0) oldBridgePort = lock.port;
+      } catch { /* 无 lock：保持默认 */ }
+      // 新端口：显式指定则用新值，否则沿用旧端口
+      const nextBridgePort = explicit ? explicitPort : oldBridgePort;
       // 先读控制端口：daemon 清理任务会在 shutdown 时删除 daemon.control.port
       let controlPort = 0;
       try {
@@ -118,7 +119,7 @@ async function main(): Promise<void> {
       if (!stopped) {
         throw new Error('failed to stop daemon — aborting restart');
       }
-      // 等待完全关闭：Control Server 不可访问 + PID lock 已释放 + Bridge 端口已关闭
+      // 等待完全关闭：Control Server 不可访问 + PID lock 已释放 + 旧 Bridge 端口已关闭
       const deadline = Date.now() + 10_000;
       let fullyStopped = false;
       while (Date.now() < deadline) {
@@ -132,8 +133,8 @@ async function main(): Promise<void> {
           }
         }
         const lockHeld = await isDaemonRunning(LOCK_FILE);
-        const bridgeUp = await tcpReachable(port);
-        if (!controlUp && !lockHeld && !bridgeUp) {
+        const oldBridgeUp = await tcpReachable(oldBridgePort);
+        if (!controlUp && !lockHeld && !oldBridgeUp) {
           fullyStopped = true;
           break;
         }
@@ -142,13 +143,18 @@ async function main(): Promise<void> {
       if (!fullyStopped) {
         throw new Error('daemon did not stop within 10 seconds — aborting restart');
       }
+      // 启动前确认新端口空闲（换端口场景：避免被其他程序占用；
+      // 同端口场景：旧进程刚确认完全关闭，此处必然可连）
+      if (await tcpReachable(nextBridgePort)) {
+        throw new Error(`port ${nextBridgePort} is already in use — aborting restart`);
+      }
       // Fork to background (same as start)
       const logDir = join(homedir(), '.nexus');
       const logFile = join(logDir, 'daemon.log');
       mkdirSync(logDir, { recursive: true });
       const fd = openSync(logFile, 'a');
       const child = spawn(process.execPath, [
-        process.argv[1], 'start', '--foreground', `--port=${port}`
+        process.argv[1], 'start', '--foreground', `--port=${nextBridgePort}`
       ], {
         detached: true,
         stdio: ['ignore', fd, fd],

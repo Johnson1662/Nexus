@@ -5,12 +5,14 @@ on:
     branches: [master]
     paths:
       - 'server/**'
+      - 'nexus_flutter/**'
       - 'package.json'
       - 'package-lock.json'
       - '.github/**'
   pull_request:
     paths:
       - 'server/**'
+      - 'nexus_flutter/**'
       - 'package.json'
       - 'package-lock.json'
       - '.github/**'
@@ -27,3 +29,17 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npm test
+
+  flutter:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: nexus_flutter
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter analyze
