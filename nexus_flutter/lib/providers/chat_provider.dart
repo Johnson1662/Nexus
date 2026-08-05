@@ -248,9 +248,19 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
+  void _cancelPendingProbePhases() {
+    final hostStore = HostStore();
+    for (final hostKey in _probePhaseGenerations.keys.toList()) {
+      if (hostStore.getPhase(hostKey) == 'connecting') {
+        hostStore.setPhase(hostKey, 'offline');
+      }
+    }
+    _probePhaseGenerations.clear();
+  }
+
   void disconnect() {
     _selectionGeneration++;
-    _probePhaseGenerations.clear();
+    _cancelPendingProbePhases();
     _ws.disconnect();
     _turnRequestTimer?.cancel();
     _turnRequestTimer = null;
@@ -1524,7 +1534,7 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
   @override
   void dispose() {
     _selectionGeneration++;
-    _probePhaseGenerations.clear();
+    _cancelPendingProbePhases();
     for (final dispose in _listenerDisposers) {
       dispose();
     }

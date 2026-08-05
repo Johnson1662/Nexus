@@ -200,7 +200,7 @@ class _ToolCallCardState extends State<ToolCallCard> {
             Padding(
               padding: const EdgeInsets.only(bottom: 6),
               child: Text(
-                '输出已截断，仅显示前 256KB',
+                '输出已截断，仅显示前部内容',
                 style: TextStyle(fontSize: 11, color: AppColors.warning),
               ),
             ),

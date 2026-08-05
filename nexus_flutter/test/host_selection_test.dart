@@ -133,6 +133,34 @@ void main() {
     }, createHttpClient: _NetworkHttpOverrides().createHttpClient);
   });
 
+  test('断开连接会清理未完成慢探测的 connecting 状态', () async {
+    final bServer = await _startHost(
+      hostId: 'host-b-disconnect',
+      probeDelay: const Duration(milliseconds: 500),
+    );
+    final ws = WSClient();
+    final provider = ChatProvider(ws);
+    final hostStore = HostStore();
+    addTearDown(() async {
+      provider.dispose();
+      ws.dispose();
+      await bServer.close(force: true);
+    });
+
+    final bKey = 'host-b-disconnect';
+    final bUrl = 'ws://127.0.0.1:${bServer.port}';
+    await HttpOverrides.runZoned(() async {
+      final pendingProbe = provider.connectBest([bUrl], hostKey: bKey);
+      expect(hostStore.getPhase(bKey), 'connecting');
+
+      provider.disconnect();
+      expect(hostStore.getPhase(bKey), 'offline');
+
+      await pendingProbe;
+      expect(hostStore.getPhase(bKey), isNot('connecting'));
+    }, createHttpClient: _NetworkHttpOverrides().createHttpClient);
+  });
+
   test('较早 Host 的慢探测结果不能覆盖后发起的选择', () async {
     final aServer = await _startHost(hostId: 'host-a');
     final bServer = await _startHost(

@@ -67,12 +67,13 @@ void main() {
         home: Scaffold(body: ToolCallCard(message: message)),
       ),
     );
-    expect(find.text('输出已截断，仅显示前 256KB'), findsNothing);
+    expect(find.text('输出已截断，仅显示前部内容'), findsNothing);
 
     await tester.tap(find.text('terminal'));
     await tester.pump();
 
-    expect(find.text('输出已截断，仅显示前 256KB'), findsOneWidget);
+    expect(find.text('输出已截断，仅显示前部内容'), findsOneWidget);
+    expect(find.text('输出已截断，仅显示前 256KB'), findsNothing);
     expect(find.text('output'), findsOneWidget);
   });
 
