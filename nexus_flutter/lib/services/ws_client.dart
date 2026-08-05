@@ -81,6 +81,16 @@ class WSClient {
 
   Future<void> connectBest(List<String> candidates, String hostKey,
       {String? authToken}) async {
+    final selectedUrl =
+        await probeBest(candidates, hostKey, authToken: authToken);
+    if (selectedUrl != null) {
+      connect(selectedUrl, hostKey, authToken: authToken);
+    }
+  }
+
+  /// 只探测候选地址，返回首个可用地址；成功后由调用方决定何时切换连接。
+  Future<String?> probeBest(List<String> candidates, String hostKey,
+      {String? authToken}) async {
     final normalizedToken = _normalizeToken(authToken);
     final initialUrl = candidates.isNotEmpty ? candidates.first : null;
     _notifyPhase(HostPhase.connecting, hostKey: hostKey, url: initialUrl);
@@ -89,8 +99,7 @@ class WSClient {
       lastProbeUrl = url;
       try {
         if (await probeCandidate(url, authToken: normalizedToken)) {
-          connect(url, hostKey, authToken: normalizedToken);
-          return;
+          return url;
         }
       } catch (_) {}
     }
@@ -99,6 +108,7 @@ class WSClient {
       _notifyStateChange(false, lastProbeUrl ?? '');
     }
     _notifyPhase(HostPhase.offline, hostKey: hostKey, url: lastProbeUrl);
+    return null;
   }
 
   void disconnect() {

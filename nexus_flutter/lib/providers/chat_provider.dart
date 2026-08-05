@@ -28,6 +28,7 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
   Timer? _cursorPersistTimer;
   String _cursorSessionId = '';
   String _lastConnectionHostKey = '';
+  int _selectionGeneration = 0;
   final Set<String> _processedMessageIds = <String>{};
   final List<ListenerDisposer> _listenerDisposers = [];
   late final OnPermissionActionCallback _permissionAction;
@@ -126,6 +127,7 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   Future<void> connectToUrl(String url,
       {String? hostKey, String? authToken}) async {
+    _selectionGeneration++;
     final normalizedUrl = _normalizeUrl(url);
     if (normalizedUrl.isEmpty) return;
 
@@ -146,7 +148,7 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   Future<void> connectBest(List<String> candidates,
       {String? hostKey, String? authToken}) async {
-    // Normalize all candidates
+    final selectionGeneration = ++_selectionGeneration;
     final normalized = candidates
         .map((u) => _normalizeUrl(u))
         .where((u) => u.isNotEmpty)
@@ -154,21 +156,25 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
     if (normalized.isEmpty) return;
 
     final hk = hostKey ?? _getHostKeyForUrl(normalized.first);
-    _beginConnectionBoundary(hk);
-    _state.currentDeviceId = hk;
     final token = authToken ?? _authTokenForHost(hk, normalized.first);
-
-    // Save first URL to storage
-    if (normalized.first.isNotEmpty) {
-      final storage = await StorageService.getInstance();
-      storage.putString('server_url', normalized.first);
+    final selectedUrl = await _ws.probeBest(
+      normalized,
+      hk,
+      authToken: token,
+    );
+    if (selectedUrl == null || selectionGeneration != _selectionGeneration) {
+      return;
     }
 
-    // Mark connecting
-    HostRuntimeStore()
-        .setPhase(hk, HostPhase.connecting, url: normalized.first);
+    final storage = await StorageService.getInstance();
+    if (selectionGeneration != _selectionGeneration) return;
 
-    await _ws.connectBest(normalized, hk, authToken: token);
+    _beginConnectionBoundary(hk);
+    _state.currentDeviceId = hk;
+    HostRuntimeStore().setPhase(hk, HostPhase.connecting, url: selectedUrl);
+    final persistence = storage.putString('server_url', selectedUrl);
+    _ws.connect(selectedUrl, hk, authToken: token);
+    await persistence;
   }
 
   void _beginConnectionBoundary(String hostKey) {
@@ -222,6 +228,7 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   void disconnect() {
+    _selectionGeneration++;
     _ws.disconnect();
     _turnRequestTimer?.cancel();
     _turnRequestTimer = null;
@@ -1492,6 +1499,7 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    _selectionGeneration++;
     for (final dispose in _listenerDisposers) {
       dispose();
     }
