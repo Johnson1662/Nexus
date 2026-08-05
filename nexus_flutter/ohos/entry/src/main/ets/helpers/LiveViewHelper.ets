@@ -118,6 +118,11 @@ export class LiveViewHelper {
     const boundedProgress = Math.max(0, Math.min(1, progress));
     const percentage = Math.round(boundedProgress * 100);
     const nodeIcons = await this.loadNodeIcons();
+    // 进度布局要求节点图标：加载失败时中止本次更新/启动，
+    // 避免空 nodeIcons 触发 LiveViewKit 参数错误。
+    if (nodeIcons.length === 0) {
+      throw new Error('node icon unavailable — aborting live view operation');
+    }
     return {
       id: LIVE_VIEW_ID,
       event: LIVE_VIEW_EVENT,

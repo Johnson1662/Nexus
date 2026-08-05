@@ -136,7 +136,8 @@ export async function startDaemon(config: DaemonStartConfig): Promise<void> {
 
 // ── stopDaemon — send stop signal to running daemon via control server ──
 
-export async function stopDaemon(port?: number): Promise<void> {
+/** 发送 stop 信号；返回是否成功发出（200 = true，401/网络错误/无 daemon = false）。 */
+export async function stopDaemon(port?: number): Promise<boolean> {
   // Find control port from saved file
   const CONTROL_PORT_FILE = join(DATA_DIR, 'daemon.control.port');
   let controlPort: number | null = null;
@@ -155,7 +156,7 @@ export async function stopDaemon(port?: number): Promise<void> {
       controlPort = lock.port;
     } else {
       console.log('[nexus] No running daemon found');
-      return;
+      return false;
     }
   }
 
@@ -181,20 +182,22 @@ export async function stopDaemon(port?: number): Promise<void> {
       : { "Content-Type": "application/json" },
   };
 
-  return new Promise<void>((resolve) => {
+  return new Promise<boolean>((resolve) => {
     const req = http.request(options, (res) => {
       if (res.statusCode === 200) {
         console.log("[nexus] Stop signal sent");
+        resolve(true);
       } else if (res.statusCode === 401) {
         console.error("[nexus] Stop rejected: unauthorized");
+        resolve(false);
       } else {
         console.log(`[nexus] Unexpected response: ${res.statusCode}`);
+        resolve(false);
       }
-      resolve();
     });
     req.on("error", (err) => {
       console.error(`[nexus] Failed to send stop: ${err.message}`);
-      resolve();
+      resolve(false);
     });
     req.end("{}");
   });
