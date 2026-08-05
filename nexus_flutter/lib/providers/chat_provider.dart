@@ -55,11 +55,9 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
     }));
     _listenerDisposers.add(_ws.onAgentList(_onAgentList));
     // Bridge WS connection phases to HostStore so UI shows online status
-    _listenerDisposers.add(_ws.onPhaseChange((phase) {
-      final hk = _ws.currentHostKey;
-      if (hk.isEmpty) return;
-      final hs = HostStore();
-      hs.setPhase(hk, phase, url: _ws.currentUrl);
+    _listenerDisposers.add(_ws.onPhaseChange((hostKey, phase, url) {
+      if (hostKey.isEmpty) return;
+      HostStore().setPhase(hostKey, phase, url: url);
       notifyListeners();
     }));
     // Observe app lifecycle for background notification decisions

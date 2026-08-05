@@ -8,6 +8,7 @@ import '../models/ws_protocol.dart';
 import '../models/host_runtime_state.dart';
 
 typedef MessageCallback = void Function(ServerMessage msg);
+typedef PhaseCallback = void Function(String hostKey, String phase, String? url);
 typedef ListenerDisposer = void Function();
 
 class WSClient {
@@ -32,7 +33,7 @@ class WSClient {
   final List<void Function(List<AgentInfo>)> _onAgentList = [];
   final List<void Function(String)> _onError = [];
   final List<void Function(List<RegistryAgentInfo>)> _onRegistryList = [];
-  final List<void Function(String phase)> _onPhaseChange = [];
+  final List<PhaseCallback> _onPhaseChange = [];
 
   static const int _heartbeatMs = 20000;
   static const int _watchdogMs = 5000;
@@ -81,8 +82,11 @@ class WSClient {
   Future<void> connectBest(List<String> candidates, String hostKey,
       {String? authToken}) async {
     final normalizedToken = _normalizeToken(authToken);
-    _notifyPhase(HostPhase.connecting, hostKey: hostKey);
+    final initialUrl = candidates.isNotEmpty ? candidates.first : null;
+    _notifyPhase(HostPhase.connecting, hostKey: hostKey, url: initialUrl);
+    String? lastProbeUrl;
     for (final url in candidates) {
+      lastProbeUrl = url;
       try {
         if (await probeCandidate(url, authToken: normalizedToken)) {
           connect(url, hostKey, authToken: normalizedToken);
@@ -90,9 +94,11 @@ class WSClient {
         }
       } catch (_) {}
     }
-    // All candidates probe failed — mark offline gracefully, do NOT force WebSocket connect
-    _notifyStateChange(false, candidates.isNotEmpty ? candidates.first : '');
-    _notifyPhase(HostPhase.offline, hostKey: hostKey);
+    // 全部探测失败时，不能让 B 的失败状态把仍在线的 A 全局置离线。
+    if (!isConnected || hostKey == _currentHostKey) {
+      _notifyStateChange(false, lastProbeUrl ?? '');
+    }
+    _notifyPhase(HostPhase.offline, hostKey: hostKey, url: lastProbeUrl);
   }
 
   void disconnect() {
@@ -381,7 +387,7 @@ class WSClient {
     return () => _onRegistryList.remove(cb);
   }
 
-  ListenerDisposer onPhaseChange(void Function(String phase) cb) {
+  ListenerDisposer onPhaseChange(PhaseCallback cb) {
     _onPhaseChange.add(cb);
     return () => _onPhaseChange.remove(cb);
   }
@@ -402,13 +408,19 @@ class WSClient {
   void _notifyRegistryList(List<RegistryAgentInfo> list) {
     for (final cb in _onRegistryList) { cb(list); }
   }
-  void _notifyPhase(HostPhase phase, {String? hostKey}) {
+  void _notifyPhase(HostPhase phase, {String? hostKey, String? url}) {
     final s = phase.name;
     final targetHostKey = hostKey ?? _currentHostKey;
+    final targetUrl = url ??
+        (targetHostKey == _currentHostKey && _currentUrl.isNotEmpty
+            ? _currentUrl
+            : null);
     if (targetHostKey.isNotEmpty) {
-      HostRuntimeStore().setPhase(targetHostKey, phase);
+      HostRuntimeStore().setPhase(targetHostKey, phase, url: targetUrl);
     }
-    for (final cb in _onPhaseChange) { cb(s); }
+    for (final cb in _onPhaseChange) {
+      cb(targetHostKey, s, targetUrl);
+    }
   }
 
   void _clearSeenMessageIds() {

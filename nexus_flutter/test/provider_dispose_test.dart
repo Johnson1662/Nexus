@@ -1,9 +1,14 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../lib/models/ws_protocol.dart';
 import '../lib/providers/chat_provider.dart';
+import '../lib/services/host_store.dart';
 import '../lib/services/notification_service.dart';
+import '../lib/services/storage_service.dart';
 import '../lib/services/ws_client.dart';
 
 ServerMessage _modelMessage(int sequence) => ServerMessage(
@@ -17,13 +22,23 @@ ServerMessage _modelMessage(int sequence) => ServerMessage(
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  setUp(() {
+  late Directory sandbox;
+
+  setUp(() async {
     SharedPreferences.setMockInitialValues({});
+    StorageService.resetForTest();
+    sandbox = await Directory.systemTemp.createTemp('nexus-provider-dispose-');
+    StorageService.sandboxForTest = sandbox.path;
     NotificationService.onPermissionAction = null;
   });
 
-  tearDown(() {
+  tearDown(() async {
     NotificationService.onPermissionAction = null;
+    StorageService.resetForTest();
+    StorageService.sandboxForTest = null;
+    if (await sandbox.exists()) {
+      await _deleteSandbox(sandbox);
+    }
   });
 
   test('同一 WS 的 Provider 可独立解绑监听', () {
@@ -102,6 +117,41 @@ void main() {
     ws.dispose();
   });
 
+  test('探测 B 失败不影响已连接的 A', () async {
+    final aServer = await _startHost(probeStatus: HttpStatus.ok);
+    final bServer = await _startHost(probeStatus: HttpStatus.serviceUnavailable);
+    final ws = WSClient();
+    final provider = ChatProvider(ws);
+    addTearDown(() async {
+      provider.dispose();
+      ws.dispose();
+      await aServer.close(force: true);
+      await bServer.close(force: true);
+    });
+
+    final aUrl = 'ws://127.0.0.1:${aServer.port}';
+    final bUrl = 'ws://127.0.0.1:${bServer.port}';
+    await HttpOverrides.runZoned(() async {
+      await provider.connectToUrl(aUrl, hostKey: 'host-a');
+      final hostStore = HostStore();
+      await _waitUntil(() =>
+          ws.isConnected &&
+          provider.state.connected &&
+          hostStore.getPhase('host-a') == 'online');
+
+      expect(ws.currentHostKey, 'host-a');
+      expect(hostStore.getPhase('host-a'), 'online');
+
+      await provider.connectBest([bUrl], hostKey: 'host-b');
+
+      expect(ws.currentHostKey, 'host-a');
+      expect(ws.isConnected, isTrue);
+      expect(provider.state.connected, isTrue);
+      expect(hostStore.getPhase('host-a'), 'online');
+      expect(hostStore.getPhase('host-b'), 'offline');
+    }, createHttpClient: (context) => HttpClient(context: context));
+  });
+
   test('dispose 首次调用不抛异常，解绑器可重复调用', () {
     final ws = WSClient();
     final disposers = <ListenerDisposer>[
@@ -111,7 +161,7 @@ void main() {
       ws.onAgentList((_) {}),
       ws.onError((_) {}),
       ws.onRegistryList((_) {}),
-      ws.onPhaseChange((_) {}),
+      ws.onPhaseChange((_, __, ___) {}),
     ];
     final provider = ChatProvider(ws);
 
@@ -124,3 +174,49 @@ void main() {
     ws.dispose();
   });
 }
+
+Future<void> _deleteSandbox(Directory sandbox) async {
+  for (var attempt = 0; attempt < 50; attempt++) {
+    try {
+      await sandbox.delete(recursive: true);
+      return;
+    } on FileSystemException {
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+    }
+  }
+}
+
+Future<HttpServer> _startHost({required int probeStatus}) async {
+  final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+  server.listen((request) async {
+    if (request.uri.path == '/probe') {
+      request.response.statusCode = probeStatus;
+      await request.response.close();
+      return;
+    }
+    if (WebSocketTransformer.isUpgradeRequest(request)) {
+      try {
+        final socket = await WebSocketTransformer.upgrade(request);
+        socket.add(jsonEncode(<String, dynamic>{
+          'type': 'server_info',
+          'hostId': 'host-a',
+          'hostname': 'host-a',
+        }));
+        socket.listen((_) {}, onError: (_) {});
+      } catch (_) {}
+      return;
+    }
+    request.response.statusCode = HttpStatus.notFound;
+    await request.response.close();
+  });
+  return server;
+}
+
+Future<void> _waitUntil(bool Function() predicate) async {
+  for (var attempt = 0; attempt < 100; attempt++) {
+    if (predicate()) return;
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+  }
+  fail('等待连接状态超时');
+}
+
