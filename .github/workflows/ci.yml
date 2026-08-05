@@ -5,14 +5,12 @@ on:
     branches: [master]
     paths:
       - 'server/**'
-      - 'nexus_flutter/**'
       - 'package.json'
       - 'package-lock.json'
       - '.github/**'
   pull_request:
     paths:
       - 'server/**'
-      - 'nexus_flutter/**'
       - 'package.json'
       - 'package-lock.json'
       - '.github/**'
@@ -29,20 +27,3 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npm test
-
-  flutter:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: nexus_flutter
-    steps:
-      - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-          cache: true
-      - run: flutter pub get
-      # Stable channel flags info/warning as fatal; repo keeps ~80 legacy
-      # info/warning items (withOpacity, curly_braces, ...). Only real errors
-      # (type/compile) should fail the job.
-      - run: flutter analyze --no-fatal-infos --no-fatal-warnings
