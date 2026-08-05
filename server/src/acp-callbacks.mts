@@ -52,7 +52,6 @@ export function appendTerminalOutput(t: TerminalState, text: string): void {
     t.output += delta;
     t.pendingDelta += delta;
   }
-  if (remainingBytes === 0) t.truncated = true;
 }
 
 export function resolvePathWithinCwd(target: string, cwd: string, allowMissing = false): string {

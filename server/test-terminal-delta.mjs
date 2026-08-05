@@ -114,6 +114,26 @@ try {
     "terminal final status event arrives",
   );
 
+  const exactAsciiResult = await callbacks.onCreateTerminal({
+    command: process.execPath,
+    args: ["-e", "process.stdout.write(\"a\".repeat(256 * 1024));"],
+    outputByteLimit: 1024 * 1024,
+  });
+  await waitForExit(callbacks, exactAsciiResult.terminalId);
+  const exactAsciiOutput = await callbacks.onTerminalOutput({ terminalId: exactAsciiResult.terminalId });
+  assert(exactAsciiOutput.output === "a".repeat(256 * 1024), "exact 256KB callback output is retained");
+  assert(exactAsciiOutput.truncated === false, "exact 256KB callback output is not truncated");
+
+  const overrunResult = await callbacks.onCreateTerminal({
+    command: process.execPath,
+    args: ["-e", "process.stdout.write(\"b\".repeat(256 * 1024) + \"c\");"],
+    outputByteLimit: 1024 * 1024,
+  });
+  await waitForExit(callbacks, overrunResult.terminalId);
+  const overrunOutput = await callbacks.onTerminalOutput({ terminalId: overrunResult.terminalId });
+  assert(overrunOutput.output === "b".repeat(256 * 1024), "256KB plus one callback byte keeps the cap");
+  assert(overrunOutput.truncated === true, "256KB plus one callback byte marks truncation");
+
   const hardCapResult = await callbacks.onCreateTerminal({
     command: process.execPath,
     args: ["-e", "process.stdout.write(\"y\".repeat(300 * 1024));"],
@@ -168,6 +188,18 @@ try {
   assert(oneChunk.output === "x".repeat(256 * 1024), "single oversized helper input keeps the first 256KB");
   assert(oneChunk.pendingDelta === oneChunk.output, "single oversized helper input keeps all accepted delta pending");
   assert(oneChunk.truncated === true, "single oversized helper input marks truncation");
+
+  const exactUtf8Text = "é".repeat(128 * 1024);
+  const exactUtf8 = { output: "", pendingDelta: "", truncated: false, outputByteLimit: 256 * 1024 };
+  appendTerminalOutput(exactUtf8, exactUtf8Text);
+  assert(Buffer.byteLength(exactUtf8.output, "utf8") === 256 * 1024, "exact 256KB UTF-8 helper output fills the cap");
+  assert(exactUtf8.output === exactUtf8Text, "exact 256KB UTF-8 helper output is retained");
+  assert(exactUtf8.truncated === false, "exact 256KB UTF-8 helper output is not truncated");
+
+  const exactUtf8Overrun = { output: "", pendingDelta: "", truncated: false, outputByteLimit: 256 * 1024 };
+  appendTerminalOutput(exactUtf8Overrun, exactUtf8Text + "x");
+  assert(exactUtf8Overrun.output === exactUtf8Text, "256KB plus one helper byte keeps the cap");
+  assert(exactUtf8Overrun.truncated === true, "256KB plus one helper byte marks truncation");
 
   const multiChunk = { output: "", pendingDelta: "", truncated: false, outputByteLimit: 256 * 1024 };
   appendTerminalOutput(multiChunk, "o".repeat(200 * 1024));
