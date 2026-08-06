@@ -10,8 +10,10 @@ Nexus 是一款工具类远程 AI 编程助手。用户在手机端向电脑工�
 
 3. 附件说明
 附件压缩包包含：
-- node-design.svg：Nexus TIMER 实况窗节点与生命周期设计图；
-- solution-architecture.svg：手机 Nexus、LiveViewHelper/LiveViewKit、WebSocket、PC Bridge、ACP Agent 的技术链路与数据边界图；
+- node-design.mmd：Nexus TIMER 实况窗节点与生命周期设计的 Mermaid 可编辑源文件；
+- node-design.svg：由固定版本 Mermaid CLI 渲染的节点与生命周期设计图成品；
+- solution-architecture.mmd：手机 Nexus、WebSocket、PC Bridge、ACP Agent、LiveViewHelper/LiveViewKit 及数据边界的 Mermaid 可编辑源文件；
+- solution-architecture.svg：由固定版本 Mermaid CLI 渲染的解决方案架构图成品；
 - scenario-description.md：完整场景说明、节点表、字段定义、生命周期策略、点击行为、数据来源、隐私边界和验收标准。
 
 本次仅申请“计时”一种场景，符合工具类应用的计时使用范围，不涉及出行、配送、航班、取餐、赛事、共享租赁、运动或导航业务。

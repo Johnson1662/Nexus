@@ -1,0 +1,35 @@
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif","fontSize":"16px","primaryColor":"#f8fafc","primaryTextColor":"#111827","primaryBorderColor":"#374151","lineColor":"#4b5563","secondaryColor":"#eff6ff","tertiaryColor":"#f3f4f6","clusterBkg":"#f8fafc","clusterBorder":"#9ca3af","edgeLabelBackground":"#ffffff"}}}%%
+flowchart LR
+  subgraph phone["手机端"]
+    nexus["Nexus<br/>发起 / 处理代码任务<br/>接收状态与点击回调"]
+    helper["LiveViewHelper / LiveViewKit<br/>event = TIMER<br/>创建 startLiveView<br/>更新 updateLiveView<br/>结束 stopLiveView"]
+    nexus -->|创建 / 更新 / 结束| helper
+  end
+
+  socket["WebSocket<br/>双向实时通道<br/>任务请求 ↔ 状态事件"]
+  bridge["PC Bridge<br/>任务编排 / 连接管理<br/>返回最小状态摘要"]
+  agent["ACP Agent<br/>思考 / 工具执行<br/>等待 / 完成 / 取消 / 失败"]
+  boundary["LiveView 数据边界<br/>允许：状态、标题、time(ms)<br/>isCountdown=false、isPaused<br/>不传：代码、命令、密钥、完整日志"]
+  liveview["HarmonyOS LiveView<br/>TIMER 状态卡片<br/>只显示轻量摘要"]
+
+  nexus -->|任务 / 控制| socket
+  socket -->|任务请求| bridge
+  bridge -->|状态摘要| socket
+  socket -->|状态事件| nexus
+  bridge -->|ACP 请求| agent
+  agent -->|ACP 状态事件| bridge
+  helper -->|TIMER payload| boundary
+  boundary -->|最小状态投影| liveview
+  liveview -->|点击回应用| nexus
+
+  classDef appStyle fill:#eff6ff,stroke:#2563eb,color:#111827,stroke-width:2px;
+  classDef channelStyle fill:#f3f4f6,stroke:#6b7280,color:#111827,stroke-width:2px;
+  classDef systemStyle fill:#f8fafc,stroke:#374151,color:#111827,stroke-width:2px;
+  classDef boundaryStyle fill:#eef2f7,stroke:#4b5563,color:#111827,stroke-width:2px;
+  classDef liveStyle fill:#dbeafe,stroke:#2563eb,color:#111827,stroke-width:2px;
+  class nexus,helper appStyle;
+  class socket channelStyle;
+  class bridge,agent systemStyle;
+  class boundary boundaryStyle;
+  class liveview liveStyle;
+  style phone fill:#f8fafc,stroke:#9ca3af,stroke-width:1px,color:#374151;

@@ -58,61 +58,32 @@ Nexus 通过手机端连接用户电脑上的 PC Bridge Server，再由 Bridge S
 
 说明：若任务在“等待用户授权”或“等待主机重连”节点被取消或失败，结束时仍只结算此前累计的活跃执行时间，不把暂停等待时长加入 `time`。最终结果以 Bridge/ACP 会话的规范化终态为准，实况窗不自行推断“完成”或“失败”。
 
-## 5. 生命周期流程图（SVG）
+## 5. 生命周期流程图（Mermaid 源与 SVG 成品）
 
-```html
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="570" viewBox="0 0 1200 570" role="img" aria-labelledby="liveview-title liveview-desc">
-  <title id="liveview-title">Nexus TIMER 实况窗生命周期</title>
-  <desc id="liveview-desc">任务开始后进入计时中，等待授权或主机重连时暂停，条件满足后恢复，最后完成、取消或失败结束。</desc>
-  <defs>
-    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
-      <path d="M0,0 L10,5 L0,10 Z" fill="#3b3b3b"/>
-    </marker>
-  </defs>
-  <rect x="0" y="0" width="1200" height="570" rx="18" fill="#ffffff"/>
-  <text x="60" y="52" font-family="sans-serif" font-size="28" font-weight="700" fill="#171717">Nexus · event=TIMER</text>
-  <text x="60" y="84" font-family="sans-serif" font-size="18" fill="#555555">仅展示远程 AI 编程任务的累计活跃执行时间</text>
+本节图示使用 Mermaid 作为可编辑源格式；附件中的 SVG 是由固定版本 Mermaid CLI 渲染的成品。图示只表达本申请的工具类远程 AI 编程任务 `event=TIMER`，不引入其他场景。
 
-  <rect x="60" y="135" width="200" height="92" rx="14" fill="#f1f1f1" stroke="#333333" stroke-width="2"/>
-  <text x="160" y="175" text-anchor="middle" font-family="sans-serif" font-size="22" font-weight="700" fill="#171717">任务开始</text>
-  <text x="160" y="205" text-anchor="middle" font-family="sans-serif" font-size="17" fill="#333333">创建 · time=0</text>
-
-  <rect x="350" y="135" width="235" height="92" rx="14" fill="#e5f2e8" stroke="#2c6e3f" stroke-width="2"/>
-  <text x="467" y="175" text-anchor="middle" font-family="sans-serif" font-size="22" font-weight="700" fill="#173d23">计时中 / Agent 执行</text>
-  <text x="467" y="205" text-anchor="middle" font-family="sans-serif" font-size="17" fill="#285c37">更新 · isPaused=false</text>
-
-  <rect x="680" y="100" width="220" height="92" rx="14" fill="#fff4d6" stroke="#9a7418" stroke-width="2"/>
-  <text x="790" y="140" text-anchor="middle" font-family="sans-serif" font-size="21" font-weight="700" fill="#5c450d">等待用户授权</text>
-  <text x="790" y="170" text-anchor="middle" font-family="sans-serif" font-size="17" fill="#6f5717">更新 · isPaused=true</text>
-
-  <rect x="680" y="245" width="220" height="92" rx="14" fill="#fff4d6" stroke="#9a7418" stroke-width="2"/>
-  <text x="790" y="285" text-anchor="middle" font-family="sans-serif" font-size="21" font-weight="700" fill="#5c450d">等待主机重连</text>
-  <text x="790" y="315" text-anchor="middle" font-family="sans-serif" font-size="17" fill="#6f5717">更新 · isPaused=true</text>
-
-  <rect x="350" y="390" width="235" height="92" rx="14" fill="#e5f2e8" stroke="#2c6e3f" stroke-width="2"/>
-  <text x="467" y="430" text-anchor="middle" font-family="sans-serif" font-size="22" font-weight="700" fill="#173d23">恢复</text>
-  <text x="467" y="460" text-anchor="middle" font-family="sans-serif" font-size="17" fill="#285c37">更新 · isPaused=false</text>
-
-  <rect x="980" y="170" width="160" height="190" rx="14" fill="#eeeeee" stroke="#333333" stroke-width="2"/>
-  <text x="1060" y="205" text-anchor="middle" font-family="sans-serif" font-size="21" font-weight="700" fill="#171717">结束</text>
-  <text x="1060" y="245" text-anchor="middle" font-family="sans-serif" font-size="18" fill="#333333">完成</text>
-  <text x="1060" y="275" text-anchor="middle" font-family="sans-serif" font-size="18" fill="#333333">取消</text>
-  <text x="1060" y="305" text-anchor="middle" font-family="sans-serif" font-size="18" fill="#333333">失败</text>
-  <text x="1060" y="340" text-anchor="middle" font-family="sans-serif" font-size="16" fill="#555555">终态 · 停止更新</text>
-
-  <line x1="260" y1="181" x2="350" y2="181" stroke="#3b3b3b" stroke-width="3" marker-end="url(#arrow)"/>
-  <line x1="585" y1="158" x2="680" y2="146" stroke="#3b3b3b" stroke-width="3" marker-end="url(#arrow)"/>
-  <line x1="585" y1="204" x2="680" y2="291" stroke="#3b3b3b" stroke-width="3" marker-end="url(#arrow)"/>
-  <path d="M680 175 C625 220 610 390 585 430" fill="none" stroke="#3b3b3b" stroke-width="3" marker-end="url(#arrow)"/>
-  <path d="M680 300 C620 330 610 420 585 445" fill="none" stroke="#3b3b3b" stroke-width="3" marker-end="url(#arrow)"/>
-  <path d="M585 435 C735 435 810 385 980 330" fill="none" stroke="#3b3b3b" stroke-width="3" marker-end="url(#arrow)"/>
-  <path d="M585 150 C760 130 830 170 980 220" fill="none" stroke="#3b3b3b" stroke-width="3" marker-end="url(#arrow)"/>
-
-  <text x="625" y="118" font-family="sans-serif" font-size="16" fill="#555555">权限请求</text>
-  <text x="620" y="270" font-family="sans-serif" font-size="16" fill="#555555">连接中断</text>
-  <text x="625" y="380" font-family="sans-serif" font-size="16" fill="#555555">授权通过 / 连接恢复</text>
-</svg>
+```mermaid
+flowchart LR
+    A["任务开始<br/>创建 TIMER<br/>time=0<br/>isCountdown=false<br/>isPaused=false"] --> B["Agent 执行<br/>累计 time<br/>isPaused=false<br/>展示：已用时 ${placeholder.timer}"]
+    B -->|权限请求 / 主机或网络等待| C["等待<br/>time 冻结<br/>isPaused=true<br/>展示：等待用户授权 / 等待主机重连"]
+    C -->|授权完成 / 连接恢复| D["恢复执行<br/>继续累计 time<br/>isPaused=false"]
+    D --> B
+    B -->|完成 / 取消 / 失败| E["终态<br/>更新最终 time<br/>stopLiveView<br/>停止更新"]
+    C -->|取消 / 失败| E
 ```
+
+完整附件：
+
+- [`node-design.mmd`](node-design.mmd)：节点与 TIMER 生命周期的 Mermaid 可编辑源；
+- [`node-design.svg`](node-design.svg)：由固定 Mermaid CLI 渲染的节点图成品；
+- [`solution-architecture.mmd`](solution-architecture.mmd)：Nexus 手机、WebSocket、PC Bridge、ACP Agent、LiveViewHelper/LiveViewKit 及数据边界的 Mermaid 可编辑源；
+- [`solution-architecture.svg`](solution-architecture.svg)：由固定 Mermaid CLI 渲染的架构图成品。
+
+渲染命令固定为：
+
+`npx --yes @mermaid-js/mermaid-cli@11.12.0 -i <file>.mmd -o <file>.svg`
+
+`node-design.mmd` 展示任务开始/创建、Agent 执行计时、等待用户授权或主机/网络、恢复执行，以及完成、取消、失败后的终态与停止更新；`solution-architecture.mmd` 展示手机 Nexus ↔ WebSocket ↔ PC Bridge ↔ ACP Agent、LiveViewHelper/LiveViewKit 的创建/更新/结束与点击回应用路径。两张图均只传递状态、标题和已用时长，不传递代码、密钥或完整日志。
 
 ## 6. TIMER 字段与展示内容
 
@@ -282,4 +253,4 @@ LiveView Kit 实况窗
 ### 11.5 材料与图示
 
 - [ ] 申请表可直接复制本材料中的场景描述、节点表、TIMER 字段、生命周期策略和隐私边界。
-- [ ] 生命周期图使用 SVG，中文标签清晰，压缩后仍可辨认；图示只表达 TIMER 场景，不引入其他业务场景。
+- [ ] Mermaid 源文件可编辑，SVG 由固定版本 `@mermaid-js/mermaid-cli@11.12.0` 渲染；中文标签清晰，压缩后仍可辨认，图示只表达 TIMER 场景，不引入其他业务场景。

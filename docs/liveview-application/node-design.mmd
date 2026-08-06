@@ -1,0 +1,43 @@
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif","fontSize":"16px","primaryColor":"#f8fafc","primaryTextColor":"#111827","primaryBorderColor":"#374151","lineColor":"#4b5563","secondaryColor":"#eff6ff","tertiaryColor":"#f3f4f6","clusterBkg":"#f8fafc","clusterBorder":"#9ca3af","edgeLabelBackground":"#ffffff"}}}%%
+flowchart TD
+  start["任务开始<br/>create startLiveView<br/>event = TIMER<br/>time(ms) = 0<br/>isCountdown=false<br/>isPaused=false"]
+  running["计时中<br/>updateLiveView<br/>time(ms) = 累计活跃时长<br/>isCountdown=false<br/>isPaused=false"]
+  waiting["等待（暂停）<br/>授权 / 主机 / 网络<br/>time(ms) = 保留已用时<br/>isCountdown=false<br/>isPaused=true"]
+  resume["恢复<br/>updateLiveView<br/>time(ms) = 从暂停值继续<br/>isCountdown=false<br/>isPaused=false"]
+
+  start -->|创建| running
+  running -->|权限 / 主机 / 网络暂停| waiting
+  waiting -->|恢复| resume
+  resume -->|继续执行| running
+
+  subgraph terminal["终态：TIMER"]
+    direction TB
+    halt["停止"]
+    done["完成<br/>update → stopLiveView<br/>time(ms) = 最终值<br/>isCountdown=false<br/>isPaused=false"]
+    cancelled["取消<br/>update → stopLiveView<br/>time(ms) = 最终值<br/>isCountdown=false<br/>isPaused=false"]
+    failed["失败<br/>update → stopLiveView<br/>time(ms) = 最终值<br/>isCountdown=false<br/>isPaused=false"]
+    summary["结果摘要<br/>display<br/>点击返回 Nexus"]
+
+    halt -->|完成| done
+    halt -->|取消| cancelled
+    halt -->|失败| failed
+    done --> summary
+    cancelled --> summary
+    failed --> summary
+  end
+
+  running -->|停止| halt
+  waiting -->|取消| halt
+  waiting -->|失败| halt
+  summary -->|点击返回 Nexus| nexus(["Nexus"])
+
+  classDef startStyle fill:#f8fafc,stroke:#374151,color:#111827,stroke-width:2px;
+  classDef runningStyle fill:#eff6ff,stroke:#2563eb,color:#111827,stroke-width:2px;
+  classDef pausedStyle fill:#f3f4f6,stroke:#6b7280,color:#111827,stroke-width:2px;
+  classDef terminalStyle fill:#f8fafc,stroke:#374151,color:#111827,stroke-width:2px;
+  classDef summaryStyle fill:#eff6ff,stroke:#2563eb,color:#111827,stroke-width:2px;
+  class start startStyle;
+  class running,resume runningStyle;
+  class waiting pausedStyle;
+  class halt,done,cancelled,failed terminalStyle;
+  class summary,nexus summaryStyle;
