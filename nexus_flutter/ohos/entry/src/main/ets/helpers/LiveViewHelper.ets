@@ -1,8 +1,7 @@
 import { MethodChannel, MethodCall, MethodResult, FlutterEngine } from '@ohos/flutter_ohos';
 import { liveViewManager } from '@kit.LiveViewKit';
-import { WantAgent, wantAgent, common } from '@kit.AbilityKit';
+import { WantAgent, wantAgent } from '@kit.AbilityKit';
 import { BusinessError } from '@kit.BasicServicesKit';
-import { image } from '@kit.ImageKit';
 
 const TAG = 'LiveViewHelper';
 const CHANNEL_NAME = 'com.nexus.remoteai/live_view';
@@ -28,7 +27,6 @@ export class LiveViewHelper {
   private isLiveViewActive: boolean = false;
   private disposed: boolean = false;
   private operationTail: Promise<void> = Promise.resolve();
-  private nodeIconCache: image.PixelMap | null = null;
 
   constructor(flutterEngine: FlutterEngine) {
     this.wantAgentInfo = {
@@ -53,12 +51,6 @@ export class LiveViewHelper {
     if (this.disposed) return;
     this.disposed = true;
     this.channel.setMethodCallHandler(null);
-    if (this.nodeIconCache) {
-      try {
-        this.nodeIconCache.release();
-      } catch { /* ignore */ }
-      this.nodeIconCache = null;
-    }
     this.resetState();
   }
 
@@ -91,24 +83,6 @@ export class LiveViewHelper {
     return await wantAgent.getWantAgent(this.wantAgentInfo);
   }
 
-  /** 懒加载并缓存应用图标 PixelMap（每次更新都重新解码很浪费）。 */
-  private async loadNodeIcons(): Promise<Array<string | image.PixelMap>> {
-    if (this.nodeIconCache) {
-      return [this.nodeIconCache];
-    }
-    try {
-      // nodeIcons 仅接受 string | PixelMap，需把媒体资源转成 PixelMap
-      const context = getContext() as common.UIAbilityContext;
-      const data: Uint8Array = await context.resourceManager.getMediaContent($r('app.media.app_icon'));
-      const source: image.ImageSource = image.createImageSource(data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength));
-      this.nodeIconCache = await source.createPixelMap();
-      return [this.nodeIconCache];
-    } catch (err) {
-      console.error(TAG, `load node icon failed: ${this.errorMessage(err)}`);
-      return [];
-    }
-  }
-
   private async buildConfig(
     progress: number,
     statusText: string,
@@ -117,12 +91,6 @@ export class LiveViewHelper {
   ): Promise<liveViewManager.LiveView> {
     const boundedProgress = Math.max(0, Math.min(1, progress));
     const percentage = Math.round(boundedProgress * 100);
-    const nodeIcons = await this.loadNodeIcons();
-    // 进度布局要求节点图标：加载失败时中止本次更新/启动，
-    // 避免空 nodeIcons 触发 LiveViewKit 参数错误。
-    if (nodeIcons.length === 0) {
-      throw new Error('node icon unavailable — aborting live view operation');
-    }
     return {
       id: LIVE_VIEW_ID,
       event: LIVE_VIEW_EVENT,
@@ -137,7 +105,7 @@ export class LiveViewHelper {
           layoutData: {
             layoutType: liveViewManager.LayoutType.LAYOUT_TYPE_PROGRESS,
             progress: percentage,
-            nodeIcons: nodeIcons
+            nodeIcons: ['icon.png', 'icon.png']
           }
         }
       }
