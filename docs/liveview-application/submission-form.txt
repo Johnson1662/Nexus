@@ -1,0 +1,17 @@
+1. 场景类型
+计时（TIMER）
+
+2. 场景描述
+Nexus 是一款工具类远程 AI 编程助手。用户在手机端向电脑工作区中的 AI 编程 Agent 发起代码任务后，Nexus 通过 WebSocket 将任务交给 PC Bridge Server，再由 Bridge Server 通过 ACP 调用 AI Agent 执行。任务可能持续一段时间，用户不需要一直停留在 Nexus 前台，因此希望接入 HarmonyOS 实况窗，帮助用户在锁屏或切换到其他应用后快速查看本次远程 AI 编程任务的当前状态与累计活跃执行时长。
+
+本场景使用官方计时事件 event=TIMER，采用正计时：任务会话建立后创建实况窗，time 从 0 毫秒开始累计；Agent 处于思考或工具执行等可继续执行状态时 isPaused=false，实况窗显示“Agent 执行中”和已用时；当 Agent 等待用户授权，或电脑/Bridge Server 处于明确的等待重连状态时，更新 isPaused=true，冻结已用时并显示“等待用户授权”或“等待主机重连”；用户完成授权或主机恢复并确认 Agent 继续执行后，更新 isPaused=false，从原累计时间继续计时。任务完成、用户取消或不可恢复失败时，显示最终状态和总用时，结束实况窗。
+
+实况窗只展示 Nexus、任务高层标题、当前状态、下一步状态和累计活跃执行时间，不展示代码内容、完整提示词、文件路径、命令输出、访问令牌、主机地址、权限敏感参数、Agent 内部思考或完整错误堆栈。点击实况窗只回到 Nexus 对应任务页面：运行中进入任务详情，等待授权进入授权页，等待重连进入连接状态页，终态进入结果或错误详情页；权限批准、拒绝、取消和代码操作均在 Nexus 内由用户完成。
+
+3. 附件说明
+附件压缩包包含：
+- node-design.svg：Nexus TIMER 实况窗节点与生命周期设计图；
+- solution-architecture.svg：手机 Nexus、LiveViewHelper/LiveViewKit、WebSocket、PC Bridge、ACP Agent 的技术链路与数据边界图；
+- scenario-description.md：完整场景说明、节点表、字段定义、生命周期策略、点击行为、数据来源、隐私边界和验收标准。
+
+本次仅申请“计时”一种场景，符合工具类应用的计时使用范围，不涉及出行、配送、航班、取餐、赛事、共享租赁、运动或导航业务。

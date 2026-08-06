@@ -1,0 +1,143 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="990" viewBox="0 0 1400 990">
+  <rect x="0" y="0" width="1400" height="990" fill="#ffffff"/>
+
+  <text x="56" y="56" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="30" font-weight="700" fill="#111827">Nexus TIMER 实况窗：任务生命周期节点</text>
+  <text x="56" y="88" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="16" fill="#4b5563">官方计时场景（event = TIMER）｜手机离开前台后，快速查看任务状态、已用时长与下一步状态</text>
+
+  <rect x="56" y="112" width="1288" height="44" rx="8" fill="#f5f7fa" stroke="#d1d5db" stroke-width="1"/>
+  <rect x="78" y="128" width="12" height="12" rx="2" fill="#2563eb"/>
+  <text x="100" y="141" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="15" fill="#1f2937">创建 / 更新 / 结束：startLiveView · updateLiveView · stopLiveView</text>
+  <rect x="540" y="128" width="12" height="12" rx="2" fill="#e5e7eb" stroke="#9ca3af"/>
+  <text x="562" y="141" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="15" fill="#1f2937">计时字段：time（ms） · isCountdown=false · isPaused</text>
+  <rect x="1060" y="128" width="12" height="12" rx="2" fill="#dbeafe" stroke="#60a5fa"/>
+  <text x="1082" y="141" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="15" fill="#1f2937">蓝色：实时计时关键状态</text>
+
+  <text x="56" y="190" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="16" font-weight="700" fill="#2563eb">主流程</text>
+
+  <!-- Start -->
+  <rect x="55" y="205" width="260" height="180" rx="12" fill="#ffffff" stroke="#374151" stroke-width="2"/>
+  <rect x="55" y="205" width="260" height="42" rx="12" fill="#eef2f7"/>
+  <rect x="55" y="235" width="260" height="12" fill="#eef2f7"/>
+  <rect x="72" y="219" width="28" height="18" rx="4" fill="#2563eb"/>
+  <text x="86" y="232" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="12" font-weight="700" fill="#ffffff">01</text>
+  <text x="112" y="232" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="18" font-weight="700" fill="#111827">任务开始</text>
+  <text x="72" y="278" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="16" fill="#111827">创建 startLiveView</text>
+  <text x="72" y="303" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="15" fill="#374151">event = TIMER</text>
+  <text x="72" y="326" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="15" fill="#374151">标题：Nexus 编程任务</text>
+  <text x="72" y="349" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="15" fill="#374151">time = 0 ms · isPaused = false</text>
+  <text x="72" y="372" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="14" fill="#6b7280">展示：已开始 · 等待 Agent</text>
+
+  <!-- Start to running -->
+  <path d="M315 295 H343" fill="none" stroke="#6b7280" stroke-width="2.5"/>
+  <path d="M343 295 l-11 -7 M343 295 l-11 7" fill="none" stroke="#6b7280" stroke-width="2.5"/>
+  <text x="318" y="273" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="14" fill="#2563eb">创建</text>
+
+  <!-- Running -->
+  <rect x="355" y="170" width="340" height="245" rx="12" fill="#ffffff" stroke="#2563eb" stroke-width="2.5"/>
+  <rect x="355" y="170" width="340" height="46" rx="12" fill="#dbeafe"/>
+  <rect x="355" y="204" width="340" height="12" fill="#dbeafe"/>
+  <rect x="373" y="184" width="28" height="18" rx="4" fill="#2563eb"/>
+  <text x="387" y="197" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="12" font-weight="700" fill="#ffffff">02</text>
+  <text x="413" y="198" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="18" font-weight="700" fill="#111827">计时中 / Agent 执行</text>
+  <text x="373" y="247" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="16" font-weight="700" fill="#111827">更新 updateLiveView</text>
+  <text x="373" y="273" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="15" fill="#374151">time：已用时（ms）</text>
+  <text x="373" y="297" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="15" fill="#374151">isCountdown = false</text>
+  <text x="373" y="321" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="15" fill="#374151">isPaused = false</text>
+  <text x="373" y="347" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="15" fill="#111827">主信息：Agent 执行中</text>
+  <text x="373" y="371" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="15" fill="#374151">辅信息：思考 / 工具执行 / 当前阶段</text>
+  <text x="373" y="397" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="14" fill="#6b7280">点击卡片：打开 Nexus 查看详情</text>
+
+  <!-- Running to waiting -->
+  <path d="M695 292 H733" fill="none" stroke="#6b7280" stroke-width="2.5"/>
+  <path d="M733 292 l-11 -7 M733 292 l-11 7" fill="none" stroke="#6b7280" stroke-width="2.5"/>
+  <text x="698" y="270" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="14" fill="#2563eb">等待事件</text>
+
+  <!-- Waiting -->
+  <rect x="745" y="170" width="340" height="245" rx="12" fill="#ffffff" stroke="#9ca3af" stroke-width="2"/>
+  <rect x="745" y="170" width="340" height="46" rx="12" fill="#f3f4f6"/>
+  <rect x="745" y="204" width="340" height="12" fill="#f3f4f6"/>
+  <rect x="763" y="184" width="28" height="18" rx="4" fill="#6b7280"/>
+  <text x="777" y="197" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="12" font-weight="700" fill="#ffffff">03</text>
+  <text x="803" y="198" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="18" font-weight="700" fill="#111827">等待授权或主机 / 网络</text>
+  <text x="763" y="247" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="16" font-weight="700" fill="#111827">更新 updateLiveView（暂停）</text>
+  <text x="763" y="273" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="15" fill="#374151">time：保留已用时（ms）</text>
+  <text x="763" y="297" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="15" fill="#374151">isCountdown = false</text>
+  <text x="763" y="321" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="15" fill="#2563eb">isPaused = true</text>
+  <text x="763" y="347" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="15" fill="#111827">主信息：等待授权 / 主机 / 网络</text>
+  <text x="763" y="371" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="15" fill="#374151">辅信息：条件满足后恢复</text>
+  <text x="763" y="397" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="14" fill="#6b7280">计时暂停，已用时长不丢失</text>
+
+  <!-- Waiting to resume -->
+  <path d="M915 415 V458" fill="none" stroke="#6b7280" stroke-width="2.5"/>
+  <path d="M915 458 l-7 -11 M915 458 l7 -11" fill="none" stroke="#6b7280" stroke-width="2.5"/>
+  <text x="930" y="447" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="14" fill="#2563eb">授权 / 主机 / 网络恢复</text>
+
+  <!-- Resume -->
+  <rect x="745" y="475" width="340" height="165" rx="12" fill="#ffffff" stroke="#2563eb" stroke-width="2"/>
+  <rect x="745" y="475" width="340" height="42" rx="12" fill="#eef2ff"/>
+  <rect x="745" y="505" width="340" height="12" fill="#eef2ff"/>
+  <rect x="763" y="489" width="28" height="18" rx="4" fill="#2563eb"/>
+  <text x="777" y="502" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="12" font-weight="700" fill="#ffffff">04</text>
+  <text x="803" y="503" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="18" font-weight="700" fill="#111827">恢复执行</text>
+  <text x="763" y="542" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="15" font-weight="700" fill="#111827">更新：继续计时</text>
+  <text x="763" y="566" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="15" fill="#374151">time：从上次已用时继续</text>
+  <text x="763" y="590" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="15" fill="#2563eb">isPaused = false</text>
+  <text x="763" y="614" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="14" fill="#6b7280">返回“计时中 / Agent 执行”</text>
+
+  <!-- Resume back to running -->
+  <path d="M745 555 H712 C694 555 705 457 680 415" fill="none" stroke="#2563eb" stroke-width="2.5"/>
+  <path d="M680 415 l12 3 M680 415 l5 12" fill="none" stroke="#2563eb" stroke-width="2.5"/>
+  <text x="595" y="508" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="14" fill="#2563eb">恢复后继续更新 TIMER</text>
+
+  <text x="56" y="688" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="16" font-weight="700" fill="#2563eb">终态（结束 stopLiveView）</text>
+
+  <!-- Running to terminal states -->
+  <path d="M440 415 C420 500 235 560 235 704" fill="none" stroke="#6b7280" stroke-width="2.5"/>
+  <path d="M235 704 l-7 -11 M235 704 l7 -11" fill="none" stroke="#6b7280" stroke-width="2.5"/>
+  <text x="248" y="554" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="14" fill="#4b5563">完成</text>
+  <path d="M525 415 V704" fill="none" stroke="#6b7280" stroke-width="2.5"/>
+  <path d="M525 704 l-7 -11 M525 704 l7 -11" fill="none" stroke="#6b7280" stroke-width="2.5"/>
+  <text x="540" y="560" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="14" fill="#4b5563">用户取消</text>
+  <path d="M610 415 C630 500 1075 560 1075 704" fill="none" stroke="#6b7280" stroke-width="2.5"/>
+  <path d="M1075 704 l-7 -11 M1075 704 l7 -11" fill="none" stroke="#6b7280" stroke-width="2.5"/>
+  <text x="875" y="554" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="14" fill="#4b5563">错误 / 失败</text>
+
+  <!-- Completed -->
+  <rect x="55" y="720" width="360" height="180" rx="12" fill="#ffffff" stroke="#374151" stroke-width="2"/>
+  <rect x="55" y="720" width="360" height="42" rx="12" fill="#eef2f7"/>
+  <rect x="55" y="750" width="360" height="12" fill="#eef2f7"/>
+  <rect x="73" y="734" width="28" height="18" rx="4" fill="#374151"/>
+  <text x="87" y="747" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="12" font-weight="700" fill="#ffffff">A</text>
+  <text x="113" y="748" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="18" font-weight="700" fill="#111827">完成</text>
+  <text x="73" y="791" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="15" font-weight="700" fill="#111827">结束 stopLiveView</text>
+  <text x="73" y="816" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="15" fill="#374151">主信息：任务完成</text>
+  <text x="73" y="840" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="15" fill="#374151">time：最终已用时（ms）</text>
+  <text x="73" y="864" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="14" fill="#6b7280">辅信息：可回到 Nexus 查看结果</text>
+
+  <!-- Canceled -->
+  <rect x="475" y="720" width="360" height="180" rx="12" fill="#ffffff" stroke="#374151" stroke-width="2"/>
+  <rect x="475" y="720" width="360" height="42" rx="12" fill="#eef2f7"/>
+  <rect x="475" y="750" width="360" height="12" fill="#eef2f7"/>
+  <rect x="493" y="734" width="28" height="18" rx="4" fill="#374151"/>
+  <text x="507" y="747" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="12" font-weight="700" fill="#ffffff">B</text>
+  <text x="533" y="748" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="18" font-weight="700" fill="#111827">取消</text>
+  <text x="493" y="791" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="15" font-weight="700" fill="#111827">结束 stopLiveView</text>
+  <text x="493" y="816" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="15" fill="#374151">主信息：任务已取消</text>
+  <text x="493" y="840" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="15" fill="#374151">time：最终已用时（ms）</text>
+  <text x="493" y="864" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="14" fill="#6b7280">辅信息：用户主动结束任务</text>
+
+  <!-- Failed -->
+  <rect x="895" y="720" width="360" height="180" rx="12" fill="#ffffff" stroke="#374151" stroke-width="2"/>
+  <rect x="895" y="720" width="360" height="42" rx="12" fill="#eef2f7"/>
+  <rect x="895" y="750" width="360" height="12" fill="#eef2f7"/>
+  <rect x="913" y="734" width="28" height="18" rx="4" fill="#374151"/>
+  <text x="927" y="747" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="12" font-weight="700" fill="#ffffff">C</text>
+  <text x="953" y="748" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="18" font-weight="700" fill="#111827">失败</text>
+  <text x="913" y="791" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="15" font-weight="700" fill="#111827">结束 stopLiveView</text>
+  <text x="913" y="816" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="15" fill="#374151">主信息：执行失败</text>
+  <text x="913" y="840" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="15" fill="#374151">time：最终已用时（ms）</text>
+  <text x="913" y="864" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="14" fill="#6b7280">辅信息：错误摘要（不含代码内容）</text>
+
+  <rect x="56" y="930" width="1288" height="38" rx="8" fill="#f8fafc" stroke="#d1d5db" stroke-width="1"/>
+  <text x="76" y="955" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="15" fill="#374151">展示边界：实况窗只显示状态、标题、已用时长与下一步状态；不展示代码内容、密钥或完整错误日志。</text>
+</svg>
