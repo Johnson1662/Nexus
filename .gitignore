@@ -62,3 +62,6 @@ query.txt
 wstest/
 *.tar.gz
 .deveco/
+
+competition/
+.scratch/
