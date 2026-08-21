@@ -14,6 +14,10 @@ import { createAcpCallbacks } from "./acp-callbacks.mjs";
 import { getLastModel, setLastModel } from "./prefs.mjs";
 import { recordToolCallIds } from "./tool-call-map.mjs";
 import { extractModelList, setCachedModelList, invalidateModelListCache } from "./model-list.mjs";
+import {
+  boundAgentEventPayload,
+  MAX_REPLAY_BYTES_PER_SESSION,
+} from "./payload-budget.mjs";
 
 
 // ── Constants ────────────────────────────────────────────────────
@@ -22,7 +26,6 @@ const IDLE_TIMEOUT_MS = 15 * 60 * 1_000;
 const MAX_ACP_PROCESSES = 5;
 const IDLE_CLEANUP_INTERVAL_MS = 30_000;
 const MAX_MESSAGE_BUFFER = 500;
-const MAX_REPLAY_BYTES_PER_SESSION = 2 * 1024 * 1024;
 const PROMPT_TIMEOUT = 300_000; // 5 minutes sliding inactivity
 const AGENT_INITIALIZE_TIMEOUT_MS = 30_000;
 
@@ -996,10 +999,15 @@ export class SessionManager {
     this.sessionSeqCounter.set(sessionId, seq);
     const messageId = `${sessionId}:${seq}`;
 
-    // Clone — never mutate the caller-owned object
-    const buffered = { ...(eventPayload as Record<string, unknown>), messageId };
-    const payload = JSON.stringify(buffered);
-    const payloadBytes = Buffer.byteLength(payload, "utf8");
+    // Clone and enforce both per-field and per-entry UTF-8 budgets before the
+    // entry is retained. A single oversized event must not bypass the total
+    // replay cap merely because the buffer keeps one newest entry.
+    const bounded = boundAgentEventPayload({
+      ...(eventPayload as Record<string, unknown>),
+      messageId,
+    });
+    const buffered = bounded.value;
+    const { payload, payloadBytes } = bounded;
     sess.messageBuffer.push({
       messageId,
       payload,

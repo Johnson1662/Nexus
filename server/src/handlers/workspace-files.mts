@@ -3,6 +3,7 @@ import { readdir, realpath, stat } from "node:fs/promises";
 import { lstatSync } from "node:fs";
 import { join, relative, basename, dirname, resolve, isAbsolute } from "node:path";
 import type { WebSocket } from "ws";
+import { boundFileEventPayload } from "../payload-budget.mjs";
 
 export interface WorkspaceFile {
   path: string;
@@ -19,6 +20,10 @@ export interface GitLogEntry {
 }
 
 const MAX_FILE_BYTES = 4 * 1024 * 1024;
+
+function sendFileEvent(ws: WebSocket, payload: Record<string, unknown>): void {
+  ws.send(boundFileEventPayload(payload).payload);
+}
 
 // ── Helpers ──
 
@@ -170,11 +175,11 @@ export async function handleFileDiff(
         }
         const content = await readFile(canonicalPath, "utf-8");
         diff = content;
-        ws.send(JSON.stringify({ type: "file_diff", path: filePath, diff }));
+        sendFileEvent(ws, { type: "file_diff", path: filePath, diff });
         return;
       } catch {}
     }
-    ws.send(JSON.stringify({ type: "file_diff", path: filePath, diff }));
+    sendFileEvent(ws, { type: "file_diff", path: filePath, diff });
   } catch (err: any) {
     ws.send(JSON.stringify({ type: "file_diff", path: filePath, diff: "", error: err.message }));
   }
@@ -231,7 +236,7 @@ export async function handleFileRead(
       throw new Error(`file exceeds ${MAX_FILE_BYTES} byte limit`);
     }
     const content = await fs.readFile(fullPath, "utf-8");
-    ws.send(JSON.stringify({ type: "file_content", path: filePath, content }));
+    sendFileEvent(ws, { type: "file_content", path: filePath, content });
   } catch (err: any) {
     ws.send(JSON.stringify({ type: "file_content", path: filePath, content: "", error: err.message }));
   }

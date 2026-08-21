@@ -218,7 +218,8 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
     for (final device in HostStore().devices) {
       if (device.hostId == hostKey ||
           device.name == hostKey ||
-          device.urls.any((candidate) => _normalizeUrl(candidate) == normalizedUrl) ||
+          device.urls
+              .any((candidate) => _normalizeUrl(candidate) == normalizedUrl) ||
           (device.relayUrl != null &&
               _normalizeUrl(device.relayUrl!) == normalizedUrl)) {
         final token = device.authToken?.trim();
@@ -349,7 +350,8 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
   void _appendUserMessage(String text) {
     _state.messages = [
       ..._state.messages,
-      MessageData(role: 'user', content: text, type: 'text', sendStatus: 'sent'),
+      MessageData(
+          role: 'user', content: text, type: 'text', sendStatus: 'sent'),
     ];
     _setCurrentSessionStatus('running');
   }
@@ -365,9 +367,8 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
         _inputInFlight = false;
         _state.turnActive = false;
         _setCurrentSessionStatus('idle');
-        _state.errorMessage = kind == 'start'
-            ? '启动会话超时，请检查 Bridge 连接'
-            : '发送消息超时，请重试';
+        _state.errorMessage =
+            kind == 'start' ? '启动会话超时，请检查 Bridge 连接' : '发送消息超时，请重试';
         _turnRequestTimer = null;
         notifyListeners();
       },
@@ -696,7 +697,8 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
     _cursorPersistTimer?.cancel();
     _cursorPersistTimer = null;
     if (clearPersisted) {
-      StorageService.getInstance().then((storage) => storage.setLastMessageId(''));
+      StorageService.getInstance()
+          .then((storage) => storage.setLastMessageId(''));
     }
   }
 
@@ -1095,8 +1097,11 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
       _ws.send(ClientMessage(
         type: 'load_session',
         sessionId: sessionId,
-        cwd: _state.currentWorkspace.isNotEmpty ? _state.currentWorkspace : null,
-        agent: _state.selectedAgentName.isNotEmpty ? _state.selectedAgentName : null,
+        cwd:
+            _state.currentWorkspace.isNotEmpty ? _state.currentWorkspace : null,
+        agent: _state.selectedAgentName.isNotEmpty
+            ? _state.selectedAgentName
+            : null,
       ));
     }
     notifyListeners();
@@ -1488,15 +1493,17 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
     _state.sessions = sessions;
   }
 
-  /// 事件是否属于当前会话：加载历史中允许当前会话或加载会话的事件；
-  /// 事件/当前会话 id 为空（旧协议或启动早期）时放行。
+  /// 事件是否属于当前会话：加载历史中允许当前会话或加载会话的事件。
+  /// 只有事件 id 为空时才兼容旧协议；当前会话为空时不能放行带 id 的旧事件。
   bool _isEventForCurrentSession(String? eventSessionId) {
-    final current = _state.sessionId;
-    return eventSessionId == null ||
-        eventSessionId.isEmpty ||
-        current.isEmpty ||
-        eventSessionId == current ||
-        eventSessionId == _loadingSessionId;
+    if (eventSessionId == null || eventSessionId.isEmpty) return true;
+    if (_state.sessionId.isNotEmpty && eventSessionId == _state.sessionId) {
+      return true;
+    }
+    if (_loadingSessionId.isNotEmpty && eventSessionId == _loadingSessionId) {
+      return true;
+    }
+    return false;
   }
 
   void _handleTurnEnded() {
@@ -1605,9 +1612,8 @@ class WorkspaceProvider extends ChangeNotifier {
     final storage = await StorageService.getInstance();
     final oldWorkspacesKey = 'workspaces_$oldId';
     final oldIndexKey = 'workspace_index_$oldId';
-    final newPartitionExists =
-        storage.getObject('workspaces_$newId') != null ||
-            storage.getObject('workspace_index_$newId') != null;
+    final newPartitionExists = storage.getObject('workspaces_$newId') != null ||
+        storage.getObject('workspace_index_$newId') != null;
     if (newPartitionExists) {
       await storage.remove(oldWorkspacesKey);
       await storage.remove(oldIndexKey);
@@ -1621,7 +1627,8 @@ class WorkspaceProvider extends ChangeNotifier {
         await storage.saveWorkspaces(newId, paths);
       }
       if (oldIndex != null) {
-        final index = oldIndex is int ? oldIndex : storage.loadWorkspaceIndex(oldId);
+        final index =
+            oldIndex is int ? oldIndex : storage.loadWorkspaceIndex(oldId);
         await storage.saveWorkspaceIndex(newId, index);
       }
       await storage.remove(oldWorkspacesKey);
@@ -1682,18 +1689,14 @@ class WorkspaceProvider extends ChangeNotifier {
     final storage = await StorageService.getInstance();
     if (hostId != _activeHostId) return;
 
-    final hasPartition =
-        storage.getObject('workspaces_$hostId') != null ||
-            storage.getObject('workspace_index_$hostId') != null;
+    final hasPartition = storage.getObject('workspaces_$hostId') != null ||
+        storage.getObject('workspace_index_$hostId') != null;
     var paths = storage.loadWorkspaces(hostId);
     var index = storage.loadWorkspaceIndex(hostId);
     if (!hasPartition) {
       final legacy = storage.getString('workspaces');
       if (legacy != null) {
-        paths = legacy
-            .split('\n')
-            .where((path) => path.isNotEmpty)
-            .toList();
+        paths = legacy.split('\n').where((path) => path.isNotEmpty).toList();
         index = 0;
         await storage.saveWorkspaces(hostId, paths);
         await storage.saveWorkspaceIndex(hostId, index);

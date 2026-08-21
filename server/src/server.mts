@@ -38,6 +38,7 @@ import { SessionStatusWatcher, mergeSessionStatus } from "./discovery/session-wa
 import { handleListWorkspaceFiles, handleFileDiff, handleFileLog, handleFileRead } from "./handlers/workspace-files.mjs";
 import { SessionOwnerError, sessionManager } from "./session-manager.mjs";
 import { setTitle as setSessionTitle } from "./session-titles.mjs";
+import { parseClientMessage, type JsonRecord } from "./protocol-validation.mjs";
 
 const PORT = parseInt(process.env.PORT || "", 10) || 12138;
 const HOST_ID = getOrCreateHostId();
@@ -296,7 +297,7 @@ function sendServerInfo(ws: WebSocket | any, hostId: string): void {
   }
 }
 
-function handleIncomingConnection(transport: any, hostId: string = HOST_ID) {
+export function handleIncomingConnection(transport: any, hostId: string = HOST_ID) {
   console.log(`[server] Local client connected`);
   const originalSend = transport.send.bind(transport);
   transport.send = (data: string | Buffer) => originalSend(data);
@@ -307,47 +308,43 @@ function handleIncomingConnection(transport: any, hostId: string = HOST_ID) {
     try { transport.send(JSON.stringify({ type: "ping" })); } catch {}
   }, HEARTBEAT_INTERVAL_MS);
 
-  function handlePlaintextMessage(rawStr: string) {
-    let msg: any;
+  function sendProtocolError(code: string, text: string): void {
     try {
-      msg = JSON.parse(rawStr);
-    } catch {
-      // Some relays may strip quotes from JSON keys/values. Try to fix.
-      try {
-        const fixed = rawStr
-          .replace(/([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*:/g, '$1"$2":')
-          .replace(/:\s*([a-zA-Z_][a-zA-Z0-9_.-]*)\s*([,}])/g, ':"$1"$2');
-        msg = JSON.parse(fixed);
-      } catch {
-        transport.send(JSON.stringify({ type: "error", text: "invalid json" }));
-        return;
-      }
-    }
+      transport.send(JSON.stringify({ type: "error", code, text }));
+    } catch { /* WS already closed */ }
+  }
 
-    const logPrefix = `[server] ← ${msg.type}`;
-    const logDetails = msg.text ? ` text="${msg.text.slice(0, 60)}"` :
-      msg.sessionId ? ` sessionId="${msg.sessionId?.slice(0, 20)}"` : '';
-    console.log(`${logPrefix}${logDetails}`);
-
-    // ── Transport layer: messages about the connection itself ──
-    // These are handled first and don't enter the session routing.
-    if (handleTransportMessage(msg, rawStr)) {
+  function handlePlaintextMessage(rawStr: string): void {
+    const parsed = parseClientMessage(rawStr);
+    if (!parsed.ok) {
+      sendProtocolError(parsed.code, parsed.text);
       return;
     }
 
-    // ── Session layer ──────────────────────────────────────────
-    // Session ownership is checked by SessionManager. Reclaim is only
-    // performed by the explicit sync/load/resume flows below.
+    const msg = parsed.message;
+    try {
+      const logPrefix = `[server] ← ${msg.type}`;
+      const logDetails = typeof msg.text === "string" ? ` text="${msg.text.slice(0, 60)}"` :
+        typeof msg.sessionId === "string" ? ` sessionId="${msg.sessionId.slice(0, 20)}"` : '';
+      console.log(`${logPrefix}${logDetails}`);
 
-    // Dispatch to the appropriate handler.
-    handleSessionMessage(msg, rawStr);
+      // ── Transport layer: messages about the connection itself ──
+      if (handleTransportMessage(msg, rawStr)) return;
+
+      // ── Session layer ──────────────────────────────────────────
+      handleSessionMessage(msg, rawStr);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.log(`[server] message handler error: ${message}`);
+      sendProtocolError("MESSAGE_HANDLER_FAILED", "Message handler failed");
+    }
   }
 
   /**
    * Handle transport-level messages (heartbeat, ping/pong, etc.)
    * Returns true if the message was consumed, false otherwise.
    */
-  function handleTransportMessage(msg: any, rawStr: string): boolean {
+  function handleTransportMessage(msg: JsonRecord, _rawStr: string): boolean {
     switch (msg.type) {
       case "heartbeat":
         transport.send(JSON.stringify({ type: "heartbeat", ts: msg.ts || Date.now() }));
@@ -363,11 +360,11 @@ function handleIncomingConnection(transport: any, hostId: string = HOST_ID) {
     }
   }
 
-  function handleSessionMessage(msg: any, _rawStr: string): void {
+  function handleSessionMessage(msg: JsonRecord, _rawStr: string): void {
     // Support two inbound formats:
     //   Legacy: { type: "start", ... }
     //   Layered: { type: "session", message: { type: "start", ... } }
-    const sessionMsg = msg.type === "session" && msg.message ? msg.message : msg;
+    const sessionMsg: any = msg.type === "session" ? msg.message : msg;
 
     switch (sessionMsg.type) {
       case "start":

@@ -104,6 +104,33 @@ void main() {
     expect(provider.state.lastMessageId, 'session:1');
   });
 
+  test('late event from a closed session cannot repopulate the empty chat', () {
+    final ws = _FakeWSClient();
+    final provider = ChatProvider(ws);
+    addTearDown(provider.dispose);
+    provider.state.sessionId = 'session-a';
+    provider.state.sessionId = '';
+
+    ws.emit(ServerMessage(
+      type: 'agent_event',
+      sessionId: 'session-a',
+      event: AcpUpdate(event: 'agent_message_chunk', text: 'late'),
+    ));
+
+    expect(provider.state.messages, isEmpty);
+  });
+
+  test('binary WS frames are rejected without a String cast', () {
+    final ws = WSClient();
+    addTearDown(ws.dispose);
+    final errors = <String>[];
+    ws.onError(errors.add);
+
+    ws.handleIncomingDataForTest(<int>[123, 125]);
+
+    expect(errors, contains('收到不支持的二进制帧'));
+  });
+
   test('sync overflow clears turn state and reloads the session', () {
     final ws = _FakeWSClient();
     final provider = ChatProvider(ws);
@@ -138,5 +165,4 @@ void main() {
       isTrue,
     );
   });
-
 }

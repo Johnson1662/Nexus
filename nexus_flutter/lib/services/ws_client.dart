@@ -8,7 +8,8 @@ import '../models/ws_protocol.dart';
 import '../models/host_runtime_state.dart';
 
 typedef MessageCallback = void Function(ServerMessage msg);
-typedef PhaseCallback = void Function(String hostKey, String phase, String? url);
+typedef PhaseCallback = void Function(
+    String hostKey, String phase, String? url);
 typedef ListenerDisposer = void Function();
 
 class WSClient {
@@ -138,7 +139,8 @@ class WSClient {
       if (token != null) {
         request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
       }
-      final response = await request.close().timeout(const Duration(seconds: 4));
+      final response =
+          await request.close().timeout(const Duration(seconds: 4));
       final status = response.statusCode;
       await response.drain<void>();
       if (status == HttpStatus.unauthorized || status == HttpStatus.forbidden) {
@@ -170,7 +172,8 @@ class WSClient {
       return '连接被拒绝，目标主机 Bridge 服务未启动';
     } else if (str.contains('Network is unreachable')) {
       return '网络不可达，请检查网络配置';
-    } else if (str.contains('Connection timed out') || str.contains('TimeoutException')) {
+    } else if (str.contains('Connection timed out') ||
+        str.contains('TimeoutException')) {
       return '网络连接超时';
     } else if (str.contains('WebSocketChannelException')) {
       return 'WebSocket 连接失败，网络中断或连接受阻';
@@ -235,7 +238,7 @@ class WSClient {
         (data) {
           if (gen != _connectionGeneration || _channel != channel) return;
           _lastMsgReceived = DateTime.now();
-          _handleRaw(data as String);
+          _handleIncomingData(data);
         },
         onError: (error) {
           if (gen != _connectionGeneration || _channel != channel) return;
@@ -308,7 +311,8 @@ class WSClient {
           timer.cancel();
           return;
         }
-        final elapsed = DateTime.now().difference(_lastMsgReceived).inMilliseconds;
+        final elapsed =
+            DateTime.now().difference(_lastMsgReceived).inMilliseconds;
         if (elapsed > _watchdogTimeoutMs && !_intentionalClose) {
           _notifyError('heartbeat timeout');
           _cleanup();
@@ -319,6 +323,17 @@ class WSClient {
   }
 
   // ── Message handling with dedup ──
+  void _handleIncomingData(Object data) {
+    if (data is! String) {
+      _notifyError('收到不支持的二进制帧');
+      return;
+    }
+    _handleRaw(data);
+  }
+
+  @visibleForTesting
+  void handleIncomingDataForTest(Object data) => _handleIncomingData(data);
+
   void _handleRaw(String raw) {
     try {
       final json = jsonDecode(raw) as Map<String, dynamic>;
@@ -339,17 +354,29 @@ class WSClient {
   }
 
   void _routeMessage(ServerMessage msg) {
-    for (final cb in _onMessage) { cb(msg); }
+    for (final cb in _onMessage) {
+      cb(msg);
+    }
     switch (msg.type) {
       case 'server_info':
         _reconnectAttempt = 0;
         _notifyServerInfo();
         break;
-      case 'agent_list': if (msg.agents != null) _notifyAgentList(msg.agents!); break;
-      case 'registry_agents_list': if (msg.registryAgents != null) _notifyRegistryList(msg.registryAgents!); break;
-      case 'error': if (msg.text != null) _notifyError(msg.text!); break;
-      case 'target_offline': _notifyPhase(HostPhase.waitingHost); break;
-      default: break;
+      case 'agent_list':
+        if (msg.agents != null) _notifyAgentList(msg.agents!);
+        break;
+      case 'registry_agents_list':
+        if (msg.registryAgents != null)
+          _notifyRegistryList(msg.registryAgents!);
+        break;
+      case 'error':
+        if (msg.text != null) _notifyError(msg.text!);
+        break;
+      case 'target_offline':
+        _notifyPhase(HostPhase.waitingHost);
+        break;
+      default:
+        break;
     }
   }
 
@@ -382,8 +409,7 @@ class WSClient {
     return () => _onError.remove(cb);
   }
 
-  ListenerDisposer onRegistryList(
-      void Function(List<RegistryAgentInfo>) cb) {
+  ListenerDisposer onRegistryList(void Function(List<RegistryAgentInfo>) cb) {
     _onRegistryList.add(cb);
     return () => _onRegistryList.remove(cb);
   }
@@ -394,21 +420,45 @@ class WSClient {
   }
 
   void clearListeners() {
-    _onMessage.clear(); _onStateChange.clear(); _onServerInfo.clear();
-    _onAgentList.clear(); _onError.clear(); _onRegistryList.clear(); _onPhaseChange.clear();
+    _onMessage.clear();
+    _onStateChange.clear();
+    _onServerInfo.clear();
+    _onAgentList.clear();
+    _onError.clear();
+    _onRegistryList.clear();
+    _onPhaseChange.clear();
   }
 
   void _notifyStateChange(bool connected, String detail) {
-    for (final cb in _onStateChange) { cb(connected, detail); }
+    for (final cb in _onStateChange) {
+      cb(connected, detail);
+    }
   }
-  void _notifyServerInfo() { for (final cb in _onServerInfo) { cb(); } }
+
+  void _notifyServerInfo() {
+    for (final cb in _onServerInfo) {
+      cb();
+    }
+  }
+
   void _notifyAgentList(List<AgentInfo> agents) {
-    for (final cb in _onAgentList) { cb(agents); }
+    for (final cb in _onAgentList) {
+      cb(agents);
+    }
   }
-  void _notifyError(String text) { for (final cb in _onError) { cb(text); } }
+
+  void _notifyError(String text) {
+    for (final cb in _onError) {
+      cb(text);
+    }
+  }
+
   void _notifyRegistryList(List<RegistryAgentInfo> list) {
-    for (final cb in _onRegistryList) { cb(list); }
+    for (final cb in _onRegistryList) {
+      cb(list);
+    }
   }
+
   void _notifyPhase(HostPhase phase, {String? hostKey, String? url}) {
     final s = phase.name;
     final targetHostKey = hostKey ?? _currentHostKey;
@@ -429,11 +479,15 @@ class WSClient {
   }
 
   void _cleanup() {
-    _heartbeatTimer?.cancel(); _heartbeatTimer = null;
-    _watchdogTimer?.cancel(); _watchdogTimer = null;
-    _readyTimer?.cancel(); _readyTimer = null;
+    _heartbeatTimer?.cancel();
+    _heartbeatTimer = null;
+    _watchdogTimer?.cancel();
+    _watchdogTimer = null;
+    _readyTimer?.cancel();
+    _readyTimer = null;
     _ready = false;
-    _channel?.sink.close(); _channel = null;
+    _channel?.sink.close();
+    _channel = null;
   }
 
   void dispose() {

@@ -80,6 +80,7 @@ void main() {
   test('ChatProvider appends terminal deltas to one tool card', () {
     final provider = ChatProvider(WSClient());
     addTearDown(provider.dispose);
+    provider.state.sessionId = 'session-1';
 
     provider.receiveServerMessage(ServerMessage.fromJson({
       'type': 'agent_event',
@@ -106,6 +107,7 @@ void main() {
   test('100 incremental 1KB terminal chunks append to exactly 100KB', () {
     final provider = ChatProvider(WSClient());
     addTearDown(provider.dispose);
+    provider.state.sessionId = 'session-1';
 
     provider.receiveServerMessage(ServerMessage.fromJson({
       'type': 'agent_event',
