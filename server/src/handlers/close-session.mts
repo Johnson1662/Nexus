@@ -1,5 +1,5 @@
 import type { WebSocket } from "ws";
-import { SessionOwnerError, sessionManager } from "../session-manager.mjs";
+import { SessionOperationError, SessionOwnerError, sessionManager } from "../session-manager.mjs";
 
 export async function handleCloseSession(
   ws: WebSocket,
@@ -14,7 +14,9 @@ export async function handleCloseSession(
     try { ws.send(JSON.stringify({ type: "session_closed", sessionId })); } catch {}
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
-    const code = err instanceof SessionOwnerError ? err.code : "SESSION_ACCESS_DENIED";
+    const code = err instanceof SessionOwnerError || err instanceof SessionOperationError
+      ? err.code
+      : "SESSION_ACCESS_DENIED";
     try { ws.send(JSON.stringify({ type: "error", sessionId, code, text: msg })); } catch {}
   }
 }

@@ -36,7 +36,7 @@ import { handleAuth } from "./handlers/auth.mjs";
 
 import { SessionStatusWatcher, mergeSessionStatus } from "./discovery/session-watcher.mjs";
 import { handleListWorkspaceFiles, handleFileDiff, handleFileLog, handleFileRead } from "./handlers/workspace-files.mjs";
-import { SessionOwnerError, sessionManager } from "./session-manager.mjs";
+import { SessionOperationError, SessionOwnerError, sessionManager } from "./session-manager.mjs";
 import { setTitle as setSessionTitle } from "./session-titles.mjs";
 import { parseClientMessage, type JsonRecord } from "./protocol-validation.mjs";
 
@@ -511,6 +511,18 @@ export function handleIncomingConnection(transport: any, hostId: string = HOST_I
 
       case "close_session":
         console.log(`[server] handleCloseSession session="${sessionMsg.sessionId?.slice(0, 20)}"`);
+        try {
+          // Reserve the close before queueing the ACP await so a following
+          // input cannot claim the same session while closeSession is pending.
+          sessionManager.beginClose(sessionMsg.sessionId, transport);
+        } catch (err: unknown) {
+          const code = err instanceof SessionOwnerError || err instanceof SessionOperationError
+            ? err.code
+            : "SESSION_ACCESS_DENIED";
+          const message = err instanceof Error ? err.message : String(err);
+          transport.send(JSON.stringify({ type: "error", sessionId: sessionMsg.sessionId, code, text: message }));
+          break;
+        }
         sessionManager.enqueueWsOp(transport, () => handleCloseSession(transport, sessionMsg.sessionId));
         break;
 

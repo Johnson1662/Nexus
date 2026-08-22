@@ -47,9 +47,16 @@ export class SessionOwnerError extends Error {
 }
 
 export class SessionOperationError extends Error {
-  constructor(public readonly code: "SESSION_OPERATION_IN_PROGRESS", message: string) {
+  constructor(public readonly code: "SESSION_OPERATION_IN_PROGRESS" | "SESSION_CLOSING", message: string) {
     super(message);
     this.name = "SessionOperationError";
+  }
+}
+
+export class AcpDeadlineError extends Error {
+  constructor(public readonly operation: string) {
+    super(`${operation} timeout`);
+    this.name = "AcpDeadlineError";
   }
 }
 
@@ -82,7 +89,7 @@ export function withAcpDeadline<T>(
     const timer = setTimeout(() => {
       if (settled) return;
       settled = true;
-      reject(new Error(`${label} timeout`));
+      reject(new AcpDeadlineError(label));
     }, timeoutMs);
 
     void Promise.resolve()
@@ -228,6 +235,15 @@ export class SessionManager {
     return this.pendingOperations.has(ws);
   }
 
+  /** Reserve explicit close synchronously so a following input cannot race it. */
+  public beginClose(sessionId: string, ownerTransport: WebSocket): void {
+    const sess = this.assertOwner(sessionId, ownerTransport);
+    if (sess.closing) {
+      throw new SessionOperationError("SESSION_CLOSING", "session is already closing");
+    }
+    sess.closing = true;
+  }
+
   /** ── getOrCreate ─────────────────────────────────────────────
    *  Return the session matching `params.sessionId` if already alive,
    *  or spawn a new ACP agent process, initialise the ACP protocol,
@@ -269,6 +285,9 @@ export class SessionManager {
     if (targetSessionId) {
       const existing = this.sessions.get(targetSessionId);
       if (existing) {
+        if (existing.closing) {
+          throw new SessionOperationError("SESSION_CLOSING", "session is closing");
+        }
         if (existing.ownerTransport && existing.ownerTransport !== ws) {
           throw new SessionOwnerError("SESSION_NOT_OWNER", "session is owned by another connection");
         }
@@ -410,34 +429,39 @@ export class SessionManager {
     }
 
     // ── Process lifecycle listeners ────────────────────────────
+    const isCurrentProcess = () => {
+      const current = this.sessions.get(sessionId);
+      return Boolean(sessionId) && current === sess && sess.clientGeneration === callbackGeneration;
+    };
     proc.stderr.on("data", (chunk: Buffer) => {
       console.log(`[server] stderr: ${chunk.toString().slice(0, 200)}`);
     });
     proc.on("error", (err: Error) => {
+      if (!isCurrentProcess()) return;
       console.log(`[session-manager] ${agent} process error: ${err.message}`);
-      try {
-        sess.ws?.send(JSON.stringify({ type: "error", sessionId, code: "AGENT_SPAWN_FAILED", text: `Agent process failed: ${err.message}` }));
-      } catch { /* WS gone */ }
-      if (sessionId) {
-        const current = this.sessions.get(sessionId);
-        if (current === sess) {
-          this.killTerminalProcesses(sess);
-          this.cancelPendingPermissions(sess);
-          this.sessions.delete(sessionId);
-          this.sessionSeqCounter.delete(sessionId);
-        }
+      this.sendToOwner(sessionId, {
+        type: "error",
+        sessionId,
+        code: "AGENT_SPAWN_FAILED",
+        text: `Agent process failed: ${err.message}`,
+      });
+      const current = this.sessions.get(sessionId);
+      if (current === sess) {
+        this.killTerminalProcesses(sess);
+        this.cancelPendingPermissions(sess);
+        this.sessions.delete(sessionId);
+        this.sessionSeqCounter.delete(sessionId);
       }
     });
     proc.on("exit", (code) => {
+      if (!isCurrentProcess()) return;
       console.log(`[server] ${sessionId} process exited with code ${code}`);
-      if (sessionId) {
-        const s = this.sessions.get(sessionId);
-        if (s) {
-          this.killTerminalProcesses(s);
-          this.cancelPendingPermissions(s);
-          this.sessions.delete(sessionId);
-          this.sessionSeqCounter.delete(sessionId);
-        }
+      const s = this.sessions.get(sessionId);
+      if (s === sess) {
+        this.killTerminalProcesses(s);
+        this.cancelPendingPermissions(s);
+        this.sessions.delete(sessionId);
+        this.sessionSeqCounter.delete(sessionId);
       }
     });
 
@@ -537,6 +561,9 @@ export class SessionManager {
     ownerTransport: WebSocket,
   ): { run: () => Promise<void> } {
     const sess = this.assertOwner(sessionId, ownerTransport);
+    if (sess.closing) {
+      throw new SessionOperationError("SESSION_CLOSING", "session is closing");
+    }
     if (sess.turnActive) {
       throw new Error("session turn already active");
     }
@@ -553,7 +580,8 @@ export class SessionManager {
       run: () => this.runPromptTurn(sessionId, text, turnGeneration).catch((err: unknown) => {
         const msg = err instanceof Error ? err.message : String(err);
         console.log(`[session-manager] prompt turn error: ${msg}`);
-        if (this.finishTurn(sessionId, "error", turnGeneration)) {
+        if (this.invalidateClientAfterForcedTurnEnd(sessionId, turnGeneration) &&
+          this.finishTurn(sessionId, "error", turnGeneration)) {
           this.sendToOwner(sessionId, {
             type: "error",
             sessionId,
@@ -580,7 +608,8 @@ export class SessionManager {
       const ok = await this.restartSession(sessionId);
       if (!ok) {
         liveSess = this.sessions.get(sessionId);
-        if (liveSess && this.finishTurn(sessionId, "error", turnGeneration)) {
+        if (liveSess && this.invalidateClientAfterForcedTurnEnd(sessionId, turnGeneration) &&
+          this.finishTurn(sessionId, "error", turnGeneration)) {
           this.sendToOwner(sessionId, {
             type: "error",
             sessionId,
@@ -637,7 +666,8 @@ export class SessionManager {
             `[session-manager] model error detected: ${stderrText.slice(0, 200)}`,
           );
           liveSess.client.cancel(liveSess.sessionId!).catch(() => {});
-          if (this.finishTurn(sessionId, "error", turnGeneration)) {
+          if (this.invalidateClientAfterForcedTurnEnd(sessionId, turnGeneration) &&
+            this.finishTurn(sessionId, "error", turnGeneration)) {
             this.sendToOwner(sessionId, {
               type: "error",
               sessionId,
@@ -662,7 +692,8 @@ export class SessionManager {
           `[session-manager] prompt INACTIVITY TIMEOUT (5min) after ${Date.now() - startTime}ms for ${sessionId}`,
         );
         liveSess.client.cancel(liveSess.sessionId!).catch(() => {});
-        if (this.finishTurn(sessionId, "timeout", turnGeneration)) {
+        if (this.invalidateClientAfterForcedTurnEnd(sessionId, turnGeneration) &&
+          this.finishTurn(sessionId, "timeout", turnGeneration)) {
           this.sendToOwner(sessionId, {
             type: "error",
             sessionId,
@@ -700,7 +731,8 @@ export class SessionManager {
       console.log(
         `[session-manager] prompt error after ${Math.floor((Date.now() - startTime) / 1_000)}s: ${msg}`,
       );
-      if (this.finishTurn(sessionId, "error", turnGeneration)) {
+      if (this.invalidateClientAfterForcedTurnEnd(sessionId, turnGeneration) &&
+        this.finishTurn(sessionId, "error", turnGeneration)) {
         const displayMsg =
           msg.includes("closed") || msg.includes("abort")
             ? "[Session expired] Send a message to auto-restart."
@@ -811,6 +843,7 @@ export class SessionManager {
    */
   async close(sessionId: string, ownerTransport: WebSocket): Promise<void> {
     const sess = this.assertOwner(sessionId, ownerTransport);
+    sess.closing = true;
     // Invalidate all ACP callbacks before awaiting closeSession. A recovery
     // already in flight must not commit a replacement after explicit close.
     sess.clientGeneration += 1;
@@ -861,9 +894,9 @@ export class SessionManager {
       console.log(`[session-manager] cancel watchdog releasing turn for ${sessionId.slice(0, 20)}`);
       // Invalidate callbacks from the hung ACP prompt immediately. The next
       // prompt will restart this client before sending new input.
-      current.clientGeneration += 1;
-      current.requiresClientRestart = true;
-      this.finishTurn(sessionId, "cancelled", turnGeneration);
+      if (this.invalidateClientAfterForcedTurnEnd(sessionId, turnGeneration)) {
+        this.finishTurn(sessionId, "cancelled", turnGeneration);
+      }
     }, this.cancelWatchdogMs);
   }
 
@@ -1118,6 +1151,15 @@ export class SessionManager {
 
   private isCurrentTurn(sess: SessionState, turnGeneration: number): boolean {
     return sess.turnActive && sess.turnGeneration === turnGeneration;
+  }
+
+  /** Invalidate the ACP client before forcibly ending a live turn. */
+  private invalidateClientAfterForcedTurnEnd(sessionId: string, turnGeneration: number): boolean {
+    const sess = this.sessions.get(sessionId);
+    if (!sess || !this.isCurrentTurn(sess, turnGeneration)) return false;
+    sess.clientGeneration += 1;
+    sess.requiresClientRestart = true;
+    return true;
   }
 
   private finishTurn(sessionId: string, reason?: string, turnGeneration?: number): boolean {
@@ -1498,10 +1540,14 @@ export class SessionManager {
       console.log(`[server] stderr: ${chunk.toString().slice(0, 200)}`);
     });
     proc.on("error", (err: Error) => {
+      if (!isCurrentClient()) return;
       console.log(`[session-manager] restarted ${sess.agent} process error: ${err.message}`);
-      try {
-        sess.ws?.send(JSON.stringify({ type: "error", sessionId, code: "AGENT_SPAWN_FAILED", text: `Agent restart failed: ${err.message}` }));
-      } catch { /* WS gone */ }
+      this.sendToOwner(sessionId, {
+        type: "error",
+        sessionId,
+        code: "AGENT_SPAWN_FAILED",
+        text: `Agent restart failed: ${err.message}`,
+      });
     });
     proc.on("exit", (code) => {
       console.log(
@@ -1533,7 +1579,8 @@ export class SessionManager {
           this.acpSessionOperationTimeoutMs,
         );
         acpSessionId = reloadSessionId;
-      } catch {
+      } catch (error: unknown) {
+        if (error instanceof AcpDeadlineError) throw error;
         console.log(
           `[session-manager] loadSession failed, creating new session`,
         );

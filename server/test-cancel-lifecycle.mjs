@@ -206,6 +206,23 @@ const sessions = manager.getAllSessions();
   assert(resolved?.outcome?.outcome === "cancelled", "close cancels pending permission");
 }
 
+// Close is reserved synchronously, so input cannot claim the session while
+// the closeSession ACP request is still awaiting.
+{
+  const closeGateManager = new SessionManager();
+  const ws = transport();
+  closeGateManager.getAllSessions().set("close-gate-session", fakeSession("close-gate-session", ws));
+  closeGateManager.beginClose("close-gate-session", ws);
+  let closingRejected = false;
+  try {
+    closeGateManager.beginPrompt("close-gate-session", "too-late", ws);
+  } catch (error) {
+    closingRejected = error?.code === "SESSION_CLOSING";
+  }
+  assert(closingRejected, "input is rejected after close is reserved");
+  closeGateManager.stop();
+}
+
 // Explicit close must not wait forever on a hung ACP closeSession request.
 {
   const closeTimeoutManager = new SessionManager(undefined, { closeSessionTimeoutMs: 10 });

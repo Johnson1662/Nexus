@@ -63,6 +63,8 @@ export interface SessionState {
   clientGeneration: number;
   /** Force the next prompt to recover the ACP client before issuing input. */
   requiresClientRestart?: boolean;
+  /** Explicit close has started; reject new prompts until the session is removed. */
+  closing?: boolean;
   /** Shared recovery operation for concurrent prompts on this session. */
   restartInFlight?: Promise<boolean>;
   /** Optional callback to reset the prompt inactivity timeout on new output/tool activity */
