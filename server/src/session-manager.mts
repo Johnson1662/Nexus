@@ -16,6 +16,8 @@ import { recordToolCallIds } from "./tool-call-map.mjs";
 import { extractModelList, setCachedModelList, invalidateModelListCache } from "./model-list.mjs";
 import {
   boundAgentEventPayload,
+  countToolContentBytes,
+  MAX_TOOL_CONTENT_BYTES,
   MAX_REPLAY_BYTES_PER_SESSION,
 } from "./payload-budget.mjs";
 
@@ -267,6 +269,7 @@ export class SessionManager {
       terminals: new Map(),
       restartCount: 0,
       toolCallIdMap: new Map(),
+      toolContentBytesByCallId: new Map(),
       turnActive: false,
       lastActivity: Date.now(),
       orphanedAt: null,
@@ -289,9 +292,10 @@ export class SessionManager {
         };
         let wsPayload: object;
         try {
-          wsPayload = this.bufferAgentEvent(sessionId, eventPayload) ?? eventPayload;
+          wsPayload = this.bufferAgentEvent(sessionId, eventPayload) ??
+            boundAgentEventPayload(eventPayload).value;
         } catch { /* buffer full — discard */
-          wsPayload = eventPayload;
+          wsPayload = boundAgentEventPayload(eventPayload).value;
         }
         try {
           // orphan（s 存在但 ownerTransport 为 null）时事件已缓冲，等 reclaim 后 sync 补齐，
@@ -1002,15 +1006,42 @@ export class SessionManager {
     // Clone and enforce both per-field and per-entry UTF-8 budgets before the
     // entry is retained. A single oversized event must not bypass the total
     // replay cap merely because the buffer keeps one newest entry.
-    const bounded = boundAgentEventPayload({
+    const inputPayload: Record<string, unknown> = {
       ...(eventPayload as Record<string, unknown>),
       messageId,
-    });
+    };
+    const event = inputPayload.event;
+    const toolCallId =
+      event && typeof event === "object" && !Array.isArray(event) &&
+      typeof (event as Record<string, unknown>).toolCallId === "string"
+        ? (event as Record<string, unknown>).toolCallId as string
+        : undefined;
+    // Keep compatibility with lightweight test/integration session fixtures
+    // created before cumulative tool accounting was added.
+    const toolContentBytesByCallId = sess.toolContentBytesByCallId ??
+      (sess.toolContentBytesByCallId = new Map());
+    const usedToolBytes = toolCallId
+      ? toolContentBytesByCallId.get(toolCallId) ?? 0
+      : 0;
+    const bounded = boundAgentEventPayload(
+      inputPayload,
+      toolCallId
+        ? { toolContentByteLimit: Math.max(0, MAX_TOOL_CONTENT_BYTES - usedToolBytes) }
+        : {},
+    );
+    if (toolCallId) {
+      const retainedToolBytes = countToolContentBytes(bounded.value);
+      toolContentBytesByCallId.set(
+        toolCallId,
+        Math.min(MAX_TOOL_CONTENT_BYTES, usedToolBytes + retainedToolBytes),
+      );
+      this.trimToolContentBytes(sess);
+    }
     const buffered = bounded.value;
-    const { payload, payloadBytes } = bounded;
+    const { payload: serializedPayload, payloadBytes } = bounded;
     sess.messageBuffer.push({
       messageId,
-      payload,
+      payload: serializedPayload,
       payloadBytes,
       timestamp: Date.now(),
     });
@@ -1107,6 +1138,15 @@ export class SessionManager {
     const toRemove = entries.slice(0, entries.length - MAX_TOOLCALL_IDS);
     for (const [key] of toRemove) {
       sess.toolCallIdMap.delete(key);
+    }
+  }
+
+  /** Keep cumulative tool-content accounting bounded alongside tool IDs. */
+  private trimToolContentBytes(sess: SessionState): void {
+    if (sess.toolContentBytesByCallId.size <= MAX_TOOLCALL_IDS) return;
+    const entries = [...sess.toolContentBytesByCallId.keys()];
+    for (const key of entries.slice(0, entries.length - MAX_TOOLCALL_IDS)) {
+      sess.toolContentBytesByCallId.delete(key);
     }
   }
 
@@ -1223,9 +1263,10 @@ export class SessionManager {
         };
         let wsPayload: object;
         try {
-          wsPayload = this.bufferAgentEvent(sessionId, eventPayload) ?? eventPayload;
+          wsPayload = this.bufferAgentEvent(sessionId, eventPayload) ??
+            boundAgentEventPayload(eventPayload).value;
         } catch { /* ok */
-          wsPayload = eventPayload;
+          wsPayload = boundAgentEventPayload(eventPayload).value;
         }
         try {
           const s = this.sessions.get(sessionId);

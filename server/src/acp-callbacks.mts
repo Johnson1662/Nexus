@@ -6,6 +6,7 @@ import { StringDecoder } from "node:string_decoder";
 import kill from "tree-kill";
 import type { WebSocket } from "ws";
 import { sessionManager } from "./session-manager.mjs";
+import { boundAgentEventPayload } from "./payload-budget.mjs";
 import type { TerminalState } from "./acp/types.mjs";
 import type {
   ReadTextFileRequest,
@@ -124,7 +125,8 @@ export function createAcpCallbacks(config: AcpCallbacksConfig): {
         },
       };
       const wss = getSessionWs();
-      const wsPayload = sessionManager.bufferAgentEvent(getSessionId(), eventPayload) ?? eventPayload;
+      const wsPayload = sessionManager.bufferAgentEvent(getSessionId(), eventPayload) ??
+        boundAgentEventPayload(eventPayload).value;
       if (wss) wss.send(JSON.stringify(wsPayload));
     } catch {}
   }

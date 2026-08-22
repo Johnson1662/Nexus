@@ -30,6 +30,12 @@ export function truncateUtf8(value: string, maxBytes: number): Utf8Truncation {
   return { text: accepted.join(""), originalBytes, retainedBytes, truncated: true };
 }
 
+type JsonRecord = Record<string, unknown>;
+
+function isRecord(value: unknown): value is JsonRecord {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 interface BoundedValue {
   value: unknown;
   truncated: boolean;
@@ -37,6 +43,11 @@ interface BoundedValue {
   retainedBytes: number;
 }
 
+/**
+ * Recursively bounds strings while preserving the surrounding JSON shape.
+ * The caller still has to enforce the serialized envelope budget because a
+ * payload may contain many individually-small fields.
+ */
 function boundValue(value: unknown, maxStringBytes: number): BoundedValue {
   if (typeof value === "string") {
     const result = truncateUtf8(value, maxStringBytes);
@@ -60,11 +71,11 @@ function boundValue(value: unknown, maxStringBytes: number): BoundedValue {
     });
     return { value: bounded, truncated, originalBytes, retainedBytes };
   }
-  if (typeof value !== "object" || value === null) {
+  if (!isRecord(value)) {
     return { value, truncated: false, originalBytes: 0, retainedBytes: 0 };
   }
 
-  const bounded: Record<string, unknown> = {};
+  const bounded: JsonRecord = {};
   let truncated = false;
   let originalBytes = 0;
   let retainedBytes = 0;
@@ -83,82 +94,309 @@ function boundValue(value: unknown, maxStringBytes: number): BoundedValue {
   return { value: bounded, truncated, originalBytes, retainedBytes };
 }
 
+function serialize(value: JsonRecord): { payload: string; payloadBytes: number } {
+  const payload = JSON.stringify(value) ?? "{}";
+  return { payload, payloadBytes: Buffer.byteLength(payload, "utf8") };
+}
+
 export interface BoundedPayload {
-  value: Record<string, unknown>;
+  value: JsonRecord;
   payload: string;
   payloadBytes: number;
   truncated: boolean;
 }
 
+function minimalEvent(event: unknown): JsonRecord {
+  if (!isRecord(event)) {
+    return { sessionUpdate: "content", truncated: true };
+  }
+
+  const compact: JsonRecord = {};
+  for (const key of [
+    "sessionUpdate",
+    "toolCallId",
+    "status",
+    "path",
+    "terminalId",
+    "terminalStatus",
+  ]) {
+    const value = event[key];
+    if (typeof value === "string") compact[key] = value;
+  }
+  if (Array.isArray(event.toolCallContent)) {
+    compact.toolCallContent = event.toolCallContent.map((block) => {
+      if (!isRecord(block)) return { type: "content", content: { type: "text", text: "" } };
+      const boundedBlock: JsonRecord = {};
+      if (typeof block.type === "string") boundedBlock.type = block.type;
+      if (isRecord(block.content)) {
+        const content: JsonRecord = {};
+        for (const key of ["type", "path", "terminalId", "oldText", "newText", "text"]) {
+          if (typeof block.content[key] === "string") content[key] = block.content[key];
+        }
+        boundedBlock.content = content;
+      } else {
+        boundedBlock.content = { type: "text", text: "" };
+      }
+      return boundedBlock;
+    });
+  }
+  compact.truncated = true;
+  return compact;
+}
+
+function minimalPayload(payload: JsonRecord): JsonRecord {
+  const compact: JsonRecord = {};
+  for (const key of ["type", "sessionId", "messageId"]) {
+    if (typeof payload[key] === "string") compact[key] = payload[key];
+  }
+  compact.event = minimalEvent(payload.event);
+  return compact;
+}
+
+function boundWithShape(
+  payload: JsonRecord,
+  maxPayloadBytes: number,
+  maxStringBytes: number,
+  fallback: () => JsonRecord,
+): BoundedPayload {
+  const initial = boundValue(payload, maxStringBytes);
+  const initialValue = initial.value as JsonRecord;
+  const initialSerialized = serialize(initialValue);
+  if (initialSerialized.payloadBytes <= maxPayloadBytes) {
+    return {
+      value: initialValue,
+      payload: initialSerialized.payload,
+      payloadBytes: initialSerialized.payloadBytes,
+      truncated: initial.truncated,
+    };
+  }
+
+  // Find the largest per-string limit that fits the whole JSON envelope. This
+  // keeps structured ACP blocks intact while making room for their metadata.
+  let low = 0;
+  let high = maxStringBytes;
+  let best: BoundedPayload | undefined;
+  for (let attempt = 0; attempt < 22 && low <= high; attempt += 1) {
+    const limit = Math.floor((low + high) / 2);
+    const candidate = boundValue(payload, limit);
+    const candidateValue = candidate.value as JsonRecord;
+    const candidateSerialized = serialize(candidateValue);
+    if (candidateSerialized.payloadBytes <= maxPayloadBytes) {
+      best = {
+        value: candidateValue,
+        payload: candidateSerialized.payload,
+        payloadBytes: candidateSerialized.payloadBytes,
+        truncated: true,
+      };
+      low = limit + 1;
+    } else {
+      high = limit - 1;
+    }
+  }
+  if (best) return best;
+
+  // A payload can still be too large at a zero string limit when it contains
+  // an unexpectedly large array/object graph. Preserve the event object and
+  // its identity fields instead of converting it to an opaque JSON string.
+  const compact = fallback();
+  const compactSerialized = serialize(compact);
+  return {
+    value: compact,
+    payload: compactSerialized.payload,
+    payloadBytes: compactSerialized.payloadBytes,
+    truncated: true,
+  };
+}
+
 /**
- * Bound JSON payloads while retaining their shape for normal client renders.
- * If many fields together still exceed the envelope budget, fall back to a
- * compact, explicitly marked representation instead of keeping an oversized
- * replay entry alive.
+ * Bound JSON payloads without replacing a structured event with a string.
+ * Agent/file callers use the more specific functions below.
  */
 export function boundJsonPayload(
-  payload: Record<string, unknown>,
+  payload: JsonRecord,
   maxPayloadBytes: number,
   maxStringBytes: number,
 ): BoundedPayload {
-  const originalPayload = JSON.stringify(payload) ?? "";
-  const originalPayloadBytes = Buffer.byteLength(originalPayload, "utf8");
-  const originalEvent = payload.event;
-  const originalEventText = JSON.stringify(originalEvent) ?? String(originalEvent ?? "");
-  const bounded = boundValue(payload, maxStringBytes);
-  let value = bounded.value as Record<string, unknown>;
-  let serialized = JSON.stringify(value);
-  let payloadBytes = Buffer.byteLength(serialized, "utf8");
-  if (payloadBytes <= maxPayloadBytes) {
-    return { value, payload: serialized, payloadBytes, truncated: bounded.truncated };
+  return boundWithShape(payload, maxPayloadBytes, maxStringBytes, () => minimalPayload(payload));
+}
+
+const TOOL_TEXT_KEYS = new Set(["content", "text", "oldText", "newText"]);
+
+interface ToolContentLimit {
+  value: unknown;
+  truncated: boolean;
+  originalBytes: number;
+  retainedBytes: number;
+}
+
+/** Limit only text-bearing fields inside a tool-call event. */
+function limitToolContentFields(value: unknown, maxBytes: number, active = false): ToolContentLimit {
+  if (typeof value === "string") {
+    return { value, truncated: false, originalBytes: 0, retainedBytes: 0 };
+  }
+  if (Array.isArray(value)) {
+    let remaining = maxBytes;
+    let truncated = false;
+    let originalBytes = 0;
+    let retainedBytes = 0;
+    const bounded = value.map((entry) => {
+      const result = limitToolContentFields(entry, remaining, active);
+      remaining -= result.retainedBytes;
+      truncated ||= result.truncated;
+      originalBytes += result.originalBytes;
+      retainedBytes += result.retainedBytes;
+      return result.value;
+    });
+    return { value: bounded, truncated, originalBytes, retainedBytes };
+  }
+  if (!isRecord(value)) return { value, truncated: false, originalBytes: 0, retainedBytes: 0 };
+  // Terminal output has its own 256KB per-terminal limit. Do not consume the
+  // cumulative ACP tool-card budget with repeated deltas from that terminal.
+  if (value.type === "terminal") {
+    return { value, truncated: false, originalBytes: 0, retainedBytes: 0 };
   }
 
-  const originalBytes = originalPayloadBytes;
-  const eventType =
-    typeof value.event === "object" && value.event !== null && !Array.isArray(value.event) &&
-    typeof (value.event as Record<string, unknown>).sessionUpdate === "string"
-      ? (value.event as Record<string, unknown>).sessionUpdate
-      : "content";
-  let contentLimit = maxPayloadBytes;
-  let compact: Record<string, unknown>;
-  for (let attempt = 0; attempt < 4; attempt += 1) {
-    const content = truncateUtf8(originalEventText, Math.max(0, contentLimit));
-    compact = {
-      type: value.type,
-      sessionId: value.sessionId,
-      messageId: value.messageId,
+  const bounded: JsonRecord = {};
+  let remaining = maxBytes;
+  let truncated = false;
+  let originalBytes = 0;
+  let retainedBytes = 0;
+  for (const [key, child] of Object.entries(value)) {
+    if (active && TOOL_TEXT_KEYS.has(key) && typeof child === "string") {
+      const result = truncateUtf8(child, remaining);
+      bounded[key] = result.text;
+      remaining -= result.retainedBytes;
+      truncated ||= result.truncated;
+      originalBytes += result.originalBytes;
+      retainedBytes += result.retainedBytes;
+      continue;
+    }
+    const result = limitToolContentFields(child, remaining, active || key === "toolCallContent");
+    bounded[key] = result.value;
+    remaining -= result.retainedBytes;
+    truncated ||= result.truncated;
+    originalBytes += result.originalBytes;
+    retainedBytes += result.retainedBytes;
+  }
+  return { value: bounded, truncated, originalBytes, retainedBytes };
+}
+
+function toolContentBytes(value: unknown, active = false): number {
+  if (typeof value === "string") return 0;
+  if (Array.isArray(value)) return value.reduce((sum, child) => sum + toolContentBytes(child, active), 0);
+  if (!isRecord(value)) return 0;
+  if (value.type === "terminal") return 0;
+
+  let total = 0;
+  for (const [key, child] of Object.entries(value)) {
+    if (active && TOOL_TEXT_KEYS.has(key) && typeof child === "string") {
+      total += Buffer.byteLength(child, "utf8");
+    } else {
+      total += toolContentBytes(child, active || key === "toolCallContent");
+    }
+  }
+  return total;
+}
+
+export interface AgentEventBudgetOptions {
+  /** Remaining cumulative text budget for this tool call, if applicable. */
+  toolContentByteLimit?: number;
+}
+
+export function countToolContentBytes(payload: JsonRecord): number {
+  const event = payload.event;
+  if (!isRecord(event) || event.sessionUpdate !== "tool_call_update") return 0;
+  return toolContentBytes(event, true);
+}
+
+export function boundAgentEventPayload(
+  payload: JsonRecord,
+  options: AgentEventBudgetOptions = {},
+): BoundedPayload {
+  let prepared = payload;
+  const event = payload.event;
+  if (options.toolContentByteLimit !== undefined && isRecord(event) && event.sessionUpdate === "tool_call_update") {
+    const limited = limitToolContentFields(event, Math.max(0, options.toolContentByteLimit), true);
+    prepared = {
+      ...payload,
       event: {
-        sessionUpdate: eventType,
-        content: content.text,
-        truncated: true,
-        originalBytes,
-        retainedBytes: content.retainedBytes,
+        ...limited.value as JsonRecord,
+        ...(limited.truncated
+          ? { truncated: true, originalBytes: limited.originalBytes, retainedBytes: limited.retainedBytes }
+          : {}),
       },
     };
-    serialized = JSON.stringify(compact);
-    payloadBytes = Buffer.byteLength(serialized, "utf8");
-    if (payloadBytes <= maxPayloadBytes) {
-      return { value: compact, payload: serialized, payloadBytes, truncated: true };
-    }
-    contentLimit = Math.max(0, contentLimit - (payloadBytes - maxPayloadBytes) - 1024);
   }
+  return boundWithShape(
+    prepared,
+    MAX_AGENT_EVENT_BYTES,
+    MAX_TOOL_CONTENT_BYTES,
+    () => minimalPayload(prepared),
+  );
+}
 
-  // The envelope identifiers are bounded by the WS schema in normal use. The
-  // final fallback remains valid JSON even if an unexpected identifier is huge.
-  compact = {
-    type: "error",
-    code: "PAYLOAD_TRUNCATED",
-    text: "Payload exceeded the event byte budget",
+function boundFilePayload(payload: JsonRecord, key: "content" | "diff"): BoundedPayload {
+  const originalText = typeof payload[key] === "string" ? payload[key] as string : "";
+  const basePayload = { ...payload };
+  delete basePayload[key];
+  const boundedBase = boundValue(basePayload, 64 * 1024);
+  const base = boundedBase.value as JsonRecord;
+
+  const build = (maxTextBytes: number): BoundedPayload => {
+    const text = truncateUtf8(originalText, maxTextBytes);
+    const value: JsonRecord = {
+      ...base,
+      [key]: text.text,
+      ...(text.truncated || boundedBase.truncated
+        ? {
+            truncated: true,
+            originalBytes: text.originalBytes,
+            retainedBytes: text.retainedBytes,
+          }
+        : {}),
+    };
+    const serialized = serialize(value);
+    return {
+      value,
+      payload: serialized.payload,
+      payloadBytes: serialized.payloadBytes,
+      truncated: text.truncated || boundedBase.truncated,
+    };
   };
-  serialized = JSON.stringify(compact);
-  payloadBytes = Buffer.byteLength(serialized, "utf8");
-  return { value: compact, payload: serialized, payloadBytes, truncated: true };
+
+  const initial = build(MAX_FILE_EVENT_BYTES);
+  if (initial.payloadBytes <= MAX_FILE_EVENT_BYTES) return initial;
+
+  let low = 0;
+  let high = MAX_FILE_EVENT_BYTES;
+  let best: BoundedPayload | undefined;
+  for (let attempt = 0; attempt < 22 && low <= high; attempt += 1) {
+    const limit = Math.floor((low + high) / 2);
+    const candidate = build(limit);
+    if (candidate.payloadBytes <= MAX_FILE_EVENT_BYTES) {
+      best = { ...candidate, truncated: true };
+      low = limit + 1;
+    } else {
+      high = limit - 1;
+    }
+  }
+  if (best) return best;
+
+  // The normal path always fits because only file text is large. Keep the
+  // required top-level fields even for an adversarially-large path/metadata.
+  const compact: JsonRecord = {
+    type: payload.type,
+    path: typeof payload.path === "string" ? truncateUtf8(payload.path, 1024).text : "",
+    [key]: "",
+    truncated: true,
+    originalBytes: Buffer.byteLength(originalText, "utf8"),
+    retainedBytes: 0,
+  };
+  const serialized = serialize(compact);
+  return { value: compact, payload: serialized.payload, payloadBytes: serialized.payloadBytes, truncated: true };
 }
 
-export function boundAgentEventPayload(payload: Record<string, unknown>): BoundedPayload {
-  return boundJsonPayload(payload, MAX_AGENT_EVENT_BYTES, MAX_TOOL_CONTENT_BYTES);
-}
-
-export function boundFileEventPayload(payload: Record<string, unknown>): BoundedPayload {
-  return boundJsonPayload(payload, MAX_FILE_EVENT_BYTES, MAX_FILE_EVENT_BYTES);
+export function boundFileEventPayload(payload: JsonRecord): BoundedPayload {
+  const key = payload.type === "file_diff" ? "diff" : "content";
+  return boundFilePayload(payload, key);
 }

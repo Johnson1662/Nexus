@@ -47,6 +47,8 @@ export interface SessionState {
   restartCount: number;
   /** Maps bridge-generated tool call IDs → agent's original toolCallId */
   toolCallIdMap: Map<string, string>;
+  /** Cumulative UTF-8 text retained for each tool-call card. */
+  toolContentBytesByCallId: Map<string, number>;
   /** Latest original toolCallId from agent, used by terminal mapping */
   lastToolCallId?: string;
   /** Whether this session currently has an active turn in progress */
