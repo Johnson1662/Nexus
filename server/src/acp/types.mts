@@ -59,6 +59,12 @@ export interface SessionState {
   turnCleanup?: () => void;
   /** Watchdog that releases a turn when ACP cancel never resolves prompt(). */
   cancelWatchdog?: ReturnType<typeof setTimeout>;
+  /** Generation of the ACP client whose callbacks are currently valid. */
+  clientGeneration: number;
+  /** Force the next prompt to recover the ACP client before issuing input. */
+  requiresClientRestart?: boolean;
+  /** Shared recovery operation for concurrent prompts on this session. */
+  restartInFlight?: Promise<boolean>;
   /** Optional callback to reset the prompt inactivity timeout on new output/tool activity */
   resetTimeout?: () => void;
   /** Timestamp of last session activity (input, output, or interaction) */

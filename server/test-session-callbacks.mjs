@@ -142,6 +142,14 @@ async function main() {
       update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "reclaimed" } },
     });
     assert(reclaimed.sent.length === 1, "reclaimed owner receives subsequent events");
+
+    const sentBeforeStaleCallback = reclaimed.sent.length;
+    session.clientGeneration += 1;
+    await callbacks.onSessionUpdate({
+      sessionId,
+      update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "stale client" } },
+    });
+    assert(reclaimed.sent.length === sentBeforeStaleCallback, "stale ACP client callback cannot send a late event");
     await manager.close(sessionId, reclaimed);
   } finally {
     if (previousGlobal) globalSessions.set(sessionId, previousGlobal);

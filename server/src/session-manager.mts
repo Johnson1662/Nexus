@@ -45,6 +45,13 @@ export class SessionOwnerError extends Error {
   }
 }
 
+export class SessionOperationError extends Error {
+  constructor(public readonly code: "SESSION_OPERATION_IN_PROGRESS", message: string) {
+    super(message);
+    this.name = "SessionOperationError";
+  }
+}
+
 function resolveAgentLaunch(agent: string): { cmd: string; args: string[]; env: Record<string, string> } {
   const resolved = resolveAgentInfo(agent);
   if (!resolved || !resolved.cmd || !Array.isArray(resolved.args) || resolved.args.some(arg => typeof arg !== "string")) {
@@ -164,6 +171,7 @@ export class SessionManager {
   private sessions = new Map<string, SessionState>();
   private sessionSeqCounter = new Map<string, number>();
   private wsOpQueues = new Map<import("ws").WebSocket, Promise<unknown>>();
+  private pendingOperations = new Map<import("ws").WebSocket, Promise<SessionState>>();
   private pendingCreates = new Map<import("ws").WebSocket, Promise<SessionState>>();
   private transportIds = new WeakMap<object, string>();
   private idleCleanupTimer: ReturnType<typeof setInterval> | null = null;
@@ -213,7 +221,7 @@ export class SessionManager {
 
   /** 该 WS 是否已有进行中的 Session 创建任务（用于 start 准入，拒绝重复 Start）。 */
   public hasPendingCreate(ws: import("ws").WebSocket): boolean {
-    return this.pendingCreates.has(ws);
+    return this.pendingOperations.has(ws);
   }
 
   /** ── getOrCreate ─────────────────────────────────────────────
@@ -222,14 +230,24 @@ export class SessionManager {
    *  and register the session in the pool.
    */
   async getOrCreate(ws: WebSocket, params: CreateSessionParams): Promise<SessionState> {
-    // server 层已在 start 准入阶段拒绝重复请求；这里保留共享 in-flight 作为其他调用者的防御。
-    const inFlight = this.pendingCreates.get(ws);
-    if (inFlight) return inFlight;
+    const mode = params.mode ?? "create";
+    const inFlight = this.pendingOperations.get(ws);
+    if (inFlight) {
+      // Duplicate starts may share the same create promise, but a load/resume
+      // must never receive the session created by a different operation.
+      if (mode === "create" && this.pendingCreates.get(ws) === inFlight) return inFlight;
+      throw new SessionOperationError(
+        "SESSION_OPERATION_IN_PROGRESS",
+        "another session operation is already in progress",
+      );
+    }
     const pending = this.getOrCreateInternal(ws, params);
-    this.pendingCreates.set(ws, pending);
+    this.pendingOperations.set(ws, pending);
+    if (mode === "create") this.pendingCreates.set(ws, pending);
     try {
       return await pending;
     } finally {
+      if (this.pendingOperations.get(ws) === pending) this.pendingOperations.delete(ws);
       if (this.pendingCreates.get(ws) === pending) this.pendingCreates.delete(ws);
     }
   }
@@ -327,6 +345,7 @@ export class SessionManager {
       toolContentBytesByCallId: new Map(),
       turnActive: false,
       turnGeneration: 0,
+      clientGeneration: 0,
       lastActivity: Date.now(),
       orphanedAt: null,
       messageBuffer: [],
@@ -334,9 +353,12 @@ export class SessionManager {
     };
 
     // ── Build ACP callbacks ────────────────────────────────────
+    const callbackGeneration = sess.clientGeneration + 1;
+    sess.clientGeneration = callbackGeneration;
     const callbacks: AcpClientCallbacks = {
       onSessionUpdate: async (update) => {
         const s = this.sessions.get(sessionId);
+        if (s && s.clientGeneration !== callbackGeneration) return;
         if (s) {
           recordToolCallIds(s, update.update);
           this.updateSessionActivity(sessionId);
@@ -366,6 +388,10 @@ export class SessionManager {
         getSessionId: () => sessionId,
         cwd: resolvedCwd,
         toolCallIdMap: sess.toolCallIdMap,
+        isCurrentClient: () => {
+          const current = this.sessions.get(sessionId);
+          return !current || current.clientGeneration === callbackGeneration;
+        },
       }),
     };
 
@@ -544,7 +570,7 @@ export class SessionManager {
     if (!liveSess || !liveSess.sessionId || !liveSess.client || !this.isCurrentTurn(liveSess, turnGeneration)) {
       return;
     }
-    if (!liveSess.client.connected) {
+    if (!liveSess.client.connected || liveSess.requiresClientRestart) {
       const ok = await this.restartSession(sessionId);
       if (!ok) {
         liveSess = this.sessions.get(sessionId);
@@ -809,6 +835,10 @@ export class SessionManager {
       const current = this.sessions.get(sessionId);
       if (!current || !current.turnActive || current.turnGeneration !== turnGeneration) return;
       console.log(`[session-manager] cancel watchdog releasing turn for ${sessionId.slice(0, 20)}`);
+      // Invalidate callbacks from the hung ACP prompt immediately. The next
+      // prompt will restart this client before sending new input.
+      current.clientGeneration += 1;
+      current.requiresClientRestart = true;
       this.finishTurn(sessionId, "cancelled", turnGeneration);
     }, this.cancelWatchdogMs);
   }
@@ -1193,6 +1223,7 @@ export class SessionManager {
       this.idleCleanupTimer = null;
     }
     this.wsOpQueues.clear();
+    this.pendingOperations.clear();
     this.pendingCreates.clear();
     for (const sess of this.sessions.values()) {
       this.cancelPendingPermissions(sess);
@@ -1331,6 +1362,18 @@ export class SessionManager {
     const sess = this.sessions.get(sessionId);
     if (!sess) return false;
 
+    if (sess.restartInFlight) return sess.restartInFlight;
+    const pending = this.restartSessionInternal(sessionId, sess);
+    sess.restartInFlight = pending;
+    try {
+      return await pending;
+    } finally {
+      if (sess.restartInFlight === pending) delete sess.restartInFlight;
+    }
+  }
+
+  private async restartSessionInternal(sessionId: string, sess: SessionState): Promise<boolean> {
+
     sess.restartCount = (sess.restartCount || 0) + 1;
     if (sess.restartCount > 2) {
       console.log(
@@ -1371,11 +1414,14 @@ export class SessionManager {
 
     let suppressingReplay = false;
     const wsRef = sess.ws;
+    const callbackGeneration = sess.clientGeneration + 1;
+    sess.clientGeneration = callbackGeneration;
 
     const callbacks: AcpClientCallbacks = {
       onSessionUpdate: async (update) => {
         if (suppressingReplay) return;
         const s = this.sessions.get(sessionId);
+        if (s && s.clientGeneration !== callbackGeneration) return;
         if (s) {
           recordToolCallIds(s, update.update);
           this.updateSessionActivity(sessionId);
@@ -1403,6 +1449,10 @@ export class SessionManager {
         getSessionId: () => sessionId,
         cwd,
         toolCallIdMap: sess.toolCallIdMap,
+        isCurrentClient: () => {
+          const current = this.sessions.get(sessionId);
+          return !current || current.clientGeneration === callbackGeneration;
+        },
       }),
     };
 
@@ -1441,13 +1491,21 @@ export class SessionManager {
         console.log(
           `[session-manager] reloading session ${reloadSessionId.slice(0, 20)}...`,
         );
-        await client.loadSession(reloadSessionId, cwd);
+        await withAcpDeadline(
+          "restart.loadSession",
+          () => client.loadSession(reloadSessionId, cwd).then(() => undefined),
+          this.acpSessionOperationTimeoutMs,
+        );
         acpSessionId = reloadSessionId;
       } catch {
         console.log(
           `[session-manager] loadSession failed, creating new session`,
         );
-        const result = await client.createSession(cwd);
+        const result = await withAcpDeadline(
+          "restart.createSession",
+          () => client.createSession(cwd),
+          this.acpSessionOperationTimeoutMs,
+        );
         acpSessionId = result.sessionId;
         // 旧 ACP Session 加载失败，Agent 上下文已被新 Session 替换——通知客户端（不当作 error）
         const contextEvent = {
@@ -1467,7 +1525,11 @@ export class SessionManager {
         suppressingReplay = false;
       }
       } else {
-        const result = await client.createSession(cwd);
+        const result = await withAcpDeadline(
+          "restart.createSession",
+          () => client.createSession(cwd),
+          this.acpSessionOperationTimeoutMs,
+        );
         acpSessionId = result.sessionId;
       }
     } catch (err: unknown) {
@@ -1481,6 +1543,7 @@ export class SessionManager {
     sess.process = proc;
     sess.client = client;
     sess.sessionId = acpSessionId;
+    sess.requiresClientRestart = false;
     this.cancelPendingPermissions(sess);
     sess.restartCount = 0;
 

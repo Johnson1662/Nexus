@@ -48,6 +48,16 @@ async function main() {
   assert(manager.hasPendingCreate(wsA), "duplicate create sees the existing pending lock");
   assert(!manager.hasPendingCreate(wsB), "pending lock is isolated per WebSocket");
 
+  let crossModeRejected = false;
+  const crossModeResult = await Promise.race([
+    manager.getOrCreate(wsA, { sessionId: "session-b", mode: "load" })
+      .then(() => "resolved")
+      .catch((error) => error?.code),
+    new Promise((resolve) => setTimeout(() => resolve("timeout"), 50)),
+  ]);
+  crossModeRejected = crossModeResult === "SESSION_OPERATION_IN_PROGRESS";
+  assert(crossModeRejected, "load cannot reuse a different pending create operation");
+
   inFlight.resolve({ sessionId: "created" });
   await first;
   await second;
@@ -85,6 +95,8 @@ async function main() {
     toolCallIdMap: new Map(),
     toolContentBytesByCallId: new Map(),
     turnActive: false,
+    turnGeneration: 0,
+    clientGeneration: 0,
     lastActivity: Date.now(),
     orphanedAt: null,
     messageBuffer: [],

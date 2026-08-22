@@ -42,6 +42,7 @@ function fakeSession(sessionId, ownerTransport, overrides = {}) {
     toolCallIdMap: new Map(),
     turnActive: false,
     turnGeneration: 0,
+    clientGeneration: 0,
     lastActivity: Date.now(),
     orphanedAt: null,
     messageBuffer: [],
@@ -51,6 +52,27 @@ function fakeSession(sessionId, ownerTransport, overrides = {}) {
 
 const manager = new SessionManager(undefined, { cancelWatchdogMs: 50 });
 const sessions = manager.getAllSessions();
+
+// Restart is shared by concurrent turns after a cancel watchdog releases the
+// previous turn; the same session must not spawn two recovery processes.
+{
+  const restartWs = transport();
+  const restartSession = fakeSession("restart-session", restartWs);
+  sessions.set("restart-session", restartSession);
+  let restartCalls = 0;
+  let resolveRestart;
+  const restartPromise = new Promise((resolve) => { resolveRestart = resolve; });
+  manager.restartSessionInternal = () => {
+    restartCalls += 1;
+    return restartPromise;
+  };
+  const firstRestart = manager.restartSession("restart-session");
+  const secondRestart = manager.restartSession("restart-session");
+  assert(restartCalls === 1, "concurrent restart requests share one recovery operation");
+  resolveRestart(true);
+  assert(await firstRestart === true && await secondRestart === true, "shared restart result reaches both callers");
+  sessions.delete("restart-session");
+}
 
 // cancel() immediately voids all permission waits without ending the turn.
 {

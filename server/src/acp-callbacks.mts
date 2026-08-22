@@ -108,6 +108,7 @@ interface AcpCallbacksConfig {
   getSessionId: () => string;
   cwd: string;
   toolCallIdMap?: Map<string, string>;
+  isCurrentClient?: () => boolean;
 }
 
 export function createAcpCallbacks(config: AcpCallbacksConfig): {
@@ -119,15 +120,21 @@ export function createAcpCallbacks(config: AcpCallbacksConfig): {
   onKillTerminal: (params: KillTerminalRequest) => Promise<KillTerminalResponse | void>;
   onReleaseTerminal: (params: ReleaseTerminalRequest) => Promise<ReleaseTerminalResponse | void>;
 } {
-  const { getSessionId, cwd, toolCallIdMap } = config;
+  const { getSessionId, cwd, toolCallIdMap, isCurrentClient } = config;
+
+  function assertCurrentClient(): void {
+    if (isCurrentClient && !isCurrentClient()) throw new Error("stale ACP client");
+  }
   
   // Resolve WS dynamically from session map — supports session reclaim after reconnect
   function getSessionWs(): import("ws").WebSocket | undefined {
+    if (isCurrentClient && !isCurrentClient()) return undefined;
     const sess = sessionManager.getSession(getSessionId());
     return sess?.ownerTransport || undefined;
   }
 
   function sendToolCallUpdate(toolCallId: string, status: string, content: object[]): void {
+    if (isCurrentClient && !isCurrentClient()) return;
     const originalId = toolCallIdMap?.get(toolCallId);
     const effectiveId = originalId || toolCallId;
     try {
@@ -153,6 +160,7 @@ export function createAcpCallbacks(config: AcpCallbacksConfig): {
   }
 
   const onReadTextFile = async (params: ReadTextFileRequest): Promise<ReadTextFileResponse> => {
+    assertCurrentClient();
     const currentSess = sessionManager.getSession(getSessionId());
     if (!currentSess) throw new Error("session not found");
     const resolvedPath = resolvePathWithinCwd(params.path, cwd);
@@ -181,6 +189,7 @@ export function createAcpCallbacks(config: AcpCallbacksConfig): {
   };
 
   const onWriteTextFile = async (params: WriteTextFileRequest): Promise<WriteTextFileResponse> => {
+    assertCurrentClient();
     const currentSess = sessionManager.getSession(getSessionId());
     if (!currentSess) throw new Error("session not found");
     const resolvedPath = resolvePathWithinCwd(params.path, cwd, true);
@@ -204,6 +213,7 @@ export function createAcpCallbacks(config: AcpCallbacksConfig): {
   };
 
   const onCreateTerminal = async (params: CreateTerminalRequest): Promise<CreateTerminalResponse> => {
+    assertCurrentClient();
     const currentSess = sessionManager.getSession(getSessionId());
     if (!currentSess) throw new Error("session not found");
 
@@ -338,6 +348,7 @@ export function createAcpCallbacks(config: AcpCallbacksConfig): {
   };
 
   const onTerminalOutput = async (params: TerminalOutputRequest): Promise<TerminalOutputResponse> => {
+    assertCurrentClient();
     const currentSess = sessionManager.getSession(getSessionId());
     if (!currentSess) throw new Error("session not found");
     const term = currentSess.terminals.get(params.terminalId);
@@ -350,6 +361,7 @@ export function createAcpCallbacks(config: AcpCallbacksConfig): {
   };
 
   const onWaitForTerminalExit = async (params: WaitForTerminalExitRequest): Promise<WaitForTerminalExitResponse> => {
+    assertCurrentClient();
     const currentSess = sessionManager.getSession(getSessionId());
     if (!currentSess) throw new Error("session not found");
     const term = currentSess.terminals.get(params.terminalId);
@@ -362,6 +374,7 @@ export function createAcpCallbacks(config: AcpCallbacksConfig): {
   };
 
   const onKillTerminal = async (params: KillTerminalRequest): Promise<KillTerminalResponse | void> => {
+    assertCurrentClient();
     const currentSess = sessionManager.getSession(getSessionId());
     if (!currentSess) throw new Error("session not found");
     const term = currentSess.terminals.get(params.terminalId);
@@ -375,6 +388,7 @@ export function createAcpCallbacks(config: AcpCallbacksConfig): {
   };
 
   const onReleaseTerminal = async (params: ReleaseTerminalRequest): Promise<ReleaseTerminalResponse | void> => {
+    assertCurrentClient();
     const currentSess = sessionManager.getSession(getSessionId());
     if (!currentSess) throw new Error("session not found");
     const term = currentSess.terminals.get(params.terminalId);
