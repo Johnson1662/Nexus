@@ -67,6 +67,10 @@ export interface SessionState {
   closing?: boolean;
   /** Shared recovery operation for concurrent prompts on this session. */
   restartInFlight?: Promise<boolean>;
+  /** Turn generation whose cancel arrived while recovery was in flight. */
+  cancelRequestedGeneration?: number;
+  /** Stable owner identity reserved for an explicit close across disconnect. */
+  closingOwnerId?: string;
   /** Optional callback to reset the prompt inactivity timeout on new output/tool activity */
   resetTimeout?: () => void;
   /** Timestamp of last session activity (input, output, or interaction) */

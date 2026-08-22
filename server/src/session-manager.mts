@@ -242,6 +242,7 @@ export class SessionManager {
       throw new SessionOperationError("SESSION_CLOSING", "session is already closing");
     }
     sess.closing = true;
+    sess.closingOwnerId = sess.ownerId ?? this.transportIdentity(ownerTransport);
   }
 
   /** ── getOrCreate ─────────────────────────────────────────────
@@ -605,9 +606,23 @@ export class SessionManager {
       return;
     }
     if (!liveSess.client.connected || liveSess.requiresClientRestart) {
-      const ok = await this.restartSession(sessionId);
+      let ok = await this.restartSession(sessionId);
+      // A cancel watchdog may have invalidated a recovery candidate after it
+      // released the old turn. A newer turn must wait for that stale recovery
+      // to settle, then get one fresh candidate rather than surfacing a
+      // recovery error to the user.
+      liveSess = this.sessions.get(sessionId);
+      if (!ok && liveSess && liveSess.requiresClientRestart &&
+        this.isCurrentTurn(liveSess, turnGeneration)) {
+        ok = await this.restartSession(sessionId);
+      }
       if (!ok) {
         liveSess = this.sessions.get(sessionId);
+        if (liveSess?.cancelRequestedGeneration === turnGeneration) {
+          delete liveSess.cancelRequestedGeneration;
+          this.finishTurn(sessionId, "cancelled", turnGeneration);
+          return;
+        }
         if (liveSess && this.invalidateClientAfterForcedTurnEnd(sessionId, turnGeneration) &&
           this.finishTurn(sessionId, "error", turnGeneration)) {
           this.sendToOwner(sessionId, {
@@ -623,6 +638,12 @@ export class SessionManager {
     // Guard: session may have been cleaned up during restart
     liveSess = this.sessions.get(sessionId);
     if (!liveSess || !liveSess.sessionId || !liveSess.client || !this.isCurrentTurn(liveSess, turnGeneration)) {
+      return;
+    }
+    if (liveSess.cancelRequestedGeneration === turnGeneration) {
+      delete liveSess.cancelRequestedGeneration;
+      liveSess.client.cancel(liveSess.sessionId).catch(() => {});
+      this.finishTurn(sessionId, "cancelled", turnGeneration);
       return;
     }
 
@@ -842,8 +863,16 @@ export class SessionManager {
    *  pool.  Throws if the session is not found.
    */
   async close(sessionId: string, ownerTransport: WebSocket): Promise<void> {
-    const sess = this.assertOwner(sessionId, ownerTransport);
+    const current = this.sessions.get(sessionId);
+    if (!current) {
+      throw new SessionOwnerError("SESSION_NOT_FOUND", "session not found");
+    }
+    const ownerId = this.transportIdentity(ownerTransport);
+    const sess = current.closing && current.closingOwnerId === ownerId
+      ? current
+      : this.assertOwner(sessionId, ownerTransport);
     sess.closing = true;
+    sess.closingOwnerId ??= sess.ownerId ?? ownerId;
     // Invalidate all ACP callbacks before awaiting closeSession. A recovery
     // already in flight must not commit a replacement after explicit close.
     sess.clientGeneration += 1;
@@ -887,6 +916,9 @@ export class SessionManager {
     this.cancelPendingPermissions(sess);
     if (!sess.turnActive) return;
     const turnGeneration = sess.turnGeneration;
+    if (sess.restartInFlight) {
+      sess.cancelRequestedGeneration = turnGeneration;
+    }
     if (sess.cancelWatchdog) clearTimeout(sess.cancelWatchdog);
     sess.cancelWatchdog = setTimeout(() => {
       const current = this.sessions.get(sessionId);
@@ -1173,6 +1205,9 @@ export class SessionManager {
       delete sess.cancelWatchdog;
     }
     sess.turnActive = false;
+    if (sess.cancelRequestedGeneration === sess.turnGeneration) {
+      delete sess.cancelRequestedGeneration;
+    }
     sess.turnGeneration = (sess.turnGeneration ?? 0) + 1;
     delete sess.resetTimeout;
     this.cancelPendingPermissions(sess);
