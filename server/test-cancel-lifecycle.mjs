@@ -240,6 +240,70 @@ const sessions = manager.getAllSessions();
   closeTimeoutManager.stop();
 }
 
+// A close reserved before transport cleanup still completes after the WS is
+// orphaned, because the close operation owns a stable transport identity.
+{
+  const orphanCloseManager = new SessionManager(undefined, { closeSessionTimeoutMs: 10 });
+  const ws = transport();
+  orphanCloseManager.getAllSessions().set("orphan-close-session", fakeSession("orphan-close-session", ws));
+  orphanCloseManager.beginClose("orphan-close-session", ws);
+  orphanCloseManager.cleanupWsSessions(ws);
+  await orphanCloseManager.close("orphan-close-session", ws);
+  assert(!orphanCloseManager.getAllSessions().has("orphan-close-session"), "reserved close completes after WS cleanup");
+  orphanCloseManager.stop();
+}
+
+// A cancel received while restart is awaiting must cancel the replacement
+// client once it becomes available, without ever calling prompt().
+{
+  const recoveryManager = new SessionManager(undefined, { cancelWatchdogMs: 100 });
+  const ws = transport();
+  let resolveRecovery;
+  const recovery = new Promise((resolve) => { resolveRecovery = resolve; });
+  let promptCalls = 0;
+  let replacementCancelCalls = 0;
+  const replacementClient = {
+    connected: true,
+    cancel: () => { replacementCancelCalls += 1; return Promise.resolve(); },
+    prompt: async () => {
+      promptCalls += 1;
+      return { stopReason: "unexpected" };
+    },
+    closeSession: () => Promise.resolve(),
+    destroy: () => { },
+  };
+  const session = fakeSession("cancel-during-restart", ws, {
+    client: {
+      connected: false,
+      cancel: () => Promise.resolve(),
+      closeSession: () => Promise.resolve(),
+      destroy: () => { },
+    },
+    requiresClientRestart: true,
+  });
+  recoveryManager.getAllSessions().set("cancel-during-restart", session);
+  recoveryManager.restartSession = () => {
+    session.restartInFlight = recovery;
+    return recovery.then(() => {
+      session.client = replacementClient;
+      session.requiresClientRestart = false;
+      delete session.restartInFlight;
+      return true;
+    });
+  };
+  const handle = recoveryManager.beginPrompt("cancel-during-restart", "first", ws);
+  void handle.run();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  recoveryManager.cancel("cancel-during-restart", ws);
+  resolveRecovery();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert(promptCalls === 0, "cancel during restart prevents replacement prompt");
+  assert(replacementCancelCalls === 1, "cancel during restart reaches replacement client");
+  assert(session.turnActive === false, "cancel during restart ends the turn as cancelled");
+  assert(ws.messages.at(-1)?.type === "turn_ended" && ws.messages.at(-1)?.stopReason === "cancelled", "cancel during restart emits cancelled turn_ended");
+  recoveryManager.stop();
+}
+
 // A rejected old prompt must not send an error after the cancel watchdog has
 // released its turn and a new turn has already started.
 {
