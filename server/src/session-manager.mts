@@ -32,6 +32,7 @@ const PROMPT_TIMEOUT = 300_000; // 5 minutes sliding inactivity
 export const CANCEL_WATCHDOG_TIMEOUT_MS = 10_000;
 const AGENT_INITIALIZE_TIMEOUT_MS = 30_000;
 export const ACP_SESSION_OPERATION_TIMEOUT_MS = 30_000;
+export const ACP_CLOSE_SESSION_TIMEOUT_MS = 5_000;
 
 export type SessionOwnerErrorCode =
   | "SESSION_NOT_FOUND"
@@ -142,6 +143,7 @@ export interface AcpClientFactory {
 
 export interface SessionManagerOptions {
   acpSessionOperationTimeoutMs?: number;
+  closeSessionTimeoutMs?: number;
   cancelWatchdogMs?: number;
 }
 
@@ -177,6 +179,7 @@ export class SessionManager {
   private idleCleanupTimer: ReturnType<typeof setInterval> | null = null;
   private clientFactory: AcpClientFactory;
   private acpSessionOperationTimeoutMs: number;
+  private closeSessionTimeoutMs: number;
   private cancelWatchdogMs: number;
 
   constructor(factory?: AcpClientFactory, options: SessionManagerOptions = {}) {
@@ -184,6 +187,7 @@ export class SessionManager {
       create: (proc, callbacks) => new AcpClient(proc, callbacks),
     };
     this.acpSessionOperationTimeoutMs = options.acpSessionOperationTimeoutMs ?? ACP_SESSION_OPERATION_TIMEOUT_MS;
+    this.closeSessionTimeoutMs = options.closeSessionTimeoutMs ?? ACP_CLOSE_SESSION_TIMEOUT_MS;
     this.cancelWatchdogMs = options.cancelWatchdogMs ?? CANCEL_WATCHDOG_TIMEOUT_MS;
   }
 
@@ -355,10 +359,14 @@ export class SessionManager {
     // ── Build ACP callbacks ────────────────────────────────────
     const callbackGeneration = sess.clientGeneration + 1;
     sess.clientGeneration = callbackGeneration;
+    const isCurrentClient = () => {
+      const current = this.sessions.get(sessionId);
+      return !sessionId || (current === sess && current.clientGeneration === callbackGeneration);
+    };
     const callbacks: AcpClientCallbacks = {
       onSessionUpdate: async (update) => {
         const s = this.sessions.get(sessionId);
-        if (s && s.clientGeneration !== callbackGeneration) return;
+        if (sessionId && (!s || s !== sess || s.clientGeneration !== callbackGeneration)) return;
         if (s) {
           recordToolCallIds(s, update.update);
           this.updateSessionActivity(sessionId);
@@ -383,15 +391,12 @@ export class SessionManager {
           if (currentWs) currentWs.send(JSON.stringify(wsPayload));
         } catch { /* WS disconnected — event buffered */ }
       },
-      onPermissionRequest: this.buildPermissionRequestCallback(wsRef, () => sessionId),
+      onPermissionRequest: this.buildPermissionRequestCallback(wsRef, () => sessionId, isCurrentClient),
       ...createAcpCallbacks({
         getSessionId: () => sessionId,
         cwd: resolvedCwd,
         toolCallIdMap: sess.toolCallIdMap,
-        isCurrentClient: () => {
-          const current = this.sessions.get(sessionId);
-          return !current || current.clientGeneration === callbackGeneration;
-        },
+        isCurrentClient,
       }),
     };
 
@@ -548,12 +553,13 @@ export class SessionManager {
       run: () => this.runPromptTurn(sessionId, text, turnGeneration).catch((err: unknown) => {
         const msg = err instanceof Error ? err.message : String(err);
         console.log(`[session-manager] prompt turn error: ${msg}`);
-        this.finishTurn(sessionId, "error", turnGeneration);
-        this.sendToOwner(sessionId, {
-          type: "error",
-          sessionId,
-          text: `Agent error: ${msg}`,
-        });
+        if (this.finishTurn(sessionId, "error", turnGeneration)) {
+          this.sendToOwner(sessionId, {
+            type: "error",
+            sessionId,
+            text: `Agent error: ${msg}`,
+          });
+        }
       }),
     };
   }
@@ -574,14 +580,13 @@ export class SessionManager {
       const ok = await this.restartSession(sessionId);
       if (!ok) {
         liveSess = this.sessions.get(sessionId);
-        if (liveSess) {
-          this.finishTurn(sessionId, "error", turnGeneration);
+        if (liveSess && this.finishTurn(sessionId, "error", turnGeneration)) {
+          this.sendToOwner(sessionId, {
+            type: "error",
+            sessionId,
+            text: `Failed to restart session: ${sessionId}`,
+          });
         }
-        this.sendToOwner(sessionId, {
-          type: "error",
-          sessionId,
-          text: `Failed to restart session: ${sessionId}`,
-        });
         return;
       }
     }
@@ -632,12 +637,13 @@ export class SessionManager {
             `[session-manager] model error detected: ${stderrText.slice(0, 200)}`,
           );
           liveSess.client.cancel(liveSess.sessionId!).catch(() => {});
-          this.finishTurn(sessionId, "error", turnGeneration);
-          this.sendToOwner(sessionId, {
-            type: "error",
-            sessionId,
-            text: `Model error: ${stderrText.slice(0, 300).trim()}`,
-          });
+          if (this.finishTurn(sessionId, "error", turnGeneration)) {
+            this.sendToOwner(sessionId, {
+              type: "error",
+              sessionId,
+              text: `Model error: ${stderrText.slice(0, 300).trim()}`,
+            });
+          }
           break;
         }
       };
@@ -656,12 +662,13 @@ export class SessionManager {
           `[session-manager] prompt INACTIVITY TIMEOUT (5min) after ${Date.now() - startTime}ms for ${sessionId}`,
         );
         liveSess.client.cancel(liveSess.sessionId!).catch(() => {});
-        this.finishTurn(sessionId, "timeout", turnGeneration);
-        this.sendToOwner(sessionId, {
-          type: "error",
-          sessionId,
-          text: "[Timeout] 连续 5 分钟未收到任何输出或工具回调。",
-        });
+        if (this.finishTurn(sessionId, "timeout", turnGeneration)) {
+          this.sendToOwner(sessionId, {
+            type: "error",
+            sessionId,
+            text: "[Timeout] 连续 5 分钟未收到任何输出或工具回调。",
+          });
+        }
       }, PROMPT_TIMEOUT);
     };
 
@@ -693,16 +700,17 @@ export class SessionManager {
       console.log(
         `[session-manager] prompt error after ${Math.floor((Date.now() - startTime) / 1_000)}s: ${msg}`,
       );
-      this.finishTurn(sessionId, "error", turnGeneration);
-      const displayMsg =
-        msg.includes("closed") || msg.includes("abort")
-          ? "[Session expired] Send a message to auto-restart."
-          : `Agent error: ${msg}`;
-      this.sendToOwner(sessionId, {
-        type: "error",
-        sessionId,
-        text: displayMsg,
-      });
+      if (this.finishTurn(sessionId, "error", turnGeneration)) {
+        const displayMsg =
+          msg.includes("closed") || msg.includes("abort")
+            ? "[Session expired] Send a message to auto-restart."
+            : `Agent error: ${msg}`;
+        this.sendToOwner(sessionId, {
+          type: "error",
+          sessionId,
+          text: displayMsg,
+        });
+      }
     }
   }
 
@@ -803,10 +811,24 @@ export class SessionManager {
    */
   async close(sessionId: string, ownerTransport: WebSocket): Promise<void> {
     const sess = this.assertOwner(sessionId, ownerTransport);
+    // Invalidate all ACP callbacks before awaiting closeSession. A recovery
+    // already in flight must not commit a replacement after explicit close.
+    sess.clientGeneration += 1;
+    sess.turnCleanup?.();
+    delete sess.turnCleanup;
+    if (sess.cancelWatchdog) {
+      clearTimeout(sess.cancelWatchdog);
+      delete sess.cancelWatchdog;
+    }
     this.cancelPendingPermissions(sess);
+    const client = sess.client;
 
     try {
-      await sess.client.closeSession(sess.sessionId);
+      await withAcpDeadline(
+        "closeSession",
+        () => client.closeSession(sess.sessionId),
+        this.closeSessionTimeoutMs,
+      );
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       console.log(`[session-manager] closeSession error: ${msg}`);
@@ -814,8 +836,10 @@ export class SessionManager {
 
     this.killSessionProcess(sess);
     this.killTerminalProcesses(sess);
-    this.sessions.delete(sessionId);
-    this.sessionSeqCounter.delete(sessionId);
+    if (this.sessions.get(sessionId) === sess) {
+      this.sessions.delete(sessionId);
+      this.sessionSeqCounter.delete(sessionId);
+    }
 
     console.log(`[session-manager] session closed: ${sessionId.slice(0, 20)}`);
   }
@@ -1038,9 +1062,14 @@ export class SessionManager {
   private buildPermissionRequestCallback(
     wsRef: import("ws").WebSocket | null | undefined,
     sessionIdRef: () => string,
+    isCurrentClient?: () => boolean,
   ): (permParams: RequestPermissionRequest) => Promise<RequestPermissionResponse> {
     return (permParams) =>
       new Promise((resolve) => {
+        if (isCurrentClient && !isCurrentClient()) {
+          resolve({ outcome: { outcome: "cancelled" } });
+          return;
+        }
         const requestId = randomUUID();
         const sid = sessionIdRef();
         const s = this.sessions.get(sid);
@@ -1059,6 +1088,11 @@ export class SessionManager {
           });
         }
         try {
+          if (isCurrentClient && !isCurrentClient()) {
+            s?.pendingPermissions.delete(requestId);
+            resolve({ outcome: { outcome: "cancelled" } });
+            return;
+          }
           // orphan 时不向旧连接发权限请求（cleanupWsSessions 已取消该会话的 pending）
           const currentWs = s ? s.ownerTransport : wsRef;
           currentWs?.send(
@@ -1086,10 +1120,10 @@ export class SessionManager {
     return sess.turnActive && sess.turnGeneration === turnGeneration;
   }
 
-  private finishTurn(sessionId: string, reason?: string, turnGeneration?: number): void {
+  private finishTurn(sessionId: string, reason?: string, turnGeneration?: number): boolean {
     const sess = this.sessions.get(sessionId);
-    if (!sess) return;
-    if (turnGeneration !== undefined && sess.turnGeneration !== turnGeneration) return;
+    if (!sess) return false;
+    if (turnGeneration !== undefined && sess.turnGeneration !== turnGeneration) return false;
     sess.turnCleanup?.();
     delete sess.turnCleanup;
     if (sess.cancelWatchdog) {
@@ -1110,6 +1144,7 @@ export class SessionManager {
       sessionId,
       stopReason: reason,
     });
+    return true;
   }
 
   /** Touch lastActivity and slide the prompt inactivity timer. */
@@ -1416,12 +1451,16 @@ export class SessionManager {
     const wsRef = sess.ws;
     const callbackGeneration = sess.clientGeneration + 1;
     sess.clientGeneration = callbackGeneration;
+    const isCurrentClient = () => {
+      const current = this.sessions.get(sessionId);
+      return current === sess && current.clientGeneration === callbackGeneration;
+    };
 
     const callbacks: AcpClientCallbacks = {
       onSessionUpdate: async (update) => {
         if (suppressingReplay) return;
         const s = this.sessions.get(sessionId);
-        if (s && s.clientGeneration !== callbackGeneration) return;
+        if (!s || s !== sess || s.clientGeneration !== callbackGeneration) return;
         if (s) {
           recordToolCallIds(s, update.update);
           this.updateSessionActivity(sessionId);
@@ -1444,15 +1483,12 @@ export class SessionManager {
           if (currentWs) currentWs.send(JSON.stringify(wsPayload));
         } catch { /* WS gone */ }
       },
-      onPermissionRequest: this.buildPermissionRequestCallback(wsRef, () => sessionId),
+      onPermissionRequest: this.buildPermissionRequestCallback(wsRef, () => sessionId, isCurrentClient),
       ...createAcpCallbacks({
         getSessionId: () => sessionId,
         cwd,
         toolCallIdMap: sess.toolCallIdMap,
-        isCurrentClient: () => {
-          const current = this.sessions.get(sessionId);
-          return !current || current.clientGeneration === callbackGeneration;
-        },
+        isCurrentClient,
       }),
     };
 
@@ -1471,8 +1507,8 @@ export class SessionManager {
       console.log(
         `[session-manager] ${sessionId.slice(0, 20)} restarted process exited with code ${code}`,
       );
-      if (this.sessions.has(sessionId)) {
-        const s = this.sessions.get(sessionId)!;
+      const s = this.sessions.get(sessionId);
+      if (s === sess && sess.clientGeneration === callbackGeneration) {
         this.killTerminalProcesses(s);
         this.cancelPendingPermissions(s);
         this.sessions.delete(sessionId);
@@ -1516,10 +1552,11 @@ export class SessionManager {
           newAgentSessionId: acpSessionId,
         };
         try {
-          const replayed = this.bufferAgentEvent(sessionId, contextEvent) ?? contextEvent;
-          const s = this.sessions.get(sessionId);
-          const currentWs = s ? s.ownerTransport : wsRef;
-          if (currentWs) currentWs.send(JSON.stringify(replayed));
+          if (isCurrentClient()) {
+            const replayed = this.bufferAgentEvent(sessionId, contextEvent) ?? contextEvent;
+            const s = this.sessions.get(sessionId);
+            if (s) s.ownerTransport?.send(JSON.stringify(replayed));
+          }
         } catch { /* WS gone */ }
       } finally {
         suppressingReplay = false;
@@ -1538,6 +1575,17 @@ export class SessionManager {
         try { kill(proc.pid!, "SIGTERM"); } catch { /* ok */ }
       }
       throw err;
+    }
+
+    // Cancellation, close, or a newer recovery may have invalidated this
+    // candidate while ACP load/create was awaiting. Never let stale recovery
+    // resurrect a closed session or clear requiresClientRestart.
+    if (!isCurrentClient()) {
+      try { client.destroy(); } catch { /* ok */ }
+      if (!proc.killed) {
+        try { kill(proc.pid!, "SIGTERM"); } catch { /* ok */ }
+      }
+      return false;
     }
 
     sess.process = proc;

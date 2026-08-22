@@ -206,6 +206,54 @@ const sessions = manager.getAllSessions();
   assert(resolved?.outcome?.outcome === "cancelled", "close cancels pending permission");
 }
 
+// Explicit close must not wait forever on a hung ACP closeSession request.
+{
+  const closeTimeoutManager = new SessionManager(undefined, { closeSessionTimeoutMs: 10 });
+  const ws = transport();
+  let destroyed = false;
+  closeTimeoutManager.getAllSessions().set("close-timeout-session", fakeSession("close-timeout-session", ws, {
+    client: {
+      closeSession: () => new Promise(() => {}),
+      destroy: () => { destroyed = true; },
+    },
+  }));
+  await closeTimeoutManager.close("close-timeout-session", ws);
+  assert(destroyed, "close timeout destroys the ACP client");
+  assert(!closeTimeoutManager.getAllSessions().has("close-timeout-session"), "close timeout removes the session");
+  closeTimeoutManager.stop();
+}
+
+// A rejected old prompt must not send an error after the cancel watchdog has
+// released its turn and a new turn has already started.
+{
+  const staleErrorManager = new SessionManager(undefined, { cancelWatchdogMs: 10 });
+  const ws = transport();
+  const session = fakeSession("stale-error-session", ws, {
+    client: { cancel: () => Promise.resolve(), destroy: () => { } },
+  });
+  staleErrorManager.getAllSessions().set("stale-error-session", session);
+  const oldRun = staleErrorManager.runPromptTurn;
+  let rejectOld;
+  let promptCall = 0;
+  staleErrorManager.runPromptTurn = () => new Promise((_resolve, reject) => {
+    if (promptCall === 0) rejectOld = reject;
+    promptCall += 1;
+  });
+  const first = staleErrorManager.beginPrompt("stale-error-session", "first", ws);
+  void first.run();
+  staleErrorManager.cancel("stale-error-session", ws);
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  const second = staleErrorManager.beginPrompt("stale-error-session", "second", ws);
+  void second.run();
+  rejectOld(new Error("late old prompt failure"));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert(session.turnActive === true, "late old prompt failure does not end the new turn");
+  assert(!ws.messages.some((message) => message.type === "error" && message.text?.includes("late old prompt failure")), "late old prompt failure does not reach the owner");
+  staleErrorManager.runPromptTurn = oldRun;
+  staleErrorManager.finishTurn("stale-error-session", "test");
+  staleErrorManager.stop();
+}
+
 manager.stop();
 console.log(`Cancel Lifecycle: ${passed} passed, ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);

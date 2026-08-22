@@ -150,6 +150,13 @@ async function main() {
       update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "stale client" } },
     });
     assert(reclaimed.sent.length === sentBeforeStaleCallback, "stale ACP client callback cannot send a late event");
+    const sentBeforeStalePermission = reclaimed.sent.length;
+    const stalePermission = await callbacks.onPermissionRequest({
+      toolCall: { toolCallId: "stale-tool", title: "stale" },
+      options: [{ optionId: "allow-stale", name: "Allow" }],
+    });
+    assert(stalePermission.outcome?.outcome === "cancelled", "stale ACP permission request is cancelled locally");
+    assert(reclaimed.sent.length === sentBeforeStalePermission, "stale ACP permission request cannot reach the owner");
     await manager.close(sessionId, reclaimed);
   } finally {
     if (previousGlobal) globalSessions.set(sessionId, previousGlobal);

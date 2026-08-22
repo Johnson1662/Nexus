@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const { handleFileRead } = await import("./dist/handlers/workspace-files.mjs");
+const { handleFileRead, handleListWorkspaceFiles } = await import("./dist/handlers/workspace-files.mjs");
 const root = await mkdtemp(join(tmpdir(), "nexus-workspace-"));
 const outside = `${root}-outside.txt`;
 await writeFile(join(root, "inside.txt"), "safe", "utf8");
@@ -20,7 +20,20 @@ try {
   assert.equal(rejected.content, "");
   assert.equal(rejected.error, "path traversal denied");
 
-  console.log("Workspace path boundary: 2 passed, 0 failed");
+  const largeRoot = await mkdtemp(join(tmpdir(), "nexus-workspace-large-"));
+  try {
+    await Promise.all(Array.from({ length: 5_001 }, (_value, index) =>
+      writeFile(join(largeRoot, `file-${index}.txt`), "x", "utf8"),
+    ));
+    await handleListWorkspaceFiles(ws, { cwd: largeRoot });
+    const listing = sent.pop();
+    assert.equal(listing.files.length, 5_000);
+    assert.equal(listing.truncated, true);
+  } finally {
+    await rm(largeRoot, { recursive: true, force: true });
+  }
+
+  console.log("Workspace path boundary: 4 passed, 0 failed");
 } finally {
   await rm(root, { recursive: true, force: true });
   await rm(outside, { force: true });

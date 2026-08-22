@@ -20,6 +20,7 @@ export interface GitLogEntry {
 }
 
 const MAX_FILE_BYTES = 4 * 1024 * 1024;
+const MAX_WORKSPACE_ENTRIES = 5_000;
 
 function sendFileEvent(ws: WebSocket, payload: Record<string, unknown>): void {
   ws.send(boundFileEventPayload(payload).payload);
@@ -104,7 +105,12 @@ export async function handleListWorkspaceFiles(
 
     // List workspace files (non-.git, max depth 3 to avoid explosion)
     const files: WorkspaceFile[] = [];
+    let truncated = false;
     async function walk(dir: string, depth: number): Promise<void> {
+      if (files.length >= MAX_WORKSPACE_ENTRIES) {
+        truncated = true;
+        return;
+      }
       if (depth > 3) return;
       let entries;
       try {
@@ -113,6 +119,10 @@ export async function handleListWorkspaceFiles(
         return;
       }
       for (const e of entries) {
+        if (files.length >= MAX_WORKSPACE_ENTRIES) {
+          truncated = true;
+          return;
+        }
         if (e.name.startsWith(".")) continue;
         if (e.name === "node_modules") continue;
         const fp = join(dir, e.name);
@@ -128,7 +138,7 @@ export async function handleListWorkspaceFiles(
     }
     await walk(root, 0);
 
-    ws.send(JSON.stringify({ type: "workspace_files", cwd: root, files }));
+    ws.send(JSON.stringify({ type: "workspace_files", cwd: root, files, truncated }));
   } catch (err: any) {
     ws.send(JSON.stringify({ type: "workspace_files", cwd, files: [], error: err.message }));
   }
