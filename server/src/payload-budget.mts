@@ -4,6 +4,8 @@ export const MAX_AGENT_EVENT_BYTES = 512 * 1024;
 export const MAX_REPLAY_BYTES_PER_SESSION = 2 * 1024 * 1024;
 export const MAX_TOOL_CONTENT_BYTES = 512 * 1024;
 export const MAX_FILE_EVENT_BYTES = 512 * 1024;
+export const MAX_STRUCTURE_ENTRIES = 5_000;
+export const MAX_STRUCTURE_DEPTH = 64;
 
 export interface Utf8Truncation {
   text: string;
@@ -39,6 +41,7 @@ function isRecord(value: unknown): value is JsonRecord {
 interface BoundedValue {
   value: unknown;
   truncated: boolean;
+  structureTruncated: boolean;
   originalBytes: number;
   retainedBytes: number;
 }
@@ -48,50 +51,70 @@ interface BoundedValue {
  * The caller still has to enforce the serialized envelope budget because a
  * payload may contain many individually-small fields.
  */
-function boundValue(value: unknown, maxStringBytes: number): BoundedValue {
+function boundValue(value: unknown, maxStringBytes: number, depth = 0): BoundedValue {
   if (typeof value === "string") {
     const result = truncateUtf8(value, maxStringBytes);
     return {
       value: result.text,
       truncated: result.truncated,
+      structureTruncated: false,
       originalBytes: result.originalBytes,
       retainedBytes: result.retainedBytes,
     };
   }
   if (Array.isArray(value)) {
+    if (depth >= MAX_STRUCTURE_DEPTH) {
+      return { value: [], truncated: true, structureTruncated: true, originalBytes: 0, retainedBytes: 0 };
+    }
     let truncated = false;
+    let structureTruncated = value.length > MAX_STRUCTURE_ENTRIES;
     let originalBytes = 0;
     let retainedBytes = 0;
-    const bounded = value.map((entry) => {
-      const result = boundValue(entry, maxStringBytes);
+    const bounded = value.slice(0, MAX_STRUCTURE_ENTRIES).map((entry) => {
+      const result = boundValue(entry, maxStringBytes, depth + 1);
       truncated ||= result.truncated;
+      structureTruncated ||= result.structureTruncated;
       originalBytes += result.originalBytes;
       retainedBytes += result.retainedBytes;
       return result.value;
     });
-    return { value: bounded, truncated, originalBytes, retainedBytes };
+    return { value: bounded, truncated: truncated || structureTruncated, structureTruncated, originalBytes, retainedBytes };
   }
   if (!isRecord(value)) {
-    return { value, truncated: false, originalBytes: 0, retainedBytes: 0 };
+    return { value, truncated: false, structureTruncated: false, originalBytes: 0, retainedBytes: 0 };
+  }
+  if (depth >= MAX_STRUCTURE_DEPTH) {
+    return {
+      value: { truncated: true, structureTruncated: true },
+      truncated: true,
+      structureTruncated: true,
+      originalBytes: 0,
+      retainedBytes: 0,
+    };
   }
 
   const bounded: JsonRecord = {};
   let truncated = false;
+  let structureTruncated = false;
   let originalBytes = 0;
   let retainedBytes = 0;
-  for (const [key, child] of Object.entries(value)) {
-    const result = boundValue(child, maxStringBytes);
+  const entries = Object.entries(value);
+  if (entries.length > MAX_STRUCTURE_ENTRIES) structureTruncated = true;
+  for (const [key, child] of entries.slice(0, MAX_STRUCTURE_ENTRIES)) {
+    const result = boundValue(child, maxStringBytes, depth + 1);
     bounded[key] = result.value;
     truncated ||= result.truncated;
+    structureTruncated ||= result.structureTruncated;
     originalBytes += result.originalBytes;
     retainedBytes += result.retainedBytes;
   }
-  if (truncated) {
+  if (truncated || structureTruncated) {
     bounded.truncated = true;
+    if (structureTruncated) bounded.structureTruncated = true;
     bounded.originalBytes = originalBytes;
     bounded.retainedBytes = retainedBytes;
   }
-  return { value: bounded, truncated, originalBytes, retainedBytes };
+  return { value: bounded, truncated: truncated || structureTruncated, structureTruncated, originalBytes, retainedBytes };
 }
 
 function serialize(value: JsonRecord): { payload: string; payloadBytes: number } {
@@ -237,43 +260,61 @@ const TOOL_TEXT_KEYS = new Set(["content", "text", "oldText", "newText"]);
 interface ToolContentLimit {
   value: unknown;
   truncated: boolean;
+  structureTruncated: boolean;
   originalBytes: number;
   retainedBytes: number;
 }
 
 /** Limit only text-bearing fields inside a tool-call event. */
-function limitToolContentFields(value: unknown, maxBytes: number, active = false): ToolContentLimit {
+function limitToolContentFields(value: unknown, maxBytes: number, active = false, depth = 0): ToolContentLimit {
   if (typeof value === "string") {
-    return { value, truncated: false, originalBytes: 0, retainedBytes: 0 };
+    return { value, truncated: false, structureTruncated: false, originalBytes: 0, retainedBytes: 0 };
   }
   if (Array.isArray(value)) {
+    if (depth >= MAX_STRUCTURE_DEPTH) {
+      return { value: [], truncated: true, structureTruncated: true, originalBytes: 0, retainedBytes: 0 };
+    }
     let remaining = maxBytes;
     let truncated = false;
+    let structureTruncated = value.length > MAX_STRUCTURE_ENTRIES;
     let originalBytes = 0;
     let retainedBytes = 0;
-    const bounded = value.map((entry) => {
-      const result = limitToolContentFields(entry, remaining, active);
+    const bounded = value.slice(0, MAX_STRUCTURE_ENTRIES).map((entry) => {
+      const result = limitToolContentFields(entry, remaining, active, depth + 1);
       remaining -= result.retainedBytes;
       truncated ||= result.truncated;
+      structureTruncated ||= result.structureTruncated;
       originalBytes += result.originalBytes;
       retainedBytes += result.retainedBytes;
       return result.value;
     });
-    return { value: bounded, truncated, originalBytes, retainedBytes };
+    return { value: bounded, truncated: truncated || structureTruncated, structureTruncated, originalBytes, retainedBytes };
   }
-  if (!isRecord(value)) return { value, truncated: false, originalBytes: 0, retainedBytes: 0 };
+  if (!isRecord(value)) return { value, truncated: false, structureTruncated: false, originalBytes: 0, retainedBytes: 0 };
+  if (depth >= MAX_STRUCTURE_DEPTH) {
+    return {
+      value: { truncated: true, structureTruncated: true },
+      truncated: true,
+      structureTruncated: true,
+      originalBytes: 0,
+      retainedBytes: 0,
+    };
+  }
   // Terminal output has its own 256KB per-terminal limit. Do not consume the
   // cumulative ACP tool-card budget with repeated deltas from that terminal.
   if (value.type === "terminal") {
-    return { value, truncated: false, originalBytes: 0, retainedBytes: 0 };
+    return { value, truncated: false, structureTruncated: false, originalBytes: 0, retainedBytes: 0 };
   }
 
   const bounded: JsonRecord = {};
   let remaining = maxBytes;
   let truncated = false;
+  let structureTruncated = false;
   let originalBytes = 0;
   let retainedBytes = 0;
-  for (const [key, child] of Object.entries(value)) {
+  const entries = Object.entries(value);
+  if (entries.length > MAX_STRUCTURE_ENTRIES) structureTruncated = true;
+  for (const [key, child] of entries.slice(0, MAX_STRUCTURE_ENTRIES)) {
     if (active && TOOL_TEXT_KEYS.has(key) && typeof child === "string") {
       const result = truncateUtf8(child, remaining);
       bounded[key] = result.text;
@@ -283,28 +324,38 @@ function limitToolContentFields(value: unknown, maxBytes: number, active = false
       retainedBytes += result.retainedBytes;
       continue;
     }
-    const result = limitToolContentFields(child, remaining, active || key === "toolCallContent");
+    const result = limitToolContentFields(child, remaining, active || key === "toolCallContent", depth + 1);
     bounded[key] = result.value;
     remaining -= result.retainedBytes;
     truncated ||= result.truncated;
+    structureTruncated ||= result.structureTruncated;
     originalBytes += result.originalBytes;
     retainedBytes += result.retainedBytes;
   }
-  return { value: bounded, truncated, originalBytes, retainedBytes };
+  if (structureTruncated) {
+    bounded.truncated = true;
+    bounded.structureTruncated = true;
+  }
+  return { value: bounded, truncated: truncated || structureTruncated, structureTruncated, originalBytes, retainedBytes };
 }
 
-function toolContentBytes(value: unknown, active = false): number {
+function toolContentBytes(value: unknown, active = false, depth = 0): number {
   if (typeof value === "string") return 0;
-  if (Array.isArray(value)) return value.reduce((sum, child) => sum + toolContentBytes(child, active), 0);
+  if (depth >= MAX_STRUCTURE_DEPTH) return 0;
+  if (Array.isArray(value)) {
+    return value
+      .slice(0, MAX_STRUCTURE_ENTRIES)
+      .reduce((sum, child) => sum + toolContentBytes(child, active, depth + 1), 0);
+  }
   if (!isRecord(value)) return 0;
   if (value.type === "terminal") return 0;
 
   let total = 0;
-  for (const [key, child] of Object.entries(value)) {
+  for (const [key, child] of Object.entries(value).slice(0, MAX_STRUCTURE_ENTRIES)) {
     if (active && TOOL_TEXT_KEYS.has(key) && typeof child === "string") {
       total += Buffer.byteLength(child, "utf8");
     } else {
-      total += toolContentBytes(child, active || key === "toolCallContent");
+      total += toolContentBytes(child, active || key === "toolCallContent", depth + 1);
     }
   }
   return total;
@@ -333,8 +384,13 @@ export function boundAgentEventPayload(
       ...payload,
       event: {
         ...limited.value as JsonRecord,
-        ...(limited.truncated
-          ? { truncated: true, originalBytes: limited.originalBytes, retainedBytes: limited.retainedBytes }
+        ...(limited.truncated || limited.structureTruncated
+          ? {
+              truncated: true,
+              ...(limited.structureTruncated ? { structureTruncated: true } : {}),
+              originalBytes: limited.originalBytes,
+              retainedBytes: limited.retainedBytes,
+            }
           : {}),
       },
     };

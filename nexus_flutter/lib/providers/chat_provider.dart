@@ -751,6 +751,10 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   // ── Server message routing ──
   void _handleServerMessage(ServerMessage msg) {
+    if (_isCursorScopedMessageType(msg.type) &&
+        !_isRequiredSessionEventForCurrentSession(msg.sessionId)) {
+      return;
+    }
     if (!_acceptMessageId(msg.messageId, sessionId: msg.sessionId)) return;
     switch (msg.type) {
       case 'server_info':
@@ -1558,6 +1562,22 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
   bool _isRequiredSessionEventForCurrentSession(String? eventSessionId) {
     if (eventSessionId == null || eventSessionId.isEmpty) return false;
     return _isEventForCurrentSession(eventSessionId);
+  }
+
+  bool _isCursorScopedMessageType(String type) {
+    switch (type) {
+      case 'agent_event':
+      case 'session_context_replaced':
+      case 'session_cancelled':
+      case 'turn_ended':
+      case 'permission_request':
+      case 'session_ended':
+      case 'session_closed':
+      case 'sync_response':
+        return true;
+      default:
+        return false;
+    }
   }
 
   void _handleTurnEnded() {

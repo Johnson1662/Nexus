@@ -41,6 +41,7 @@ function fakeSession(sessionId, ownerTransport, overrides = {}) {
     restartCount: 0,
     toolCallIdMap: new Map(),
     turnActive: false,
+    turnGeneration: 0,
     lastActivity: Date.now(),
     orphanedAt: null,
     messageBuffer: [],
@@ -48,7 +49,7 @@ function fakeSession(sessionId, ownerTransport, overrides = {}) {
   };
 }
 
-const manager = new SessionManager();
+const manager = new SessionManager(undefined, { cancelWatchdogMs: 50 });
 const sessions = manager.getAllSessions();
 
 // cancel() immediately voids all permission waits without ending the turn.
@@ -112,6 +113,40 @@ const sessions = manager.getAllSessions();
     "beginPrompt rejects an active turn",
   );
   sessions.delete("active-session");
+}
+
+// A prompt that never resolves must not pin the session forever after cancel;
+// a late completion from that old prompt must not end a newer turn.
+{
+  const ws = transport();
+  const promptResolvers = [];
+  const session = fakeSession("watchdog-session", ws, {
+    client: {
+      connected: true,
+      cancel: () => Promise.resolve(),
+      prompt: () => new Promise((resolve) => promptResolvers.push(resolve)),
+      closeSession: () => Promise.resolve(),
+      destroy: () => { },
+    },
+  });
+  sessions.set("watchdog-session", session);
+  const first = manager.beginPrompt("watchdog-session", "first", ws);
+  void first.run();
+  manager.cancel("watchdog-session", ws);
+  await new Promise((resolve) => setTimeout(resolve, 150));
+  assert(session.turnActive === false, "cancel watchdog releases a hung prompt turn");
+
+  const second = manager.beginPrompt("watchdog-session", "second", ws);
+  void second.run();
+  promptResolvers[0]?.({ stopReason: "late-first" });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert(session.turnActive === true, "late completion from the old prompt cannot end the new turn");
+  assert(ws.messages.filter((message) => message.type === "turn_ended").length === 1, "old prompt emits no duplicate turn_ended");
+
+  promptResolvers[1]?.({ stopReason: "second-done" });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert(session.turnActive === false, "new prompt can still complete normally");
+  sessions.delete("watchdog-session");
 }
 
 // Idle eviction cancels permission waits before dropping the session.

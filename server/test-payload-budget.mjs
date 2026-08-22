@@ -97,7 +97,19 @@ try {
   const hugeBlockPayload = JSON.parse(hugeBlockArray.payload);
   assert(hugeBlockArray.payloadBytes <= MAX_AGENT_EVENT_BYTES, "last-resort event shape stays below the hard cap");
   assert(hugeBlockPayload.event?.structureTruncated === true, "last-resort event shape marks structural truncation");
-  assert(hugeBlockPayload.event?.toolCallContent?.length <= 1, "last-resort event shape bounds content blocks");
+  assert(hugeBlockPayload.event?.toolCallContent?.length <= 5_000, "bounded event shape caps content blocks");
+
+  const wideStructure = boundAgentEventPayload({
+    type: "agent_event",
+    sessionId,
+    event: {
+      sessionUpdate: "agent_message_chunk",
+      metadata: Array.from({ length: 6_000 }, (_, index) => ({ index, value: "x" })),
+    },
+  });
+  const wideStructurePayload = JSON.parse(wideStructure.payload);
+  assert(wideStructurePayload.event?.metadata?.length <= 5_000, "generic payload structures stop after the entry cap");
+  assert(wideStructurePayload.event?.structureTruncated === true, "generic payload structures mark structural truncation");
 
   const diffPayload = boundFileEventPayload({
     type: "file_diff",

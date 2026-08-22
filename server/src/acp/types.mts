@@ -53,6 +53,12 @@ export interface SessionState {
   lastToolCallId?: string;
   /** Whether this session currently has an active turn in progress */
   turnActive: boolean;
+  /** Monotonic token used to invalidate late prompt completions. */
+  turnGeneration: number;
+  /** Cleanup for prompt timers/listeners owned by the active turn. */
+  turnCleanup?: () => void;
+  /** Watchdog that releases a turn when ACP cancel never resolves prompt(). */
+  cancelWatchdog?: ReturnType<typeof setTimeout>;
   /** Optional callback to reset the prompt inactivity timeout on new output/tool activity */
   resetTimeout?: () => void;
   /** Timestamp of last session activity (input, output, or interaction) */

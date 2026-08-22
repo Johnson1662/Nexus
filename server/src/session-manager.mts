@@ -29,6 +29,7 @@ const MAX_ACP_PROCESSES = 5;
 const IDLE_CLEANUP_INTERVAL_MS = 30_000;
 const MAX_MESSAGE_BUFFER = 500;
 const PROMPT_TIMEOUT = 300_000; // 5 minutes sliding inactivity
+export const CANCEL_WATCHDOG_TIMEOUT_MS = 10_000;
 const AGENT_INITIALIZE_TIMEOUT_MS = 30_000;
 export const ACP_SESSION_OPERATION_TIMEOUT_MS = 30_000;
 
@@ -134,6 +135,7 @@ export interface AcpClientFactory {
 
 export interface SessionManagerOptions {
   acpSessionOperationTimeoutMs?: number;
+  cancelWatchdogMs?: number;
 }
 
 // ── Params Interface ──────────────────────────────────────────────
@@ -167,12 +169,14 @@ export class SessionManager {
   private idleCleanupTimer: ReturnType<typeof setInterval> | null = null;
   private clientFactory: AcpClientFactory;
   private acpSessionOperationTimeoutMs: number;
+  private cancelWatchdogMs: number;
 
   constructor(factory?: AcpClientFactory, options: SessionManagerOptions = {}) {
     this.clientFactory = factory ?? {
       create: (proc, callbacks) => new AcpClient(proc, callbacks),
     };
     this.acpSessionOperationTimeoutMs = options.acpSessionOperationTimeoutMs ?? ACP_SESSION_OPERATION_TIMEOUT_MS;
+    this.cancelWatchdogMs = options.cancelWatchdogMs ?? CANCEL_WATCHDOG_TIMEOUT_MS;
   }
 
   private transportIdentity(transport: WebSocket): string {
@@ -322,6 +326,7 @@ export class SessionManager {
       toolCallIdMap: new Map(),
       toolContentBytesByCallId: new Map(),
       turnActive: false,
+      turnGeneration: 0,
       lastActivity: Date.now(),
       orphanedAt: null,
       messageBuffer: [],
@@ -510,12 +515,14 @@ export class SessionManager {
     // Claim the turn BEFORE any await so concurrent inputs are
     // rejected atomically (input_ack is only sent on success).
     sess.turnActive = true;
+    sess.turnGeneration = (sess.turnGeneration ?? 0) + 1;
+    const turnGeneration = sess.turnGeneration;
     this.updateSessionActivity(sessionId);
     return {
-      run: () => this.runPromptTurn(sessionId, text).catch((err: unknown) => {
+      run: () => this.runPromptTurn(sessionId, text, turnGeneration).catch((err: unknown) => {
         const msg = err instanceof Error ? err.message : String(err);
         console.log(`[session-manager] prompt turn error: ${msg}`);
-        this.finishTurn(sessionId, "error");
+        this.finishTurn(sessionId, "error", turnGeneration);
         this.sendToOwner(sessionId, {
           type: "error",
           sessionId,
@@ -531,10 +538,10 @@ export class SessionManager {
    *  model-error monitoring. All turn_ended / error frames go
    *  through sendToOwner — never a captured transport.
    */
-  private async runPromptTurn(sessionId: string, text: string): Promise<void> {
+  private async runPromptTurn(sessionId: string, text: string, turnGeneration: number): Promise<void> {
     // Auto-recover dead ACP connection by restarting the session
     let liveSess = this.sessions.get(sessionId);
-    if (!liveSess || !liveSess.sessionId || !liveSess.client) {
+    if (!liveSess || !liveSess.sessionId || !liveSess.client || !this.isCurrentTurn(liveSess, turnGeneration)) {
       return;
     }
     if (!liveSess.client.connected) {
@@ -542,7 +549,7 @@ export class SessionManager {
       if (!ok) {
         liveSess = this.sessions.get(sessionId);
         if (liveSess) {
-          this.finishTurn(sessionId, "error");
+          this.finishTurn(sessionId, "error", turnGeneration);
         }
         this.sendToOwner(sessionId, {
           type: "error",
@@ -555,22 +562,38 @@ export class SessionManager {
 
     // Guard: session may have been cleaned up during restart
     liveSess = this.sessions.get(sessionId);
-    if (!liveSess || !liveSess.sessionId || !liveSess.client) {
+    if (!liveSess || !liveSess.sessionId || !liveSess.client || !this.isCurrentTurn(liveSess, turnGeneration)) {
       return;
     }
 
     const startTime = Date.now();
     let timedOut = false;
     let errorDetected = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let stderrHandler: ((chunk: Buffer) => void) | null = null;
+    let cleanedUp = false;
 
     // Heartbeat keep-alive during prompt
     const keepAlive = setInterval(() => {
-      if (timedOut || errorDetected) return;
+      if (timedOut || errorDetected || !this.isCurrentTurn(liveSess, turnGeneration)) return;
       this.sendToOwner(sessionId, { type: "heartbeat", sessionId, ts: Date.now() });
     }, 3_000);
 
+    const cleanupTurn = () => {
+      if (cleanedUp) return;
+      cleanedUp = true;
+      clearInterval(keepAlive);
+      clearTimeout(timer);
+      if (stderrHandler && liveSess.process?.stderr) {
+        try {
+          liveSess.process.stderr.removeListener("data", stderrHandler);
+        } catch { /* ok */ }
+      }
+      if (liveSess.turnCleanup === cleanupTurn) delete liveSess.turnCleanup;
+    };
+    liveSess.turnCleanup = cleanupTurn;
+
     // ── stderr model-error monitoring ─────────────────────────
-    let stderrHandler: ((chunk: Buffer) => void) | null = null;
     if (liveSess.process?.stderr) {
       stderrHandler = (chunk: Buffer) => {
         if (errorDetected || timedOut) return;
@@ -578,13 +601,12 @@ export class SessionManager {
         for (const pattern of MODEL_ERROR_PATTERNS) {
           if (!pattern.test(stderrText)) continue;
           errorDetected = true;
-          clearInterval(keepAlive);
-          clearTimeout(timer);
+          cleanupTurn();
           console.log(
             `[session-manager] model error detected: ${stderrText.slice(0, 200)}`,
           );
           liveSess.client.cancel(liveSess.sessionId!).catch(() => {});
-          this.finishTurn(sessionId, "error");
+          this.finishTurn(sessionId, "error", turnGeneration);
           this.sendToOwner(sessionId, {
             type: "error",
             sessionId,
@@ -597,25 +619,18 @@ export class SessionManager {
     }
 
     // ── Sliding inactivity timeout (5 min) ────────────────────
-    let timer: ReturnType<typeof setTimeout> | undefined;
-
     const resetInactivityTimer = () => {
-      if (timedOut || errorDetected) return;
+      if (timedOut || errorDetected || !this.isCurrentTurn(liveSess, turnGeneration)) return;
       clearTimeout(timer);
       timer = setTimeout(() => {
         if (errorDetected) return;
         timedOut = true;
-        clearInterval(keepAlive);
+        cleanupTurn();
         console.log(
           `[session-manager] prompt INACTIVITY TIMEOUT (5min) after ${Date.now() - startTime}ms for ${sessionId}`,
         );
-        if (stderrHandler && liveSess.process?.stderr) {
-          try {
-            liveSess.process.stderr.removeListener("data", stderrHandler);
-          } catch { /* ok */ }
-        }
         liveSess.client.cancel(liveSess.sessionId!).catch(() => {});
-        this.finishTurn(sessionId, "timeout");
+        this.finishTurn(sessionId, "timeout", turnGeneration);
         this.sendToOwner(sessionId, {
           type: "error",
           sessionId,
@@ -631,34 +646,28 @@ export class SessionManager {
     try {
       const result = await liveSess.client.prompt(liveSess.sessionId, text);
 
-      if (timedOut || errorDetected) return;
-
-      clearInterval(keepAlive);
-      clearTimeout(timer);
-      if (stderrHandler && liveSess.process?.stderr) {
-        try {
-          liveSess.process.stderr.removeListener("data", stderrHandler);
-        } catch { /* ok */ }
+      if (timedOut || errorDetected || !this.isCurrentTurn(liveSess, turnGeneration)) {
+        cleanupTurn();
+        return;
       }
+
+      cleanupTurn();
       console.log(
         `[session-manager] turn ended after ${Math.floor((Date.now() - startTime) / 1_000)}s: ${result?.stopReason}`,
       );
-      this.finishTurn(sessionId, result?.stopReason);
+      this.finishTurn(sessionId, result?.stopReason, turnGeneration);
     } catch (err: unknown) {
-      if (timedOut || errorDetected) return;
-
-      clearInterval(keepAlive);
-      clearTimeout(timer);
-      if (stderrHandler && liveSess.process?.stderr) {
-        try {
-          liveSess.process.stderr.removeListener("data", stderrHandler);
-        } catch { /* ok */ }
+      if (timedOut || errorDetected || !this.isCurrentTurn(liveSess, turnGeneration)) {
+        cleanupTurn();
+        return;
       }
+
+      cleanupTurn();
       const msg = err instanceof Error ? err.message : String(err);
       console.log(
         `[session-manager] prompt error after ${Math.floor((Date.now() - startTime) / 1_000)}s: ${msg}`,
       );
-      this.finishTurn(sessionId, "error");
+      this.finishTurn(sessionId, "error", turnGeneration);
       const displayMsg =
         msg.includes("closed") || msg.includes("abort")
           ? "[Session expired] Send a message to auto-restart."
@@ -793,6 +802,15 @@ export class SessionManager {
     if (!sess.sessionId) return;
     sess.client.cancel(sess.sessionId).catch(() => {});
     this.cancelPendingPermissions(sess);
+    if (!sess.turnActive) return;
+    const turnGeneration = sess.turnGeneration;
+    if (sess.cancelWatchdog) clearTimeout(sess.cancelWatchdog);
+    sess.cancelWatchdog = setTimeout(() => {
+      const current = this.sessions.get(sessionId);
+      if (!current || !current.turnActive || current.turnGeneration !== turnGeneration) return;
+      console.log(`[session-manager] cancel watchdog releasing turn for ${sessionId.slice(0, 20)}`);
+      this.finishTurn(sessionId, "cancelled", turnGeneration);
+    }, this.cancelWatchdogMs);
   }
 
   /** ── switchModel ────────────────────────────────────────────
@@ -1034,10 +1052,22 @@ export class SessionManager {
     sess.pendingPermissions.clear();
   }
 
-  private finishTurn(sessionId: string, reason?: string): void {
+  private isCurrentTurn(sess: SessionState, turnGeneration: number): boolean {
+    return sess.turnActive && sess.turnGeneration === turnGeneration;
+  }
+
+  private finishTurn(sessionId: string, reason?: string, turnGeneration?: number): void {
     const sess = this.sessions.get(sessionId);
     if (!sess) return;
+    if (turnGeneration !== undefined && sess.turnGeneration !== turnGeneration) return;
+    sess.turnCleanup?.();
+    delete sess.turnCleanup;
+    if (sess.cancelWatchdog) {
+      clearTimeout(sess.cancelWatchdog);
+      delete sess.cancelWatchdog;
+    }
     sess.turnActive = false;
+    sess.turnGeneration = (sess.turnGeneration ?? 0) + 1;
     delete sess.resetTimeout;
     this.cancelPendingPermissions(sess);
     this.bufferAgentEvent(sessionId, {

@@ -105,6 +105,28 @@ void main() {
     expect(provider.state.lastMessageId, 'session:1');
   });
 
+  test(
+      'late cursor event cannot advance state after the current session closes',
+      () {
+    final ws = _FakeWSClient();
+    final provider = ChatProvider(ws);
+    addTearDown(provider.dispose);
+    provider.state.sessionId = 'session-a';
+    provider.state.lastMessageId = 'session-a:4';
+    provider.state.sessionId = '';
+    provider.state.lastMessageId = '';
+
+    ws.emit(ServerMessage(
+      type: 'agent_event',
+      sessionId: 'session-b',
+      messageId: 'session-b:42',
+      event: AcpUpdate(event: 'agent_message_chunk', text: 'late'),
+    ));
+
+    expect(provider.state.messages, isEmpty);
+    expect(provider.state.lastMessageId, isEmpty);
+  });
+
   test('late event from a closed session cannot repopulate the empty chat', () {
     final ws = _FakeWSClient();
     final provider = ChatProvider(ws);
