@@ -51,10 +51,15 @@ export async function handleLoadSession(
         .map(e => {
           try {
             const parsed = JSON.parse(e.payload);
-            const payload = parsed.event || parsed;
-            if (payload && typeof payload === "object") {
-              payload.messageId = e.messageId;
-            }
+            if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return null;
+            // Replay the complete Nexus protocol envelope. Dropping the
+            // outer type/sessionId here turns agent_event into an unscoped ACP
+            // update and makes Flutter route replay differently from live data.
+            const payload = {
+              ...parsed,
+              sessionId: parsed.sessionId || sessionId,
+              messageId: e.messageId,
+            };
             return { messageId: e.messageId, payload, timestamp: e.timestamp };
           } catch {
             return null;

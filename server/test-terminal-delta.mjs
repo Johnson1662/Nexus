@@ -183,6 +183,20 @@ try {
   assert(missingFinalStatuses[0]?.event.status === "failed", "spawn error followed by close is failed");
   assert(missingOutput.exitStatus?.exitCode === -1, "spawn error keeps the legacy exit code");
 
+  const releaseResult = await callbacks.onCreateTerminal({
+    command: process.execPath,
+    args: ["-e", "setTimeout(() => {}, 60000);"],
+  });
+  const pendingReleaseWait = callbacks.onWaitForTerminalExit({ terminalId: releaseResult.terminalId });
+  await new Promise((resolve) => setTimeout(resolve, 25));
+  await callbacks.onReleaseTerminal({ terminalId: releaseResult.terminalId });
+  const releasedExit = await Promise.race([
+    pendingReleaseWait,
+    new Promise((_, reject) => setTimeout(() => reject(new Error("released terminal wait timed out")), 1000)),
+  ]);
+  assert(releasedExit.signal === "SIGTERM", "releasing a terminal settles concurrent waiters");
+  assert(!session.terminals.has(releaseResult.terminalId), "released terminal is removed from the session map");
+
   const oneChunk = { output: "", pendingDelta: "", truncated: false, outputByteLimit: 256 * 1024 };
   appendTerminalOutput(oneChunk, "x".repeat(300 * 1024));
   assert(oneChunk.output === "x".repeat(256 * 1024), "single oversized helper input keeps the first 256KB");

@@ -99,6 +99,10 @@ function serialize(value: JsonRecord): { payload: string; payloadBytes: number }
   return { payload, payloadBytes: Buffer.byteLength(payload, "utf8") };
 }
 
+function boundedIdentity(value: unknown, maxBytes = 256): string | undefined {
+  return typeof value === "string" ? truncateUtf8(value, maxBytes).text : undefined;
+}
+
 export interface BoundedPayload {
   value: JsonRecord;
   payload: string;
@@ -121,17 +125,23 @@ function minimalEvent(event: unknown): JsonRecord {
     "terminalStatus",
   ]) {
     const value = event[key];
-    if (typeof value === "string") compact[key] = value;
+    const bounded = boundedIdentity(value);
+    if (bounded !== undefined) compact[key] = bounded;
   }
   if (Array.isArray(event.toolCallContent)) {
-    compact.toolCallContent = event.toolCallContent.map((block) => {
+    // The fallback must be constant-sized too. An attacker can provide a
+    // huge array of tiny blocks that is still oversized after all strings are
+    // truncated, so never copy the whole array into the last-resort shape.
+    compact.toolCallContent = event.toolCallContent.slice(0, 1).map((block) => {
       if (!isRecord(block)) return { type: "content", content: { type: "text", text: "" } };
       const boundedBlock: JsonRecord = {};
-      if (typeof block.type === "string") boundedBlock.type = block.type;
+      const blockType = boundedIdentity(block.type);
+      if (blockType !== undefined) boundedBlock.type = blockType;
       if (isRecord(block.content)) {
         const content: JsonRecord = {};
         for (const key of ["type", "path", "terminalId", "oldText", "newText", "text"]) {
-          if (typeof block.content[key] === "string") content[key] = block.content[key];
+          const bounded = boundedIdentity(block.content[key]);
+          if (bounded !== undefined) content[key] = bounded;
         }
         boundedBlock.content = content;
       } else {
@@ -141,13 +151,15 @@ function minimalEvent(event: unknown): JsonRecord {
     });
   }
   compact.truncated = true;
+  compact.structureTruncated = true;
   return compact;
 }
 
 function minimalPayload(payload: JsonRecord): JsonRecord {
   const compact: JsonRecord = {};
   for (const key of ["type", "sessionId", "messageId"]) {
-    if (typeof payload[key] === "string") compact[key] = payload[key];
+    const bounded = boundedIdentity(payload[key]);
+    if (bounded !== undefined) compact[key] = bounded;
   }
   compact.event = minimalEvent(payload.event);
   return compact;
@@ -385,7 +397,7 @@ function boundFilePayload(payload: JsonRecord, key: "content" | "diff"): Bounded
   // The normal path always fits because only file text is large. Keep the
   // required top-level fields even for an adversarially-large path/metadata.
   const compact: JsonRecord = {
-    type: payload.type,
+    type: boundedIdentity(payload.type) ?? "file_event",
     path: typeof payload.path === "string" ? truncateUtf8(payload.path, 1024).text : "",
     [key]: "",
     truncated: true,

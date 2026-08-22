@@ -30,6 +30,7 @@ const IDLE_CLEANUP_INTERVAL_MS = 30_000;
 const MAX_MESSAGE_BUFFER = 500;
 const PROMPT_TIMEOUT = 300_000; // 5 minutes sliding inactivity
 const AGENT_INITIALIZE_TIMEOUT_MS = 30_000;
+export const ACP_SESSION_OPERATION_TIMEOUT_MS = 30_000;
 
 export type SessionOwnerErrorCode =
   | "SESSION_NOT_FOUND"
@@ -62,7 +63,43 @@ function spawnAgentProcess(agent: string, cwd: string): ChildProcess {
   });
 }
 
-async function initializeWithTimeout(client: AcpClient, proc: ChildProcess): Promise<void> {
+export function withAcpDeadline<T>(
+  label: string,
+  operation: () => Promise<T>,
+  timeoutMs = ACP_SESSION_OPERATION_TIMEOUT_MS,
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      reject(new Error(`${label} timeout`));
+    }, timeoutMs);
+
+    void Promise.resolve()
+      .then(operation)
+      .then(
+        (value) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          resolve(value);
+        },
+        (error: unknown) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          reject(error);
+        },
+      );
+  });
+}
+
+async function initializeWithTimeout(
+  client: AcpClient,
+  proc: ChildProcess,
+  timeoutMs = AGENT_INITIALIZE_TIMEOUT_MS,
+): Promise<void> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   let rejectProcessError: (error: Error) => void = () => {};
   const onProcessError = (error: Error) => rejectProcessError(error);
@@ -71,7 +108,7 @@ async function initializeWithTimeout(client: AcpClient, proc: ChildProcess): Pro
     proc.once("error", onProcessError);
   });
   const timeout = new Promise<never>((_resolve, reject) => {
-    timer = setTimeout(() => reject(new Error("agent initialize timeout")), AGENT_INITIALIZE_TIMEOUT_MS);
+    timer = setTimeout(() => reject(new Error("agent initialize timeout")), timeoutMs);
   });
   try {
     await Promise.race([client.initialize(), processError, timeout]);
@@ -93,6 +130,10 @@ const MODEL_ERROR_PATTERNS: RegExp[] = [
 /** Inversion-of-control seam for testability — overrides AcpClient construction. */
 export interface AcpClientFactory {
   create(proc: ChildProcess, callbacks: AcpClientCallbacks): AcpClient;
+}
+
+export interface SessionManagerOptions {
+  acpSessionOperationTimeoutMs?: number;
 }
 
 // ── Params Interface ──────────────────────────────────────────────
@@ -125,11 +166,13 @@ export class SessionManager {
   private transportIds = new WeakMap<object, string>();
   private idleCleanupTimer: ReturnType<typeof setInterval> | null = null;
   private clientFactory: AcpClientFactory;
+  private acpSessionOperationTimeoutMs: number;
 
-  constructor(factory?: AcpClientFactory) {
+  constructor(factory?: AcpClientFactory, options: SessionManagerOptions = {}) {
     this.clientFactory = factory ?? {
       create: (proc, callbacks) => new AcpClient(proc, callbacks),
     };
+    this.acpSessionOperationTimeoutMs = options.acpSessionOperationTimeoutMs ?? ACP_SESSION_OPERATION_TIMEOUT_MS;
   }
 
   private transportIdentity(transport: WebSocket): string {
@@ -215,17 +258,25 @@ export class SessionManager {
         this.updateSessionActivity(targetSessionId);
         if (mode === "load" || mode === "resume") {
           if (!existing.loadInFlight) {
-            existing.loadInFlight = (async () => {
-              if (mode === "load") {
-                await existing.client.loadSession(targetSessionId, existing.cwd);
-              } else {
-                await existing.client.resumeSession(targetSessionId, existing.cwd);
-              }
-            })().finally(() => {
+            existing.loadInFlight = withAcpDeadline(
+              `${mode}Session`,
+              () => mode === "load"
+                ? existing.client.loadSession(targetSessionId, existing.cwd).then(() => undefined)
+                : existing.client.resumeSession(targetSessionId, existing.cwd).then(() => undefined),
+              this.acpSessionOperationTimeoutMs,
+            ).finally(() => {
               existing.loadInFlight = undefined;
             });
           }
-          await existing.loadInFlight;
+          try {
+            await existing.loadInFlight;
+          } catch (error) {
+            // A timed-out ACP load/resume leaves the connection state
+            // ambiguous. Dispose it so the next request cannot inherit a
+            // permanently locked loadInFlight/client/process.
+            this.disposeSession(targetSessionId, existing);
+            throw error;
+          }
         }
         return existing;
       }
@@ -358,31 +409,38 @@ export class SessionManager {
     try {
       await initializeWithTimeout(client, proc);
       if (mode === "load" && targetSessionId) {
-        sess.loadInFlight = (async () => {
-          await client.loadSession(targetSessionId, resolvedCwd);
-        })().finally(() => {
+        sess.loadInFlight = withAcpDeadline(
+          "loadSession",
+          () => client.loadSession(targetSessionId, resolvedCwd).then(() => undefined),
+          this.acpSessionOperationTimeoutMs,
+        ).finally(() => {
           sess.loadInFlight = undefined;
         });
         await sess.loadInFlight;
         sessionId = targetSessionId;
       } else if (mode === "resume" && targetSessionId) {
-        sess.loadInFlight = (async () => {
-          await client.resumeSession(targetSessionId, resolvedCwd);
-        })().finally(() => {
+        sess.loadInFlight = withAcpDeadline(
+          "resumeSession",
+          () => client.resumeSession(targetSessionId, resolvedCwd).then(() => undefined),
+          this.acpSessionOperationTimeoutMs,
+        ).finally(() => {
           sess.loadInFlight = undefined;
         });
         await sess.loadInFlight;
         sessionId = targetSessionId;
       } else {
-        const result = await client.createSession(resolvedCwd);
+        const result = await withAcpDeadline(
+          "createSession",
+          () => client.createSession(resolvedCwd),
+          this.acpSessionOperationTimeoutMs,
+        );
         sessionId = result.sessionId;
       }
     } catch (err: unknown) {
-      // Tear down on init failure
-      try { client.destroy(); } catch { /* ok */ }
-      if (!proc.killed) {
-        try { kill(proc.pid!, "SIGTERM"); } catch { /* ok */ }
-      }
+      // Tear down on any init/create/load/resume failure. In particular,
+      // targetSessionId may already be present in the map as a partial
+      // session, so leaving it there would poison the next request.
+      this.disposeSession(targetSessionId || sessionId, sess);
       throw err;
     }
 
@@ -1113,6 +1171,17 @@ export class SessionManager {
     this.sessionSeqCounter.clear();
   }
 
+  /** Dispose a partially initialized or unusable ACP session. */
+  private disposeSession(sessionId: string, sess: SessionState): void {
+    this.killTerminalProcesses(sess);
+    this.cancelPendingPermissions(sess);
+    this.killSessionProcess(sess);
+    if (sessionId && this.sessions.get(sessionId) === sess) {
+      this.sessions.delete(sessionId);
+      this.sessionSeqCounter.delete(sessionId);
+    }
+  }
+
   /** Kill an ACP session's child process and destroy its client. */
   public killSessionProcess(sess: SessionState): void {
     try {
@@ -1129,6 +1198,14 @@ export class SessionManager {
   private killTerminalProcesses(sess: SessionState): void {
     if (!sess.terminals) return;
     for (const [, term] of sess.terminals) {
+      if (term.flushTimer) {
+        clearTimeout(term.flushTimer);
+        term.flushTimer = null;
+      }
+      term.exitStatus ??= { exitCode: null, signal: "SIGTERM" };
+      const resolveExit = term.resolveExit;
+      term.resolveExit = null;
+      resolveExit?.();
       if (term.process && !term.process.killed) {
         try {
           kill(term.process.pid!, "SIGTERM");

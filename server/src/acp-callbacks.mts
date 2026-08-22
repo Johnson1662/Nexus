@@ -28,6 +28,23 @@ import type {
 const MAX_TERMINAL_OUTPUT_BYTES = 256 * 1024;
 const TERMINAL_FLUSH_INTERVAL_MS = 75;
 
+function settleTerminalExit(
+  terminal: TerminalState,
+  exitStatus: { exitCode: number | null; signal: string | null } = {
+    exitCode: null,
+    signal: "SIGTERM",
+  },
+): void {
+  if (terminal.flushTimer) {
+    clearTimeout(terminal.flushTimer);
+    terminal.flushTimer = null;
+  }
+  terminal.exitStatus ??= exitStatus;
+  const resolveExit = terminal.resolveExit;
+  terminal.resolveExit = null;
+  resolveExit?.();
+}
+
 export function appendTerminalOutput(t: TerminalState, text: string): void {
   if (!text || t.truncated) return;
 
@@ -249,14 +266,21 @@ export function createAcpCallbacks(config: AcpCallbacksConfig): {
     };
 
     const terminalCwd = params.cwd ? resolvePathWithinCwd(params.cwd, cwd) : cwd;
-    const termProc = spawn(params.command, params.args ?? [], {
-      cwd: terminalCwd,
-      env: params.env
-        ? { ...process.env, ...Object.fromEntries(params.env.map((e: { name: string; value: string }) => [e.name, e.value])) }
-        : { ...process.env },
-      stdio: ["pipe", "pipe", "pipe"],
-      windowsHide: true,
-    });
+    let termProc: ReturnType<typeof spawn>;
+    try {
+      termProc = spawn(params.command, params.args ?? [], {
+        cwd: terminalCwd,
+        env: params.env
+          ? { ...process.env, ...Object.fromEntries(params.env.map((e: { name: string; value: string }) => [e.name, e.value])) }
+          : { ...process.env },
+        stdio: ["pipe", "pipe", "pipe"],
+        windowsHide: true,
+      });
+    } catch (error) {
+      currentSess.terminals.delete(terminalId);
+      currentSess.toolCallIdMap.delete(terminalId);
+      throw error;
+    }
 
     terminal.process = termProc;
 
@@ -301,15 +325,11 @@ export function createAcpCallbacks(config: AcpCallbacksConfig): {
       const t = sess?.terminals.get(terminalId);
       if (t) {
         flushDecoder(t);
-        if (t.flushTimer) {
-          clearTimeout(t.flushTimer);
-          t.flushTimer = null;
-        }
         t.exitStatus = {
           exitCode: spawnError ? -1 : code,
           signal: spawnError ? null : sig ?? null,
         };
-        if (t.resolveExit) t.resolveExit();
+        settleTerminalExit(t);
       }
       sendTerminalUpdate(spawnError || code !== 0 ? "failed" : "completed", true);
     });
@@ -359,11 +379,15 @@ export function createAcpCallbacks(config: AcpCallbacksConfig): {
     if (!currentSess) throw new Error("session not found");
     const term = currentSess.terminals.get(params.terminalId);
     if (!term) throw new Error(`terminal not found: ${params.terminalId}`);
-    if (!term.process!.killed) {
+    if (term.process && !term.process.killed) {
       try {
         kill(term.process.pid!, "SIGTERM");
       } catch {}
     }
+    // Release must settle waitForTerminalExit callers before removing the
+    // terminal from the session map; otherwise a concurrent wait hangs
+    // forever after an explicit release.
+    settleTerminalExit(term);
     currentSess.terminals.delete(params.terminalId);
     // Clean up terminal's toolCallIdMap entry
     currentSess.toolCallIdMap.delete(params.terminalId);

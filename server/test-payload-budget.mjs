@@ -3,7 +3,9 @@ import { Buffer } from "node:buffer";
 import { sessionManager } from "./dist/session-manager.mjs";
 import {
   boundFileEventPayload,
+  boundAgentEventPayload,
   countToolContentBytes,
+  MAX_AGENT_EVENT_BYTES,
   MAX_FILE_EVENT_BYTES,
   MAX_TOOL_CONTENT_BYTES,
   truncateUtf8,
@@ -78,7 +80,24 @@ try {
   assert(Array.isArray(parsedTool.event?.toolCallContent), "large tool event keeps content blocks");
   assert(parsedTool.event?.toolCallContent[0]?.content?.type === "text", "large tool event keeps block type");
   assert(countToolContentBytes(parsedTool) <= MAX_TOOL_CONTENT_BYTES, "large tool event text stays below the cumulative tool cap");
-  assert(Buffer.byteLength(boundedTool?.payload ? JSON.stringify(boundedTool) : "", "utf8") <= 700 * 1024, "bounded tool result remains finite");
+  assert(session.messageBuffer.at(-1)?.payloadBytes <= MAX_AGENT_EVENT_BYTES, "bounded tool result stays below the event cap");
+
+  const hugeBlockArray = boundAgentEventPayload({
+    type: "agent_event",
+    sessionId,
+    event: {
+      sessionUpdate: "tool_call_update",
+      toolCallId: "huge-block-array",
+      toolCallContent: Array.from({ length: 100_000 }, () => ({
+        type: "content",
+        content: { type: "text", text: "x" },
+      })),
+    },
+  });
+  const hugeBlockPayload = JSON.parse(hugeBlockArray.payload);
+  assert(hugeBlockArray.payloadBytes <= MAX_AGENT_EVENT_BYTES, "last-resort event shape stays below the hard cap");
+  assert(hugeBlockPayload.event?.structureTruncated === true, "last-resort event shape marks structural truncation");
+  assert(hugeBlockPayload.event?.toolCallContent?.length <= 1, "last-resort event shape bounds content blocks");
 
   const diffPayload = boundFileEventPayload({
     type: "file_diff",

@@ -1,4 +1,4 @@
-import { SessionManager } from "./dist/session-manager.mjs";
+import { SessionManager, withAcpDeadline } from "./dist/session-manager.mjs";
 
 let passed = 0;
 let failed = 0;
@@ -22,6 +22,16 @@ function fakeWs() {
 }
 
 async function main() {
+  let timedOut = false;
+  const timeoutStarted = Date.now();
+  try {
+    await withAcpDeadline("createSession", () => new Promise(() => {}), 10);
+  } catch (error) {
+    timedOut = error instanceof Error && error.message === "createSession timeout";
+  }
+  assert(timedOut, "ACP operation deadline rejects a hung operation");
+  assert(Date.now() - timeoutStarted < 1000, "ACP operation deadline settles promptly");
+
   const manager = new SessionManager();
   const originalCreate = manager.getOrCreateInternal;
   const inFlight = deferred();
@@ -51,6 +61,50 @@ async function main() {
     assert(error === failedCreate, "create failure reaches the caller");
   }
   assert(!manager.hasPendingCreate(wsA), "failed create releases the pending lock");
+
+  // A timed-out load must release the in-flight marker and dispose the
+  // session instead of leaving a permanently locked ACP process in the pool.
+  const timeoutManager = new SessionManager(undefined, { acpSessionOperationTimeoutMs: 10 });
+  const timeoutWs = fakeWs();
+  let destroyed = false;
+  const timeoutSession = {
+    ws: timeoutWs,
+    ownerTransport: timeoutWs,
+    ownerId: null,
+    client: {
+      loadSession: () => new Promise(() => {}),
+      destroy: () => { destroyed = true; },
+    },
+    sessionId: "load-timeout",
+    cwd: process.cwd(),
+    process: { killed: true },
+    agent: "test",
+    pendingPermissions: new Map(),
+    terminals: new Map(),
+    restartCount: 0,
+    toolCallIdMap: new Map(),
+    toolContentBytesByCallId: new Map(),
+    turnActive: false,
+    lastActivity: Date.now(),
+    orphanedAt: null,
+    messageBuffer: [],
+    replayBytes: 0,
+  };
+  timeoutManager.getAllSessions().set("load-timeout", timeoutSession);
+  let loadTimedOut = false;
+  try {
+    await timeoutManager.getOrCreate(timeoutWs, {
+      sessionId: "load-timeout",
+      mode: "load",
+    });
+  } catch (error) {
+    loadTimedOut = error instanceof Error && error.message === "loadSession timeout";
+  }
+  assert(loadTimedOut, "hung loadSession is rejected by the ACP deadline");
+  assert(destroyed, "timed-out load destroys the unusable ACP client");
+  assert(!timeoutManager.getAllSessions().has("load-timeout"), "timed-out load removes the partial session");
+  assert(!timeoutManager.hasPendingCreate(timeoutWs), "timed-out load releases the pending create lock");
+  timeoutManager.stop();
 
   manager.getOrCreateInternal = originalCreate;
   manager.stop();
