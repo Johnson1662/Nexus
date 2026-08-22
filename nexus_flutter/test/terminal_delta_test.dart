@@ -130,4 +130,82 @@ void main() {
     expect(provider.state.messages.single.toolContent.length, 100 * 1024);
     expect(provider.state.messages.single.toolContent, 'x' * (100 * 1024));
   });
+
+  test('tool card content is capped cumulatively at 512KB', () {
+    final provider = ChatProvider(WSClient());
+    addTearDown(provider.dispose);
+    provider.state.sessionId = 'session-1';
+
+    provider.receiveServerMessage(ServerMessage.fromJson({
+      'type': 'agent_event',
+      'sessionId': 'session-1',
+      'event': {
+        'sessionUpdate': 'tool_call',
+        'toolCallId': 'call-1',
+        'toolName': 'large-tool',
+        'status': 'in_progress',
+      },
+    }));
+    for (var i = 0; i < 100; i++) {
+      provider.receiveServerMessage(ServerMessage.fromJson({
+        'type': 'agent_event',
+        'sessionId': 'session-1',
+        'event': {
+          'sessionUpdate': 'tool_call_update',
+          'toolCallId': 'call-1',
+          'status': 'in_progress',
+          'toolCallContent': [
+            {
+              'type': 'content',
+              'content': {'type': 'text', 'text': 'x' * (10 * 1024)},
+            },
+          ],
+        },
+      }));
+    }
+
+    expect(provider.state.messages, hasLength(1));
+    expect(provider.state.messages.single.toolContent.length, 512 * 1024);
+    expect(provider.state.messages.single.toolTruncated, isTrue);
+  });
+
+  test('large diff fields are UTF-8 safely bounded', () {
+    final provider = ChatProvider(WSClient());
+    addTearDown(provider.dispose);
+    provider.state.sessionId = 'session-1';
+
+    provider.receiveServerMessage(ServerMessage.fromJson({
+      'type': 'agent_event',
+      'sessionId': 'session-1',
+      'event': {
+        'sessionUpdate': 'tool_call',
+        'toolCallId': 'call-1',
+        'toolName': 'edit',
+        'status': 'in_progress',
+      },
+    }));
+    provider.receiveServerMessage(ServerMessage.fromJson({
+      'type': 'agent_event',
+      'sessionId': 'session-1',
+      'event': {
+        'sessionUpdate': 'tool_call_update',
+        'toolCallId': 'call-1',
+        'status': 'completed',
+        'toolCallContent': [
+          {
+            'type': 'diff',
+            'path': 'lib/main.dart',
+            'oldText': '旧🙂' * (300 * 1024),
+            'newText': '新🙂' * (300 * 1024),
+          },
+        ],
+      },
+    }));
+
+    final message = provider.state.messages.single;
+    expect(message.toolPath, 'lib/main.dart');
+    expect(message.toolOldText.length, lessThanOrEqualTo(512 * 1024));
+    expect(message.toolNewText.length, lessThanOrEqualTo(512 * 1024));
+    expect(message.toolTruncated, isTrue);
+  });
 }

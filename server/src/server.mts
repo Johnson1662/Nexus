@@ -315,7 +315,13 @@ export function handleIncomingConnection(transport: any, hostId: string = HOST_I
   }
 
   function handlePlaintextMessage(rawStr: string): void {
-    const parsed = parseClientMessage(rawStr);
+    let parsed: ReturnType<typeof parseClientMessage>;
+    try {
+      parsed = parseClientMessage(rawStr);
+    } catch {
+      sendProtocolError("INVALID_MESSAGE", "Message does not match the WS protocol");
+      return;
+    }
     if (!parsed.ok) {
       sendProtocolError(parsed.code, parsed.text);
       return;
@@ -572,12 +578,15 @@ export function handleIncomingConnection(transport: any, hostId: string = HOST_I
             .map(e => {
               try {
                 const parsed = JSON.parse(e.payload);
-                // payload is stored as {type:"agent_event", sessionId, event: {...}}
-                // client expects just the inner event object; fallback to parsed for non-event payloads
-                const payload = parsed.event || parsed;
-                if (payload && typeof payload === "object") {
-                  payload.messageId = e.messageId;
-                }
+                if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return null;
+                // Replay the complete protocol envelope. The Flutter client
+                // must be able to route session_context_replaced and other
+                // session-scoped messages, not only inner ACP events.
+                const payload = {
+                  ...parsed,
+                  sessionId: parsed.sessionId || syncSessionId,
+                  messageId: e.messageId,
+                };
                 return { messageId: e.messageId, payload, timestamp: e.timestamp };
               } catch {
                 return null;

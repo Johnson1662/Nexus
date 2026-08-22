@@ -33,6 +33,25 @@ for (const raw of invalidInputs) {
 const valid = parseClientMessage(JSON.stringify({ type: "heartbeat", ts: Date.now() }));
 assert(valid.ok === true, "accepts a valid transport message");
 
+function nestedSession(depth) {
+  let raw = JSON.stringify({ type: "heartbeat" });
+  for (let index = 0; index < depth; index += 1) {
+    raw = `{"type":"session","message":${raw}}`;
+  }
+  return raw;
+}
+
+for (const depth of [100, 1000, 10000]) {
+  let parsed;
+  try {
+    parsed = parseClientMessage(nestedSession(depth));
+  } catch (error) {
+    parsed = { ok: true };
+    console.error(`FAIL: nested session depth ${depth} escaped validation: ${String(error)}`);
+  }
+  assert(parsed.ok === false, `rejects nested session depth ${depth} without recursion`);
+}
+
 const originalHome = process.env.HOME;
 const originalUserProfile = process.env.USERPROFILE;
 const testHome = mkdtempSync(join(tmpdir(), "nexus-protocol-test-"));
@@ -55,6 +74,14 @@ assert(
 
 transport.emit("message", Buffer.from(JSON.stringify({ type: "heartbeat", ts: 42 })));
 assert(transport.sent.some((message) => message.type === "heartbeat" && message.ts === 42), "heartbeat still reaches the transport handler");
+
+transport.emit("message", Buffer.from(nestedSession(10000)));
+assert(
+  transport.sent.some((message) => message.type === "error" && message.code === "INVALID_MESSAGE"),
+  "deeply nested session receives INVALID_MESSAGE instead of escaping the WS handler",
+);
+transport.emit("message", Buffer.from(JSON.stringify({ type: "heartbeat", ts: 43 })));
+assert(transport.sent.some((message) => message.type === "heartbeat" && message.ts === 43), "bridge stays alive after deeply nested input");
 
 transport.emit("close");
 if (originalHome === undefined) delete process.env.HOME;

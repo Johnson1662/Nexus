@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 
 import '../lib/models/device_entry.dart';
+import '../lib/models/message_data.dart';
 import '../lib/models/ws_protocol.dart';
 import '../lib/providers/chat_provider.dart';
 import '../lib/services/host_store.dart';
@@ -118,6 +119,62 @@ void main() {
     ));
 
     expect(provider.state.messages, isEmpty);
+  });
+
+  test(
+      'session-scoped legacy event without a session id cannot pollute the chat',
+      () {
+    final ws = _FakeWSClient();
+    final provider = ChatProvider(ws);
+    addTearDown(provider.dispose);
+    provider.state.sessionId = '';
+
+    ws.emit(ServerMessage(
+      type: 'agent_event',
+      event: AcpUpdate(event: 'agent_message_chunk', text: 'unscoped'),
+    ));
+
+    expect(provider.state.messages, isEmpty);
+  });
+
+  test('delayed sync response from session A cannot mutate session B', () {
+    final ws = _FakeWSClient();
+    final provider = ChatProvider(ws);
+    addTearDown(provider.dispose);
+    provider.state.sessionId = 'session-a';
+    provider.state.lastMessageId = 'session-a:4';
+    provider.syncRequest();
+
+    provider.state.sessionId = 'session-b';
+    provider.state.turnActive = true;
+    provider.state.lastMessageId = 'session-b:2';
+    provider.state.messages = [
+      MessageData(role: 'assistant', content: 'B is still here'),
+    ];
+
+    ws.emit(ServerMessage.fromJson({
+      'type': 'sync_response',
+      'sessionId': 'session-a',
+      'turnActive': false,
+      'entries': [
+        {
+          'messageId': 'session-a:5',
+          'payload': {
+            'type': 'agent_event',
+            'sessionId': 'session-a',
+            'messageId': 'session-a:5',
+            'event': {
+              'sessionUpdate': 'agent_message_chunk',
+              'content': 'late A',
+            },
+          },
+        },
+      ],
+    }));
+
+    expect(provider.state.turnActive, isTrue);
+    expect(provider.state.lastMessageId, 'session-b:2');
+    expect(provider.state.messages.single.content, 'B is still here');
   });
 
   test('binary WS frames are rejected without a String cast', () {

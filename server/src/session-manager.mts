@@ -808,11 +808,28 @@ export class SessionManager {
       const syncResult = this.replayBuffer(sessionId, lastMessageId, ws);
       if (syncResult.entries.length > 0) {
         try {
+          const entries = syncResult.entries.flatMap((entry) => {
+            try {
+              const parsed = JSON.parse(entry.payload);
+              if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return [];
+              return [{
+                messageId: entry.messageId,
+                payload: {
+                  ...parsed,
+                  sessionId: parsed.sessionId || sessionId,
+                  messageId: entry.messageId,
+                },
+                timestamp: entry.timestamp,
+              }];
+            } catch {
+              return [];
+            }
+          });
           ws.send(
             JSON.stringify({
               type: "sync_response",
               sessionId,
-              entries: syncResult.entries,
+              entries,
               overflow: syncResult.overflow,
             }),
           );

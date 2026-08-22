@@ -50,9 +50,15 @@ export function isValidClientMessage(value: unknown): value is JsonRecord {
   if (!hasValidOptionalFields(value)) return false;
 
   // Layered messages carry the session message in a required object. This also
-  // prevents `message: null` from reaching the router and throwing.
+  // prevents `message: null` from reaching the router and throwing. Only one
+  // layer is part of the protocol; rejecting another `session` layer keeps
+  // validation iterative and immune to attacker-controlled recursion depth.
   if (value.type === "session") {
-    return isRecord(value.message) && isValidClientMessage(value.message);
+    return isRecord(value.message) &&
+      value.message.type !== "session" &&
+      typeof value.message.type === "string" &&
+      value.message.type.trim().length > 0 &&
+      hasValidOptionalFields(value.message);
   }
   return true;
 }
@@ -64,8 +70,14 @@ export function parseClientMessage(raw: string): ClientMessageParseResult {
   } catch {
     return { ok: false, code: "INVALID_JSON", text: "Invalid JSON message" };
   }
-  if (!isValidClientMessage(decoded)) {
+  try {
+    if (!isValidClientMessage(decoded)) {
+      return { ok: false, code: "INVALID_MESSAGE", text: "Message does not match the WS protocol" };
+    }
+    return { ok: true, message: decoded };
+  } catch {
+    // Validation exceptions are handled as invalid messages rather than
+    // escaping the WS message callback.
     return { ok: false, code: "INVALID_MESSAGE", text: "Message does not match the WS protocol" };
   }
-  return { ok: true, message: decoded };
 }

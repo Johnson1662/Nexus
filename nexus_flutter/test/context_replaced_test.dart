@@ -6,8 +6,7 @@ import '../lib/models/ws_protocol.dart';
 import '../lib/providers/chat_provider.dart';
 import '../lib/services/ws_client.dart';
 
-const _contextReplacedNotice =
-    'Agent 上下文已重新创建。此前消息仍可查看，但新任务不会继承旧 Agent 上下文。';
+const _contextReplacedNotice = 'Agent 上下文已重新创建。此前消息仍可查看，但新任务不会继承旧 Agent 上下文。';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -58,6 +57,31 @@ void main() {
     expect(provider.state.contextReplacedNotice, '已有提示');
   });
 
+  test('session_context_replaced survives full-envelope sync replay', () {
+    final provider = ChatProvider(WSClient());
+    addTearDown(provider.dispose);
+    provider.state.sessionId = 'session-1';
+
+    provider.receiveServerMessage(ServerMessage.fromJson({
+      'type': 'sync_response',
+      'sessionId': 'session-1',
+      'entries': [
+        {
+          'messageId': 'session-1:7',
+          'payload': {
+            'type': 'session_context_replaced',
+            'sessionId': 'session-1',
+            'messageId': 'session-1:7',
+            'reason': 'reload_failed',
+          },
+        },
+      ],
+    }));
+
+    expect(provider.state.contextReplacedNotice, _contextReplacedNotice);
+    expect(provider.state.lastMessageId, 'session-1:7');
+  });
+
   test('resetForNewChat clears the context replacement notice', () {
     final provider = ChatProvider(WSClient());
     addTearDown(provider.dispose);
@@ -68,7 +92,8 @@ void main() {
     expect(provider.state.contextReplacedNotice, isEmpty);
   });
 
-  test('START_ALREADY_IN_PROGRESS start_failed unlocks the turn with an error', () {
+  test('START_ALREADY_IN_PROGRESS start_failed unlocks the turn with an error',
+      () {
     final provider = ChatProvider(WSClient());
     addTearDown(provider.dispose);
 

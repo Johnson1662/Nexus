@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../models/message_data.dart';
 import '../models/chat_state.dart';
@@ -23,6 +24,7 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
   bool _startInFlight = false;
   bool _inputInFlight = false;
   bool _syncInFlight = false;
+  String _syncRequestSessionId = '';
   Timer? _turnRequestTimer;
   Timer? _cancelTimer;
   Timer? _cursorPersistTimer;
@@ -35,6 +37,7 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
   late final OnPermissionActionCallback _permissionAction;
   static const int _turnRequestTimeoutMs = 15000;
   static const int _maxProcessedMessageIds = 4096;
+  static const int _maxToolCardBytes = 512 * 1024;
   static const String _contextReplacedNotice =
       'Agent 上下文已重新创建。此前消息仍可查看，但新任务不会继承旧 Agent 上下文。';
 
@@ -47,6 +50,7 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
         syncRequest();
       } else {
         _syncInFlight = false;
+        _syncRequestSessionId = '';
       }
       notifyListeners();
     }));
@@ -268,6 +272,7 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
     _startInFlight = false;
     _inputInFlight = false;
     _syncInFlight = false;
+    _syncRequestSessionId = '';
     _state.connected = false;
     _state.currentDeviceId = '';
     _state.sessionTitle = '';
@@ -684,6 +689,7 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
       _resetCursor(clearPersisted: true);
     }
     _syncInFlight = true;
+    _syncRequestSessionId = sessionId;
     _ws.send(ClientMessage(
       type: 'sync_request',
       sessionId: sessionId,
@@ -769,7 +775,7 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
         notifyListeners();
         break;
       case 'session_context_replaced':
-        if (!_isEventForCurrentSession(msg.sessionId)) {
+        if (!_isRequiredSessionEventForCurrentSession(msg.sessionId)) {
           break;
         }
         _state.contextReplacedNotice = _contextReplacedNotice;
@@ -788,6 +794,7 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
         _cursorSessionId = sessionId;
         _clearTurnRequest();
         _syncInFlight = false;
+        _syncRequestSessionId = '';
         if (_loadingSessionId == sessionId) _loadingSessionId = '';
         final previous = _state.sessions
             .where(
@@ -862,7 +869,7 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
         notifyListeners();
         break;
       case 'agent_event':
-        if (!_isEventForCurrentSession(msg.sessionId)) {
+        if (!_isRequiredSessionEventForCurrentSession(msg.sessionId)) {
           break;
         }
         _handleAgentEvent(msg);
@@ -878,7 +885,7 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
         }
         break;
       case 'turn_ended':
-        if (!_isEventForCurrentSession(msg.sessionId)) {
+        if (!_isRequiredSessionEventForCurrentSession(msg.sessionId)) {
           break;
         }
         _handleTurnEnded();
@@ -940,6 +947,7 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
         }
         _loadingSessionId = '';
         _syncInFlight = false;
+        _syncRequestSessionId = '';
         _clearTurnRequest();
         _clearCancelling();
         _state.turnActive = false;
@@ -995,11 +1003,17 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
         notifyListeners();
         break;
       case 'sync_response':
+        final responseSessionId = msg.sessionId ?? '';
+        if (!_isRequiredSessionEventForCurrentSession(responseSessionId) ||
+            (_syncRequestSessionId.isNotEmpty &&
+                _syncRequestSessionId != responseSessionId)) {
+          break;
+        }
         _syncInFlight = false;
-        final sessionId = msg.sessionId ?? _state.sessionId;
+        _syncRequestSessionId = '';
         if (msg.turnActive != null) _state.turnActive = msg.turnActive!;
         if (msg.overflow == true) {
-          _handleSyncOverflow(sessionId);
+          _handleSyncOverflow(responseSessionId);
           break;
         }
         for (final entry in msg.entries ?? const <Map<String, dynamic>>[]) {
@@ -1008,16 +1022,17 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
           final payload = Map<String, dynamic>.from(rawPayload);
           final rawId = entry['messageId']?.toString() ??
               payload['messageId']?.toString();
-          if (!_acceptMessageId(rawId, sessionId: sessionId)) continue;
           if (rawId != null && rawId.isNotEmpty) payload['messageId'] = rawId;
-          final syntheticJson = <String, dynamic>{
-            'type': 'agent_event',
-            'sessionId': sessionId,
-            'messageId': rawId,
-            'event': payload,
-          };
-          final eventMsg = ServerMessage.fromJson(syntheticJson);
-          _handleAgentEvent(eventMsg);
+          payload['sessionId'] ??= responseSessionId;
+          final replaySessionId = payload['sessionId']?.toString() ?? '';
+          if (replaySessionId != responseSessionId ||
+              !_isRequiredSessionEventForCurrentSession(replaySessionId)) {
+            continue;
+          }
+          // Replay entries are complete protocol envelopes. Parsing and
+          // routing the original envelope preserves session_context_replaced,
+          // turn_ended, and future session-scoped message types.
+          _handleServerMessage(ServerMessage.fromJson(payload));
         }
         notifyListeners();
         break;
@@ -1157,6 +1172,40 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
     _onServerInfo();
   }
 
+  String _truncateUtf8(String value, int maxBytes) {
+    if (utf8.encode(value).length <= maxBytes) return value;
+    final retained = StringBuffer();
+    var retainedBytes = 0;
+    for (final rune in value.runes) {
+      final codePoint = String.fromCharCode(rune);
+      final codePointBytes = utf8.encode(codePoint).length;
+      if (retainedBytes + codePointBytes > maxBytes) break;
+      retained.write(codePoint);
+      retainedBytes += codePointBytes;
+    }
+    return retained.toString();
+  }
+
+  void _appendBoundedToolContent(MessageData message, String addition) {
+    if (addition.isEmpty) return;
+    final originalBytes =
+        utf8.encode(message.toolContent).length + utf8.encode(addition).length;
+    final bounded = _truncateUtf8(
+      '${message.toolContent}$addition',
+      _maxToolCardBytes,
+    );
+    if (utf8.encode(bounded).length < originalBytes) {
+      message.toolTruncated = true;
+    }
+    message.toolContent = bounded;
+  }
+
+  String _boundedToolDiffText(MessageData message, String value) {
+    final bounded = _truncateUtf8(value, _maxToolCardBytes);
+    if (bounded != value) message.toolTruncated = true;
+    return bounded;
+  }
+
   void _handleAgentEvent(ServerMessage msg) {
     if (msg.acpUpdate != null) {
       final event = msg.acpUpdate!;
@@ -1259,15 +1308,14 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
               for (int i = _state.messages.length - 1; i >= 0; i--) {
                 if (_state.messages[i].toolCallId == event.toolCallId) {
                   final m = _state.messages[i];
-                  if (newContent.isNotEmpty)
-                    m.toolContent = (m.toolContent) + newContent;
+                  _appendBoundedToolContent(m, newContent);
                   if (newType.isNotEmpty) m.toolContentType = newType;
                   if (event.path != null && event.path!.isNotEmpty)
                     m.toolPath = event.path!;
                   if (event.oldText != null && event.oldText!.isNotEmpty)
-                    m.toolOldText = event.oldText!;
+                    m.toolOldText = _boundedToolDiffText(m, event.oldText!);
                   if (event.newText != null && event.newText!.isNotEmpty)
-                    m.toolNewText = event.newText!;
+                    m.toolNewText = _boundedToolDiffText(m, event.newText!);
                   if (event.terminalId != null && event.terminalId!.isNotEmpty)
                     m.toolTerminalId = event.terminalId!;
                   if (event.terminalTruncated) m.toolTruncated = true;
@@ -1288,15 +1336,14 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
                         _state.messages[i].toolStatus == 'in_progress' ||
                         _state.messages[i].toolStatus == 'running')) {
                   final m = _state.messages[i];
-                  if (newContent.isNotEmpty)
-                    m.toolContent = (m.toolContent) + newContent;
+                  _appendBoundedToolContent(m, newContent);
                   if (newType.isNotEmpty) m.toolContentType = newType;
                   if (event.path != null && event.path!.isNotEmpty)
                     m.toolPath = event.path!;
                   if (event.oldText != null && event.oldText!.isNotEmpty)
-                    m.toolOldText = event.oldText!;
+                    m.toolOldText = _boundedToolDiffText(m, event.oldText!);
                   if (event.newText != null && event.newText!.isNotEmpty)
-                    m.toolNewText = event.newText!;
+                    m.toolNewText = _boundedToolDiffText(m, event.newText!);
                   if (event.terminalId != null && event.terminalId!.isNotEmpty)
                     m.toolTerminalId = event.terminalId!;
                   if (event.terminalTruncated) m.toolTruncated = true;
@@ -1504,6 +1551,13 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
       return true;
     }
     return false;
+  }
+
+  /// Session-scoped events must carry an explicit session ID. Legacy
+  /// session-less compatibility remains reserved for global events/errors.
+  bool _isRequiredSessionEventForCurrentSession(String? eventSessionId) {
+    if (eventSessionId == null || eventSessionId.isEmpty) return false;
+    return _isEventForCurrentSession(eventSessionId);
   }
 
   void _handleTurnEnded() {
