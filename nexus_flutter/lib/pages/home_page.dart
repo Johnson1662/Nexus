@@ -1,15 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:intl/intl.dart';
 
 import '../constants/theme.dart';
 import '../providers/chat_provider.dart';
 import '../services/host_store.dart';
-import '../services/ws_client.dart';
-import '../models/host_runtime_state.dart';
 import '../models/ws_protocol.dart';
-import '../models/device_entry.dart';
-import '../widgets/host_filter_bar.dart';
 import '../widgets/session_tile.dart';
 
 class HomePage extends StatefulWidget {
@@ -32,115 +27,9 @@ class _HomePageState extends State<HomePage> {
 
   // ── Helpers ──
 
-  List<String> _getConnectCandidates(DeviceEntry device) {
-    final candidates = <String>[...device.urls];
-    if (device.relayUrl != null &&
-        device.relayUrl!.isNotEmpty &&
-        device.hostId.isNotEmpty) {
-      final sep = device.relayUrl!.contains('?') ? '&' : '?';
-      candidates.add('${device.relayUrl}$sep${device.hostId}');
-    }
-    if (device.name.isNotEmpty) {
-      candidates.add('ws://${device.name}:12138');
-    }
-    return candidates;
-  }
-
   Future<void> _onRefresh() async {
     if (!mounted) return;
     context.read<ChatProvider>().requestSessionList();
-  }
-
-  void _showManualConnectDialog() {
-    if (!mounted) return;
-    final controller = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (dialogCtx) => AlertDialog(
-        backgroundColor: AppColors.surfaceCtx(context),
-        titlePadding: const EdgeInsets.fromLTRB(
-          AppSpacing.xl,
-          AppSpacing.xl,
-          AppSpacing.xl,
-          0,
-        ),
-        title: Text(
-          '手动连接',
-          style: TextStyle(
-            color: AppColors.foregroundCtx(context),
-            fontSize: AppFontSize.lg,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        contentPadding: const EdgeInsets.fromLTRB(
-          AppSpacing.xl,
-          AppSpacing.md,
-          AppSpacing.xl,
-          0,
-        ),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          keyboardType: TextInputType.url,
-          textInputAction: TextInputAction.go,
-          decoration: const InputDecoration(
-            hintText: 'ws://192.168.1.2:12138',
-          ),
-          onSubmitted: (url) {
-            if (!mounted) return;
-            final trimmed = url.trim();
-            if (trimmed.isNotEmpty) {
-              context.read<ChatProvider>().connectToUrl(trimmed);
-              Navigator.pop(dialogCtx);
-            }
-          },
-        ),
-        actionsPadding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.md, vertical: AppSpacing.sm),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogCtx),
-            child: Text(
-              '取消',
-              style: TextStyle(color: AppColors.foregroundMutedCtx(context)),
-            ),
-          ),
-          TextButton(
-            onPressed: () {
-              if (!mounted) return;
-              final url = controller.text.trim();
-              if (url.isNotEmpty) {
-                context.read<ChatProvider>().connectToUrl(url);
-                // Persist host and automatically merge url if belonging to an existing device
-                final uri = Uri.tryParse(url);
-                final hostKey = uri?.host ?? url;
-                final hostStore = context.read<HostStore>();
-                hostStore.addOrUpdateDevice(DeviceEntry(
-                  hostId: hostKey,
-                  name: hostKey,
-                  urls: [url],
-                ));
-                hostStore.saveToDisk();
-              }
-              Navigator.pop(dialogCtx);
-            },
-            child: const Text('连接'),
-          ),
-        ],
-      ),
-    ).whenComplete(controller.dispose);
-  }
-
-  String _formatRelativeTime(int epoch) {
-    if (epoch <= 0) return '';
-    final now = DateTime.now();
-    final date = DateTime.fromMillisecondsSinceEpoch(epoch);
-    final diff = now.difference(date);
-    if (diff.inMinutes < 1) return '刚刚';
-    if (diff.inMinutes < 60) return '${diff.inMinutes} 分钟前';
-    if (diff.inHours < 24) return '${diff.inHours} 小时前';
-    if (diff.inDays < 7) return '${diff.inDays} 天前';
-    return DateFormat('M/d/yy').format(date);
   }
 
   // ── Build ──

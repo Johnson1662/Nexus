@@ -3,10 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../constants/theme.dart';
 import '../providers/chat_provider.dart';
-import '../models/ws_protocol.dart';
 import '../services/device_agent_store.dart';
-import '../utils/agent_utils.dart';
-import '../widgets/agent_logo.dart';
 
 class AgentManagePage extends StatefulWidget {
   const AgentManagePage({super.key});
@@ -15,22 +12,12 @@ class AgentManagePage extends StatefulWidget {
   State<AgentManagePage> createState() => _AgentManagePageState();
 }
 
-class _AgentManagePageState extends State<AgentManagePage>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabController;
-  final TextEditingController _storeSearchController = TextEditingController();
-  String _storeSearchQuery = '';
-
-  // Custom agent form
-  final TextEditingController _customNameController = TextEditingController();
-  final TextEditingController _customCommandController = TextEditingController();
-  final TextEditingController _customArgsController = TextEditingController();
+class _AgentManagePageState extends State<AgentManagePage> {
+  String? _statusNotice;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
-
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final chatProvider = context.read<ChatProvider>();
@@ -39,476 +26,262 @@ class _AgentManagePageState extends State<AgentManagePage>
     });
   }
 
-  @override
-  void dispose() {
-    _tabController.dispose();
-    _storeSearchController.dispose();
-    _customNameController.dispose();
-    _customCommandController.dispose();
-    _customArgsController.dispose();
-    super.dispose();
-  }
-
-  void _confirmUninstall(String agentId) {
-    if (!mounted) return;
-    showDialog(
-      context: context,
-      builder: (dialogCtx) => AlertDialog(
-        backgroundColor: AppColors.surface1(context),
-        title: Text(
-          '确认卸载',
-          style: TextStyle(
-            color: AppColors.foregroundC(context),
-            fontSize: AppFontSize.lg,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        content: Text(
-          '确定要卸载该 Agent 吗？',
-          style: TextStyle(
-            color: AppColors.foregroundM(context),
-            fontSize: AppFontSize.base,
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogCtx),
-            child: Text(
-              '取消',
-              style: TextStyle(color: AppColors.foregroundM(context)),
-            ),
-          ),
-          TextButton(
-            onPressed: () {
-              if (!mounted) return;
-              context.read<ChatProvider>().uninstallAgent(agentId);
-              if (dialogCtx.mounted) Navigator.pop(dialogCtx);
-            },
-            child: const Text(
-              '卸载',
-              style: TextStyle(color: AppColors.error),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _installCustomAgent() {
-    if (!mounted) return;
-    final name = _customNameController.text.trim();
-    final command = _customCommandController.text.trim();
-    final argsText = _customArgsController.text.trim();
-
-    if (command.isEmpty) return;
-
-    final args = argsText.isNotEmpty ? argsText.split(' ') : <String>[];
-
-    context.read<ChatProvider>().installCustomAgent(command, args, name);
-
-    _customNameController.clear();
-    _customCommandController.clear();
-    _customArgsController.clear();
+  void _showNotice(String text) {
+    setState(() => _statusNotice = text);
+    Future.delayed(const Duration(seconds: 3), () {
+      if (mounted && _statusNotice == text) {
+        setState(() => _statusNotice = null);
+      }
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final chatProvider = context.watch<ChatProvider>();
-
     final installedAgents = DeviceAgentStore()
         .getAgents(chatProvider.state.currentDeviceId);
-
-    final registryAgents = chatProvider.state.registryAgents;
-
-    // Filter registry agents by search
-    var filteredRegistry = registryAgents;
-    if (_storeSearchQuery.isNotEmpty) {
-      filteredRegistry = registryAgents
-          .where((a) =>
-              a.name.toLowerCase().contains(_storeSearchQuery.toLowerCase()) ||
-              a.description
-                  .toLowerCase()
-                  .contains(_storeSearchQuery.toLowerCase()))
-          .toList();
+    final installedNames = installedAgents.map((a) => a.name.toLowerCase()).toSet();
+    for (final name in chatProvider.state.agentNames) {
+      installedNames.add(name.toLowerCase());
     }
 
+    // Default list of agent integrations aligned with Herdr settings
+    final defaultAgentIds = [
+      'pi',
+      'omp',
+      'claude',
+      'codex',
+      'copilot',
+      'devin',
+      'droid',
+      'kimi',
+      'opencode',
+      'kilo',
+      'hermes',
+      'qodercli',
+      'qwen',
+      'cursor',
+      'mastracode',
+      'antigravity-cli',
+      'grok',
+    ];
+
+    final allAgentIds = <String>[...defaultAgentIds];
+    for (final r in chatProvider.state.registryAgents) {
+      final id = r.id.toLowerCase();
+      if (!allAgentIds.contains(id)) {
+        allAgentIds.add(id);
+      }
+    }
+
+    const monoStyle = TextStyle(
+      fontFamily: 'monospace',
+      fontSize: 14,
+      height: 1.5,
+      letterSpacing: 0.2,
+    );
+
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Agent 商店 & 管理'),
-        bottom: TabBar(
-          controller: _tabController,
-          tabs: const [
-            Tab(text: '商店'),
-            Tab(text: '已安装'),
-          ],
-        ),
-      ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          _buildStoreTab(context, filteredRegistry, installedAgents),
-          _buildInstalledTab(context, installedAgents),
-        ],
-      ),
-    );
-  }
-
-  // ── Installed Tab ──
-
-  Widget _buildInstalledTab(
-    BuildContext context,
-    List<AgentInfo> installedAgents,
-  ) {
-    return ListView(
-      padding: const EdgeInsets.all(AppSpacing.lg),
-      children: [
-        // Installed agents list
-        if (installedAgents.isEmpty)
-          Center(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: AppSpacing.xxxl),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.extension_off,
-                    size: 48,
-                    color: AppColors.foregroundM(context).withAlpha(80),
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                  Text(
-                    '暂无已安装的 Agent',
-                    style: TextStyle(
-                      color: AppColors.foregroundM(context),
-                      fontSize: AppFontSize.md,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          )
-        else
-          ...installedAgents.map((agent) {
-            return _buildInstalledAgentCard(context, agent);
-          }),
-
-        const SizedBox(height: AppSpacing.xl),
-
-        // Custom agent install form
-        _buildCustomInstallForm(context),
-      ],
-    );
-  }
-
-  Widget _buildInstalledAgentCard(BuildContext context, AgentInfo agent) {
-    final displayName = AgentUtils.getDisplayName(agent.name);
-    return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-      child: Material(
-        color: AppColors.surface1(context),
-        borderRadius: BorderRadius.circular(AppRadius.md),
+      backgroundColor: AppColors.backgroundCtx(context),
+      body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.lg),
-          child: Row(
-            children: [
-              AgentLogo(
-                agentName: agent.name,
-                size: 22,
-                color: AppColors.accent,
-              ),
-              const SizedBox(width: AppSpacing.md),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Flexible(
-                          child: Text(
-                            displayName,
-                            style: Theme.of(context).textTheme.titleMedium,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        const SizedBox(width: AppSpacing.sm),
-                        Text(
-                          'v${agent.version}',
-                          style: TextStyle(
-                            fontSize: AppFontSize.xxs,
-                            color: AppColors.foregroundM(context),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: AppSpacing.xxs),
-                    Text(
-                      '来源: ${agent.source}',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ],
-                ),
-              ),
-              IconButton(
-                icon: Icon(
-                  Icons.delete_outline,
-                  size: 20,
-                  color: AppColors.error,
-                ),
-                onPressed: () => _confirmUninstall(agent.name),
-                tooltip: '卸载',
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCustomInstallForm(BuildContext context) {
-    return Material(
-      color: AppColors.surface1(context),
-      borderRadius: BorderRadius.circular(AppRadius.md),
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.lg),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '安装自定义 Agent',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: AppSpacing.md),
-            TextField(
-              controller: _customNameController,
-              decoration: const InputDecoration(
-                hintText: 'Agent 名称',
-              ),
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            TextField(
-              controller: _customCommandController,
-              decoration: const InputDecoration(
-                hintText: '命令 (如 npx, npm, python)',
-              ),
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            TextField(
-              controller: _customArgsController,
-              decoration: const InputDecoration(
-                hintText: '参数 (空格分隔)',
-              ),
-            ),
-            const SizedBox(height: AppSpacing.md),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: _installCustomAgent,
-                icon: const Icon(Icons.download, size: 18),
-                label: const Text('安装'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.accent,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(AppRadius.md),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // ── Store Tab ──
-
-  Widget _buildStoreTab(
-    BuildContext context,
-    List<RegistryAgentInfo> registryAgents,
-    List<AgentInfo> installedAgents,
-  ) {
-    return Column(
-      children: [
-        // Search bar
-        Padding(
-          padding: const EdgeInsets.fromLTRB(
-            AppSpacing.lg, AppSpacing.md, AppSpacing.lg, 0,
-          ),
-          child: TextField(
-            controller: _storeSearchController,
-            onChanged: (v) => setState(() => _storeSearchQuery = v),
-            decoration: InputDecoration(
-              hintText: '搜索 Agent...',
-              prefixIcon: Icon(
-                Icons.search,
-                size: 18,
-                color: AppColors.foregroundMutedCtx(context),
-              ),
-              suffixIcon: _storeSearchQuery.isNotEmpty
-                  ? IconButton(
-                      icon: const Icon(Icons.clear, size: 16),
-                      onPressed: () {
-                        _storeSearchController.clear();
-                        setState(() => _storeSearchQuery = '');
-                      },
-                    )
-                  : null,
-            ),
-          ),
-        ),
-
-        // Registry agents list
-        Expanded(
-          child: registryAgents.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.store_outlined,
-                        size: 48,
-                        color: AppColors.foregroundMutedCtx(context).withAlpha(80),
-                      ),
-                      const SizedBox(height: AppSpacing.md),
-                      Text(
-                        _storeSearchQuery.isNotEmpty
-                            ? '未找到匹配的 Agent'
-                            : '商店暂无 Agent',
-                        style: TextStyle(
-                          color: AppColors.foregroundMutedCtx(context),
-                          fontSize: AppFontSize.md,
-                        ),
-                      ),
-                    ],
-                  ),
-                )
-              : ListView.builder(
-                  padding: const EdgeInsets.all(AppSpacing.lg),
-                  itemCount: registryAgents.length,
-                  itemBuilder: (context, index) {
-                    return _buildRegistryAgentCard(
-                      context,
-                      registryAgents[index],
-                      installedAgents,
-                    );
-                  },
-                ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildRegistryAgentCard(
-    BuildContext context,
-    RegistryAgentInfo agent,
-    List<AgentInfo> installedAgents,
-  ) {
-    final isInstalled = installedAgents
-        .any((a) => a.name == agent.id || a.name == agent.name);
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-      child: Material(
-        color: AppColors.surfaceCtx(context),
-        borderRadius: BorderRadius.circular(AppRadius.md),
-        child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.lg),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
+              // 1. Settings top tabs navigation
+              Text(
+                'settings',
+                style: monoStyle.copyWith(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.foregroundCtx(context),
+                ),
+              ),
+              const SizedBox(height: 8),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    _navItem(context, 'theme'),
+                    _navItem(context, 'indicators'),
+                    _navItem(context, 'sound'),
+                    _navItem(context, 'toasts'),
+                    _navItem(context, 'pane labels'),
+                    _activeNavItem(context, 'integrations'),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              // 2. Section title & subtitle
+              Text(
+                'agent integrations',
+                style: monoStyle.copyWith(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.foregroundCtx(context),
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'let agents report state directly instead of relying only on process detection',
+                style: monoStyle.copyWith(
+                  fontSize: 12,
+                  color: AppColors.foregroundMutedCtx(context),
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // 3. Monospace integrations list
+              Expanded(
+                child: ListView.builder(
+                  itemCount: allAgentIds.length,
+                  itemBuilder: (context, index) {
+                    final agentId = allAgentIds[index];
+                    final isInstalled = installedNames.contains(agentId) ||
+                        installedNames.contains(agentId.replaceAll('-', ''));
+
+                    return InkWell(
+                      onTap: () {
+                        if (isInstalled) {
+                          chatProvider.uninstallAgent(agentId);
+                          _showNotice('uninstalled $agentId');
+                        } else {
+                          chatProvider.installAgent(agentId);
+                          _showNotice('installed $agentId');
+                        }
+                      },
+                      borderRadius: BorderRadius.circular(4),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+                        child: Row(
                           children: [
-                            AgentLogo(
-                              agentName: agent.id,
-                              size: 16,
-                              color: AppColors.accentCtx(context),
-                            ),
-                            const SizedBox(width: AppSpacing.xs),
-                            Flexible(
+                            SizedBox(
+                              width: 20,
                               child: Text(
-                                AgentUtils.getDisplayName(agent.name),
-                                style: TextStyle(
-                                  fontSize: AppFontSize.md,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppColors.foregroundCtx(context),
+                                isInstalled ? '✓' : '-',
+                                style: monoStyle.copyWith(
+                                  color: isInstalled
+                                      ? const Color(0xFF4CAF50)
+                                      : AppColors.foregroundMutedCtx(context),
+                                  fontWeight: isInstalled ? FontWeight.bold : FontWeight.normal,
                                 ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
-                            const SizedBox(width: AppSpacing.sm),
+                            const SizedBox(width: 6),
+                            SizedBox(
+                              width: 140,
+                              child: Text(
+                                agentId,
+                                style: monoStyle.copyWith(
+                                  color: isInstalled
+                                      ? AppColors.foregroundCtx(context)
+                                      : AppColors.foregroundMutedCtx(context),
+                                  fontWeight: isInstalled ? FontWeight.w600 : FontWeight.normal,
+                                ),
+                              ),
+                            ),
                             Text(
-                              'v${agent.version}',
-                              style: TextStyle(
-                                fontSize: AppFontSize.xxs,
-                                color: AppColors.foregroundMutedCtx(context),
+                              isInstalled ? 'installed' : 'not found',
+                              style: monoStyle.copyWith(
+                                color: isInstalled
+                                    ? const Color(0xFF4CAF50)
+                                    : AppColors.foregroundMutedCtx(context),
+                                fontSize: 13,
                               ),
                             ),
                           ],
                         ),
-                        if (agent.description.isNotEmpty) ...[
-                          const SizedBox(height: AppSpacing.xs),
-                          Text(
-                            agent.description,
-                            style: TextStyle(
-                              fontSize: AppFontSize.sm,
-                              color: AppColors.foregroundMutedCtx(context),
-                            ),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                      ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+
+              // 4. Status notice
+              if (_statusNotice != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Text(
+                    _statusNotice!,
+                    style: monoStyle.copyWith(
+                      color: AppColors.foregroundCtx(context),
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
                     ),
                   ),
-                  const SizedBox(width: AppSpacing.md),
-                  isInstalled
-                      ? OutlinedButton(
-                          onPressed: null,
-                          style: OutlinedButton.styleFrom(
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(AppRadius.sm),
-                            ),
-                          ),
-                          child: const Text('已安装', style: TextStyle(fontSize: AppFontSize.xs)),
-                        )
-                      : ElevatedButton(
-                          onPressed: () {
-                            context.read<ChatProvider>().installAgent(agent.id);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('正在安装 ${agent.name}...'),
-                                duration: const Duration(seconds: 2),
-                              ),
-                            );
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.accent,
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(AppRadius.sm),
-                            ),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: AppSpacing.md,
-                              vertical: AppSpacing.sm,
-                            ),
-                          ),
-                          child: const Text(
-                            '安装',
-                            style: TextStyle(fontSize: AppFontSize.sm),
-                          ),
+                ),
+
+              // 5. Minimal footer with esc close button
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    '↑↓ select  tab section',
+                    style: monoStyle.copyWith(
+                      fontSize: 11,
+                      color: AppColors.foregroundMutedCtx(context),
+                    ),
+                  ),
+                  InkWell(
+                    onTap: () => Navigator.maybePop(context),
+                    borderRadius: BorderRadius.circular(4),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: AppColors.surface2Ctx(context),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: AppColors.borderCtx(context)),
+                      ),
+                      child: Text(
+                        'esc close',
+                        style: monoStyle.copyWith(
+                          fontSize: 12,
+                          color: AppColors.foregroundCtx(context),
+                          fontWeight: FontWeight.w600,
                         ),
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _navItem(BuildContext context, String title) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 14),
+      child: Text(
+        title,
+        style: TextStyle(
+          fontFamily: 'monospace',
+          fontSize: 13,
+          color: AppColors.foregroundMutedCtx(context),
+        ),
+      ),
+    );
+  }
+
+  Widget _activeNavItem(BuildContext context, String title) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: const Color(0xFF2962FF),
+        borderRadius: BorderRadius.circular(2),
+      ),
+      child: Text(
+        title,
+        style: const TextStyle(
+          fontFamily: 'monospace',
+          fontSize: 13,
+          fontWeight: FontWeight.bold,
+          color: Colors.white,
         ),
       ),
     );

@@ -208,15 +208,15 @@ class ServerMessage {
             final nested = item['content'];
             if (nested is Map && nested['text'] != null) {
               sb.write(nested['text'] as String);
-              if (toolContentType == null || toolContentType!.isEmpty) toolContentType = 'content';
+              if (toolContentType == null || toolContentType.isEmpty) toolContentType = 'content';
             } else if (item['text'] != null) {
               sb.write(item['text'] as String);
-              if (toolContentType == null || toolContentType!.isEmpty) toolContentType = 'content';
+              if (toolContentType == null || toolContentType.isEmpty) toolContentType = 'content';
             }
           } else if (type == 'text') {
             if (item['text'] != null) {
               sb.write(item['text'] as String);
-              if (toolContentType == null || toolContentType!.isEmpty) toolContentType = 'content';
+              if (toolContentType == null || toolContentType.isEmpty) toolContentType = 'content';
             }
           } else if (type == 'diff') {
             toolContentType = 'diff';
@@ -239,7 +239,7 @@ class ServerMessage {
 
       // Prefer the structured parse (toolContentText) — it correctly handles
       // type:"content" blocks. Fall back to raw extraction only if no text was parsed.
-      final extractedText = (toolContentText != null && toolContentText!.isNotEmpty)
+      final extractedText = (toolContentText != null && toolContentText.isNotEmpty)
           ? toolContentText
           : (_extractText(e['content']) ?? _extractText(e['text']));
       return AcpUpdate(

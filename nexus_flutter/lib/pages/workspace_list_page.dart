@@ -108,7 +108,6 @@ class _WorkspaceListPageState extends State<WorkspaceListPage> {
     final hostStore = context.watch<HostStore>();
 
     final workspaces = workspaceProvider.workspaces;
-    final connected = chatProvider.state.connected;
 
     // Derive workspace card data
     final workspaceCards = workspaces.map((w) {
@@ -285,7 +284,6 @@ class _WorkspaceListPageState extends State<WorkspaceListPage> {
   Widget _buildFilterChip(String label, String value) {
     final selected = _filter == value;
     final dark = Theme.of(context).brightness == Brightness.dark;
-    final fg = AppColors.foregroundCtx(context);
     final muted = AppColors.foregroundMutedCtx(context);
 
     return FilterChip(

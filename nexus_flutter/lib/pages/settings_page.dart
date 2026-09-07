@@ -68,7 +68,6 @@ class _SettingsPageState extends State<SettingsPage> {
         return AppColors.error;
       case HostPhase.offline:
       case HostPhase.unknown:
-      default:
         return AppColors.foregroundLight;
     }
   }
@@ -626,7 +625,6 @@ class _SettingsPageState extends State<SettingsPage> {
       case HostPhase.offline:
         return '离线';
       case HostPhase.unknown:
-      default:
         return '未知';
     }
   }

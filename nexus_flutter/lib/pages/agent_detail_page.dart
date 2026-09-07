@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:intl/intl.dart';
 
 import '../constants/theme.dart';
 import '../models/ws_protocol.dart';
@@ -45,18 +44,6 @@ class _AgentDetailPageState extends State<AgentDetailPage>
   void dispose() {
     _tabController.dispose();
     super.dispose();
-  }
-
-  String _formatRelativeTime(int epoch) {
-    if (epoch <= 0) return '';
-    final now = DateTime.now();
-    final date = DateTime.fromMillisecondsSinceEpoch(epoch);
-    final diff = now.difference(date);
-    if (diff.inMinutes < 1) return '刚刚';
-    if (diff.inMinutes < 60) return '${diff.inMinutes} 分钟前';
-    if (diff.inHours < 24) return '${diff.inHours} 小时前';
-    if (diff.inDays < 7) return '${diff.inDays} 天前';
-    return DateFormat('M/d/yy').format(date);
   }
 
   DeviceEntry? _getDevice(HostStore hostStore) {

@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../constants/theme.dart';
-import '../models/ws_protocol.dart';
-import '../models/message_data.dart';
 import '../providers/chat_provider.dart';
 
 // ── Filter kind ──
@@ -411,7 +409,6 @@ class _SearchPageState extends State<SearchPage> {
       case _MatchField.toolContent:
         return Icons.build_outlined;
       case _MatchField.content:
-      default:
         return Icons.textsms_outlined;
     }
   }
