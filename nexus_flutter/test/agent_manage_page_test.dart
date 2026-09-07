@@ -7,7 +7,7 @@ import 'package:nexus_flutter/providers/chat_provider.dart';
 import 'package:nexus_flutter/services/ws_client.dart';
 
 void main() {
-  testWidgets('AgentManagePage renders clean terminal-style agent integrations', (WidgetTester tester) async {
+  testWidgets('AgentManagePage renders mobile native agent integrations settings', (WidgetTester tester) async {
     final ws = WSClient();
     final chatProvider = ChatProvider(ws);
 
@@ -20,18 +20,14 @@ void main() {
       ),
     );
 
-    // Verify header and subtitle matching Image #1
-    expect(find.text('settings'), findsOneWidget);
-    expect(find.text('integrations'), findsOneWidget);
-    expect(find.text('agent integrations'), findsOneWidget);
-    expect(find.textContaining('let agents report state directly'), findsOneWidget);
+    // Verify native mobile AppBar and description banner
+    expect(find.text('Agent 集成'), findsOneWidget);
+    expect(find.text('本地 Agent 状态上报'), findsOneWidget);
+    expect(find.text('可用集成'), findsOneWidget);
 
-    // Verify presence of default agent identifiers
-    expect(find.text('omp'), findsOneWidget);
-    expect(find.text('codex'), findsOneWidget);
-    expect(find.text('claude'), findsOneWidget);
-
-    // Verify footer
-    expect(find.text('esc close'), findsOneWidget);
+    // Verify presence of default agents
+    expect(find.text('Oh My Pi (OMP)'), findsOneWidget);
+    expect(find.text('Codex CLI'), findsOneWidget);
+    expect(find.text('Claude Code'), findsOneWidget);
   });
 }
