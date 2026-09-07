@@ -27,9 +27,10 @@ Nexus/
 │   └── README.md     # 服务端完整文档（协议、CLI、故障排查）
 ├── nexus_flutter/    # 手机端 Flutter 客户端（OHOS 工程在 ohos/ 子目录）
 │   └── lib/          # pages/、widgets/、providers/、services/、models/
-├── docs/             # 设计文档、todo、比赛材料
-├── plans/            # 规格与重构计划
-├── adr/              # 架构决策记录
+├── docs/             # 设计文档、架构决策与开发计划
+│   ├── plans/        # 规格与重构计划
+│   ├── adr/          # 架构决策记录
+│   └── reference/    # 协议与设计参考
 ├── app_test_picture/ # 实机测试截图
 └── prototype_picture/ # 产品设计原型
 ```
@@ -73,4 +74,4 @@ cd nexus_flutter && flutter test   # 手机端 Dart 单元测试
 - `AGENTS.md` — 开发指南（架构决策、ArkTS 规范、构建部署、踩坑记录）
 - `CONTEXT.md` — 领域模型与术语
 - `PRODUCT.md` / `SPEC.md` — 产品定位与规格
-- `adr/` — 架构决策记录
+- `docs/adr/` — 架构决策记录

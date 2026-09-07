@@ -73,7 +73,9 @@ function sendUnauthorizedUpgrade(socket: { write: (data: string) => void; destro
 function createAuthenticatedWebSocketServer(httpServer: http.Server): WebSocketServer {
   const wss = new WebSocketServer({ noServer: true, maxPayload: 10 * 1024 * 1024 });
   httpServer.on("upgrade", (req, socket, head) => {
-    if (!isAuthorizedHeader(req.headers.authorization)) {
+    const url = new URL(req.url || "/", "http://localhost");
+    const queryToken = url.searchParams.get("token");
+    if (!isAuthorizedHeader(req.headers.authorization) && (!queryToken || !isAuthorizedHeader(`Bearer ${queryToken}`))) {
       sendUnauthorizedUpgrade(socket);
       return;
     }
@@ -260,7 +262,8 @@ function handleHttpRequest(req: IncomingMessage, res: ServerResponse, hostId: st
   }
   const url = new URL(req.url || "/", "http://localhost");
   if (url.pathname === "/probe") {
-    if (!isAuthorizedHeader(req.headers.authorization)) {
+    const queryToken = url.searchParams.get("token");
+    if (!isAuthorizedHeader(req.headers.authorization) && (!queryToken || !isAuthorizedHeader(`Bearer ${queryToken}`))) {
       sendJson(res, 401, { ok: false, error: "unauthorized", code: "AUTH_REQUIRED" });
       return;
     }
@@ -481,8 +484,8 @@ export function handleIncomingConnection(transport: any, hostId: string = HOST_I
         break;
 
       case "list_sessions":
-        console.log(`[server] handleListSessions cwd="${sessionMsg.cwd || ""}" agent="${sessionMsg.agent || ""}"`);
-        sessionManager.enqueueWsOp(transport, () => handleListSessions(transport, sessionMsg.cwd, sessionMsg.agent));
+        console.log(`[server] handleListSessions cwd="${sessionMsg.cwd || ""}" agent="${sessionMsg.agent || ""}" useHerdr="${sessionMsg.useHerdr ?? ""}"`);
+        sessionManager.enqueueWsOp(transport, () => handleListSessions(transport, sessionMsg.cwd, sessionMsg.agent, sessionMsg.useHerdr as boolean | undefined));
         break;
 
       case "set_mode":

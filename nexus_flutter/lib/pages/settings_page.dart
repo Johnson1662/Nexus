@@ -7,6 +7,7 @@ import '../services/host_store.dart';
 import '../services/app_preference_service.dart';
 import '../models/device_entry.dart';
 import '../models/host_runtime_state.dart';
+import '../services/storage_service.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -22,6 +23,7 @@ class _SettingsPageState extends State<SettingsPage> {
   late String _colorMode;
   late bool _thinkingExpanded;
   late bool _toolCallExpanded;
+  bool _useHerdrBackend = false;
 
   final Set<String> _expandedHostIds = {};
 
@@ -32,6 +34,13 @@ class _SettingsPageState extends State<SettingsPage> {
     _colorMode = AppPreferenceService.normalizeColorMode(_prefs.colorMode);
     _thinkingExpanded = _prefs.thinkingExpanded;
     _toolCallExpanded = _prefs.toolCallExpanded;
+    StorageService.getInstance().then((storage) {
+      if (mounted) {
+        setState(() {
+          _useHerdrBackend = storage.getUseHerdrBackend();
+        });
+      }
+    });
   }
 
   // ── Helpers ──
@@ -805,6 +814,38 @@ class _SettingsPageState extends State<SettingsPage> {
               Icons.build_outlined,
               size: 20,
               color: _toolCallExpanded
+                  ? AppColors.foregroundCtx(context)
+                  : AppColors.foregroundMutedCtx(context),
+            ),
+          ),
+          const Divider(height: 1),
+          SwitchListTile(
+            value: _useHerdrBackend,
+            onChanged: (val) async {
+              setState(() => _useHerdrBackend = val);
+              if (mounted) {
+                await context.read<ChatProvider>().setUseHerdrBackend(val);
+              }
+            },
+            title: Text(
+              '使用 Herdr 作为后端',
+              style: TextStyle(
+                color: AppColors.foregroundCtx(context),
+                fontSize: AppFontSize.base,
+              ),
+            ),
+            subtitle: Text(
+              '开启后仅检测和展示 Herdr 终端会话与工作区',
+              style: TextStyle(
+                fontSize: AppFontSize.xs,
+                color: AppColors.foregroundMutedCtx(context),
+              ),
+            ),
+            activeColor: AppColors.foregroundCtx(context),
+            secondary: Icon(
+              Icons.terminal_outlined,
+              size: 20,
+              color: _useHerdrBackend
                   ? AppColors.foregroundCtx(context)
                   : AppColors.foregroundMutedCtx(context),
             ),

@@ -34,6 +34,8 @@ export interface SessionState {
   ws: import("ws").WebSocket | null;
   /** Only this authenticated transport may operate on the session. */
   ownerTransport: import("ws").WebSocket | null;
+  /** Active subscribers listening to and interacting with this session. */
+  subscribers: Set<import("ws").WebSocket>;
   /** Stable bridge-local identity for the current owner transport. */
   ownerId: string | null;
   client: import("./client.mjs").AcpClient;

@@ -60,17 +60,17 @@ class _ChatPageState extends State<ChatPage> {
 
   void _onScroll() {
     if (!mounted || !_scrollController.hasClients) return;
-    final atBottom = _scrollController.position.pixels >=
-        _scrollController.position.maxScrollExtent - 80;
-    if (atBottom == _showScrollToBottom) {
-      setState(() => _showScrollToBottom = !atBottom);
+    // In reverse: true, offset 0 is the bottom.
+    final shouldShow = _scrollController.position.pixels > 120;
+    if (shouldShow != _showScrollToBottom) {
+      setState(() => _showScrollToBottom = shouldShow);
     }
   }
 
   void _scrollToBottom() {
     if (!mounted || !_scrollController.hasClients) return;
     _scrollController.animateTo(
-      _scrollController.position.maxScrollExtent,
+      0,
       duration: const Duration(milliseconds: 250),
       curve: Curves.easeOut,
     );
@@ -88,7 +88,9 @@ class _ChatPageState extends State<ChatPage> {
       if (!mounted || !_scrollController.hasClients || _showScrollToBottom) {
         return;
       }
-      _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+      if (_scrollController.position.pixels > 0 && _scrollController.position.pixels < 40) {
+        _scrollController.jumpTo(0);
+      }
     });
   }
 
@@ -282,6 +284,7 @@ class _ChatPageState extends State<ChatPage> {
                     children: [
                       ListView.builder(
                         controller: _scrollController,
+                        reverse: true,
                         padding: const EdgeInsets.only(
                           left: AppSpacing.lg,
                           right: AppSpacing.lg,
@@ -290,7 +293,8 @@ class _ChatPageState extends State<ChatPage> {
                         ),
                         itemCount: items.length,
                         itemBuilder: (context, index) {
-                          return _buildItem(context, state, items[index]);
+                          final reversedIndex = items.length - 1 - index;
+                          return _buildItem(context, state, items[reversedIndex]);
                         },
                       ),
 
@@ -632,6 +636,25 @@ class _ChatPageState extends State<ChatPage> {
                 ),
               ),
             ],
+            if (state.sessionId.startsWith('herdr:')) ...[
+              const SizedBox(width: AppSpacing.xs),
+              Text(
+                '·',
+                style: TextStyle(
+                  fontSize: AppFontSize.xxs,
+                  color: AppColors.foregroundMutedCtx(context).withOpacity(0.5),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.xs),
+              Text(
+                'Herdr 终端',
+                style: TextStyle(
+                  fontSize: AppFontSize.xxs,
+                  color: AppColors.accent,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
           ],
         ),
       ],
@@ -958,6 +981,8 @@ class _ChatPageState extends State<ChatPage> {
 
   Widget _buildItem(BuildContext context, ChatState state, _ListItem item) {
     final chatProvider = context.read<ChatProvider>();
+    final isHerdrSession = state.sessionId.startsWith('herdr:');
+    final isTerminal = isHerdrSession && state.streamMode == 'terminal';
 
     switch (item.type) {
       case _ItemType.message:
@@ -978,6 +1003,7 @@ class _ChatPageState extends State<ChatPage> {
               msg.type == 'plan' && state.planEntries.isNotEmpty
                   ? state.planEntries
                   : null,
+          isTerminal: isTerminal,
         );
 
       case _ItemType.streamingThinking:
@@ -987,6 +1013,7 @@ class _ChatPageState extends State<ChatPage> {
         return MessageBubble(
           streamingText: state.streamingText,
           showCursor: true,
+          isTerminal: isTerminal,
         );
 
       case _ItemType.agentReplyingIndicator:

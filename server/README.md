@@ -936,32 +936,27 @@ server/dist/
 
 源码采用 ESM 和 NodeNext 模块解析，源码导入通常使用 `.mjs` 后缀，这是 TypeScript 编译到 ESM 的既定约定。
 
-### Session Watcher 测试
+### 全量测试套件
 
-先构建，再运行：
+在项目根目录运行全部 16 组服务端测试（涵盖认证、消息校验、会话管理、权限委托、取消、终端输出、状态监听等）：
+
+```powershell
+npm test
+```
+
+### 独立测试组件
+
+也可针对关键模块单独运行测试，例如：
 
 ```powershell
 npm run build
 node server/test-session-watcher.mjs
+node server/test-cancel-lifecycle.mjs
+node server/test-workspace-files.mjs
+node server/test-agents-store.mjs
 ```
 
-该测试覆盖本地会话扫描、运行状态分类、增删改 diff、Watcher 回调和 WebSocket 状态广播。
-
-### E2EE 单元测试
-
-```powershell
-npm run build
-node server/test-e2ee-unit.mjs
-```
-
-该测试在进程内验证加密通道握手、版本协商和签名校验。
-
-### E2EE 握手测试
-
-```powershell
-npm run build
-node server/test-e2ee-handshake.mjs
-```
+`test-session-watcher.mjs` 覆盖本地会话扫描、运行状态分类、增删改 diff、Watcher 回调和 WebSocket 状态广播。
 
 ### OpenCode 实时测试
 

@@ -2,9 +2,9 @@
 
 ## 项目概述
 
-Nexus（原 Nexus）是一个 HarmonyOS App，通过 WebSocket 连接到 PC 端 Bridge Server，Bridge Server 再通过 ACP (Agent Client Protocol) 协议与 AI 编程 Agent 通信。
+Nexus 是一个 HarmonyOS 优先的 AI Agent 远程协作客户端，通过 WebSocket 连接到 PC 端 Bridge Server，Bridge Server 再通过 ACP (Agent Client Protocol) 协议与本地 AI 编程 Agent 通信。
 
-> 手机端有**两套实现并存**：`nexus_harmony/`（ArkTS，参考实现）与 `nexus_flutter/`（Flutter，A 路线 `flutter build hap`，当前活跃开发与视觉重构主战场）。PC 端 Bridge Server 共用 `server/`。软件官方名称已全面更新为 **Nexus**。
+> 手机端为 **`nexus_flutter/`**（基于 Flutter 开发，构建为 HarmonyOS HAP，当前唯一活跃的客户端实现）。早期 ArkTS 原生参考实现 `nexus_harmony/` 已下线清理。PC 端 Bridge Server 位于 `server/`。软件官方名称为 **Nexus**。
 
 ### 连接方式
 
@@ -220,7 +220,26 @@ opencode ACP 返回 session 时使用 `updatedAt`（ISO 8601 字符串）而非 
 
 ```json
 {
-  "version
+  "version": 1,
+  "agents": [
+    {
+      "id": "opencode",
+      "name": "OpenCode",
+      "description": "ACP-compatible coding agent",
+      "version": "latest",
+      "distribution": {
+        "direct": {
+          "cmd": "opencode",
+          "args": [
+            "acp"
+          ]
+        }
+      }
+    }
+  ]
+}
+```
+
 - **Model / Mode 列表**：与 workspace + agent 绑定，首次进入工作区并选定 agent 时请求；切换 agent 后才能切换 model
 - **Session 列表**：与 workspace 绑定，首次打开工作区请求并缓存；除非新建/加载会话、手动刷新或后端推送变化，不重复加载
 - 启动时自动向已配对主机发起连接，失败只进入重连/手动刷新状态，不阻塞首页渲染
@@ -327,21 +346,21 @@ Bridge 收到 `{ type: "heartbeat" }` 必须回包；手机端收到任意服务
 
 ## 构建与部署
 
-### 无线调试
+### 无线调试与部署
 
-```powershell
-# 构建 HAP
-cd nexus_harmony
-node "D:\DevEco Studio\tools\hvigor\bin\hvigorw.js" --mode module -p module=entry@default -p product=default assembleHap
+```bash
+# 构建 HAP (在 nexus_flutter/ohos 目录下)
+cd nexus_flutter/ohos
+NODE_OPTIONS="" devecocli build --build-mode debug
 
 # 连接设备（IP:端口每次不同）
 hdc tconn <IP>:<PORT>
 
 # 部署
-hdc -t "<IP>:<PORT>" install "entry/build/default/outputs/default/entry-default-signed.hap"
+hdc -t "<IP>:<PORT>" install entry/build/default/outputs/default/entry-default-signed.hap
 
 # 启动
-hdc -t "<IP>:<PORT>" shell aa start -a EntryAbility -b com.nexus.app
+hdc -t "<IP>:<PORT>" shell aa start -a EntryAbility -b com.nexus.remoteai
 ```
 
 **诊断命令**：
@@ -390,7 +409,7 @@ Bridge Server 监听 `:12138`，不指定 host（自动 IPv4+IPv6 双栈）。**
 
 ## Flutter OHOS 客户端（nexus_flutter/）
 
-除 ArkTS 版 `nexus_harmony/` 外，另有 **Flutter 重写的鸿蒙客户端** `nexus_flutter/`（A 路线：`flutter build hap`）。当前活跃开发集中在此目录。ArkTS 版仅作参考实现（如 resume 渲染、ConfigPanel 行为可对照 `nexus_harmony/`）。
+Nexus 手机端采用 **Flutter OHOS 方案**（工程位于 `nexus_flutter/`，通过 `flutter build hap` / `devecocli build` 构建），是当前全量业务与界面开发的主线。早期实验性的 ArkTS 原生工程 `nexus_harmony/` 已下线移除。
 
 ### 工具链
 
@@ -461,7 +480,7 @@ devecocli run --device "2NP0224627054426" --skip-build
 
 ```powershell
 # 崩溃 / 错误日志
-hdc -t "2NP0224627054426" shell hilog -x | Select-String "FATAL|com.nexus.app"
+hdc -t "2NP0224627054426" shell hilog -x | Select-String "FATAL|com.nexus.remoteai"
 # 启动后只会有无害的 vsync voting 警告
 ```
 
@@ -469,7 +488,7 @@ hdc -t "2NP0224627054426" shell hilog -x | Select-String "FATAL|com.nexus.app"
 
 - **状态/数据**：`lib/providers/chat_provider.dart`（ACP 事件中枢 `_handleAgentEvent`）、`lib/models/ws_protocol.dart`（`AcpUpdate` 解析 + `_extractText`）、`lib/models/message_data.dart`（`MessageData`，`toolKind` 字段，`id` 为 `final` 经构造函数传入）。
 - **UI**：`lib/widgets/tool_call_card.dart`（可折叠工具卡片，运行中自动展开）、`lib/widgets/message_bubble.dart`、`lib/pages/chat_page.dart`（ListView 加 `key: ValueKey(msg.id)`）、`lib/pages/home_page.dart`、`lib/pages/workspace_detail_page.dart`。
-- **聊天顶栏（`chat_page.dart` `_buildTopBar`）**：三个独立圆角胶囊、固定高度 42 —— ① 返回键 `<`（单独胶囊）；② 对话标题 + 状态点 + 主机名 + 工作区名（Expanded 胶囊，左对齐）；③ 历史记录（时钟）+ 文件（`···`）两个图标（一个胶囊）。历史记录点击弹底部 sheet 占位；文件点击从右侧滑出文件管理器面板（功能待实现）。右侧图标功能均未实现，仅 UI 壳。
+- **聊天顶栏（`chat_page.dart` `_buildTopBar`）**：三个独立圆角胶囊、固定高度 42 —— ① 返回键 `<`（单独胶囊）；② 对话标题 + 状态点 + 主机名 + 工作区名（Expanded 胶囊，左对齐）；③ 历史记录（时钟）+ 文件（`folder_open`）两个图标（一个胶囊）。历史记录点击弹底部 sheet（提示词历史待实现）；文件点击从右侧滑出文件管理器面板（`_buildFileOverlay` / `_buildFilePanel`），已实现工作区文件树浏览、Git 修改状态过滤、Diff 审查与 Commit 历史查看。
 - **文件管理器面板**：**不用 `Scaffold.endDrawer`**（见下方踩坑），改为 `body: Stack` 内的 `_buildFileOverlay`（遮罩 `AnimatedOpacity` + 面板 `AnimatedPositioned` 右滑）由 `setState(_fileDrawerOpen)` 控制开关。
 - **连接/持久化**：`lib/services/ws_client.dart`（WS + ACP 调试 dump 到沙箱 `nexus_acp_debug.jsonl`）、`lib/services/storage_service.dart`（**OHOS 沙箱绝对路径** `/data/storage/el2/base/haps/entry/files/.nexus_store.json`，不用 `path_provider`——OHOS 未实现且当前目录无写权限）、`lib/main.dart`（`_probeAllHosts()` 启动时探测已配对主机并自动连接首个在线主机）。
 - **ACP 渲染类型**：`user_message_chunk` / `agent_message_chunk` / `tool_call` / `tool_call_update` / `session_started` / `turn_ended`。
@@ -481,7 +500,7 @@ hdc -t "2NP0224627054426" shell hilog -x | Select-String "FATAL|com.nexus.app"
 - **resume 走 `session_started`**（非 `resumed_session`），且 `resumed_session` 时 `turnActive=false` 走 `input`。
 - **`list_sessions` 必须带 `agent` + `cwd` 参数**，否则返回空。
 - **服务器不发 `tool_call_end`**：turn 结束时 `_finishRunningTools()` 兜底把 `running`/`in_progress` 标记 `completed`，避免卡片卡转圈。
-- **更名与中英文资源**：软件全面更名为 **Nexus**。桌面应用图标 Label 在 HarmonyOS 中由 `AppScope/resources/base/element/string.json` 中的 `app_name` 与 `entry/.../zh_CN/element/string.json` 及 `en_US/.../string.json` 中的 `EntryAbility_label` 共同控制。覆盖安装时系统桌面存在强缓存，需先 `hdc uninstall com.nexus.app` 才能刷出最新的桌面名称 **Nexus**。
+- **更名与中英文资源**：软件全面更名为 **Nexus**。桌面应用图标 Label 在 HarmonyOS 中由 `AppScope/resources/base/element/string.json` 中的 `app_name` 与 `entry/.../zh_CN/element/string.json` 及 `en_US/.../string.json` 中的 `EntryAbility_label` 共同控制。覆盖安装时系统桌面存在强缓存，需先 `hdc uninstall com.nexus.remoteai` 才能刷出最新的桌面名称 **Nexus**。
 - **品牌 Icon**：采用纯白 Squircle 底座 + 3D 立体斜切面 ASCII 字符终端艺术 **Block N** 图腾，兼具黑白极简与硬核 Console 代码范。矢量资源保存在 `entry/src/main/resources/base/media/nexus_3d_ascii_n.svg`。
 - **主机名优先**：全量界面（Chat/Home/FilterBar/Settings/Workspaces）隐去技术性 `host_...` UUID 字符串，优先渲染 Friendly 主机名 `device.name`。
 - **非阻塞启动与防崩溃**：`main.dart` 启动时 `runApp()` 立即执行，避免 `await _probeAllHosts` 阻塞首帧渲染导致白屏；`SettingsPage` 中 `Dismissible` Key 增加 `index` 锚定防 DuplicateKey 崩溃。
@@ -500,11 +519,8 @@ Nexus/                             # 项目根（PC 端 + 手机端合一）
 ├── server/                           # Bridge Server (Node.js + ACP)
 │   ├── src/
 │   │   ├── server.mts                # WS 服务主入口，监听 :12138
-│   │   ├── relay.mts                 # Relay 客户端（连接 GCloud Relay Server）
-│   │   ├── encrypted-channel.mts     # E2EE 加密通道
 │   │   ├── host-identity.mts         # 主机身份 / 密钥
 │   │   ├── prefs.mts                 # 持久化偏好
-│   │   ├── session.mts               # 旧桥接会话管理（遗留，逐步迁移至 session-manager.mts）
 │   │   ├── session-manager.mts       # 深模块：会话生命周期、进程池、LRU 淘汰、事件缓冲
 │   │   ├── agent-registry-service.mts # 深模块：Agent 注册/发现/安装、路径规范化
 │   │   ├── agents-store.mts          # 已安装 Agent 持久化存储
@@ -539,16 +555,6 @@ Nexus/                             # 项目根（PC 端 + 手机端合一）
 │   │       └── workspace-files.mts
 │   └── dist/                         # 编译产物（*.mjs）
 │
-├── relay/                            # GCloud Relay Server
-│   ├── relay.mjs                     # Node.js 中继（当前使用）
-│   ├── relay.py                      # Python 中继（备用）
-│   ├── server.ts                     # TypeScript 源
-│   ├── go.mod
-│   ├── nexus-relay                # Go 编译中继（Linux）
-│   └── nexus-relay.exe            # Go 编译中继（Windows）
-├── wstest/                           # WebSocket 测试工具
-│   ├── test-relay.cjs
-│   └── package.json
 ├── prototype_picture/                # 产品设计原型
 │   ├── Home.png
 │   ├── Chat.png
@@ -559,83 +565,20 @@ Nexus/                             # 项目根（PC 端 + 手机端合一）
 │   ├── chat_title_bar_native.jpeg
 │   └── ...
 ├── docs/                             # 文档
-│   ├── harmonyos-symbol-reference.md
-│   └── ...
-├── nexus_flutter/                 # Flutter OHOS 客户端（手机端，A 路线 flutter build hap）
+│   ├── plans/                        # 重构与开发计划
+│   ├── adr/                          # 架构决策记录
+│   └── reference/                    # 协议参考与规范
+└── nexus_flutter/                    # Flutter OHOS 客户端（手机端，当前活跃主线）
 │   ├── lib/
-│   │   ├── main.dart                 # 入口 + _probeAllHosts 启动探测已配对主机
-│   │   ├── providers/chat_provider.dart   # ACP 事件中枢 _handleAgentEvent
-│   │   ├── models/ws_protocol.dart        # AcpUpdate 解析 + _extractText
-│   │   ├── models/message_data.dart       # MessageData（toolKind 字段，id 为 final）
-│   │   ├── widgets/tool_call_card.dart    # 可折叠工具卡片（运行中自动展开）
-│   │   ├── widgets/message_bubble.dart
-│   │   ├── pages/chat_page.dart / home_page.dart / workspace_detail_page.dart
-│   │   └── services/ws_client.dart / storage_service.dart
+│   │   ├── main.dart                 # 入口、顶层 Provider、路由表与启动探测
+│   │   ├── pages/                    # 页面组件（home、chat、workspace、settings、agent、search 等）
+│   │   ├── providers/                # 状态中枢（ChatProvider 等）
+│   │   ├── models/                   # 数据模型与协议解析（MessageData、AcpUpdate 等）
+│   │   ├── widgets/                  # UI 组件（工具卡片、消息气泡、Diff 视图、输入栏等）
+│   │   ├── services/                 # 通信与系统桥接（WSClient、StorageService 等）
+│   │   └── constants/                # 主题、设计规范 Token
 │   ├── ohos/                         # OHOS 工程（hvigorw 由 ohpm install 生成）
 │   └── ohos/entry/build/default/outputs/default/entry-default-signed.hap  # devecocli 构建产物
-└── nexus_harmony/                 # HarmonyOS App（手机端，ArkTS 参考实现）
-    ├── entry/
-    │   ├── src/main/ets/
-    │   │   ├── pages/
-    │   │   │   └── Index.ets         # 导航根、PagesMap、WS 生命周期、自动连接
-    │   │   ├── feature/
-    │   │   │   ├── home/
-    │   │   │   │   ├── HomeView.ets      # 首页：host chips、Projects、Recent chats
-    │   │   │   │   └── HostFilterBar.ets # 独立 host 在线状态组件
-    │   │   │   ├── chat/
-    │   │   │   │   ├── ChatView.ets      # 聊天壳层（NavDestination）
-    │   │   │   │   ├── ChatPage.ets      # 消息流列表（LazyForEach）
-    │   │   │   │   ├── ChatInputBar.ets  # 输入区 + Model chip → ConfigPanel
-    │   │   │   │   └── NewSessionView.ets# 新建会话页
-    │   │   │   ├── agent/
-    │   │   │   │   └── AgentDetailView.ets
-    │   │   │   ├── session/
-    │   │   │   │   └── SessionDetailView.ets
-    │   │   │   ├── workspace/
-    │   │   │   │   ├── WorkspaceDetailView.ets
-    │   │   │   │   ├── WorkspaceListView.ets
-    │   │   │   │   └── WorkspaceDrawer.ets
-    │   │   │   └── settings/
-    │   │   │       └── SettingsView.ets
-    │   │   │
-    │   │   ├── common/
-    │   │   │   ├── model/
-    │   │   │   │   ├── ChatState.ets         # ChatStore 全局状态
-    │   │   │   │   ├── WorkspaceInfo.ets     # WorkspaceStore / HostStore /...
-    │   │   │   │   ├── HostState.ets         # HostRuntimeStore / HostPhase
-    │   │   │   │   ├── DeviceAgentStore.ets  # Agent 缓存
-    │   │   │   │   ├── MessageHandler.ets    # 消息路由
-    │   │   │   │   ├── MessageData.ets       # 消息数据模型
-    │   │   │   │   ├── NavParams.ets         # 导航参数
-    │   │   │   │   └── AgentConfig.ets       # Agent 配置模型
-    │   │   │   ├── websocket/
-    │   │   │   │   ├── WSClient.ets          # WS 客户端 + 自动重连
-    │   │   │   │   └── WSProtocol.ets        # 协议类型定义
-    │   │   │   └── ui/
-    │   │   │       ├── CustomIcon.ets        # SVG 图标组件
-    │   │   │       ├── MessageCard.ets       # 消息气泡
-    │   │   │       ├── ToolCallCard.ets      # 工具调用卡片
-    │   │   │       ├── MarkdownRender.ets    # Markdown 渲染
-    │   │   │       ├── ThinkingSection.ets   # Thinking 折叠区
-    │   │   │       └── PlanView.ets          # Plan 进度视图
-    │   │   │
-    │   │   ├── services/
-    │   │   │   ├── StorageService.ets        # Preferences 持久化
-    │   │   │   └── AppPreferenceService.ets  # 语言 / 深浅色模式偏好
-    │   │   │
-    │   │   ├── constants/
-    │   │   │   └── DesignTokens.ets          # 设计 token
-    │   │   │
-    │   │   └── vendor/                       # 第三方组件
-    │   │       └── lv-md/                    # Markdown 解析引擎
-    │   │
-    │   └── src/main/resources/
-    │       ├── base/media/                   # SVG 图标文件（33 个 ic_*.svg）
-    │       ├── base/profile/                 # 配置文件
-    │       └── base/element/                 # 主题元素
-    │
-    ├── build/                                # 构建产物
-    └── oh_modules/                           # 鸿蒙依赖
 ```
 
 ---
@@ -704,6 +647,6 @@ WorkBuddy 设置了 `NODE_OPTIONS=--require="..." --use-system-ca`，DevEco Stud
 
 仍失败则删除 `ohos/oh_modules` 与 `ohos/.hvigor` 后从步骤 1 重来。
 
-### ArkTS 与 Flutter 双客户端并存
+### 客户端演进与当前实现收敛
 
-项目有两套手机端实现：`nexus_harmony/`（ArkTS，参考实现）与 `nexus_flutter/`（Flutter，当前活跃开发）。改 Flutter 端时如需对照 resume 渲染、ConfigPanel、状态管理等行为，参考 `nexus_harmony/`；但两者代码互不直接共享，改动需分别落地。
+项目手机端已全面收敛至 **`nexus_flutter/`**（基于 Flutter 构建的 HarmonyOS 应用）。历史上的 ArkTS 原生实现 `nexus_harmony/` 已于架构重构中归档清理，后续所有界面特性、多语言支持、状态管理与构建部署均以 `nexus_flutter/` 为准。

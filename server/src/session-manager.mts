@@ -209,6 +209,8 @@ export class SessionManager {
   }
 
   private claimSession(sess: SessionState, transport: WebSocket): SessionState {
+    sess.subscribers ??= new Set();
+    sess.subscribers.add(transport);
     sess.ownerTransport = transport;
     sess.ownerId = this.transportIdentity(transport);
     sess.ws = transport;
@@ -220,8 +222,16 @@ export class SessionManager {
   public assertOwner(sessionId: string, transport: WebSocket): SessionState {
     const sess = this.sessions.get(sessionId);
     if (!sess) throw new SessionOwnerError("SESSION_NOT_FOUND", "session not found");
-    if (sess.ownerTransport !== transport) {
-      throw new SessionOwnerError("SESSION_NOT_OWNER", "session is owned by another connection");
+    sess.subscribers ??= new Set();
+    if (!sess.subscribers.has(transport)) {
+      if (sess.ownerTransport === transport) {
+        sess.subscribers.add(transport);
+      } else if (sess.ownerTransport === null || sess.subscribers.size === 0) {
+        this.claimSession(sess, transport);
+      } else {
+        sess.subscribers.add(transport);
+        sess.orphanedAt = null;
+      }
     }
     return sess;
   }
@@ -289,20 +299,17 @@ export class SessionManager {
         if (existing.closing) {
           throw new SessionOperationError("SESSION_CLOSING", "session is closing");
         }
-        if (existing.ownerTransport && existing.ownerTransport !== ws) {
-          throw new SessionOwnerError("SESSION_NOT_OWNER", "session is owned by another connection");
-        }
-        if (!existing.ownerTransport) {
-          if (existing.orphanedAt === null || (mode !== "load" && mode !== "resume")) {
-            throw new SessionOwnerError("SESSION_RECLAIM_REQUIRED", "session reclaim requires an explicit load, resume, or sync request");
-          }
-          this.claimSession(existing, ws);
-        } else {
-          existing.ws = ws;
-          existing.ownerId = this.transportIdentity(ws);
-        }
+        existing.subscribers ??= new Set();
+        existing.subscribers.add(ws);
+        existing.ownerTransport = ws;
+        existing.ws = ws;
+        existing.ownerId = this.transportIdentity(ws);
+        existing.orphanedAt = null;
         this.updateSessionActivity(targetSessionId);
         if (mode === "load" || mode === "resume") {
+          if (existing.client?.connected && existing.sessionId) {
+            return existing;
+          }
           if (!existing.loadInFlight) {
             existing.loadInFlight = withAcpDeadline(
               `${mode}Session`,
@@ -356,6 +363,7 @@ export class SessionManager {
     const sess: SessionState = {
       ws: wsRef,
       ownerTransport: wsRef,
+      subscribers: new Set([wsRef]),
       ownerId: this.transportIdentity(wsRef),
       client: null!, // assigned below
       sessionId: "",
@@ -404,11 +412,12 @@ export class SessionManager {
           wsPayload = boundAgentEventPayload(eventPayload).value;
         }
         try {
-          // orphan（s 存在但 ownerTransport 为 null）时事件已缓冲，等 reclaim 后 sync 补齐，
-          // 不再向旧连接实时发送；创建初期（map 无此 key）仍发当前 wsRef。
           const s = this.sessions.get(sessionId);
-          const currentWs = s ? s.ownerTransport : wsRef;
-          if (currentWs) currentWs.send(JSON.stringify(wsPayload));
+          if (s) {
+            this.broadcastToSubscribers(sessionId, wsPayload);
+          } else if (wsRef) {
+            wsRef.send(JSON.stringify(wsPayload));
+          }
         } catch { /* WS disconnected — event buffered */ }
       },
       onPermissionRequest: this.buildPermissionRequestCallback(wsRef, () => sessionId, isCurrentClient),
@@ -537,16 +546,27 @@ export class SessionManager {
     return sess;
   }
 
-  /** Send a payload to the session's CURRENT owner transport.
-   *  Resolved at send time so a stale turn can never leak
-   *  turn_ended/error frames onto a WebSocket that a newer session
-   *  has since reclaimed. */
+  /** Broadcast a payload to all active subscribers of the session. */
+  public broadcastToSubscribers(sessionId: string, payload: object, excludeWs?: WebSocket): void {
+    const sess = this.sessions.get(sessionId);
+    if (!sess) return;
+    const json = JSON.stringify(payload);
+    if (sess.subscribers && sess.subscribers.size > 0) {
+      for (const sub of sess.subscribers) {
+        if (excludeWs && sub === excludeWs) continue;
+        try {
+          sub.send(json);
+        } catch { /* WS gone */ }
+      }
+    } else if (sess.ownerTransport && sess.ownerTransport !== excludeWs) {
+      try {
+        sess.ownerTransport.send(json);
+      } catch { /* WS gone */ }
+    }
+  }
+
   private sendToOwner(sessionId: string, payload: object): void {
-    const owner = this.sessions.get(sessionId)?.ownerTransport;
-    if (!owner) return;
-    try {
-      owner.send(JSON.stringify(payload));
-    } catch { /* WS gone */ }
+    this.broadcastToSubscribers(sessionId, payload);
   }
 
   /** ── beginPrompt ────────────────────────────────────────────
@@ -577,6 +597,21 @@ export class SessionManager {
     sess.turnGeneration = (sess.turnGeneration ?? 0) + 1;
     const turnGeneration = sess.turnGeneration;
     this.updateSessionActivity(sessionId);
+
+    // Broadcast user prompt to other subscribers so their chat timeline stays in sync
+    this.broadcastToSubscribers(
+      sessionId,
+      {
+        type: "agent_event",
+        sessionId,
+        event: {
+          sessionUpdate: "user_message_chunk",
+          content: { type: "text", text },
+        },
+      },
+      ownerTransport,
+    );
+
     return {
       run: () => this.runPromptTurn(sessionId, text, turnGeneration).catch((err: unknown) => {
         const msg = err instanceof Error ? err.message : String(err);
@@ -1138,8 +1173,8 @@ export class SessionManager {
         const requestId = randomUUID();
         const sid = sessionIdRef();
         const s = this.sessions.get(sid);
-        // orphan（会话存在但无 owner）时立即取消，避免 ACP Promise 永久挂起
-        if (s && !s.ownerTransport) {
+        // orphan（会话存在且没有任何订阅者）时立即取消，避免 ACP Promise 永久挂起
+        if (s && !s.ownerTransport && (!s.subscribers || s.subscribers.size === 0)) {
           resolve({ outcome: { outcome: "cancelled" } });
           return;
         }
@@ -1158,17 +1193,18 @@ export class SessionManager {
             resolve({ outcome: { outcome: "cancelled" } });
             return;
           }
-          // orphan 时不向旧连接发权限请求（cleanupWsSessions 已取消该会话的 pending）
-          const currentWs = s ? s.ownerTransport : wsRef;
-          currentWs?.send(
-            JSON.stringify({
-              type: "permission_request",
-              sessionId: sid,
-              requestId,
-              toolCall: permParams.toolCall,
-              options: permParams.options,
-            }),
-          );
+          const permMsg = {
+            type: "permission_request",
+            sessionId: sid,
+            requestId,
+            toolCall: permParams.toolCall,
+            options: permParams.options,
+          };
+          if (s) {
+            this.broadcastToSubscribers(sid, permMsg);
+          } else if (wsRef) {
+            wsRef.send(JSON.stringify(permMsg));
+          }
         } catch { /* WS gone */ }
       });
   }
@@ -1312,17 +1348,25 @@ export class SessionManager {
   cleanupWsSessions(ws: WebSocket): void {
     const now = Date.now();
     for (const [id, sess] of this.sessions) {
-      if (sess.ownerTransport !== ws) continue;
-      sess.orphanedAt = now;
-      sess.ownerTransport = null;
-      sess.ownerId = null;
-      sess.ws = null;
-      this.cancelPendingPermissions(sess);
-      this.updateSessionActivity(id);
-      console.log(
-        `[session-manager] session ${id.slice(0, 20)} orphaned (process kept alive)`,
-      );
-      this.ensureIdleCleanupRunning();
+      sess.subscribers ??= new Set();
+      sess.subscribers.delete(ws);
+      if (sess.ownerTransport === ws) {
+        sess.ownerTransport = sess.subscribers.values().next().value ?? null;
+        sess.ws = sess.ownerTransport;
+        sess.ownerId = sess.ownerTransport ? this.transportIdentity(sess.ownerTransport) : null;
+      }
+      if (sess.subscribers.size === 0) {
+        sess.orphanedAt = now;
+        sess.ownerTransport = null;
+        sess.ownerId = null;
+        sess.ws = null;
+        this.cancelPendingPermissions(sess);
+        this.updateSessionActivity(id);
+        console.log(
+          `[session-manager] session ${id.slice(0, 20)} orphaned (process kept alive)`,
+        );
+        this.ensureIdleCleanupRunning();
+      }
     }
     this.wsOpQueues.delete(ws);
     this.enforceProcessPoolLimit();

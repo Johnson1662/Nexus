@@ -1,5 +1,8 @@
 import type { WebSocket } from "ws";
 import { sessionManager } from "../session-manager.mjs";
+import { HerdrAdapter, HerdrStreamer, findSessionFileById } from "../discovery/herdr-adapter.mjs";
+import { readSessionJsonlRecentTurn, readSessionJsonlFullHistory } from "../discovery/herdr-acp-converter.mjs";
+import { HerdrTailerRegistry } from "../discovery/herdr-session-tailer.mjs";
 
 export async function handleLoadSession(
   ws: WebSocket,
@@ -15,6 +18,161 @@ export async function handleLoadSession(
 
   if (!targetSessionId) {
     try { ws.send(JSON.stringify({ type: "error", text: "sessionId is required" })); } catch {}
+    return;
+  }
+
+  if (targetSessionId.startsWith("herdr:")) {
+    const paneId = targetSessionId.slice("herdr:".length);
+    const resolved = await HerdrAdapter.resolveSessionFile(paneId);
+
+    if (resolved?.sessionPath) {
+      // 1. Structured ACP mode using session.jsonl
+      try {
+        ws.send(JSON.stringify({
+          type: "session_started",
+          sessionId: targetSessionId,
+          agent: resolved.agent || agent,
+          resumed: true,
+          streamMode: "acp",
+        }));
+      } catch { return; }
+
+      // Stage 1: Send only the latest conversation turn for instant opening (<5ms)
+      try {
+        const events = await readSessionJsonlRecentTurn(resolved.sessionPath);
+        for (const ev of events) {
+          ws.send(JSON.stringify({
+            type: "agent_event",
+            sessionId: targetSessionId,
+            event: ev,
+          }));
+        }
+        ws.send(JSON.stringify({
+          type: "session_loaded",
+          sessionId: targetSessionId,
+          stage: "recent",
+          hasMoreHistory: true,
+        }));
+      } catch (err) {
+        console.error(`[load-session] Error replaying recent turn for ${targetSessionId}:`, err);
+      }
+
+      // Attach live tailer immediately so real-time events are captured
+      const tailer = HerdrTailerRegistry.getOrCreate(
+        resolved.sessionPath,
+        targetSessionId,
+        paneId,
+      );
+      tailer.subscribe(ws);
+      ws.on("close", () => {
+        tailer.unsubscribe(ws);
+      });
+
+      // Stage 2: Asynchronously load full history in background
+      setTimeout(async () => {
+        if (ws.readyState !== 1 /* OPEN */) return;
+        try {
+          const fullEvents = await readSessionJsonlFullHistory(resolved.sessionPath!);
+          ws.send(JSON.stringify({
+            type: "history_full",
+            sessionId: targetSessionId,
+            events: fullEvents,
+          }));
+        } catch (err) {
+          console.error(`[load-session] Error loading full history for ${targetSessionId}:`, err);
+        }
+      }, 350);
+
+      return;
+    }
+
+    // 2. Fallback: Raw terminal mode
+    const initialText = await HerdrAdapter.readTerminal(paneId, 100, "text");
+    try {
+      ws.send(JSON.stringify({
+        type: "session_started",
+        sessionId: targetSessionId,
+        agent,
+        resumed: true,
+        streamMode: "terminal",
+      }));
+      if (initialText) {
+        ws.send(JSON.stringify({
+          type: "agent_event",
+          sessionId: targetSessionId,
+          event: {
+            sessionUpdate: "agent_message_chunk",
+            content: {
+              type: "text",
+              text: initialText,
+            },
+          },
+        }));
+      }
+    } catch { /* WS gone */ }
+
+    HerdrStreamer.seedContent(paneId, initialText);
+    const listener = (msg: unknown) => {
+      try {
+        ws.send(JSON.stringify(msg));
+      } catch {
+        HerdrStreamer.unsubscribe(paneId, listener);
+      }
+    };
+    HerdrStreamer.subscribe(paneId, listener);
+    ws.on("close", () => {
+      HerdrStreamer.unsubscribe(paneId, listener);
+    });
+    return;
+  }
+
+  // Check if targetSessionId matches an existing completed session file on disk
+  const diskFile = findSessionFileById(targetSessionId);
+  if (diskFile) {
+    try {
+      ws.send(JSON.stringify({
+        type: "session_started",
+        sessionId: targetSessionId,
+        agent,
+        resumed: true,
+        streamMode: "acp",
+        ...(model ? { model } : {}),
+      }));
+    } catch { return; }
+
+    try {
+      const events = await readSessionJsonlRecentTurn(diskFile);
+      for (const ev of events) {
+        ws.send(JSON.stringify({
+          type: "agent_event",
+          sessionId: targetSessionId,
+          event: ev,
+        }));
+      }
+      ws.send(JSON.stringify({
+        type: "session_loaded",
+        sessionId: targetSessionId,
+        stage: "recent",
+        hasMoreHistory: true,
+      }));
+    } catch (err) {
+      console.error(`[load-session] Error replaying recent turn for disk file ${targetSessionId}:`, err);
+    }
+
+    setTimeout(async () => {
+      if (ws.readyState !== 1 /* OPEN */) return;
+      try {
+        const fullEvents = await readSessionJsonlFullHistory(diskFile);
+        ws.send(JSON.stringify({
+          type: "history_full",
+          sessionId: targetSessionId,
+          events: fullEvents,
+        }));
+      } catch (err) {
+        console.error(`[load-session] Error loading full history for disk file ${targetSessionId}:`, err);
+      }
+    }, 350);
+
     return;
   }
 

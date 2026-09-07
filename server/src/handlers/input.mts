@@ -1,5 +1,7 @@
 import type { WebSocket } from "ws";
 import { SessionOperationError, SessionOwnerError, sessionManager } from "../session-manager.mjs";
+import { HerdrAdapter } from "../discovery/herdr-adapter.mjs";
+import { HerdrTailerRegistry } from "../discovery/herdr-session-tailer.mjs";
 
 export function handleInput(
   ws: WebSocket,
@@ -14,6 +16,29 @@ export function handleInput(
     try { ws.send(JSON.stringify({ type: "error", sessionId, text: "text is required" })); } catch {}
     return;
   }
+
+  if (sessionId.startsWith("herdr:")) {
+    const paneId = sessionId.slice("herdr:".length);
+    const tailer = HerdrTailerRegistry.get(sessionId);
+    if (tailer) {
+      tailer.setLastInjectedPrompt(text, ws);
+    }
+    try {
+      ws.send(JSON.stringify({ type: "input_ack", sessionId }));
+    } catch { /* WS gone */ }
+    HerdrAdapter.sendPrompt(paneId, text).catch((err) => {
+      console.log(`[input] Herdr sendPrompt error: ${err}`);
+      try {
+        ws.send(JSON.stringify({
+          type: "error",
+          sessionId,
+          text: `Herdr prompt failed: ${String(err)}`,
+        }));
+      } catch { /* WS gone */ }
+    });
+    return;
+  }
+
   // 原子占用回合成功后立即 ACK，客户端收到即清除 15s 输入超时定时器
   let handle;
   try {

@@ -22,9 +22,10 @@ class _ThinkingSectionState extends State<ThinkingSection> {
   }
 
   String get _preview {
-    if (widget.content.isEmpty) return '';
+    final trimmedContent = widget.content.trim();
+    if (trimmedContent.isEmpty) return '';
     // Show first meaningful line as preview
-    final lines = widget.content.split('\n');
+    final lines = trimmedContent.split('\n');
     for (final line in lines) {
       final trimmed = line.trim();
       if (trimmed.isNotEmpty) {
@@ -95,18 +96,22 @@ class _ThinkingSectionState extends State<ThinkingSection> {
                 ),
               ),
             ),
-            if (_expanded && widget.content.isNotEmpty)
-              ConstrainedBox(
+            () {
+              final trimmed = widget.content.trim();
+              if (!_expanded || trimmed.isEmpty) return const SizedBox.shrink();
+              return ConstrainedBox(
                 constraints: const BoxConstraints(maxHeight: 300),
                 child: SingleChildScrollView(
                   controller: _scrollController,
+                  physics: const ClampingScrollPhysics(),
                   padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
                   child: Text(
-                    widget.content,
+                    trimmed,
                     style: TextStyle(fontSize: 13, color: AppColors.foregroundM(context), height: 1.5),
                   ),
                 ),
-              ),
+              );
+            }(),
           ],
         ),
       ),

@@ -31,6 +31,7 @@ class ChatState {
   bool loadingSession = false;
   String sessionTitle = '';
   String sessionCurrentModelId = '';
+  String streamMode = 'acp'; // 'acp' | 'terminal'
 
   // Agent / Model / Mode
   String selectedAgentName = '';
@@ -73,6 +74,7 @@ class ChatState {
   void resetForNewChat() {
     sessionId = '';
     sessionTitle = '';
+    streamMode = 'acp';
     loadingSession = false;
     turnActive = false;
     cancelling = false;

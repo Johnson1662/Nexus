@@ -514,39 +514,12 @@ class _HomePageState extends State<HomePage> {
     List<Map<String, String>> addedWorkspaces,
     ChatProvider chatProvider,
   ) {
-    String workspaceLeaf(String value) {
-      final parts = value
-          .split(RegExp(r'[/\\]'))
-          .where((part) => part.isNotEmpty)
-          .toList();
-      return parts.isEmpty ? '' : parts.last.toLowerCase();
-    }
-
-    final validPaths = addedWorkspaces
-        .map((w) => (w['path'] ?? '')
-            .replaceAll('\\', '/')
-            .toLowerCase()
-            .replaceAll(RegExp(r'/$'), ''))
-        .where((p) => p.isNotEmpty)
-        .toSet();
-    final currentWorkspace = chatProvider.state.currentWorkspace
-        .replaceAll('\\', '/')
-        .toLowerCase()
-        .replaceAll(RegExp(r'/$'), '');
-    if (currentWorkspace.isNotEmpty) validPaths.add(currentWorkspace);
-
-    final validNames = <String>{
-      ...validPaths.map(workspaceLeaf),
-    }..removeWhere((name) => name.isEmpty);
-
     final filtered = sessions.where((s) {
-      if (s.cwd == null || s.cwd!.isEmpty) return false;
-      final normalizedCwd = s.cwd!
-          .replaceAll('\\', '/')
-          .toLowerCase()
-          .replaceAll(RegExp(r'/$'), '');
-      return validPaths.contains(normalizedCwd) ||
-          validNames.contains(workspaceLeaf(normalizedCwd));
+      if (chatProvider.useHerdrBackend) {
+        return s.source == 'herdr';
+      }
+      // On home page, display all recent sessions (active Herdr sessions and past sessions)
+      return true;
     }).toList();
 
     filtered.sort((a, b) {
@@ -657,21 +630,6 @@ class _HomePageState extends State<HomePage> {
                   ),
                 ),
               ),
-            ),
-          ),
-          const SizedBox(width: AppSpacing.md),
-          // [TEMP] Kit test button
-          Material(
-            color: Colors.orange,
-            borderRadius: BorderRadius.circular(AppRadius.full),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(AppRadius.full),
-              onTap: () => Navigator.pushNamed(context, '/test-kits'),
-              child: const SizedBox(
-                  width: 50,
-                  height: 50,
-                  child: Center(
-                      child: Text('🧪', style: TextStyle(fontSize: 20)))),
             ),
           ),
           const SizedBox(width: AppSpacing.md),

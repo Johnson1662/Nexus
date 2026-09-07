@@ -40,6 +40,7 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
   static const int _maxToolCardBytes = 512 * 1024;
   static const String _contextReplacedNotice =
       'Agent 上下文已重新创建。此前消息仍可查看，但新任务不会继承旧 Agent 上下文。';
+  Timer? _replayBatchTimer;
 
   ChatProvider(this._ws, {WorkspaceProvider? workspaceProvider})
       : _workspaceProvider = workspaceProvider {
@@ -118,6 +119,7 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
   // ── Connection ──
   Future<void> initFromDisk() async {
     final storage = await StorageService.getInstance();
+    _useHerdrBackend = storage.getUseHerdrBackend();
     final persisted = storage.getLastMessageIdSync();
     final cursor = SessionMessageCursor.parse(persisted);
     if (cursor != null) {
@@ -235,12 +237,18 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   String _normalizeUrl(String raw) {
     String url = raw.trim();
-    if (url.startsWith('http://')) url = url.replaceFirst('http://', 'ws://');
-    if (url.startsWith('https://'))
+    if (url.startsWith('http://')) {
+      url = url.replaceFirst('http://', 'ws://');
+    }
+    if (url.startsWith('https://')) {
       url = url.replaceFirst('https://', 'wss://');
-    if (!url.startsWith('ws://') && !url.startsWith('wss://'))
+    }
+    if (!url.startsWith('ws://') && !url.startsWith('wss://')) {
       url = 'ws://$url';
-    if (url.endsWith('/')) url = url.substring(0, url.length - 1);
+    }
+    if (url.endsWith('/')) {
+      url = url.substring(0, url.length - 1);
+    }
     return url;
   }
 
@@ -586,12 +594,29 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
         type: 'rename_session', sessionId: sessionId, text: newTitle));
   }
 
-  void requestSessionList() => _ws.send(ClientMessage(type: 'list_sessions'));
+  bool _useHerdrBackend = false;
+  bool get useHerdrBackend => _useHerdrBackend;
+
+  Future<void> setUseHerdrBackend(bool value) async {
+    _useHerdrBackend = value;
+    final storage = await StorageService.getInstance();
+    await storage.setUseHerdrBackend(value);
+    requestSessionList(useHerdr: value);
+    notifyListeners();
+  }
+
+  void requestSessionList({bool? useHerdr}) => _ws.send(
+        ClientMessage(
+      type: 'list_sessions',
+          useHerdr: useHerdr ?? _useHerdrBackend,
+        ),
+      );
 
   void _requestServerSessions() {
     _ws.send(ClientMessage(
       type: 'list_sessions',
       cwd: _state.currentWorkspace.isNotEmpty ? _state.currentWorkspace : null,
+      useHerdr: _useHerdrBackend,
     ));
   }
 
@@ -807,6 +832,11 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
             .firstOrNull;
         _state.sessionId = sessionId;
         _state.sessionTitle = msg.title ?? previous?.title ?? sessionId;
+        if (msg.streamMode != null && msg.streamMode!.isNotEmpty) {
+          _state.streamMode = msg.streamMode!;
+        } else {
+          _state.streamMode = sessionId.startsWith('herdr:') ? 'terminal' : 'acp';
+        }
         // Resume: server sends session_started with resumed: true.
         // Keep turnActive false so the next message continues via 'input'.
         if (msg.resumed == true) {
@@ -822,6 +852,7 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
                 (_state.currentWorkspace.isNotEmpty
                     ? _state.currentWorkspace
                     : null),
+            source: previous?.source ?? (sessionId.startsWith('herdr:') ? 'herdr' : null),
             createdAt: previous?.createdAt ?? now,
             lastActivity: msg.resumed == true ? previous?.lastActivity : now,
             status: msg.resumed == true
@@ -878,6 +909,14 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
         }
         _handleAgentEvent(msg);
         break;
+      case 'session_loaded':
+        _state.loadingSession = false;
+        _replayBatchTimer?.cancel();
+        notifyListeners();
+        break;
+      case 'history_full':
+        _handleHistoryFull(msg);
+        break;
       case 'session_cancelled':
         // Cancel ACK only: 服务端已受理取消请求，不代表回合结束。
         // 不清 cancelling、不取消 10s 兜底 timer；由 turn_ended /
@@ -918,6 +957,17 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
             }
           }
           _state.sessions = sessions;
+
+          if (_useHerdrBackend) {
+            final herdrCwds = sessions
+                .where((s) => s.source == 'herdr' && s.cwd != null && s.cwd!.isNotEmpty)
+                .map((s) => s.cwd!)
+                .toSet()
+                .toList();
+            if (herdrCwds.isNotEmpty) {
+              _workspaceProvider?.syncFromServer(herdrCwds);
+            }
+          }
         }
         notifyListeners();
         break;
@@ -990,6 +1040,13 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
           }
         }
         notifyListeners();
+        break;
+      case 'permission_resolved':
+        if (msg.requestId != null) {
+          _state.pendingPermissions.remove(msg.requestId!);
+          NotificationService.cancelForRequest(msg.requestId!);
+          notifyListeners();
+        }
         break;
       case 'session_closed':
         if (msg.sessionId != null &&
@@ -1213,9 +1270,6 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
   void _handleAgentEvent(ServerMessage msg) {
     if (msg.acpUpdate != null) {
       final event = msg.acpUpdate!;
-      if (_state.loadingSession) {
-        _state.loadingSession = false;
-      }
       _markInputStarted();
 
       switch (event.event) {
@@ -1278,6 +1332,18 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
               : (event.title?.isNotEmpty == true ? event.title! : callId);
           debugPrint(
               '[ToolCall] start: name=$toolName callId=$callId kind=${event.kind}');
+
+          // Defensive check: prevent appending duplicate cards for the same toolCallId
+          if (callId.isNotEmpty) {
+            final existingIndex = _state.messages.indexWhere((m) => m.toolCallId == callId);
+            if (existingIndex >= 0) {
+              final m = _state.messages[existingIndex];
+              m.toolName = toolName;
+              if (event.kind != null && event.kind!.isNotEmpty) m.toolKind = event.kind!;
+              break;
+            }
+          }
+
           _state.messages = [
             ..._state.messages,
             MessageData(
@@ -1313,22 +1379,27 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
                 if (_state.messages[i].toolCallId == event.toolCallId) {
                   final m = _state.messages[i];
                   _appendBoundedToolContent(m, newContent);
-                  if (newType.isNotEmpty) m.toolContentType = newType;
-                  if (event.path != null && event.path!.isNotEmpty)
+                  if (newType.isNotEmpty) {
+                    m.toolContentType = newType;
+                  }
+                  if (event.path != null && event.path!.isNotEmpty) {
                     m.toolPath = event.path!;
-                  if (event.oldText != null && event.oldText!.isNotEmpty)
+                  }
+                  if (event.oldText != null && event.oldText!.isNotEmpty) {
                     m.toolOldText = _boundedToolDiffText(m, event.oldText!);
-                  if (event.newText != null && event.newText!.isNotEmpty)
+                  }
+                  if (event.newText != null && event.newText!.isNotEmpty) {
                     m.toolNewText = _boundedToolDiffText(m, event.newText!);
-                  if (event.terminalId != null && event.terminalId!.isNotEmpty)
+                  }
+                  if (event.terminalId != null && event.terminalId!.isNotEmpty) {
                     m.toolTerminalId = event.terminalId!;
+                  }
                   if (event.terminalTruncated) m.toolTruncated = true;
                   m.toolStatus = status;
                   toolName = m.toolName;
                   found = true;
                   debugPrint(
                       '[ToolCall] update OK: toolContent now ${m.toolContent.length} chars, status=${m.toolStatus}');
-                  break;
                 }
               }
             }
@@ -1341,15 +1412,21 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
                         _state.messages[i].toolStatus == 'running')) {
                   final m = _state.messages[i];
                   _appendBoundedToolContent(m, newContent);
-                  if (newType.isNotEmpty) m.toolContentType = newType;
-                  if (event.path != null && event.path!.isNotEmpty)
+                  if (newType.isNotEmpty) {
+                    m.toolContentType = newType;
+                  }
+                  if (event.path != null && event.path!.isNotEmpty) {
                     m.toolPath = event.path!;
-                  if (event.oldText != null && event.oldText!.isNotEmpty)
+                  }
+                  if (event.oldText != null && event.oldText!.isNotEmpty) {
                     m.toolOldText = _boundedToolDiffText(m, event.oldText!);
-                  if (event.newText != null && event.newText!.isNotEmpty)
+                  }
+                  if (event.newText != null && event.newText!.isNotEmpty) {
                     m.toolNewText = _boundedToolDiffText(m, event.newText!);
-                  if (event.terminalId != null && event.terminalId!.isNotEmpty)
+                  }
+                  if (event.terminalId != null && event.terminalId!.isNotEmpty) {
                     m.toolTerminalId = event.terminalId!;
+                  }
                   if (event.terminalTruncated) m.toolTruncated = true;
                   m.toolStatus = status;
                   toolName = m.toolName;
@@ -1448,14 +1525,19 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
           }
           break;
         case 'config_option_update':
-          if (event.config != null) _state.configOptions = event.config!;
+          if (event.config != null) {
+            _state.configOptions = event.config!;
+          }
           break;
         case 'available_commands_update':
-          if (event.commands != null)
+          if (event.commands != null) {
             _state.availableCommands = event.commands!;
+          }
           break;
         case 'usage_update':
-          if (event.usage != null) _state.lastUsage = event.usage;
+          if (event.usage != null) {
+            _state.lastUsage = event.usage;
+          }
           break;
         case 'message':
           // ACP replay: consolidated message (user or assistant)
@@ -1480,6 +1562,97 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
           break;
       }
     }
+    if (_state.loadingSession) {
+      _replayBatchTimer?.cancel();
+      _replayBatchTimer = Timer(const Duration(milliseconds: 30), () {
+        _state.loadingSession = false;
+        notifyListeners();
+      });
+    } else {
+      notifyListeners();
+    }
+  }
+
+  void _handleHistoryFull(ServerMessage msg) {
+    if (msg.events == null || msg.events!.isEmpty) return;
+    if (!_isRequiredSessionEventForCurrentSession(msg.sessionId)) return;
+
+    final List<MessageData> fullList = [];
+    for (final raw in msg.events!) {
+      if (raw is! Map) continue;
+      final map = raw as Map<String, dynamic>;
+      final updateType = map['sessionUpdate'] as String? ?? '';
+      final content = map['content'];
+      String text = '';
+      if (content is Map && content['text'] != null) {
+        text = content['text'] as String;
+      } else if (content is String) {
+        text = content;
+      }
+
+      switch (updateType) {
+        case 'user_message_chunk':
+          if (text.isNotEmpty) {
+            fullList.add(MessageData(
+              role: 'user',
+              content: text,
+              sendStatus: 'sent',
+            ));
+          }
+          break;
+        case 'agent_thought_chunk':
+          if (text.isNotEmpty) {
+            fullList.add(MessageData(
+              role: 'assistant',
+              content: text,
+              type: 'thinking',
+              sendStatus: 'sent',
+            ));
+          }
+          break;
+        case 'agent_message_chunk':
+          if (text.isNotEmpty) {
+            if (fullList.isNotEmpty &&
+                fullList.last.role == 'assistant' &&
+                fullList.last.type == 'text') {
+              fullList.last.content += text;
+            } else {
+              fullList.add(MessageData(
+                role: 'assistant',
+                content: text,
+                type: 'text',
+                sendStatus: 'sent',
+              ));
+            }
+          }
+          break;
+        case 'tool_call':
+          final toolName = (map['title'] ?? map['toolName'] ?? 'tool').toString();
+          final toolCallId = (map['toolCallId'] ?? '').toString();
+          fullList.add(MessageData(
+            role: 'assistant',
+            content: toolName,
+            type: 'tool_call',
+            toolName: toolName,
+            toolCallId: toolCallId,
+            toolStatus: 'pending',
+          ));
+          break;
+        case 'tool_call_update':
+          final toolCallId = (map['toolCallId'] ?? '').toString();
+          final status = (map['status'] ?? 'completed').toString();
+          for (int i = fullList.length - 1; i >= 0; i--) {
+            if (fullList[i].toolCallId == toolCallId) {
+              fullList[i].toolStatus = status;
+              break;
+            }
+          }
+          break;
+      }
+    }
+
+    if (fullList.isEmpty) return;
+    _state.messages = fullList;
     notifyListeners();
   }
 

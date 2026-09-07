@@ -19,7 +19,6 @@ import 'pages/agent_detail_page.dart';
 import 'pages/agent_manage_page.dart';
 import 'pages/new_session_wizard.dart';
 import 'pages/search_page.dart';
-import 'pages/kit_test_page.dart';
 import 'pages/session_detail_page.dart';
 import 'models/ws_protocol.dart';
 
@@ -167,7 +166,6 @@ class NexusApp extends StatelessWidget {
         },
         '/new-session': (context) => const NewSessionWizard(),
         '/search': (context) => const SearchPage(),
-        '/test-kits': (context) => const KitTestPage(),
       },
       ),
     );

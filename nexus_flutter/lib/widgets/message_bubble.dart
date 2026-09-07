@@ -10,6 +10,7 @@ import '../widgets/markdown_renderer.dart';
 import '../widgets/thinking_section.dart';
 import '../widgets/tool_call_card.dart';
 import '../widgets/plan_view.dart';
+import '../widgets/terminal_view.dart';
 
 // ── File prefix parsing helpers ──
 
@@ -73,6 +74,7 @@ class MessageBubble extends StatefulWidget {
   final bool showCursor;
   final VoidCallback? onRetry;
   final List<PlanEntry>? planEntries;
+  final bool isTerminal;
 
   const MessageBubble({
     super.key,
@@ -81,6 +83,7 @@ class MessageBubble extends StatefulWidget {
     this.showCursor = false,
     this.onRetry,
     this.planEntries,
+    this.isTerminal = false,
   });
 
   @override
@@ -155,6 +158,18 @@ class _MessageBubbleState extends State<MessageBubble>
   Widget build(BuildContext context) {
     if (widget.message == null) {
       if (widget.streamingText != null && widget.streamingText!.isNotEmpty) {
+        if (widget.isTerminal) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.sm,
+              vertical: AppSpacing.xs,
+            ),
+            child: TerminalView(
+              content: '${widget.streamingText!}\u258C',
+              maxLines: 500,
+            ),
+          );
+        }
         return _buildAgentText(context, widget.streamingText!, isStreaming: true);
       }
       return const SizedBox.shrink();
@@ -164,6 +179,22 @@ class _MessageBubbleState extends State<MessageBubble>
 
     if (msg.role == 'user') {
       return _buildUserMessage(context, msg);
+    }
+
+    if (widget.isTerminal) {
+      if (msg.content.trim().isEmpty) {
+        return const SizedBox.shrink();
+      }
+      return Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.sm,
+          vertical: AppSpacing.xs,
+        ),
+        child: TerminalView(
+          content: msg.content,
+          maxLines: 500,
+        ),
+      );
     }
 
     switch (msg.type) {

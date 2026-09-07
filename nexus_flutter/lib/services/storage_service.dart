@@ -7,6 +7,7 @@ import '../models/device_entry.dart';
 /// Stores a single JSON file in the OHOS app sandbox.
 class StorageService {
   static const String _fileName = '.nexus_store.json';
+  static const String keyUseHerdrBackend = 'pref_use_herdr_backend';
 
   static Future<StorageService>? _instanceFuture;
   Map<String, dynamic> _data = {};
@@ -103,6 +104,18 @@ class StorageService {
 
   Future<void> remove(String key) async {
     _data.remove(key);
+    await _enqueueFlush();
+  }
+
+  bool getUseHerdrBackend() {
+    final val = _data[keyUseHerdrBackend];
+    if (val is bool) return val;
+    if (val is String) return val == 'true';
+    return false;
+  }
+
+  Future<void> setUseHerdrBackend(bool value) async {
+    _data[keyUseHerdrBackend] = value;
     await _enqueueFlush();
   }
 

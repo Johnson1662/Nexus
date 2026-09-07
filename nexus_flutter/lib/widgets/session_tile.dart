@@ -116,6 +116,31 @@ class SessionTile extends StatelessWidget {
                           ),
                         ),
                       ],
+                      if (session.source == 'herdr') ...[
+                        Text(
+                          ' · ',
+                          style:
+                              TextStyle(fontSize: AppFontSize.xs, color: muted),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 4,
+                            vertical: 1,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppColors.surface2Ctx(context),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            'Herdr 分屏',
+                            style: TextStyle(
+                              fontSize: AppFontSize.xs - 1,
+                              color: fg,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ],

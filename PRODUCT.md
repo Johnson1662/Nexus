@@ -22,7 +22,7 @@ Nexus 是一个 HarmonyOS App，作为手机上的移动开发工作区。通过
 ## Design Principles
 - **内容优先 (Content over Chrome)**：Agent 输出的代码和思考链是界面的绝对核心，UI 框架应当尽可能隐形。
 - **极致清晰 (Exceptional Clarity)**：通过排版、字号对比和留白瞬间传达信息的层级结构。
-- **原生流畅 (Native Fluidity)**：严格优先使用 HarmonyOS 原生组件（如 NavPathStack, bindSheet），保障系统级的丝滑动画与无障碍支持。
+- **原生流畅 (Native Fluidity)**：针对 HarmonyOS 移动端交互习惯深度优化，保障系统级的丝滑动画、触控反馈与无障碍支持。
 - **可靠感知 (Unyielding Reliability)**：网络状态、端到端加密、心跳重连等后台机制需以克制且清晰的方式呈现，不打扰用户但随时可知。
 
 ## Accessibility & Inclusion

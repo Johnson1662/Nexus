@@ -126,7 +126,7 @@ function saveToDisk(agents: InstalledAgent[]): boolean {
  * This ensures a smooth upgrade from the old PATH-scanning behavior.
  */
 function getDefaultInstallations(): InstalledAgent[] {
-  const defaults: string[] = ["opencode", "claude", "codex-acp"];
+  const defaults: string[] = ["omp", "claude", "codex", "opencode"];
   const now = Date.now();
   return defaults
     .map((agentId) => ({

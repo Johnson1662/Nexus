@@ -38,6 +38,7 @@ class ClientMessage {
   final String? optionId;
   final String? methodId;
   final String? lastMessageId;
+  final bool? useHerdr;
 
   ClientMessage({
     required this.type,
@@ -59,6 +60,7 @@ class ClientMessage {
     this.optionId,
     this.methodId,
     this.lastMessageId,
+    this.useHerdr,
   });
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -81,6 +83,7 @@ class ClientMessage {
         if (optionId != null) 'optionId': optionId,
         if (methodId != null) 'methodId': methodId,
         if (lastMessageId != null) 'lastMessageId': lastMessageId,
+        if (useHerdr != null) 'useHerdr': useHerdr,
       };
 }
 
@@ -119,6 +122,8 @@ class ServerMessage {
   final List<Map<String, dynamic>>? logEntries; // file_log response
   final String? fileContent; // file_content response
   final String? path; // file path for responses
+  final String? streamMode; // 'acp' | 'terminal'
+  final List<dynamic>? events; // history_full response
   AcpUpdate? get acpUpdate => event;
 
   ServerMessage({
@@ -154,6 +159,8 @@ class ServerMessage {
     this.logEntries,
     this.fileContent,
     this.path,
+    this.streamMode,
+    this.events,
   });
 
   factory ServerMessage.fromJson(Map<String, dynamic> json) {
@@ -306,8 +313,10 @@ class ServerMessage {
       files: (json['files'] as List<dynamic>?)?.map((f) => f as Map<String, dynamic>).toList(),
       diff: json['diff'] as String?,
       logEntries: (json['logEntries'] as List<dynamic>?)?.map((e) => e as Map<String, dynamic>).toList(),
-      fileContent: json['content'] as String?,
+      fileContent: json['fileContent'] as String?,
       path: json['path'] as String?,
+      streamMode: json['streamMode'] as String?,
+      events: json['events'] as List<dynamic>?,
     );
   }
 }
@@ -384,6 +393,7 @@ class ServerSessionData {
   final int createdAt;
   final int? lastActivity;
   final String? status;
+  final String? source;
 
   ServerSessionData({
     required this.sessionId,
@@ -393,6 +403,7 @@ class ServerSessionData {
     this.createdAt = 0,
     this.lastActivity,
     this.status,
+    this.source,
   });
 
   factory ServerSessionData.fromJson(Map<String, dynamic> json) => ServerSessionData(
@@ -403,6 +414,7 @@ class ServerSessionData {
         createdAt: json['createdAt'] as int? ?? DateTime.now().millisecondsSinceEpoch,
         lastActivity: json['lastActivity'] as int?,
         status: json['status'] as String?,
+        source: json['source'] as String?,
       );
 }
 

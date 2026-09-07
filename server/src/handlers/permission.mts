@@ -59,9 +59,19 @@ export function handlePermissionResponse(
     }
     sess.pendingPermissions.delete(requestId);
     pending.resolve({ outcome: { outcome: "selected" as const, optionId: selectedOptionId } });
+    sessionManager.broadcastToSubscribers(sessionId, {
+      type: "permission_resolved",
+      sessionId,
+      requestId,
+    }, ws);
     return;
   }
 
   sess.pendingPermissions.delete(requestId);
   pending.resolve({ outcome: { outcome: "cancelled" as const } });
+  sessionManager.broadcastToSubscribers(sessionId, {
+    type: "permission_resolved",
+    sessionId,
+    requestId,
+  }, ws);
 }
