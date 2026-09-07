@@ -9,13 +9,19 @@ Nexus 是一个 HarmonyOS 优先的 AI Agent 远程控制与代码协作工具�
 ┌──────────────┐     直连 WS (LAN)    ┌─────────────────────┐            ┌──────────┐
 │  nexus_flutter │ ←────────────────→ │  server/dist/cli.mjs │ ── ACP ──→ │ OpenCode  │
 │  (Flutter HAP) │   ws://<ip>:12138  │  (Node.js 守护进程)  │           │ Claude    │
-└──────────────┘                      └─────────────────────┘           │ codex-acp │
+│└──────────────┘                      └──────────┬──────────┘           │ codex-acp │
+                                                  │                      └──────────┘
+                                        IPC / inotify
+                                                  │                      ┌──────────┐
+                                                  └────── Herdr 桥接 ──→ │ OMP / TUI│
+                                                                         └──────────┘
         │                                    │                          └──────────┘
         └──── 可选：中继模式（NEXUS_RELAY_URL 环境变量启用），适用于远程访问 ────┘
 ```
 
 - **手机端**：`nexus_flutter/`（Flutter，构建为 HarmonyOS HAP），当前活跃开发的主战场
 - **服务端**：`server/`（Node.js + TypeScript），WebSocket 桥接 + ACP 会话生命周期管理 + Agent 注册/安装 + 权限转发 + E2EE 加密通道
+- **Herdr 深度集成**：支持直连 PC 端 Herdr 分屏，自动将 TUI 终端映射为原生结构化卡片（Thinking、ToolCall、Markdown），实现双向实时同步与毫秒级开屏
 - **协议**：手机 ↔ Bridge 为自定义 JSON over WebSocket；Bridge ↔ Agent 为 ACP（JSON-RPC）
 
 ## 目录结构

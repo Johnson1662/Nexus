@@ -71,6 +71,14 @@ Bridge Server 当前负责以下工作：
    - 查看文件 diff、文件历史和文件内容。
    - 文件列表最大递归深度为 3，并忽略隐藏文件和 `node_modules`。
 
+7. **Herdr 终端分屏深度集成与双向 ACP 桥接**
+   - 自动发现并置顶活跃的 Herdr 终端分屏（`HerdrAdapter.listAgents()`）。
+   - 四级会话句柄解析（`resolveSessionFile`）：从 `/proc/<pid>/fd` 句柄精准定位真实正在运行的 `.jsonl` 文件。
+   - JSONL 到 ACP 结构化转换（`herdr-acp-converter.mts`）：无损将 OMP 审计日志映射为原生的 `agent_thought_chunk`、`tool_call`、`tool_call_update` 和 Markdown 文本。
+   - 基于 inotify 的增量文件尾随监视器（`herdr-session-tailer.mts`）：毫秒级追踪 Agent 产生的新行并增量推流，具备行缓冲与 prompt 去重机制。
+   - 两阶段秒开协议：`session_loaded stage: "recent"`（首屏渲染当前最新一轮）+ `history_full`（后台静默拉取完整历史）。
+   - 历史已完成会话磁盘直连（`findSessionFileById`）：任何历史会话均可秒级定位并以结构化卡片回放。
+
 ## 运行要求
 
 ### 必需环境
@@ -446,7 +454,8 @@ ws://192.168.x.x:12138
 | `cancel` | `sessionId` | 取消当前 Agent 回合 |
 | `list_models` | `agent`, `refresh` | 查询模型和模式列表 |
 | `list_sessions` | `cwd`, `agent` | 查询会话列表 |
-| `load_session` | `sessionId`, `cwd`, `agent`, `model`, `lastMessageId` | 加载历史会话 |
+| `list_sessions` | `cwd`, `agent`, `useHerdr` | 查询会话列表，可选仅返回 Herdr 分屏 |
+| `load_session` | `sessionId`, `cwd`, `agent`, `model`, `lastMessageId` | 加载历史会话（支持 `herdr:<pane_id>` 及磁盘 UUID 会话） |
 | `resume_session` | `sessionId`, `cwd`, `agent`, `model` | 恢复历史会话 |
 | `close_session` | `sessionId` | 关闭会话和 Agent 进程 |
 | `switch_model` | `sessionId`, `model` | 切换模型 |
@@ -487,6 +496,39 @@ Agent 会话初始化完成后返回：
   "agent": "opencode",
   "title": "分析当前项目的 WebSocket 连接流程",
   "prompt": "分析当前项目的 WebSocket 连接流程"
+}
+```
+
+加载 Herdr 会话或历史会话时返回（带 `streamMode: "acp"`）：
+
+```json
+{
+  "type": "session_started",
+  "sessionId": "herdr:wC:p1",
+  "agent": "omp",
+  "resumed": true,
+  "streamMode": "acp"
+}
+```
+
+首屏最新一轮加载完毕后发送：
+
+```json
+{
+  "type": "session_loaded",
+  "sessionId": "herdr:wC:p1",
+  "stage": "recent",
+  "hasMoreHistory": true
+}
+```
+
+后台完整历史拉取完成后下发：
+
+```json
+{
+  "type": "history_full",
+  "sessionId": "herdr:wC:p1",
+  "events": [ /* 完整 ACP 结构化历史事件数组 */ ]
 }
 ```
 

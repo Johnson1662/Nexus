@@ -4,6 +4,9 @@
 
 ### 架构与服务端深模块
 - [x] **统一 Session ID 架构**：移除 `bridgeSessionId` (`acp-timestamp-...`)，全链路（Flutter App → WebSocket 协议 → Node.js Bridge → ACP Agent）统一使用 Agent 原生 `sessionId`（UUID / `ses_...`）。
+- [x] **Herdr 原生 ACP 结构化桥接**：实现 `HerdrAdapter` 四级活跃句柄解析（直接读取 `/proc/<pid>/fd`），将 Herdr 终端分屏以原生 ACP 协议输出（Thinking 折叠、ToolCallCard 与 Markdown），消除 TUI 乱码与字符滞后。
+- [x] **两阶段秒开与零抖动平滑加载**：首屏以 `readSessionJsonlRecentTurn` 实现 <5ms 当前轮次秒开；后台静默拉取全量历史（`history_full`）；列表启用 `ListView(reverse: true)` 底部物理锚定，彻底消除因高度计算触发 `jumpTo` 导致的画面闪烁与抖动。
+- [x] **已完成会话磁盘直连秒开与主页持久显示**：`findSessionFileById` 支持秒级检索并回放已结束的历史 `.jsonl` 会话；`ServerSessionData` 完整保留 `source` 标识，修复从主页点击历史会话空白或消失的问题。
 - [x] **多 Session 后台并发与进程池**：实现 `SessionManager` 进程池，支持后台保留 active ACP 子进程（最多 5 个 LRU 淘汰，15 分钟闲置清理），切换会话或切出 App 时长任务不被中断。
 - [x] **事件缓冲与回放 (Message Buffer)**：`SessionManager` 维护滚动消息缓冲区，客户端重连/载入会话时通过 `lastMessageId` 游标平滑补齐遗漏事件。
 - [x] **实时状态检测引擎 (`SessionStatusWatcher`)**：重构 watcher 为深模块类，支持 `computeSessionDiff` 纯函数计算与 `mergeSessionStatus` 内存 `turnActive` 覆盖，向手机端广播 `{ type: "session_status_update" }`。
@@ -14,6 +17,8 @@
 - [x] **会话恢复工作区 (`cwd`) 自动归位**：`loadSession` 自动提取目标会话原本绑定的 `cwd` 路径并更新当前工作区，彻底修复跨工作区 resume 时 OMP 抛出 `Internal error (ACP session not found)` 的问题。
 - [x] **消除 `session_status_update` 死循环**：修正 Flutter 端状态更新比对逻辑，不再将其他工作区的 Status 更新误判为 `hasNewSession`，消除无限发送 `list_sessions` 的死循环。
 - [x] **思考过程与工具卡片视觉对齐**：`ThinkingSection` 的展开箭头统一移至右侧，方向调整为“闭合朝右、展开朝下”，并加上与 `ToolCallCard` 相同的浅色外框。
+- [x] **思考卡片自适应高度与去除冗余换行**：服务端与客户端双端过滤模型输出末尾多达 200+ 的幽灵空行换行符，思考卡片随文字紧密贴合包裹，消除了内部无限向下滑动的空白缺陷。
+- [x] **工具卡片去重与顶栏简化**：移除 `custom:tool_execution_start` 导致的重复卡片发射与灰/绿对生卡片；移除顶栏多余的终端图标，保持极简双胶囊结构。
 - [x] **输入栏与 ConfigPanel 升级**：Model 胶囊 Chip 内嵌在输入框左下角，ConfigPanel 支持 AnimatedSwitcher 视图切换与 Agent 商店一键安装。
 
 ---

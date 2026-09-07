@@ -492,6 +492,10 @@ hdc -t "2NP0224627054426" shell hilog -x | Select-String "FATAL|com.nexus.remote
 - **文件管理器面板**：**不用 `Scaffold.endDrawer`**（见下方踩坑），改为 `body: Stack` 内的 `_buildFileOverlay`（遮罩 `AnimatedOpacity` + 面板 `AnimatedPositioned` 右滑）由 `setState(_fileDrawerOpen)` 控制开关。
 - **连接/持久化**：`lib/services/ws_client.dart`（WS + ACP 调试 dump 到沙箱 `nexus_acp_debug.jsonl`）、`lib/services/storage_service.dart`（**OHOS 沙箱绝对路径** `/data/storage/el2/base/haps/entry/files/.nexus_store.json`，不用 `path_provider`——OHOS 未实现且当前目录无写权限）、`lib/main.dart`（`_probeAllHosts()` 启动时探测已配对主机并自动连接首个在线主机）。
 - **ACP 渲染类型**：`user_message_chunk` / `agent_message_chunk` / `tool_call` / `tool_call_update` / `session_started` / `turn_ended`。
+- **两阶段异步秒开与零抖动列表**：聊天列表启用 `ListView(reverse: true)`，物理底部固定在 `offset: 0`，无需任何 `jumpTo(maxScrollExtent)` 强制滚动；首屏只拉取最新一轮（`readSessionJsonlRecentTurn`）实现秒开，后台异步拉取全量历史（`history_full`）并平滑追加至上方，当前视口像素偏移保持为 0，彻底根除开屏抖动与页面卡跳。
+- **Herdr 双向原生结构化同步**：服务端通过 `HerdrAdapter.resolveSessionFile` 四级解析器（优先读取 `/proc/<pid>/fd`）精准锁定正在运行的 `.jsonl` 会话；`herdr-acp-converter.mts` 将日志转换为原生 ThinkingSection、ToolCallCard 与 Markdown；`HerdrSessionTailer` 监听文件增量变更；移动端支持向终端注入 Prompt（`agent.prompt`）与中断（`Ctrl+C`）。
+- **已完成历史会话直读**：`findSessionFileById` 在 `~/.omp/agent/sessions/` 中秒级检索历史会话文件并以结构化卡片回放，配合 `ServerSessionData` 保持 `source` 标识，解决从主页点击历史会话空白或丢失问题。
+- **思考过程紧凑自适应与工具去重**：双端过滤模型在 thinking 末尾生成的幽灵空行；移除 `tool_execution_start` 造成的重复事件发射并在客户端做 `toolCallId` 查重，消除一灰一绿对生卡片。
 
 ### 已知坑（Flutter 版）
 
@@ -505,6 +509,8 @@ hdc -t "2NP0224627054426" shell hilog -x | Select-String "FATAL|com.nexus.remote
 - **主机名优先**：全量界面（Chat/Home/FilterBar/Settings/Workspaces）隐去技术性 `host_...` UUID 字符串，优先渲染 Friendly 主机名 `device.name`。
 - **非阻塞启动与防崩溃**：`main.dart` 启动时 `runApp()` 立即执行，避免 `await _probeAllHosts` 阻塞首帧渲染导致白屏；`SettingsPage` 中 `Dismissible` Key 增加 `index` 锚定防 DuplicateKey 崩溃。
 - **持久化用 OHOS 沙箱绝对路径**（见上），不要改用 `path_provider`。
+- **ListView 底部锚定务必用 `reverse: true`**：不要在非 reverse 列表中用 post-frame 回调执行 `jumpTo(maxScrollExtent)`。当卡片高度动态测量时，连续的 `jumpTo` 会引发视口上下抖动。改为 `reverse: true` 并在 `itemBuilder` 中通过 `items[items.length - 1 - index]` 映射，底部天然锁定在 0，追加上方历史无任何布局跳动。
+- **Herdr 分屏路径缓存滞后**：Herdr 的 `agent_session.value` 仅在分屏创建时绑定，若终端后续切换目录或启动新 Agent，Herdr 缓存不会更新。因此不能单信 `agent_session.value`，必须优先扫描对应 CWD 下进程的 `/proc/<pid>/fd` 获取当前打开的 `.jsonl` 句柄。
 
 ---
 
@@ -534,6 +540,9 @@ Nexus/                             # 项目根（PC 端 + 手机端合一）
 │   │   ├── discovery/
 │   │   │   ├── agents.mts            # Agent 发现
 │   │   │   ├── session-watcher.mts   # 深模块：SessionStatusWatcher + computeSessionDiff
+│   │   │   ├── herdr-adapter.mts     # Herdr 终端 IPC 通信与四级会话文件解析
+│   │   │   ├── herdr-acp-converter.mts # JSONL 到 ACP 结构化事件转换引擎
+│   │   │   ├── herdr-session-tailer.mts# 基于 inotify 的增量会话日志监视器
 │   │   │   └── mcp-config.mts        # MCP 配置发现
 │   │   ├── registry/
 │   │   │   ├── agents.json           # 内置 Agent 注册表
