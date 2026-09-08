@@ -157,9 +157,16 @@ class _ToolCallCardState extends State<ToolCallCard> {
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
-                        msg.toolName.isNotEmpty ? msg.toolName : 'tool',
-                        style: TextStyle(fontSize: 12, color: AppColors.foregroundC(context), fontWeight: FontWeight.w500),
-                        maxLines: 1, overflow: TextOverflow.ellipsis,
+                        msg.toolInput.isNotEmpty
+                            ? '${msg.toolName.isNotEmpty ? msg.toolName : 'tool'}  ${msg.toolInput}'
+                            : (msg.toolName.isNotEmpty ? msg.toolName : 'tool'),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppColors.foregroundC(context),
+                          fontWeight: FontWeight.w500,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                     if (isCompleted) Icon(Icons.check, size: 13, color: AppColors.success),

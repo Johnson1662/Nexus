@@ -912,6 +912,9 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
       case 'session_loaded':
         _state.loadingSession = false;
         _replayBatchTimer?.cancel();
+        _flushStreamingThinking();
+        _flushStreamingText();
+        _finishRunningTools();
         notifyListeners();
         break;
       case 'history_full':
@@ -1352,6 +1355,7 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
               type: 'tool_call',
               toolName: toolName,
               toolCallId: callId,
+              toolInput: event.toolInput ?? '',
               toolStatus: 'pending',
               toolKind: event.kind ?? '',
             ),
@@ -1602,12 +1606,18 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
           break;
         case 'agent_thought_chunk':
           if (text.isNotEmpty) {
-            fullList.add(MessageData(
-              role: 'assistant',
-              content: text,
-              type: 'thinking',
-              sendStatus: 'sent',
-            ));
+            if (fullList.isNotEmpty &&
+                fullList.last.role == 'assistant' &&
+                fullList.last.type == 'thinking') {
+              fullList.last.content += '\n\n$text';
+            } else {
+              fullList.add(MessageData(
+                role: 'assistant',
+                content: text,
+                type: 'thinking',
+                sendStatus: 'sent',
+              ));
+            }
           }
           break;
         case 'agent_message_chunk':
@@ -1629,21 +1639,49 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
         case 'tool_call':
           final toolName = (map['title'] ?? map['toolName'] ?? 'tool').toString();
           final toolCallId = (map['toolCallId'] ?? '').toString();
+          String toolInput = '';
+          final rawInput = map['rawInput'] ?? map['arguments'];
+          if (rawInput is Map) {
+            toolInput = (rawInput['command'] ?? rawInput['path'] ?? rawInput['intent'] ?? rawInput['query'] ?? rawInput['title'])?.toString() ?? '';
+          }
           fullList.add(MessageData(
             role: 'assistant',
             content: toolName,
             type: 'tool_call',
             toolName: toolName,
             toolCallId: toolCallId,
+            toolInput: toolInput,
             toolStatus: 'pending',
           ));
           break;
         case 'tool_call_update':
           final toolCallId = (map['toolCallId'] ?? '').toString();
           final status = (map['status'] ?? 'completed').toString();
+          String toolContent = '';
+          String toolContentType = map['contentType'] as String? ?? '';
+          final rawContent = map['content'];
+          if (rawContent is List) {
+            for (final item in rawContent) {
+              if (item is Map) {
+                final type = item['type'] as String? ?? '';
+                if (type == 'content' && item['content'] is Map && item['content']['text'] != null) {
+                  toolContent += item['content']['text'] as String;
+                  if (toolContentType.isEmpty) toolContentType = 'content';
+                } else if (type == 'text' && item['text'] != null) {
+                  toolContent += item['text'] as String;
+                } else if (item['text'] != null) {
+                  toolContent += item['text'] as String;
+                }
+              }
+            }
+          } else if (rawContent is String) {
+            toolContent = rawContent;
+          }
           for (int i = fullList.length - 1; i >= 0; i--) {
             if (fullList[i].toolCallId == toolCallId) {
               fullList[i].toolStatus = status;
+              if (toolContent.isNotEmpty) fullList[i].toolContent = toolContent;
+              if (toolContentType.isNotEmpty) fullList[i].toolContentType = toolContentType;
               break;
             }
           }

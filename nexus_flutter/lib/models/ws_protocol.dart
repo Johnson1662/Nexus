@@ -242,11 +242,19 @@ class ServerMessage {
       final extractedText = (toolContentText != null && toolContentText.isNotEmpty)
           ? toolContentText
           : (_extractText(e['content']) ?? _extractText(e['text']));
+
+      String? toolInput;
+      final rawInput = e['rawInput'] ?? e['arguments'];
+      if (rawInput is Map) {
+        toolInput = (rawInput['command'] ?? rawInput['path'] ?? rawInput['intent'] ?? rawInput['query'] ?? rawInput['title'])?.toString();
+      }
+
       return AcpUpdate(
         event: e['sessionUpdate'] as String? ?? '',
         text: extractedText ?? _extractText(e['text']),
         toolCallId: e['toolCallId'] as String?,
         toolName: e['toolName'] as String? ?? e['title'] as String?,
+        toolInput: toolInput,
         toolStatus: e['status'] as String? ?? e['toolStatus'] as String?,
         content: extractedText ?? _extractText(e['text']),
         contentType: e['contentType'] as String? ?? toolContentType,
@@ -326,6 +334,7 @@ class AcpUpdate {
   final String? text;
   final String? toolCallId;
   final String? toolName;
+  final String? toolInput;
   final String? toolStatus;
   final String? content;
   final String? contentType;
@@ -349,6 +358,7 @@ class AcpUpdate {
     this.text,
     this.toolCallId,
     this.toolName,
+    this.toolInput,
     this.toolStatus,
     this.content,
     this.contentType,

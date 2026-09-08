@@ -385,13 +385,19 @@ class _MessageBubbleState extends State<MessageBubble>
   // ── Thinking ──
 
   Widget _buildThinking(MessageData msg) {
-    return ThinkingSection(content: msg.content);
+    return ThinkingSection(
+      key: ValueKey('thinking_${msg.id}'),
+      content: msg.content,
+    );
   }
 
   // ── Tool call ──
 
   Widget _buildToolCall(MessageData msg) {
-    return ToolCallCard(message: msg);
+    return ToolCallCard(
+      key: ValueKey('tool_${msg.toolCallId.isNotEmpty ? msg.toolCallId : msg.id}'),
+      message: msg,
+    );
   }
 
   // ── Plan ──

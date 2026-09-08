@@ -9,6 +9,7 @@ class MessageData {
   String toolStatus; // '' | 'running' | 'completed' | 'error'
   String toolCallId;
   String toolKind;
+  String toolInput;
   String toolContent;
   String toolContentType;
   String toolPath;
@@ -30,6 +31,7 @@ class MessageData {
     this.toolStatus = '',
     this.toolCallId = '',
     this.toolKind = '',
+    this.toolInput = '',
     this.toolContent = '',
     this.toolContentType = '',
     this.toolPath = '',

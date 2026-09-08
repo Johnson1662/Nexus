@@ -7,7 +7,6 @@ import '../models/ws_protocol.dart';
 import '../providers/chat_provider.dart';
 import '../services/host_store.dart';
 import '../utils/agent_utils.dart';
-import '../widgets/agent_logo.dart';
 import '../widgets/message_bubble.dart';
 import '../widgets/chat_input_bar.dart';
 import '../widgets/thinking_section.dart';
@@ -942,7 +941,11 @@ class _ChatPageState extends State<ChatPage> {
         );
 
       case _ItemType.streamingThinking:
-        return ThinkingSection(content: state.streamingThinking, isStreaming: true);
+        return ThinkingSection(
+          key: const ValueKey('streaming_thinking'),
+          content: state.streamingThinking,
+          isStreaming: true,
+        );
 
       case _ItemType.streamingText:
         return MessageBubble(
