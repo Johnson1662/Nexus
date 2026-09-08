@@ -245,14 +245,9 @@ export class HerdrAdapter {
 
   static async focusAgent(target: string): Promise<void> {
     if (!this.isAvailable()) return;
-    await sendHerdrRequest("agent.focus", { target: await this.resolveAgentName(target) });
-  }
-
-  private static async resolveAgentName(paneId: string): Promise<string> {
-    const normalized = paneId.replace(/^herdr:/, "");
-    const match = (await this.listAgents()).find((agent) => agent.pane_id === normalized);
-    if (match?.name) return match.name;
-    throw new Error("Herdr RPC error [agent_not_ready]: agent for pane " + normalized + " is not ready");
+    await sendHerdrRequest("agent.focus", {
+      target: target.replace(/^herdr:/, ""),
+    });
   }
 
   static async getProcessInfo(paneId: string): Promise<any> {
@@ -292,9 +287,12 @@ export class HerdrAdapter {
     let lastError: unknown = null;
     for (let attempt = 0; attempt < 10; attempt += 1) {
       try {
-        const agentName = await this.resolveAgentName(paneId);
+        const agent = (await this.listAgents()).find((item) => item.pane_id === paneId);
+        if (!agent || agent.agent_status === "unknown") {
+          throw new Error("Herdr RPC error [agent_not_ready]: agent for pane " + paneId + " is not ready");
+        }
         await sendHerdrRequest("agent.prompt", {
-          target: agentName,
+          target: paneId,
           text,
         });
         return;
@@ -309,7 +307,7 @@ export class HerdrAdapter {
 
   static async sendKeys(target: string, keys: string[]): Promise<void> {
     await sendHerdrRequest("agent.send_keys", {
-      target: await this.resolveAgentName(target),
+      target: target.replace(/^herdr:/, ""),
       keys,
     });
   }

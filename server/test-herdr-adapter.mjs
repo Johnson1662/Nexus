@@ -91,10 +91,16 @@ async function main() {
           }) + "\n");
         } else if (req.method === "agent.prompt") {
           promptTarget = req.params?.target;
-          socket.write(JSON.stringify({
-            id: req.id,
-            result: { success: true },
-          }) + "\n");
+          const promptResponse = promptTarget === "mock_p1"
+            ? { id: req.id, result: { success: true } }
+            : {
+                id: req.id,
+                error: {
+                  code: "agent_not_ready",
+                  message: "agent " + promptTarget + " is not an active named agent",
+                },
+              };
+          socket.write(JSON.stringify(promptResponse) + "\n");
         } else if (req.method === "agent.send_keys") {
           socket.write(JSON.stringify({
             id: req.id,
@@ -115,7 +121,7 @@ async function main() {
     const mockAgents = await HerdrAdapter.listAgents();
     assert(mockAgents.length === 1 && mockAgents[0].pane_id === "mock_p1", "listAgents() parses mock agent");
     await HerdrAdapter.sendPrompt("mock_p1", "hello");
-    assert(promptTarget === "omp_test", "sendPrompt() targets the active Herdr agent name");
+    assert(promptTarget === "mock_p1", "sendPrompt() targets the active Herdr pane");
 
     // Test HerdrStreamer
     const receivedEvents = [];
