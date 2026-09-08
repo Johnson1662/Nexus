@@ -321,7 +321,8 @@ class _HomePageState extends State<HomePage> {
         children: workspaceProvider.workspaces.map((w) {
           final name = w['name'] ?? (w['path']?.split('/').lastOrNull ?? '');
           final path = w['path'] ?? '';
-          return _buildWorkspaceCard(context, name, path, chatProvider);
+          final workspaceId = w['workspaceId'] ?? '';
+          return _buildWorkspaceCard(context, name, path, chatProvider, workspaceId: workspaceId);
         }).toList(),
       );
     }
@@ -355,8 +356,9 @@ class _HomePageState extends State<HomePage> {
     BuildContext context,
     String name,
     String path,
-    ChatProvider chatProvider,
-  ) {
+    ChatProvider chatProvider, {
+    String workspaceId = '',
+  }) {
     return _buildProjectRow(
       context,
       icon: Icons.folder_outlined,
@@ -364,7 +366,7 @@ class _HomePageState extends State<HomePage> {
       onTap: () => Navigator.pushNamed(
         context,
         '/workspace-detail',
-        arguments: {'name': name, 'path': path},
+        arguments: {'name': name, 'path': path, 'workspaceId': workspaceId},
       ),
     );
   }

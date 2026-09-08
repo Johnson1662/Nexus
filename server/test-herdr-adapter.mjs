@@ -55,6 +55,7 @@ async function main() {
   process.env.HERDR_SOCKET_PATH = mockSocketPath;
 
   let terminalReadCount = 0;
+  let promptTarget = null;
   const mockServer = createServer((socket) => {
     socket.on("data", (chunk) => {
       const line = chunk.toString().trim();
@@ -68,6 +69,7 @@ async function main() {
               agents: [
                 {
                   pane_id: "mock_p1",
+                  name: "omp_test",
                   agent: "omp",
                   agent_status: "working",
                   cwd: "/test",
@@ -88,6 +90,7 @@ async function main() {
             },
           }) + "\n");
         } else if (req.method === "agent.prompt") {
+          promptTarget = req.params?.target;
           socket.write(JSON.stringify({
             id: req.id,
             result: { success: true },
@@ -111,6 +114,8 @@ async function main() {
 
     const mockAgents = await HerdrAdapter.listAgents();
     assert(mockAgents.length === 1 && mockAgents[0].pane_id === "mock_p1", "listAgents() parses mock agent");
+    await HerdrAdapter.sendPrompt("mock_p1", "hello");
+    assert(promptTarget === "omp_test", "sendPrompt() targets the active Herdr agent name");
 
     // Test HerdrStreamer
     const receivedEvents = [];

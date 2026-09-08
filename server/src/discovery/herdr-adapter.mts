@@ -8,6 +8,7 @@ import { execSync } from "node:child_process";
 
 export interface HerdrAgentInfo {
   pane_id: string;
+  name?: string;
   agent: string;
   agent_status: "working" | "idle" | "blocked" | "done" | "unknown";
   cwd: string;
@@ -22,6 +23,17 @@ export interface HerdrAgentInfo {
     kind?: string;
     value?: string;
   };
+}
+
+export interface HerdrWorkspaceInfo {
+  workspace_id: string;
+  number?: number;
+  label?: string;
+  focused?: boolean;
+  pane_count?: number;
+  tab_count?: number;
+  active_tab_id?: string;
+  agent_status?: string;
 }
 
 interface HerdrRpcResponse<T = unknown> {
@@ -126,6 +138,129 @@ export class HerdrAdapter {
     return isHerdrAvailable();
   }
 
+  static async listWorkspaces(): Promise<HerdrWorkspaceInfo[]> {
+    if (!this.isAvailable()) return [];
+    try {
+      const res = await sendHerdrRequest<{ workspaces: HerdrWorkspaceInfo[] }>("workspace.list", {});
+      return res?.workspaces ?? [];
+    } catch (err) {
+      console.log(`[herdr-adapter] listWorkspaces error: ${String(err)}`);
+      return [];
+    }
+  }
+
+  static async createWorkspace(label?: string, cwd?: string): Promise<string | null> {
+    if (!this.isAvailable()) return null;
+    try {
+      const res = await sendHerdrRequest<{ workspace?: { workspace_id: string } }>("workspace.create", {
+        label,
+        cwd,
+        focus: false,
+      });
+      return res?.workspace?.workspace_id ?? null;
+    } catch (err) {
+      console.log(`[herdr-adapter] createWorkspace error: ${String(err)}`);
+      return null;
+    }
+  }
+
+  static async focusWorkspace(workspaceId: string): Promise<void> {
+    if (!this.isAvailable()) return;
+    await sendHerdrRequest("workspace.focus", { workspace_id: workspaceId });
+  }
+
+  static async splitPane(options: {
+    workspace_id?: string;
+    target_pane_id?: string;
+    direction?: "right" | "down";
+    cwd?: string;
+  }): Promise<string | null> {
+    if (!this.isAvailable()) return null;
+    const res = await sendHerdrRequest<{ pane?: { pane_id: string } }>("pane.split", {
+      direction: options.direction ?? "right",
+      workspace_id: options.workspace_id,
+      target_pane_id: options.target_pane_id,
+      cwd: options.cwd,
+      focus: false,
+    });
+    return res?.pane?.pane_id ?? null;
+  }
+
+  static async createTab(options: {
+    workspace_id: string;
+    label?: string;
+    cwd?: string;
+  }): Promise<string | null> {
+    if (!this.isAvailable()) return null;
+    const res = await sendHerdrRequest<{
+      tab?: { tab_id: string };
+      root_pane?: { pane_id: string };
+    }>("tab.create", {
+      workspace_id: options.workspace_id,
+      label: options.label,
+      cwd: options.cwd,
+      focus: false,
+    });
+    return res?.root_pane?.pane_id ?? null;
+  }
+
+  static async startAgent(options: {
+    pane_id: string;
+    kind: string;
+    name: string;
+    args?: string[];
+    retries?: number;
+    retryDelayMs?: number;
+  }): Promise<boolean> {
+    if (!this.isAvailable()) return false;
+    // A freshly split pane needs a moment before its shell reaches an
+    // interactive prompt; retry only on agent_pane_busy, fail fast otherwise.
+    // Herdr agent startup defaults to a 30s timeout; stay above it so a slow
+    // start is not misreported as failure (which would leak the new pane).
+    const tries = options.retries ?? 12;
+    const delayMs = options.retryDelayMs ?? 800;
+    let lastErr: unknown = null;
+    for (let attempt = 0; attempt <= tries; attempt++) {
+      try {
+        await sendHerdrRequest("agent.start", {
+          pane_id: options.pane_id,
+          kind: options.kind,
+          name: options.name,
+          args: options.args ?? [],
+        }, 35000);
+        return true;
+      } catch (err) {
+        lastErr = err;
+        if (!String(err).includes("agent_pane_busy") || attempt === tries) throw err;
+        await new Promise((r) => setTimeout(r, delayMs));
+      }
+    }
+    throw lastErr;
+  }
+
+  static async closePane(paneId: string): Promise<void> {
+    if (!this.isAvailable()) return;
+    await sendHerdrRequest("pane.close", { pane_id: paneId });
+  }
+
+  static async focusAgent(target: string): Promise<void> {
+    if (!this.isAvailable()) return;
+    await sendHerdrRequest("agent.focus", { target: await this.resolveAgentName(target) });
+  }
+
+  private static async resolveAgentName(paneId: string): Promise<string> {
+    const normalized = paneId.replace(/^herdr:/, "");
+    const match = (await this.listAgents()).find((agent) => agent.pane_id === normalized);
+    if (match?.name) return match.name;
+    throw new Error("Herdr RPC error [agent_not_ready]: agent for pane " + normalized + " is not ready");
+  }
+
+  static async getProcessInfo(paneId: string): Promise<any> {
+    if (!this.isAvailable()) return null;
+    const res = await sendHerdrRequest<{ process_info?: any }>("pane.process_info", { pane: paneId });
+    return res?.process_info ?? null;
+  }
+
   static async listAgents(): Promise<HerdrAgentInfo[]> {
     if (!this.isAvailable()) return [];
     try {
@@ -153,15 +288,28 @@ export class HerdrAdapter {
   }
 
   static async sendPrompt(target: string, text: string): Promise<void> {
-    await sendHerdrRequest("agent.prompt", {
-      target,
-      text,
-    });
+    const paneId = target.replace(/^herdr:/, "");
+    let lastError: unknown = null;
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      try {
+        const agentName = await this.resolveAgentName(paneId);
+        await sendHerdrRequest("agent.prompt", {
+          target: agentName,
+          text,
+        });
+        return;
+      } catch (err) {
+        lastError = err;
+        if (!String(err).includes("[agent_not_ready]") || attempt === 9) throw err;
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+    }
+    throw lastError;
   }
 
   static async sendKeys(target: string, keys: string[]): Promise<void> {
     await sendHerdrRequest("agent.send_keys", {
-      target,
+      target: await this.resolveAgentName(target),
       keys,
     });
   }
@@ -181,37 +329,32 @@ export class HerdrAdapter {
     const targetCwd = match.foreground_cwd || match.cwd;
     let sessionPath: string | undefined;
 
-    // Tier 1: Check active running process in this CWD
-    if (targetCwd) {
-      const activeFile = findActiveSessionFileForCwd(targetCwd);
+    const ownSession = match.agent_session?.value as string | undefined;
+    if (match.agent_session?.kind === "id" && ownSession) {
+      // Pane-attributed session id (no path): resolve to its file when present.
+      const byId = findSessionFileById(ownSession);
+      if (byId) sessionPath = byId;
+    } else if (match.agent_session?.kind === "path" && ownSession) {
+      // Pane-attributed path is authoritative. When it is not on disk yet
+      // (fresh agent, first flush pending) we MUST NOT fall through to
+      // cwd-based guessing: in a shared cwd that would replay a stale
+      // session into this pane. Terminal mode + upgrade poller cover the gap.
+      if (existsSync(ownSession)) sessionPath = ownSession;
+    } else if (targetCwd) {
+      // No pane attribution at all: guess from cwd, but never reuse files
+      // already attributed to OTHER panes sharing this cwd.
+      const claimed = new Set(
+        agents
+          .filter((a) => a.pane_id !== targetPaneId && a.agent_session?.value)
+          .map((a) => a.agent_session!.value as string),
+      );
+      const activeFile = findActiveSessionFileForCwd(targetCwd, claimed);
       if (activeFile) {
         sessionPath = activeFile;
-      }
-    }
-
-    // Tier 2: Check if Herdr reported path exists and matches cwd
-    if (!sessionPath && match.agent_session?.kind === "path" && match.agent_session.value) {
-      const candidate = match.agent_session.value;
-      if (existsSync(candidate)) {
-        if (!targetCwd || candidate.includes(path.basename(targetCwd))) {
-          sessionPath = candidate;
-        }
-      }
-    }
-
-    // Tier 3: Find newest session in cwd session directory
-    if (!sessionPath && targetCwd) {
-      const sessionDir = findSessionDir(targetCwd);
-      const newest = findNewestSessionInDir(sessionDir);
-      if (newest) {
-        sessionPath = newest;
-      }
-    }
-
-    // Tier 4: Fall back to Herdr candidate if it exists
-    if (!sessionPath && match.agent_session?.kind === "path" && match.agent_session.value) {
-      if (existsSync(match.agent_session.value)) {
-        sessionPath = match.agent_session.value;
+      } else {
+        const sessionDir = findSessionDir(targetCwd);
+        const newest = findNewestSessionInDir(sessionDir, claimed);
+        if (newest) sessionPath = newest;
       }
     }
 
@@ -407,7 +550,7 @@ export function computeTerminalDelta(oldText: string, newText: string): string {
   return "";
 }
 
-function findActiveSessionFileForCwd(targetCwd: string): string | null {
+function findActiveSessionFileForCwd(targetCwd: string, exclude?: Set<string>): string | null {
   try {
     const pids = execSync('pgrep -f "bun .*/omp"', { encoding: "utf8" }).trim().split("\n").filter(Boolean);
     const resolvedTarget = realpathSync(targetCwd);
@@ -420,7 +563,7 @@ function findActiveSessionFileForCwd(targetCwd: string): string | null {
           for (const fd of fds) {
             try {
               const link = readlinkSync(`/proc/${pid}/fd/${fd}`);
-              if (link.endsWith(".jsonl") && existsSync(link)) {
+              if (link.endsWith(".jsonl") && existsSync(link) && !exclude?.has(link)) {
                 return link;
               }
             } catch {}
@@ -430,6 +573,107 @@ function findActiveSessionFileForCwd(targetCwd: string): string | null {
     }
   } catch {}
   return null;
+}
+
+export type HerdrEventListener = (event: { type?: string; event?: string; [key: string]: any }) => void;
+
+export class HerdrEventBus {
+  private static client: net.Socket | null = null;
+  private static listeners = new Set<HerdrEventListener>();
+  private static reconnectTimer: NodeJS.Timeout | null = null;
+  private static buffer = "";
+
+  static start(): void {
+    if (this.client) return;
+    this.connect();
+  }
+
+  static addListener(listener: HerdrEventListener): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+
+  private static connect(): void {
+    const sockPath = getHerdrSocketPath();
+    if (!existsSync(sockPath)) {
+      this.scheduleReconnect();
+      return;
+    }
+
+    try {
+      const sock = net.createConnection(sockPath);
+      this.client = sock;
+      sock.unref();
+
+      sock.on("connect", () => {
+        const subReq = {
+          jsonrpc: "2.0",
+          id: `sub_${Date.now()}`,
+          method: "events.subscribe",
+          params: {
+            subscriptions: [
+              { type: "pane.agent_status_changed" },
+              { type: "pane.agent_detected" },
+              { type: "workspace.created" },
+              { type: "workspace.updated" },
+              { type: "workspace.closed" },
+              { type: "pane.created" },
+              { type: "pane.closed" },
+            ],
+          },
+        };
+        sock.write(JSON.stringify(subReq) + "\n");
+      });
+
+      sock.on("data", (chunk) => {
+        this.buffer += chunk.toString("utf8");
+        const lines = this.buffer.split("\n");
+        this.buffer = lines.pop() ?? "";
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          try {
+            const parsed = JSON.parse(line);
+            if (parsed.result?.type === "subscription_started") continue;
+            const ev = parsed.event ? parsed : (parsed.params || parsed);
+            for (const l of this.listeners) {
+              try { l(ev); } catch (err) { console.error("[herdr-event-bus] listener error:", err); }
+            }
+          } catch {}
+        }
+      });
+
+      sock.on("error", () => {
+        sock.destroy();
+      });
+
+      sock.on("close", () => {
+        this.client = null;
+        this.scheduleReconnect();
+      });
+    } catch {
+      this.scheduleReconnect();
+    }
+  }
+
+  private static scheduleReconnect(): void {
+    if (this.reconnectTimer) return;
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer?.unref();
+      this.reconnectTimer = null;
+      this.connect();
+    }, 3000);
+  }
+
+  static stop(): void {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    if (this.client) {
+      this.client.destroy();
+      this.client = null;
+    }
+  }
 }
 
 function findSessionDir(cwd: string): string | null {
@@ -446,9 +690,9 @@ function findSessionDir(cwd: string): string | null {
   return null;
 }
 
-function findNewestSessionInDir(dir: string | null): string | null {
+function findNewestSessionInDir(dir: string | null, exclude?: Set<string>): string | null {
   if (!dir || !existsSync(dir)) return null;
-  const files = readdirSync(dir).filter((f) => f.endsWith(".jsonl"));
+  const files = readdirSync(dir).filter((f) => f.endsWith(".jsonl") && !exclude?.has(path.join(dir, f)));
   if (files.length === 0) return null;
   files.sort((a, b) => statSync(path.join(dir, b)).mtimeMs - statSync(path.join(dir, a)).mtimeMs);
   return path.join(dir, files[0]);

@@ -159,6 +159,21 @@ export function convertJsonlLinesToAcpUpdates(lines: string[]): AcpEventPayload[
   return allUpdates;
 }
 
+function filterLinesSince(lines: string[], minTimestampMs?: number): string[] {
+  if (minTimestampMs === undefined) return lines;
+  return lines.filter((line) => {
+    try {
+      const record = JSON.parse(line) as { timestamp?: unknown };
+      const timestamp = typeof record.timestamp === "string"
+        ? Date.parse(record.timestamp)
+        : NaN;
+      return Number.isFinite(timestamp) && timestamp >= minTimestampMs;
+    } catch {
+      return false;
+    }
+  });
+}
+
 /**
  * Reads the session.jsonl file and converts its recent history into a list of ACP events.
  * Defaults to the last 80 lines to ensure instant, zero-lag session loading without
@@ -179,10 +194,16 @@ export async function readSessionJsonlToAcpUpdates(
  * Extracts ONLY the latest conversation turn (from the last user prompt to EOF).
  * Enables sub-10ms initial session open with zero lag.
  */
-export async function readSessionJsonlRecentTurn(filePath: string): Promise<AcpEventPayload[]> {
+export async function readSessionJsonlRecentTurn(
+  filePath: string,
+  minTimestampMs?: number,
+): Promise<AcpEventPayload[]> {
   const content = readFileSync(filePath, "utf8");
   const rawLines = content.split("\n");
-  const lines = rawLines.filter((l) => l.trim().length > 0);
+  const lines = filterLinesSince(
+    rawLines.filter((l) => l.trim().length > 0),
+    minTimestampMs,
+  );
 
   let lastUserIdx = -1;
   for (let i = lines.length - 1; i >= 0; i--) {
@@ -205,9 +226,15 @@ export async function readSessionJsonlRecentTurn(filePath: string): Promise<AcpE
  * Extracts the complete history from the beginning of time.
  * Used for background asynchronous full hydration without UI blocking.
  */
-export async function readSessionJsonlFullHistory(filePath: string): Promise<AcpEventPayload[]> {
+export async function readSessionJsonlFullHistory(
+  filePath: string,
+  minTimestampMs?: number,
+): Promise<AcpEventPayload[]> {
   const content = readFileSync(filePath, "utf8");
   const rawLines = content.split("\n");
-  const lines = rawLines.filter((l) => l.trim().length > 0);
+  const lines = filterLinesSince(
+    rawLines.filter((l) => l.trim().length > 0),
+    minTimestampMs,
+  );
   return convertJsonlLinesToAcpUpdates(lines);
 }

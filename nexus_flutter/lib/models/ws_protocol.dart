@@ -39,6 +39,12 @@ class ClientMessage {
   final String? methodId;
   final String? lastMessageId;
   final bool? useHerdr;
+  final String? workspaceId;
+  final String? agentKind;
+  final String? creationMode;
+  final String? paneId;
+  final String? title;
+  final int? freshAt;
 
   ClientMessage({
     required this.type,
@@ -61,6 +67,12 @@ class ClientMessage {
     this.methodId,
     this.lastMessageId,
     this.useHerdr,
+    this.workspaceId,
+    this.agentKind,
+    this.creationMode,
+    this.paneId,
+    this.title,
+    this.freshAt,
   });
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -84,6 +96,12 @@ class ClientMessage {
         if (methodId != null) 'methodId': methodId,
         if (lastMessageId != null) 'lastMessageId': lastMessageId,
         if (useHerdr != null) 'useHerdr': useHerdr,
+        if (workspaceId != null && workspaceId!.isNotEmpty) 'workspaceId': workspaceId,
+        if (agentKind != null && agentKind!.isNotEmpty) 'agentKind': agentKind,
+        if (creationMode != null && creationMode!.isNotEmpty) 'creationMode': creationMode,
+        if (paneId != null && paneId!.isNotEmpty) 'paneId': paneId,
+        if (title != null && title!.isNotEmpty) 'title': title,
+        if (freshAt != null) 'freshAt': freshAt,
       };
 }
 
@@ -113,6 +131,9 @@ class ServerMessage {
   final List<String>? ips;
   final String? hostId;
   final List<String>? workspaces;
+  final List<Map<String, dynamic>>? herdrWorkspaces;
+  final String? paneId;
+  final String? workspaceId;
   final List<Map<String, dynamic>>? entries; // sync_response entries
   final bool? overflow; // sync_response cursor fell out of the replay window
   final bool? turnActive; // optional server turn-state snapshot
@@ -124,6 +145,7 @@ class ServerMessage {
   final String? path; // file path for responses
   final String? streamMode; // 'acp' | 'terminal'
   final List<dynamic>? events; // history_full response
+  final int? freshAt; // creation boundary for a fresh Herdr pane
   AcpUpdate? get acpUpdate => event;
 
   ServerMessage({
@@ -151,6 +173,9 @@ class ServerMessage {
     this.ips,
     this.hostId,
     this.workspaces,
+    this.herdrWorkspaces,
+    this.paneId,
+    this.workspaceId,
     this.entries,
     this.overflow,
     this.turnActive,
@@ -161,6 +186,7 @@ class ServerMessage {
     this.path,
     this.streamMode,
     this.events,
+    this.freshAt,
   });
 
   factory ServerMessage.fromJson(Map<String, dynamic> json) {
@@ -174,7 +200,7 @@ class ServerMessage {
       //       [{"type":"content","content":{"text":"..."}},
       //        {"type":"diff","path":...,"oldText":...,"newText":...},
       //        {"type":"terminal","terminalId":...}]
-      String? _extractText(dynamic c) {
+      String? extractText(dynamic c) {
         if (c is String) return c;
         if (c is Map) return c['text'] as String?;
         if (c is List) {
@@ -241,7 +267,7 @@ class ServerMessage {
       // type:"content" blocks. Fall back to raw extraction only if no text was parsed.
       final extractedText = (toolContentText != null && toolContentText.isNotEmpty)
           ? toolContentText
-          : (_extractText(e['content']) ?? _extractText(e['text']));
+          : (extractText(e['content']) ?? extractText(e['text']));
 
       String? toolInput;
       final rawInput = e['rawInput'] ?? e['arguments'];
@@ -251,12 +277,12 @@ class ServerMessage {
 
       return AcpUpdate(
         event: e['sessionUpdate'] as String? ?? '',
-        text: extractedText ?? _extractText(e['text']),
+        text: extractedText ?? extractText(e['text']),
         toolCallId: e['toolCallId'] as String?,
         toolName: e['toolName'] as String? ?? e['title'] as String?,
         toolInput: toolInput,
         toolStatus: e['status'] as String? ?? e['toolStatus'] as String?,
-        content: extractedText ?? _extractText(e['text']),
+        content: extractedText ?? extractText(e['text']),
         contentType: e['contentType'] as String? ?? toolContentType,
         path: e['path'] as String? ?? toolPath,
         oldText: e['oldText'] as String? ?? toolOldText,
@@ -313,7 +339,18 @@ class ServerMessage {
       hostname: json['hostname'] as String?,
       ips: (json['ips'] as List<dynamic>?)?.map((ip) => ip as String).toList(),
       hostId: json['hostId'] as String?,
-      workspaces: (json['workspaces'] as List<dynamic>?)?.map((w) => w as String).toList(),
+      workspaces: json['workspaces'] is List &&
+              (json['workspaces'] as List).isNotEmpty &&
+              (json['workspaces'] as List).first is! Map
+          ? (json['workspaces'] as List<dynamic>).map((w) => w.toString()).toList()
+          : null,
+      herdrWorkspaces: json['workspaces'] is List &&
+              (json['workspaces'] as List).isNotEmpty &&
+              (json['workspaces'] as List).first is Map
+          ? (json['workspaces'] as List).map((e) => Map<String, dynamic>.from(e as Map)).toList()
+          : null,
+      paneId: json['paneId'] as String?,
+      workspaceId: json['workspaceId'] as String?,
       entries: (json['entries'] as List<dynamic>?)?.map((e) => e as Map<String, dynamic>).toList(),
       overflow: json['overflow'] as bool?,
       turnActive: json['turnActive'] as bool?,
@@ -325,6 +362,7 @@ class ServerMessage {
       path: json['path'] as String?,
       streamMode: json['streamMode'] as String?,
       events: json['events'] as List<dynamic>?,
+      freshAt: json['freshAt'] as int?,
     );
   }
 }

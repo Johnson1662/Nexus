@@ -24,6 +24,7 @@ class _SettingsPageState extends State<SettingsPage> {
   late bool _thinkingExpanded;
   late bool _toolCallExpanded;
   bool _useHerdrBackend = false;
+  String _herdrCreationMode = 'pane_split';
 
   final Set<String> _expandedHostIds = {};
 
@@ -38,6 +39,7 @@ class _SettingsPageState extends State<SettingsPage> {
       if (mounted) {
         setState(() {
           _useHerdrBackend = storage.getUseHerdrBackend();
+          _herdrCreationMode = storage.getHerdrAgentCreationMode();
         });
       }
     });
@@ -848,7 +850,142 @@ class _SettingsPageState extends State<SettingsPage> {
                   : AppColors.foregroundMutedCtx(context),
             ),
           ),
+          if (_useHerdrBackend) ...[
+            const Divider(height: 1),
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.lg,
+                vertical: AppSpacing.md,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.dashboard_customize_outlined,
+                        size: 18,
+                        color: AppColors.foregroundCtx(context),
+                      ),
+                      const SizedBox(width: AppSpacing.sm),
+                      Text(
+                        '新建 Agent 模式',
+                        style: TextStyle(
+                          color: AppColors.foregroundCtx(context),
+                          fontSize: AppFontSize.sm,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.xxs),
+                  Text(
+                    '选择在 PC 端启动新 Agent 时的终端窗口拓扑方式',
+                    style: TextStyle(
+                      fontSize: AppFontSize.xs,
+                      color: AppColors.foregroundMutedCtx(context),
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildCreationModeOption(
+                          context,
+                          title: '分屏创建',
+                          subtitle: 'pane.split',
+                          description: '右侧切分新窗格，同屏并排协同',
+                          mode: 'pane_split',
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.md),
+                      Expanded(
+                        child: _buildCreationModeOption(
+                          context,
+                          title: '新建标签',
+                          subtitle: 'tab.create',
+                          description: '新建独立 Tab，全屏不受挤压',
+                          mode: 'new_tab',
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
+      ),
+    );
+  }
+
+  Widget _buildCreationModeOption(
+    BuildContext context, {
+    required String title,
+    required String subtitle,
+    required String description,
+    required String mode,
+  }) {
+    final selected = _herdrCreationMode == mode;
+    final fg = AppColors.foregroundCtx(context);
+    final muted = AppColors.foregroundMutedCtx(context);
+    final border = selected ? AppColors.accent : AppColors.borderCtx(context);
+    final bg = selected
+        ? AppColors.accent.withAlpha(20)
+        : AppColors.surface2Ctx(context).withAlpha(40);
+
+    return InkWell(
+      onTap: () async {
+        setState(() => _herdrCreationMode = mode);
+        await context.read<ChatProvider>().setHerdrAgentCreationMode(mode);
+      },
+      borderRadius: BorderRadius.circular(AppRadius.md),
+      child: Container(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          border: Border.all(color: border, width: selected ? 1.5 : 0.8),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    title,
+                    style: TextStyle(
+                      color: fg,
+                      fontSize: AppFontSize.sm,
+                      fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+                    ),
+                  ),
+                ),
+                if (selected)
+                  Icon(Icons.check_circle, size: 16, color: AppColors.accent),
+              ],
+            ),
+            const SizedBox(height: 2),
+            Text(
+              subtitle,
+              style: TextStyle(
+                fontFamily: 'monospace',
+                fontSize: 10,
+                color: selected ? AppColors.accent : muted,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              description,
+              style: TextStyle(
+                fontSize: 11,
+                color: muted,
+                height: 1.2,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

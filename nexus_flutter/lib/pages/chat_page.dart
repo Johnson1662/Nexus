@@ -429,6 +429,12 @@ class _ChatPageState extends State<ChatPage> {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
+                if (state.sessionId.startsWith('herdr:'))
+                  _roundIconButton(
+                    Icons.laptop_chromebook_rounded,
+                    () => context.read<ChatProvider>().focusOnPc(paneId: state.sessionId),
+                    size: 34,
+                  ),
                 _roundIconButton(
                   Icons.history_rounded,
                   () => _showHistoryPlaceholder(context),

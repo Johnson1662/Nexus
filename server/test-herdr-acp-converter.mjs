@@ -1,9 +1,14 @@
 import assert from "node:assert";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   extractText,
   convertJsonlRecordToAcpUpdates,
   convertJsonlLinesToAcpUpdates,
   readSessionJsonlToAcpUpdates,
+  readSessionJsonlRecentTurn,
+  readSessionJsonlFullHistory,
 } from "./dist/discovery/herdr-acp-converter.mjs";
 
 console.log("=== Testing herdr-acp-converter ===");
@@ -83,7 +88,43 @@ const toolResultError = {
 const toolUpdatesError = convertJsonlRecordToAcpUpdates(toolResultError);
 assert.strictEqual(toolUpdatesError[0].status, "failed");
 
-// 5. Test real session file
+// 5. Fresh-agent replay excludes records written before the creation boundary
+const boundaryDir = mkdtempSync(join(tmpdir(), "nexus-herdr-boundary-"));
+const boundaryFile = join(boundaryDir, "session.jsonl");
+const boundary = Date.parse("2026-09-08T00:00:00.000Z");
+writeFileSync(boundaryFile, [
+  JSON.stringify({
+    type: "message",
+    timestamp: "2026-09-07T23:59:59.000Z",
+    message: { role: "user", content: [{ type: "text", text: "old prompt" }] },
+  }),
+  JSON.stringify({
+    type: "message",
+    timestamp: "2026-09-08T00:00:01.000Z",
+    message: { role: "user", content: [{ type: "text", text: "new prompt" }] },
+  }),
+  JSON.stringify({
+    type: "message",
+    timestamp: "2026-09-08T00:00:02.000Z",
+    message: { role: "assistant", content: [{ type: "text", text: "new response" }] },
+  }),
+].join("\n"));
+try {
+  const freshRecent = await readSessionJsonlRecentTurn(boundaryFile, boundary);
+  const freshFull = await readSessionJsonlFullHistory(boundaryFile, boundary);
+  assert.deepStrictEqual(
+    freshRecent.map((event) => event.content?.text),
+    ["new prompt", "new response"],
+  );
+  assert.deepStrictEqual(
+    freshFull.map((event) => event.content?.text),
+    ["new prompt", "new response"],
+  );
+} finally {
+  rmSync(boundaryDir, { recursive: true, force: true });
+}
+
+// 6. Test real session file
 const realSession = "/home/johnson/.omp/agent/sessions/--media-johnson-Data-Development-iGEM--/2026-09-07T07-43-56-077Z_01a07ad2-e2ad-766f-ae52-5029b02dc059.jsonl";
 const fileUpdates = await readSessionJsonlToAcpUpdates(realSession);
 console.log(`Successfully parsed real session: ${fileUpdates.length} ACP events loaded`);

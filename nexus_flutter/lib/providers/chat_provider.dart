@@ -120,6 +120,7 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
   Future<void> initFromDisk() async {
     final storage = await StorageService.getInstance();
     _useHerdrBackend = storage.getUseHerdrBackend();
+    _herdrAgentCreationMode = storage.getHerdrAgentCreationMode();
     final persisted = storage.getLastMessageIdSync();
     final cursor = SessionMessageCursor.parse(persisted);
     if (cursor != null) {
@@ -425,6 +426,9 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
       _setCurrentSessionStatus('idle');
     }
     _clearTurnRequest();
+    _loadingSessionId = '';
+    _syncInFlight = false;
+    _syncRequestSessionId = '';
     _resetCursor(clearPersisted: true);
     _processedMessageIds.clear();
     _state.resetForNewChat();
@@ -481,7 +485,7 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   // ── Sessions ──
   void loadSession(String sessionId,
-      {String? agent, String? cwd, String? title}) {
+      {String? agent, String? cwd, String? title, int? freshAt}) {
     if (_loadingSessionId == sessionId) return;
     _loadingSessionId = sessionId;
     String targetAgent = agent ?? '';
@@ -540,6 +544,7 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
       sessionId: sessionId,
       cwd: _state.currentWorkspace.isNotEmpty ? _state.currentWorkspace : null,
       agent: targetAgent,
+      freshAt: freshAt,
     ));
   }
 
@@ -611,6 +616,49 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
           useHerdr: useHerdr ?? _useHerdrBackend,
         ),
       );
+
+  String _herdrAgentCreationMode = 'pane_split';
+  String get herdrAgentCreationMode => _herdrAgentCreationMode;
+
+  Future<void> setHerdrAgentCreationMode(String mode) async {
+    _herdrAgentCreationMode = mode;
+    final storage = await StorageService.getInstance();
+    await storage.setHerdrAgentCreationMode(mode);
+    notifyListeners();
+  }
+
+  void requestHerdrWorkspaces() {
+    _ws.send(ClientMessage(type: 'list_herdr_workspaces'));
+  }
+
+  void createHerdrAgent({
+    required String workspaceId,
+    required String agentKind,
+    String? creationMode,
+    String? cwd,
+    String? title,
+  }) {
+    // A Herdr pane is a new chat even before its ACP session file exists.
+    // Clear the previous pane immediately; create_herdr_agent_done will load
+    // the new pane after Herdr returns its id.
+    newChat();
+    _ws.send(ClientMessage(
+      type: 'create_herdr_agent',
+      workspaceId: workspaceId,
+      agentKind: agentKind,
+      creationMode: creationMode ?? _herdrAgentCreationMode,
+      cwd: cwd,
+      title: title,
+    ));
+  }
+
+  void focusOnPc({String? paneId, String? workspaceId}) {
+    _ws.send(ClientMessage(
+      type: 'focus_herdr_target',
+      paneId: paneId,
+      workspaceId: workspaceId,
+    ));
+  }
 
   // ── Workspace File Browser ──
   void requestWorkspaceFiles() {
@@ -805,6 +853,10 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
       case 'session_started':
         final sessionId = msg.sessionId ?? '';
         if (sessionId.isEmpty) break;
+        final acceptsSession = sessionId == _state.sessionId ||
+            sessionId == _loadingSessionId ||
+            (_state.sessionId.isEmpty && _startInFlight);
+        if (!acceptsSession) break;
         if (_state.sessionId != sessionId) {
           _state.contextReplacedNotice = '';
         }
@@ -824,10 +876,21 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
             .firstOrNull;
         _state.sessionId = sessionId;
         _state.sessionTitle = msg.title ?? previous?.title ?? sessionId;
+        final prevMode = _state.streamMode;
         if (msg.streamMode != null && msg.streamMode!.isNotEmpty) {
           _state.streamMode = msg.streamMode!;
         } else {
           _state.streamMode = sessionId.startsWith('herdr:') ? 'terminal' : 'acp';
+        }
+        if (previous?.sessionId == sessionId &&
+            prevMode.isNotEmpty &&
+            prevMode != _state.streamMode) {
+          // terminal → acp upgrade (or vice versa): drop stale rendered
+          // content; the replay following session_started rebuilds it.
+          _state.messages = [];
+          _state.streamingThinking = '';
+          _state.streamingText = '';
+          _finishRunningTools();
         }
         // Resume: server sends session_started with resumed: true.
         // Keep turnActive false so the next message continues via 'input'.
@@ -980,6 +1043,25 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
       case 'registry_agents_list':
         if (msg.registryAgents != null) {
           _state.registryAgents = msg.registryAgents!;
+        }
+        notifyListeners();
+        break;
+      case 'herdr_workspaces_list':
+        if (msg.herdrWorkspaces != null) {
+          _workspaceProvider?.syncFromHerdrWorkspaces(msg.herdrWorkspaces!);
+        }
+        notifyListeners();
+        break;
+      case 'create_herdr_agent_done':
+        if (msg.sessionId != null && msg.sessionId!.isNotEmpty) {
+          loadSession(
+            msg.sessionId!,
+            agent: msg.agent,
+            title: msg.title,
+            freshAt: msg.freshAt,
+          );
+        } else if (msg.text != null && msg.text!.isNotEmpty) {
+          _state.errorMessage = msg.text!;
         }
         notifyListeners();
         break;
@@ -1222,6 +1304,9 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
     // Request agents, models, and all sessions
     _ws.send(ClientMessage(type: 'list_agents'));
     requestSessionList();
+    if (_useHerdrBackend) {
+      requestHerdrWorkspaces();
+    }
     // server_info is the authenticated connection-ready boundary; replay any
     // events missed while this socket was down before accepting new input.
     syncRequest();
@@ -1777,6 +1862,8 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
       case 'session_ended':
       case 'session_closed':
       case 'sync_response':
+      case 'session_loaded':
+      case 'history_full':
         return true;
       default:
         return false;
@@ -1943,6 +2030,34 @@ class WorkspaceProvider extends ChangeNotifier {
     }
     if (state.selectedIndex >= state.workspaces.length) {
       state.selectedIndex = 0;
+    }
+    notifyListeners();
+    _persistWorkspaces();
+  }
+
+  /// Called by herdr_workspaces_list to sync workspaces directly from Herdr PC
+  void syncFromHerdrWorkspaces(List<Map<String, dynamic>> rawList) {
+    final state = _activeState;
+    for (final raw in rawList) {
+      final name = (raw['name'] ?? raw['workspaceId'] ?? '').toString();
+      final wsPath = (raw['path'] ?? '').toString();
+      final wsId = (raw['workspaceId'] ?? '').toString();
+      final effectivePath = wsPath.isNotEmpty ? wsPath : name;
+      final existing = state.workspaces.firstWhere(
+        (w) => (wsId.isNotEmpty && w['workspaceId'] == wsId) || w['path'] == effectivePath,
+        orElse: () => <String, String>{},
+      );
+      if (existing.isNotEmpty) {
+        existing['name'] = name;
+        existing['path'] = effectivePath;
+        existing['workspaceId'] = wsId;
+      } else {
+        state.workspaces.add({
+          'name': name,
+          'path': effectivePath,
+          'workspaceId': wsId,
+        });
+      }
     }
     notifyListeners();
     _persistWorkspaces();

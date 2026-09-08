@@ -83,6 +83,41 @@ void main() {
     expect(provider.state.errorMessage, contains('正在运行'));
   });
 
+  test('创建 Herdr Agent 会先清空旧会话状态', () {
+    final ws = _FakeWSClient();
+    final provider = ChatProvider(ws);
+    addTearDown(provider.dispose);
+    provider.state.sessionId = 'herdr:old-pane';
+    provider.state.messages = [
+      MessageData(role: 'assistant', content: '旧会话'),
+    ];
+
+    provider.createHerdrAgent(workspaceId: 'workspace-1', agentKind: 'omp');
+
+    expect(provider.state.sessionId, isEmpty);
+    expect(provider.state.messages, isEmpty);
+    expect(ws.sent.single.type, 'create_herdr_agent');
+
+    ws.emit(ServerMessage.fromJson({
+      'type': 'create_herdr_agent_done',
+      'sessionId': 'herdr:new-pane',
+      'agent': 'omp',
+      'freshAt': 123,
+    }));
+    expect(provider.state.sessionId, 'herdr:new-pane');
+    expect(provider.state.messages, isEmpty);
+    expect(ws.sent.last.type, 'load_session');
+    expect(ws.sent.last.freshAt, 123);
+
+    ws.emit(ServerMessage.fromJson({
+      'type': 'session_started',
+      'sessionId': 'herdr:old-pane',
+      'resumed': true,
+    }));
+    expect(provider.state.sessionId, 'herdr:new-pane');
+    expect(provider.state.messages, isEmpty);
+  });
+
   test('server cursor deduplicates replayed agent events', () {
     final ws = _FakeWSClient();
     final provider = ChatProvider(ws);

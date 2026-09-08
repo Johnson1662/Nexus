@@ -39,6 +39,8 @@ import { handleListWorkspaceFiles, handleFileDiff, handleFileLog, handleFileRead
 import { SessionOperationError, SessionOwnerError, sessionManager } from "./session-manager.mjs";
 import { setTitle as setSessionTitle } from "./session-titles.mjs";
 import { parseClientMessage, type JsonRecord } from "./protocol-validation.mjs";
+import { handleListHerdrWorkspaces, handleCreateHerdrAgent, handleFocusHerdrTarget, handleInteractHerdrBlocked } from "./handlers/herdr-actions.mjs";
+import { HerdrEventBus } from "./discovery/herdr-adapter.mjs";
 
 const PORT = parseInt(process.env.PORT || "", 10) || 12138;
 const HOST_ID = getOrCreateHostId();
@@ -98,6 +100,13 @@ export function createBridgeServer(config: BridgeConfig): BridgeApp {
     console.log(`[server] listening on ws://0.0.0.0:${port} and IPv6 if available`);
   });
 
+  HerdrEventBus.start();
+  // NOTE(review): no status listener attached here. herdr: sessions are never
+  // registered in sessionManager, so a getSession-based fan-out would be dead
+  // code; turn_ended for Herdr panes already flows via HerdrStreamer and the
+  // session tailer. Attach real listeners (e.g. blocked-state push) when the
+  // mobile UI consumes them.
+
   // WebSocket keep-alive: ping all connected clients every 15s
   const pingInterval = setInterval(() => {
     wss.clients.forEach((sock: WebSocket) => {
@@ -130,6 +139,7 @@ export function createBridgeServer(config: BridgeConfig): BridgeApp {
     stop: async () => {
       clearInterval(pingInterval);
       stopSessionWatcher();
+      HerdrEventBus.stop();
       // Kill all agent subprocesses before closing
       for (const [, sess] of sessionManager.getAllSessions()) {
         try { sessionManager.killSessionProcess(sess); } catch {}
@@ -389,6 +399,22 @@ export function handleIncomingConnection(transport: any, hostId: string = HOST_I
         handleStart(transport, sessionMsg).catch((err: Error) => {
           console.log(`[server] handleStart error: ${err.message}`);
         });
+        break;
+
+      case "list_herdr_workspaces":
+        sessionManager.enqueueWsOp(transport, () => handleListHerdrWorkspaces(transport));
+        break;
+
+      case "create_herdr_agent":
+        sessionManager.enqueueWsOp(transport, () => handleCreateHerdrAgent(transport, sessionMsg as any));
+        break;
+
+      case "focus_herdr_target":
+        sessionManager.enqueueWsOp(transport, () => handleFocusHerdrTarget(transport, sessionMsg as any));
+        break;
+
+      case "interact_herdr_blocked":
+        sessionManager.enqueueWsOp(transport, () => handleInteractHerdrBlocked(transport, sessionMsg as any));
         break;
 
       case "list_agents": {
@@ -660,6 +686,7 @@ if (isMainModule) {
   httpServer.listen(PORT, () => {
     console.log(`[server] listening on ws://0.0.0.0:${PORT} and IPv6 if available`);
   });
+  HerdrEventBus.start();
 
   // WebSocket keep-alive: ping all connected clients every 15s
   const pingInterval = setInterval(() => {

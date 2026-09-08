@@ -8,6 +8,7 @@ import '../models/device_entry.dart';
 class StorageService {
   static const String _fileName = '.nexus_store.json';
   static const String keyUseHerdrBackend = 'pref_use_herdr_backend';
+  static const String keyHerdrAgentCreationMode = 'pref_herdr_agent_creation_mode';
 
   static Future<StorageService>? _instanceFuture;
   Map<String, dynamic> _data = {};
@@ -31,6 +32,17 @@ class StorageService {
     final svc = StorageService._();
     await svc._init();
     return svc;
+  }
+
+  String getHerdrAgentCreationMode() {
+    final val = _data[keyHerdrAgentCreationMode];
+    if (val is String && (val == 'pane_split' || val == 'new_tab')) return val;
+    return 'pane_split';
+  }
+
+  Future<void> setHerdrAgentCreationMode(String mode) async {
+    _data[keyHerdrAgentCreationMode] = mode;
+    await _enqueueFlush();
   }
 
   Future<void> _init() async {

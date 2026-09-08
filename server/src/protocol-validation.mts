@@ -33,6 +33,7 @@ function hasValidOptionalFields(message: JsonRecord): boolean {
     if (field in message && typeof message[field] !== "string") return false;
   }
   if ("refresh" in message && typeof message.refresh !== "boolean") return false;
+  if ("freshAt" in message && typeof message.freshAt !== "number") return false;
   if (
     "args" in message &&
     (!Array.isArray(message.args) || message.args.some((arg) => typeof arg !== "string"))

@@ -12,9 +12,10 @@ export async function handleLoadSession(
     agent?: string;
     model?: string;
     lastMessageId?: string;
+    freshAt?: number;
   },
 ): Promise<void> {
-  const { sessionId: targetSessionId, cwd, agent = "opencode", model, lastMessageId } = params;
+  const { sessionId: targetSessionId, cwd, agent = "opencode", model, lastMessageId, freshAt } = params;
 
   if (!targetSessionId) {
     try { ws.send(JSON.stringify({ type: "error", text: "sessionId is required" })); } catch {}
@@ -25,13 +26,16 @@ export async function handleLoadSession(
     const paneId = targetSessionId.slice("herdr:".length);
     const resolved = await HerdrAdapter.resolveSessionFile(paneId);
 
-    if (resolved?.sessionPath) {
-      // 1. Structured ACP mode using session.jsonl
+    // 1. Structured ACP mode using session.jsonl (also used for terminal→ACP upgrade)
+    const enterAcpMode = async (
+      r: NonNullable<Awaited<ReturnType<typeof HerdrAdapter.resolveSessionFile>>>,
+      minTimestampMs?: number,
+    ) => {
       try {
         ws.send(JSON.stringify({
           type: "session_started",
           sessionId: targetSessionId,
-          agent: resolved.agent || agent,
+          agent: r.agent || agent,
           resumed: true,
           streamMode: "acp",
         }));
@@ -39,7 +43,7 @@ export async function handleLoadSession(
 
       // Stage 1: Send only the latest conversation turn for instant opening (<5ms)
       try {
-        const events = await readSessionJsonlRecentTurn(resolved.sessionPath);
+        const events = await readSessionJsonlRecentTurn(r.sessionPath!, minTimestampMs);
         for (const ev of events) {
           ws.send(JSON.stringify({
             type: "agent_event",
@@ -51,7 +55,7 @@ export async function handleLoadSession(
           type: "session_loaded",
           sessionId: targetSessionId,
           stage: "recent",
-          hasMoreHistory: true,
+          hasMoreHistory: minTimestampMs === undefined,
         }));
       } catch (err) {
         console.error(`[load-session] Error replaying recent turn for ${targetSessionId}:`, err);
@@ -59,7 +63,7 @@ export async function handleLoadSession(
 
       // Attach live tailer immediately so real-time events are captured
       const tailer = HerdrTailerRegistry.getOrCreate(
-        resolved.sessionPath,
+        r.sessionPath!,
         targetSessionId,
         paneId,
       );
@@ -72,7 +76,7 @@ export async function handleLoadSession(
       setTimeout(async () => {
         if (ws.readyState !== 1 /* OPEN */) return;
         try {
-          const fullEvents = await readSessionJsonlFullHistory(resolved.sessionPath!);
+          const fullEvents = await readSessionJsonlFullHistory(r.sessionPath!, minTimestampMs);
           ws.send(JSON.stringify({
             type: "history_full",
             sessionId: targetSessionId,
@@ -83,6 +87,84 @@ export async function handleLoadSession(
         }
       }, 350);
 
+    };
+
+    const freshBoundary = typeof freshAt === "number" && Number.isFinite(freshAt) ? freshAt : null;
+    if (freshBoundary !== null) {
+      // A newly created pane starts empty. Herdr can briefly report an old
+      // session path for the new pane, so replay only records written after
+      // the creation boundary rather than trusting the path or file mtime.
+      try {
+        ws.send(JSON.stringify({
+          type: "session_started",
+          sessionId: targetSessionId,
+          agent: resolved?.agent || agent,
+          resumed: true,
+          streamMode: "acp",
+        }));
+        ws.send(JSON.stringify({
+          type: "session_loaded",
+          sessionId: targetSessionId,
+          stage: "recent",
+          hasMoreHistory: false,
+        }));
+      } catch { return; }
+
+      const freshTimer = setInterval(async () => {
+        if (ws.readyState !== 1 /* OPEN */) { clearInterval(freshTimer); return; }
+        try {
+          const r = await HerdrAdapter.resolveSessionFile(paneId);
+          if (r?.sessionPath) {
+            clearInterval(freshTimer);
+            await enterAcpMode(r, freshBoundary);
+          }
+        } catch { /* retry next tick */ }
+      }, 1000);
+      ws.on("close", () => {
+        clearInterval(freshTimer);
+      });
+      return;
+    }
+
+    if (resolved?.sessionPath) {
+      await enterAcpMode(resolved);
+      return;
+    }
+
+    if (resolved && !resolved.sessionPath) {
+      // Agent detected but no session file yet (fresh agent): show EMPTY and
+      // wait for its own file. Never terminal-fallback here (raw TUI noise)
+      // and never another pane's session. First user input makes the agent
+      // write its .jsonl, then the poller below flips this socket to ACP.
+      try {
+        ws.send(JSON.stringify({
+          type: "session_started",
+          sessionId: targetSessionId,
+          agent: resolved.agent || agent,
+          resumed: true,
+          streamMode: "acp",
+        }));
+        ws.send(JSON.stringify({
+          type: "session_loaded",
+          sessionId: targetSessionId,
+          stage: "recent",
+          hasMoreHistory: false,
+        }));
+      } catch { return; }
+
+      const emptyTimer = setInterval(async () => {
+        if (ws.readyState !== 1 /* OPEN */) { clearInterval(emptyTimer); return; }
+        try {
+          const r = await HerdrAdapter.resolveSessionFile(paneId);
+          if (r?.sessionPath) {
+            clearInterval(emptyTimer);
+            await enterAcpMode(r);
+          }
+        } catch { /* retry next tick */ }
+      }, 2000);
+      ws.on("close", () => {
+        clearInterval(emptyTimer);
+      });
       return;
     }
 
@@ -122,6 +204,24 @@ export async function handleLoadSession(
     HerdrStreamer.subscribe(paneId, listener);
     ws.on("close", () => {
       HerdrStreamer.unsubscribe(paneId, listener);
+    });
+    // 3. Upgrade: the agent writes its .jsonl seconds after start; when it
+    // appears, switch this socket from raw terminal to structured ACP cards.
+    let upgradeTries = 0;
+    const upgradeTimer = setInterval(async () => {
+      if (ws.readyState !== 1 /* OPEN */) { clearInterval(upgradeTimer); return; }
+      if (++upgradeTries > 45) { clearInterval(upgradeTimer); return; }
+      try {
+        const r = await HerdrAdapter.resolveSessionFile(paneId);
+        if (r?.sessionPath) {
+          clearInterval(upgradeTimer);
+          HerdrStreamer.unsubscribe(paneId, listener);
+          await enterAcpMode(r);
+        }
+      } catch { /* retry next tick */ }
+    }, 1000);
+    ws.on("close", () => {
+      clearInterval(upgradeTimer);
     });
     return;
   }
