@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../constants/theme.dart';
 import '../models/message_data.dart';
+import '../services/app_preference_service.dart';
 
 class ToolCallCard extends StatefulWidget {
   final MessageData message;
@@ -13,7 +14,22 @@ class ToolCallCard extends StatefulWidget {
 }
 
 class _ToolCallCardState extends State<ToolCallCard> {
-  bool _expanded = false;
+  late bool _expanded;
+  bool _userToggled = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _expanded = AppPreferenceService().toolCallExpanded;
+  }
+
+  @override
+  void didUpdateWidget(covariant ToolCallCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!_userToggled) {
+      _expanded = AppPreferenceService().toolCallExpanded;
+    }
+  }
 
   IconData _toolIcon(String toolName) {
     final name = toolName.toLowerCase();
@@ -88,14 +104,21 @@ class _ToolCallCardState extends State<ToolCallCard> {
         msg.toolTruncated;
 
     // Auto-expand while running / streaming
-    if (isRunning && !_expanded) _expanded = true;
+    if (isRunning && !_userToggled && AppPreferenceService().toolCallExpanded) {
+      _expanded = true;
+    }
 
     final icon = _toolIcon(msg.toolName);
     Color iconColor;
-    if (isRunning) iconColor = AppColors.accent;
-    else if (isCompleted) iconColor = AppColors.success;
-    else if (isError) iconColor = AppColors.error;
-    else iconColor = AppColors.foregroundM(context);
+    if (isRunning) {
+      iconColor = AppColors.accent;
+    } else if (isCompleted) {
+      iconColor = AppColors.success;
+    } else if (isError) {
+      iconColor = AppColors.error;
+    } else {
+      iconColor = AppColors.foregroundM(context);
+    }
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
@@ -118,7 +141,12 @@ class _ToolCallCardState extends State<ToolCallCard> {
                 top: const Radius.circular(8),
                 bottom: (_expanded || !hasContent) ? const Radius.circular(8) : Radius.zero,
               ),
-              onTap: hasContent ? () => setState(() => _expanded = !_expanded) : null,
+              onTap: hasContent
+                  ? () => setState(() {
+                        _userToggled = true;
+                        _expanded = !_expanded;
+                      })
+                  : null,
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 child: Row(

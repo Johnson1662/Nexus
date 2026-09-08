@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../constants/theme.dart';
+import '../services/app_preference_service.dart';
 
 class ThinkingSection extends StatefulWidget {
   final String content;
@@ -12,8 +13,23 @@ class ThinkingSection extends StatefulWidget {
 }
 
 class _ThinkingSectionState extends State<ThinkingSection> {
-  bool _expanded = true;
+  late bool _expanded;
+  bool _userToggled = false;
   final ScrollController _scrollController = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    _expanded = AppPreferenceService().thinkingExpanded;
+  }
+
+  @override
+  void didUpdateWidget(covariant ThinkingSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!_userToggled) {
+      _expanded = AppPreferenceService().thinkingExpanded;
+    }
+  }
 
   @override
   void dispose() {
@@ -56,7 +72,10 @@ class _ThinkingSectionState extends State<ThinkingSection> {
           children: [
             InkWell(
               borderRadius: BorderRadius.circular(8),
-              onTap: () => setState(() => _expanded = !_expanded),
+              onTap: () => setState(() {
+                _userToggled = true;
+                _expanded = !_expanded;
+              }),
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 child: Row(

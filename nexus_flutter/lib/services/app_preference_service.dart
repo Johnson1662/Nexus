@@ -68,11 +68,13 @@ class AppPreferenceService extends ChangeNotifier {
     thinkingExpanded = value;
     final storage = await StorageService.getInstance();
     storage.putString('pref_thinking_expanded', value.toString());
+    notifyListeners();
   }
 
   Future<void> setToolCallExpanded(bool value) async {
     toolCallExpanded = value;
     final storage = await StorageService.getInstance();
     storage.putString('pref_toolcall_expanded', value.toString());
+    notifyListeners();
   }
 }
