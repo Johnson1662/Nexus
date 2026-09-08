@@ -5,8 +5,23 @@ import '../constants/theme.dart';
 import '../providers/chat_provider.dart';
 import '../widgets/session_tile.dart';
 
-class WorkspaceDetailPage extends StatelessWidget {
+class WorkspaceDetailPage extends StatefulWidget {
   const WorkspaceDetailPage({super.key});
+
+  @override
+  State<WorkspaceDetailPage> createState() => _WorkspaceDetailPageState();
+}
+
+class _WorkspaceDetailPageState extends State<WorkspaceDetailPage> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        context.read<ChatProvider>().requestSessionList();
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -22,10 +37,21 @@ class WorkspaceDetailPage extends StatelessWidget {
     // Filter sessions by workspace (cwd matches by path or dir name)
     final sessions = chatProvider.state.sessions.where((s) {
       if (s.cwd == null || s.cwd!.isEmpty) return false;
-      if (s.cwd == workspaceName) return true;
-      final cwdName = s.cwd!.split(RegExp(r'[/\\]')).lastOrNull ?? '';
-      final targetName = workspaceName.split(RegExp(r'[/\\]')).lastOrNull ?? '';
-      return cwdName == targetName;
+      final normCwd = s.cwd!.replaceAll('\\', '/').replaceAll(RegExp(r'/+$'), '');
+      if (workspacePath.isNotEmpty) {
+        final normTarget = workspacePath.replaceAll('\\', '/').replaceAll(RegExp(r'/+$'), '');
+        if (normCwd == normTarget || normCwd.startsWith('$normTarget/')) {
+          return true;
+        }
+      }
+      if (normCwd == workspaceName) return true;
+      final cwdName = normCwd.split('/').lastOrNull ?? '';
+      final targetName = (workspacePath.isNotEmpty ? workspacePath : workspaceName)
+              .replaceAll('\\', '/')
+              .replaceAll(RegExp(r'/+$'), '')
+              .split('/')
+              .lastOrNull ?? '';
+      return cwdName.isNotEmpty && cwdName == targetName;
     }).toList();
 
     return Scaffold(
@@ -48,28 +74,39 @@ class WorkspaceDetailPage extends StatelessWidget {
           ),
         ],
       ),
-      body: sessions.isEmpty
-          ? Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
+      body: RefreshIndicator(
+        onRefresh: () async => chatProvider.requestSessionList(),
+        child: sessions.isEmpty
+            ? ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
                 children: [
-                  Icon(
-                    Icons.chat_bubble_outline_rounded,
-                    size: 48,
-                    color: AppColors.foregroundMutedCtx(context).withAlpha(80),
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                  Text(
-                    '暂无会话',
-                    style: TextStyle(
-                      color: AppColors.foregroundMutedCtx(context),
-                      fontSize: AppFontSize.md,
+                  SizedBox(
+                    height: MediaQuery.of(context).size.height * 0.6,
+                    child: Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.chat_bubble_outline_rounded,
+                            size: 48,
+                            color: AppColors.foregroundMutedCtx(context).withAlpha(80),
+                          ),
+                          const SizedBox(height: AppSpacing.md),
+                          Text(
+                            '暂无会话',
+                            style: TextStyle(
+                              color: AppColors.foregroundMutedCtx(context),
+                              fontSize: AppFontSize.md,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ],
-              ),
-            )
-          : ListView.builder(
+              )
+            : ListView.builder(
+                physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.symmetric(
                 horizontal: AppSpacing.xl,
                 vertical: AppSpacing.md,
@@ -88,6 +125,7 @@ class WorkspaceDetailPage extends StatelessWidget {
                 );
               },
             ),
+      ),
     );
   }
 

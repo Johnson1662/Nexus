@@ -13,6 +13,7 @@ export async function handleListSessions(
   agent?: string,
   useHerdr?: boolean,
 ): Promise<void> {
+  const resolvedCwd = resolveWorkspacePath(cwd);
   // 如果启用 Herdr 作为专属后端，则只返回 Herdr 分屏，彻底与 ACP 会话隔离
   if (useHerdr === true) {
     const herdrSessions: any[] = [];
@@ -22,6 +23,11 @@ export async function handleListSessions(
         for (const ha of herdrAgents) {
           if (agent && ha.agent !== agent) continue;
           const haCwd = ha.foreground_cwd || ha.cwd;
+          if (resolvedCwd && haCwd) {
+            const normHa = haCwd.replace(/[\/\\]+$/, "");
+            const normTarget = resolvedCwd.replace(/[\/\\]+$/, "");
+            if (normHa !== normTarget && !normHa.startsWith(normTarget + "/")) continue;
+          }
           const resolved = await HerdrAdapter.resolveSessionFile(ha.pane_id);
           herdrSessions.push({
             sessionId: `herdr:${ha.pane_id}`,
@@ -43,7 +49,6 @@ export async function handleListSessions(
   }
 
   const sess = sessionManager.findSessionForWs(ws);
-  const resolvedCwd = resolveWorkspacePath(cwd);
   let sessions: any[];
 
   if (agent) {
@@ -110,7 +115,11 @@ export async function handleListSessions(
       for (const ha of herdrAgents) {
         if (agent && ha.agent !== agent) continue;
         const haCwd = ha.foreground_cwd || ha.cwd;
-        if (resolvedCwd && haCwd && !haCwd.startsWith(resolvedCwd)) continue;
+        if (resolvedCwd && haCwd) {
+          const normHa = haCwd.replace(/[\/\\]+$/, "");
+          const normTarget = resolvedCwd.replace(/[\/\\]+$/, "");
+          if (normHa !== normTarget && !normHa.startsWith(normTarget + "/")) continue;
+        }
 
         const resolved = await HerdrAdapter.resolveSessionFile(ha.pane_id);
         const resolvedSessionId = resolved?.sessionId;
@@ -124,6 +133,7 @@ export async function handleListSessions(
             ...existing,
             sessionId: `herdr:${ha.pane_id}`,
             title: title || existing.title,
+            cwd: haCwd || existing.cwd,
             status,
             source: "herdr",
             lastActivity: Date.now(),

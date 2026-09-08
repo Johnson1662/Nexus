@@ -612,14 +612,6 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
         ),
       );
 
-  void _requestServerSessions() {
-    _ws.send(ClientMessage(
-      type: 'list_sessions',
-      cwd: _state.currentWorkspace.isNotEmpty ? _state.currentWorkspace : null,
-      useHerdr: _useHerdrBackend,
-    ));
-  }
-
   // ── Workspace File Browser ──
   void requestWorkspaceFiles() {
     _state.loadingFiles = true;
@@ -982,7 +974,7 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
           }
         }
         // Now we have agents, request sessions with the first one
-        _requestServerSessions();
+        requestSessionList();
         notifyListeners();
         break;
       case 'registry_agents_list':
