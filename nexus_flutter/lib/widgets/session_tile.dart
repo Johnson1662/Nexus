@@ -41,7 +41,7 @@ class SessionTile extends StatelessWidget {
     final fg = AppColors.foregroundCtx(context);
     final muted = AppColors.foregroundMutedCtx(context);
 
-    final title = session.title?.isNotEmpty == true ? session.title! : '无标题';
+    final title = AgentUtils.cleanTitle(session.title);
     final agent = session.agent ?? '';
     final agentDisplayName = AgentUtils.getDisplayName(agent);
     final relativeTime =
@@ -113,31 +113,6 @@ class SessionTile extends StatelessWidget {
                                 ? AppColors.success
                                 : AppColors.warning,
                             fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                      if (session.source == 'herdr') ...[
-                        Text(
-                          ' · ',
-                          style:
-                              TextStyle(fontSize: AppFontSize.xs, color: muted),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 4,
-                            vertical: 1,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppColors.surface2Ctx(context),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            'Herdr 分屏',
-                            style: TextStyle(
-                              fontSize: AppFontSize.xs - 1,
-                              color: fg,
-                              fontWeight: FontWeight.w500,
-                            ),
                           ),
                         ),
                       ],

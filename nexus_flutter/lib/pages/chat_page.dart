@@ -541,12 +541,23 @@ class _ChatPageState extends State<ChatPage> {
     final agentName = state.selectedAgentName.isNotEmpty
         ? AgentUtils.getDisplayName(state.selectedAgentName)
         : '';
+
+    final cleanTitle = AgentUtils.cleanTitle(title);
+    final subtitleParts = <String>[];
+    if (deviceLabel.isNotEmpty) subtitleParts.add(deviceLabel);
+    if (workspaceName.isNotEmpty) {
+      subtitleParts.add(workspaceName);
+    } else if (agentName.isNotEmpty) {
+      subtitleParts.add(agentName);
+    }
+    final subtitleText = subtitleParts.join(' · ');
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
         Text(
-          title,
+          cleanTitle,
           style: TextStyle(
             fontSize: AppFontSize.sm,
             fontWeight: FontWeight.w600,
@@ -570,7 +581,7 @@ class _ChatPageState extends State<ChatPage> {
             const SizedBox(width: AppSpacing.xs),
             Flexible(
               child: Text(
-                deviceLabel,
+                subtitleText,
                 style: TextStyle(
                   fontSize: AppFontSize.xxs,
                   color: AppColors.foregroundMutedCtx(context),
@@ -579,82 +590,6 @@ class _ChatPageState extends State<ChatPage> {
                 overflow: TextOverflow.ellipsis,
               ),
             ),
-            if (agentName.isNotEmpty) ...[
-              const SizedBox(width: AppSpacing.xs),
-              Text(
-                '/',
-                style: TextStyle(
-                  fontSize: AppFontSize.xxs,
-                  color: AppColors.foregroundMutedCtx(context).withOpacity(0.5),
-                ),
-              ),
-              const SizedBox(width: AppSpacing.xs),
-              AgentLogo(
-                agentName: state.selectedAgentName,
-                size: 10,
-                color: AppColors.foregroundMutedCtx(context),
-              ),
-              const SizedBox(width: 2),
-              Flexible(
-                child: Text(
-                  agentName,
-                  style: TextStyle(
-                    fontSize: AppFontSize.xxs,
-                    color: AppColors.foregroundMutedCtx(context),
-                    fontWeight: FontWeight.w500,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-            if (workspaceName.isNotEmpty) ...[
-              const SizedBox(width: AppSpacing.xs),
-              Text(
-                '/',
-                style: TextStyle(
-                  fontSize: AppFontSize.xxs,
-                  color: AppColors.foregroundMutedCtx(context).withOpacity(0.5),
-                ),
-              ),
-              const SizedBox(width: AppSpacing.xs),
-              Icon(
-                Icons.folder_open_outlined,
-                size: 10,
-                color: AppColors.foregroundMutedCtx(context),
-              ),
-              const SizedBox(width: 2),
-              Flexible(
-                child: Text(
-                  workspaceName,
-                  style: TextStyle(
-                    fontSize: AppFontSize.xxs,
-                    color: AppColors.foregroundMutedCtx(context),
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-            if (state.sessionId.startsWith('herdr:')) ...[
-              const SizedBox(width: AppSpacing.xs),
-              Text(
-                '·',
-                style: TextStyle(
-                  fontSize: AppFontSize.xxs,
-                  color: AppColors.foregroundMutedCtx(context).withOpacity(0.5),
-                ),
-              ),
-              const SizedBox(width: AppSpacing.xs),
-              Text(
-                'Herdr 终端',
-                style: TextStyle(
-                  fontSize: AppFontSize.xxs,
-                  color: AppColors.accent,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
           ],
         ),
       ],

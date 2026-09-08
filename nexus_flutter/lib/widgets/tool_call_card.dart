@@ -98,13 +98,16 @@ class _ToolCallCardState extends State<ToolCallCard> {
     else iconColor = AppColors.foregroundM(context);
 
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(vertical: 2),
       child: Container(
         width: double.infinity,
         decoration: BoxDecoration(
-          color: AppColors.surfaceElevatedCtx(context),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: AppColors.borderCtx(context).withAlpha(80)),
+          color: AppColors.surface2Ctx(context).withValues(alpha: 0.35),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: AppColors.borderCtx(context).withValues(alpha: 0.4),
+            width: 0.6,
+          ),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -112,32 +115,32 @@ class _ToolCallCardState extends State<ToolCallCard> {
           children: [
             InkWell(
               borderRadius: BorderRadius.vertical(
-                top: const Radius.circular(10),
-                bottom: (_expanded || !hasContent) ? const Radius.circular(10) : Radius.zero,
+                top: const Radius.circular(8),
+                bottom: (_expanded || !hasContent) ? const Radius.circular(8) : Radius.zero,
               ),
               onTap: hasContent ? () => setState(() => _expanded = !_expanded) : null,
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 child: Row(
                   children: [
                     isRunning
                         ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
-                        : Icon(icon, size: 16, color: iconColor),
-                    const SizedBox(width: 8),
+                        : Icon(icon, size: 14, color: iconColor),
+                    const SizedBox(width: 6),
                     Expanded(
                       child: Text(
                         msg.toolName.isNotEmpty ? msg.toolName : 'tool',
-                        style: TextStyle(fontSize: 13, color: AppColors.foregroundC(context), fontWeight: FontWeight.w500),
+                        style: TextStyle(fontSize: 12, color: AppColors.foregroundC(context), fontWeight: FontWeight.w500),
                         maxLines: 1, overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    if (isCompleted) Icon(Icons.check, size: 14, color: AppColors.success),
-                    if (isError) Icon(Icons.close, size: 14, color: AppColors.error),
+                    if (isCompleted) Icon(Icons.check, size: 13, color: AppColors.success),
+                    if (isError) Icon(Icons.close, size: 13, color: AppColors.error),
                     if (hasContent) ...[
                       const SizedBox(width: 4),
                       Icon(
                         _expanded ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_right,
-                        size: 16, color: AppColors.foregroundLightCtx(context),
+                        size: 14, color: AppColors.foregroundLightCtx(context),
                       ),
                     ],
                   ],

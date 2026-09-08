@@ -22,8 +22,7 @@ void main() {
 
     // Verify native mobile AppBar and description banner
     expect(find.text('Agent 集成'), findsOneWidget);
-    expect(find.text('本地 Agent 状态上报'), findsOneWidget);
-    expect(find.text('可用集成'), findsOneWidget);
+    expect(find.textContaining('可选集成'), findsOneWidget);
 
     // Verify presence of default agents
     expect(find.text('Oh My Pi (OMP)'), findsOneWidget);

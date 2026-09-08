@@ -39,4 +39,14 @@ class AgentUtils {
     if (lower == 'omp') return 'OMP';
     return name;
   }
+
+  /// Strips terminal prompts/spinners from session titles (e.g. "π > 修复..." -> "修复...").
+  static String cleanTitle(String? rawTitle) {
+    if (rawTitle == null || rawTitle.trim().isEmpty) return '新对话';
+    final cleaned = rawTitle
+        .trim()
+        .replaceFirst(RegExp(r'^(π\s*[>⠋-⠿]?\s*|>\s*)'), '')
+        .trim();
+    return cleaned.isNotEmpty ? cleaned : rawTitle.trim();
+  }
 }

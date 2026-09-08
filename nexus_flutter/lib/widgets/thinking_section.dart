@@ -39,36 +39,39 @@ class _ThinkingSectionState extends State<ThinkingSection> {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(vertical: 2),
       child: Container(
         width: double.infinity,
         decoration: BoxDecoration(
-          color: AppColors.surfaceElevatedCtx(context),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: AppColors.borderCtx(context).withAlpha(80)),
+          color: AppColors.surface2Ctx(context).withValues(alpha: 0.35),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: AppColors.borderCtx(context).withValues(alpha: 0.4),
+            width: 0.6,
+          ),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
             InkWell(
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(8),
               onTap: () => setState(() => _expanded = !_expanded),
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 child: Row(
                   children: [
                     Icon(
                       widget.isStreaming ? Icons.psychology : Icons.lightbulb_outline,
-                      size: 16,
-                      color: AppColors.accent,
+                      size: 14,
+                      color: AppColors.foregroundLightCtx(context),
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 6),
                     Text(
                       '思考过程',
                       style: TextStyle(
-                        fontSize: 13,
-                        color: AppColors.foregroundM(context),
+                        fontSize: 12,
+                        color: AppColors.foregroundMutedCtx(context),
                         fontWeight: FontWeight.w500,
                       ),
                     ),
