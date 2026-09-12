@@ -9,7 +9,7 @@ import {
   readSessionJsonlToAcpUpdates,
   readSessionJsonlRecentTurn,
   readSessionJsonlFullHistory,
-} from "./dist/discovery/herdr-acp-converter.mjs";
+} from "../dist/discovery/herdr-acp-converter.mjs";
 
 console.log("=== Testing herdr-acp-converter ===");
 

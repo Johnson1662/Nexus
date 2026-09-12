@@ -109,7 +109,7 @@ export async function handleListSessions(
   }
 
   // Merge live Herdr panes into session list and place at top
-  if (HerdrAdapter.isAvailable()) {
+  if (useHerdr !== false && HerdrAdapter.isAvailable()) {
     try {
       const herdrAgents = await HerdrAdapter.listAgents();
       for (const ha of herdrAgents) {
@@ -153,6 +153,26 @@ export async function handleListSessions(
       }
     } catch (err) {
       console.log(`[list-sessions] failed to merge herdr agents: ${err}`);
+    }
+  }
+
+  // When useHerdr === false, strictly filter out any sessions currently active in Herdr panes
+  if (useHerdr === false && HerdrAdapter.isAvailable()) {
+    try {
+      const herdrAgents = await HerdrAdapter.listAgents();
+      const herdrSessionIds = new Set<string>();
+      for (const ha of herdrAgents) {
+        const resolved = await HerdrAdapter.resolveSessionFile(ha.pane_id);
+        if (resolved?.sessionId) {
+          herdrSessionIds.add(resolved.sessionId);
+        }
+        herdrSessionIds.add(`herdr:${ha.pane_id}`);
+      }
+      sessions = sessions.filter(
+        (s) => !herdrSessionIds.has(s.sessionId) && s.source !== "herdr",
+      );
+    } catch (err) {
+      console.log(`[list-sessions] failed to filter out herdr agents: ${err}`);
     }
   }
 

@@ -1,4 +1,4 @@
-import { SessionManager, withAcpDeadline } from "./dist/session-manager.mjs";
+import { SessionManager, withAcpDeadline } from "../dist/session-manager.mjs";
 
 let passed = 0;
 let failed = 0;

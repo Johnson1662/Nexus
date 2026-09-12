@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 
 import '../constants/theme.dart';
+import '../models/ws_protocol.dart';
 import 'agent_logo.dart';
 
 class ChatInputBar extends StatefulWidget {
   final bool disabled;
   final bool showCancel;
   final String configLabel;
+  final List<AvailableCommand> availableCommands;
   final void Function(String text) onSend;
   final VoidCallback onCancel;
   final VoidCallback onOpenConfig;
@@ -16,6 +18,7 @@ class ChatInputBar extends StatefulWidget {
     required this.disabled,
     required this.showCancel,
     this.configLabel = '选择模型',
+    this.availableCommands = const [],
     required this.onSend,
     required this.onCancel,
     required this.onOpenConfig,
@@ -30,6 +33,30 @@ class _ChatInputBarState extends State<ChatInputBar>
   final TextEditingController _controller = TextEditingController();
   bool _hasText = false;
   bool _showAddSheet = false;
+  bool _dismissedSlashCommands = false;
+
+  static final List<AvailableCommand> _defaultCommands = [
+    AvailableCommand(name: 'compact', description: '压缩并精简会话上下文'),
+    AvailableCommand(name: 'model', description: '切换当前会话模型', inputHint: 'model-id'),
+    AvailableCommand(name: 'context', description: '查看当前上下文与 Token 用量'),
+    AvailableCommand(name: 'clear', description: '清空当前聊天界面显示'),
+    AvailableCommand(name: 'help', description: '查看可用命令说明'),
+  ];
+
+  List<AvailableCommand> get _allCommands =>
+      widget.availableCommands.isNotEmpty ? widget.availableCommands : _defaultCommands;
+
+  List<AvailableCommand> get _filteredCommands {
+    final text = _controller.text;
+    if (!text.startsWith('/')) return [];
+    final query = text.substring(1).toLowerCase().trim();
+    if (query.isEmpty) return _allCommands;
+    return _allCommands.where((c) {
+      final nameMatch = c.name.toLowerCase().contains(query);
+      final descMatch = c.description.toLowerCase().contains(query);
+      return nameMatch || descMatch;
+    }).toList();
+  }
 
   late final AnimationController _entrance = AnimationController(
     vsync: this,
@@ -82,6 +109,12 @@ class _ChatInputBarState extends State<ChatInputBar>
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              // ── Slash Command Suggestions Popup ──
+              if (_controller.text.startsWith('/') && !_dismissedSlashCommands && _filteredCommands.isNotEmpty) ...[
+                _buildSlashCommandsPopup(context),
+                const SizedBox(height: AppSpacing.sm),
+              ],
+
               // ── Action Sheet Popup (+ button) ──
               if (_showAddSheet) ...[
                 _buildAddActionSheet(context),
@@ -147,8 +180,14 @@ class _ChatInputBarState extends State<ChatInputBar>
                         focusedBorder: InputBorder.none,
                         contentPadding: EdgeInsets.zero,
                       ),
-                      onChanged: (v) =>
-                          setState(() => _hasText = v.trim().isNotEmpty),
+                      onChanged: (v) {
+                        setState(() {
+                          _hasText = v.trim().isNotEmpty;
+                          if (!v.startsWith('/')) {
+                            _dismissedSlashCommands = false;
+                          }
+                        });
+                      },
                       onSubmitted: (_) => _send(),
                     ),
 
@@ -389,6 +428,130 @@ class _ChatInputBarState extends State<ChatInputBar>
           ),
           child: Icon(icon, size: size * 0.6, color: glyphColor),
         ),
+      ),
+    );
+  }
+
+  Widget _buildSlashCommandsPopup(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final commands = _filteredCommands;
+
+    return Container(
+      constraints: const BoxConstraints(maxHeight: 210),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceElevatedCtx(context),
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: Border.all(
+          color: AppColors.borderCtx(context).withValues(alpha: 0.6),
+          width: 0.8,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: dark ? const Color(0x40000000) : const Color(0x15000000),
+            blurRadius: 12,
+            offset: const Offset(0, -3),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Header
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.xs),
+            child: Row(
+              children: [
+                Icon(Icons.terminal_rounded, size: 14, color: AppColors.accent),
+                const SizedBox(width: AppSpacing.xs),
+                Text(
+                  '斜杠命令 (${commands.length})',
+                  style: TextStyle(
+                    fontSize: AppFontSize.xs,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.foregroundMutedCtx(context),
+                  ),
+                ),
+                const Spacer(),
+                GestureDetector(
+                  onTap: () => setState(() => _dismissedSlashCommands = true),
+                  child: Icon(Icons.close_rounded, size: 14, color: AppColors.foregroundMutedCtx(context)),
+                ),
+              ],
+            ),
+          ),
+          Divider(height: 1, thickness: 0.5, color: AppColors.borderCtx(context).withValues(alpha: 0.4)),
+          Flexible(
+            child: ListView.separated(
+              shrinkWrap: true,
+              padding: const EdgeInsets.symmetric(vertical: AppSpacing.xxs),
+              itemCount: commands.length,
+              separatorBuilder: (_, __) => Divider(
+                height: 1,
+                thickness: 0.4,
+                color: AppColors.borderCtx(context).withValues(alpha: 0.15),
+              ),
+              itemBuilder: (context, index) {
+                final cmd = commands[index];
+                return InkWell(
+                  onTap: () {
+                    final hasArgs = cmd.inputHint != null && cmd.inputHint!.isNotEmpty;
+                    _controller.text = hasArgs ? '/${cmd.name} ' : '/${cmd.name}';
+                    _controller.selection = TextSelection.fromPosition(
+                      TextPosition(offset: _controller.text.length),
+                    );
+                    setState(() {
+                      _hasText = true;
+                      _dismissedSlashCommands = true;
+                    });
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.md,
+                      vertical: AppSpacing.sm,
+                    ),
+                    child: Row(
+                      children: [
+                        Text(
+                          '/${cmd.name}',
+                          style: TextStyle(
+                            fontSize: AppFontSize.sm,
+                            fontFamily: 'monospace',
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.accent,
+                          ),
+                        ),
+                        if (cmd.inputHint != null && cmd.inputHint!.isNotEmpty) ...[
+                          const SizedBox(width: AppSpacing.xs),
+                          Text(
+                            '<${cmd.inputHint}>',
+                            style: TextStyle(
+                              fontSize: AppFontSize.xs,
+                              fontStyle: FontStyle.italic,
+                              color: AppColors.foregroundMutedCtx(context),
+                            ),
+                          ),
+                        ],
+                        const SizedBox(width: AppSpacing.md),
+                        Expanded(
+                          child: Text(
+                            cmd.description,
+                            style: TextStyle(
+                              fontSize: AppFontSize.xs,
+                              color: AppColors.foregroundMutedCtx(context),
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.end,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }

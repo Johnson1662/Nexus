@@ -1,5 +1,5 @@
-import { handlePermissionResponse } from "./dist/handlers/permission.mjs";
-import { sessionManager } from "./dist/session-manager.mjs";
+import { handlePermissionResponse } from "../dist/handlers/permission.mjs";
+import { sessionManager } from "../dist/session-manager.mjs";
 
 let passed = 0;
 let failed = 0;

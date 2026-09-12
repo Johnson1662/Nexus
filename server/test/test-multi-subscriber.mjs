@@ -1,6 +1,6 @@
 import { EventEmitter } from "node:events";
-import { sessionManager } from "./dist/session-manager.mjs";
-import { handlePermissionResponse } from "./dist/handlers/permission.mjs";
+import { sessionManager } from "../dist/session-manager.mjs";
+import { handlePermissionResponse } from "../dist/handlers/permission.mjs";
 
 let passed = 0;
 let failed = 0;

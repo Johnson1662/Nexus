@@ -4,6 +4,40 @@ import { HerdrAdapter, HerdrStreamer, findSessionFileById } from "../discovery/h
 import { readSessionJsonlRecentTurn, readSessionJsonlFullHistory } from "../discovery/herdr-acp-converter.mjs";
 import { HerdrTailerRegistry } from "../discovery/herdr-session-tailer.mjs";
 
+// history_full 是单条 WS 消息下发全量事件：22MB 会话可膨胀到 7MB+ JSON，
+// 手机端解码卡顿且 6000+ 卡片直接撑爆 ListView。只下发尾部有限事件。
+export const MAX_HISTORY_EVENTS = 300;
+const MAX_HISTORY_TEXT = 4000;
+
+function truncateHistoryText(value: unknown): unknown {
+  if (typeof value === "string") {
+    return value.length > MAX_HISTORY_TEXT ? value.slice(0, MAX_HISTORY_TEXT) + "…" : value;
+  }
+  if (Array.isArray(value)) {
+    return value.map(truncateHistoryText);
+  }
+  if (value && typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value)) {
+      out[k] = k === "text" || k === "content" ? truncateHistoryText(v) : v;
+    }
+    return out;
+  }
+  return value;
+}
+
+export function limitHistoryEvents(events: unknown[]): { events: unknown[]; truncated: boolean; total: number } {
+  const total = events.length;
+  if (total <= MAX_HISTORY_EVENTS) {
+    return { events: events.map((e) => truncateHistoryText(e)), truncated: false, total };
+  }
+  return {
+    events: events.slice(total - MAX_HISTORY_EVENTS).map((e) => truncateHistoryText(e)),
+    truncated: true,
+    total,
+  };
+}
+
 export async function handleLoadSession(
   ws: WebSocket,
   params: {
@@ -77,10 +111,13 @@ export async function handleLoadSession(
         if (ws.readyState !== 1 /* OPEN */) return;
         try {
           const fullEvents = await readSessionJsonlFullHistory(r.sessionPath!, minTimestampMs);
+          const limited = limitHistoryEvents(fullEvents as unknown[]);
           ws.send(JSON.stringify({
             type: "history_full",
             sessionId: targetSessionId,
-            events: fullEvents,
+            events: limited.events,
+            historyTruncated: limited.truncated,
+            historyTotal: limited.total,
           }));
         } catch (err) {
           console.error(`[load-session] Error loading full history for ${targetSessionId}:`, err);
@@ -263,10 +300,13 @@ export async function handleLoadSession(
       if (ws.readyState !== 1 /* OPEN */) return;
       try {
         const fullEvents = await readSessionJsonlFullHistory(diskFile);
+        const limited = limitHistoryEvents(fullEvents as unknown[]);
         ws.send(JSON.stringify({
           type: "history_full",
           sessionId: targetSessionId,
-          events: fullEvents,
+          events: limited.events,
+          historyTruncated: limited.truncated,
+          historyTotal: limited.total,
         }));
       } catch (err) {
         console.error(`[load-session] Error loading full history for disk file ${targetSessionId}:`, err);

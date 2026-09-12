@@ -491,7 +491,7 @@ hdc -t "2NP0224627054426" shell hilog -x | Select-String "FATAL|com.nexus.remote
 
 - **状态/数据**：`lib/providers/chat_provider.dart`（ACP 事件中枢 `_handleAgentEvent`）、`lib/models/ws_protocol.dart`（`AcpUpdate` 解析 + `_extractText`）、`lib/models/message_data.dart`（`MessageData`，`toolKind` 字段，`id` 为 `final` 经构造函数传入）。
 - **UI**：`lib/widgets/tool_call_card.dart`（可折叠工具卡片，运行中自动展开）、`lib/widgets/message_bubble.dart`、`lib/pages/chat_page.dart`（ListView 加 `key: ValueKey(msg.id)`）、`lib/pages/home_page.dart`、`lib/pages/workspace_detail_page.dart`。
-- **聊天顶栏（`chat_page.dart` `_buildTopBar`）**：三个独立圆角胶囊、固定高度 42 —— ① 返回键 `<`（单独胶囊）；② 对话标题 + 状态点 + 主机名 + 工作区名（Expanded 胶囊，左对齐）；③ 历史记录（时钟）+ 文件（`folder_open`）两个图标（一个胶囊）。历史记录点击弹底部 sheet（提示词历史待实现）；文件点击从右侧滑出文件管理器面板（`_buildFileOverlay` / `_buildFilePanel`），已实现工作区文件树浏览、Git 修改状态过滤、Diff 审查与 Commit 历史查看。
+- **聊天顶栏（`chat_page.dart` `_buildTopBar`）**：三个独立圆角胶囊、固定高度 42 —— ① 返回键 `<`（单独胶囊）；② 对话标题 + 状态点 + 主机名 + 工作区名（Expanded 胶囊，左对齐）；③ 文件（`folder_open`）单图标胶囊（已精简移除未实现的占位时钟与多余按钮）。点击从右侧滑出文件管理器面板（`_buildFileOverlay` / `_buildFilePanel`），已实现工作区文件树浏览、Git 修改状态过滤、Diff 审查与 Commit 历史查看。
 - **文件管理器面板**：**不用 `Scaffold.endDrawer`**（见下方踩坑），改为 `body: Stack` 内的 `_buildFileOverlay`（遮罩 `AnimatedOpacity` + 面板 `AnimatedPositioned` 右滑）由 `setState(_fileDrawerOpen)` 控制开关。
 - **连接/持久化**：`lib/services/ws_client.dart`（WS + ACP 调试 dump 到沙箱 `nexus_acp_debug.jsonl`）、`lib/services/storage_service.dart`（**OHOS 沙箱绝对路径** `/data/storage/el2/base/haps/entry/files/.nexus_store.json`，不用 `path_provider`——OHOS 未实现且当前目录无写权限）、`lib/main.dart`（`_probeAllHosts()` 启动时探测已配对主机并自动连接首个在线主机）。
 - **ACP 渲染类型**：`user_message_chunk` / `agent_message_chunk` / `tool_call` / `tool_call_update` / `session_started` / `turn_ended`。
@@ -499,6 +499,11 @@ hdc -t "2NP0224627054426" shell hilog -x | Select-String "FATAL|com.nexus.remote
 - **Herdr 双向原生结构化同步**：服务端通过 `HerdrAdapter.resolveSessionFile` 四级解析器（优先读取 `/proc/<pid>/fd`）精准锁定正在运行的 `.jsonl` 会话；`herdr-acp-converter.mts` 将日志转换为原生 ThinkingSection、ToolCallCard 与 Markdown；`HerdrSessionTailer` 监听文件增量变更；移动端支持向终端注入 Prompt（`agent.prompt`）与中断（`Ctrl+C`）。
 - **已完成历史会话直读**：`findSessionFileById` 在 `~/.omp/agent/sessions/` 中秒级检索历史会话文件并以结构化卡片回放，配合 `ServerSessionData` 保持 `source` 标识，解决从主页点击历史会话空白或丢失问题。
 - **思考过程紧凑自适应与工具去重**：双端过滤模型在 thinking 末尾生成的幽灵空行；移除 `tool_execution_start` 造成的重复事件发射并在客户端做 `toolCallId` 查重，消除一灰一绿对生卡片。
+- **`ask` 交互工具与选项提交**：`ToolCallCard` 针对 `ask` 工具渲染单选/多选问题卡片、描述与「推荐」徽标，并提供自定义答案输入框；回答提交走 `answerAsk` 链路（先发 `cancel` 中断当前阻塞等待的进程回合，再将答案作为跟进消息注入），避免直接发送被 `turnActive` 拦截或进程死锁。
+- **ACP 斜杠命令补全**：`ChatInputBar` 对齐 ACP 协议 `available_commands_update` 规范，输入 `/` 弹出实时命令候选菜单（带 `<参数提示>` 与说明文本），支持轻触快速补全与提交。
+- **全量历史限流与容错解析**：`load-session.mts` 将历史全量回放限流至最新 300 条、单字段压至 4KB，防止巨型会话（数 MB+）卡死移动端；客户端 `_handleHistoryFull` 采用字符串容错解析，避免单个异形工具事件崩溃导致整屏空白。
+- **Herdr 模式端到端双向硬隔离**：开启 Herdr 时仅展示 Herdr 终端窗格与对应工作区；关闭时服务端自动提取 Herdr 活跃窗格原始 UUID 进行剔除，且移动端在无工作区时不泄漏任何非工作区目录的散落会话。
+- **服务端结构规范**：服务端单测统一收敛至 `server/test/` 目录，清理孤立转发脚本与本地日志。
 
 ### 已知坑（Flutter 版）
 

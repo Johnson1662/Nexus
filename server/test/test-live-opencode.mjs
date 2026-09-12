@@ -1,4 +1,4 @@
-import { startWatcher, stopWatcher, scanLocalSessionStatuses } from "./dist/discovery/session-watcher.mjs";
+import { startWatcher, stopWatcher, scanLocalSessionStatuses } from "../dist/discovery/session-watcher.mjs";
 
 console.log("=================================================");
 console.log("  OpenCode Live Session Watcher (60s Duration)  ");

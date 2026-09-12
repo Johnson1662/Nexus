@@ -3,7 +3,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { parseClientMessage } from "./dist/protocol-validation.mjs";
+import { parseClientMessage } from "../dist/protocol-validation.mjs";
 
 let passed = 0;
 let failed = 0;
@@ -57,7 +57,7 @@ const originalUserProfile = process.env.USERPROFILE;
 const testHome = mkdtempSync(join(tmpdir(), "nexus-protocol-test-"));
 process.env.HOME = testHome;
 process.env.USERPROFILE = testHome;
-const { handleIncomingConnection } = await import("./dist/server.mjs");
+const { handleIncomingConnection } = await import("../dist/server.mjs");
 
 const transport = new EventEmitter();
 transport.sent = [];

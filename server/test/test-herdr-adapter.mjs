@@ -24,7 +24,7 @@ async function main() {
     HerdrAdapter,
     HerdrStreamer,
     isHerdrAvailable,
-  } = await import("./dist/discovery/herdr-adapter.mjs");
+  } = await import("../dist/discovery/herdr-adapter.mjs");
 
   // Test 1: Real socket test if Herdr is running
   if (isHerdrAvailable()) {

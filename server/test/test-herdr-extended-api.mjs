@@ -1,5 +1,5 @@
 import assert from "node:assert";
-import { HerdrAdapter, HerdrEventBus } from "./dist/discovery/herdr-adapter.mjs";
+import { HerdrAdapter, HerdrEventBus } from "../dist/discovery/herdr-adapter.mjs";
 
 console.log("=== Testing Herdr Extended API ===");
 

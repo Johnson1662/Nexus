@@ -38,6 +38,11 @@ class _WorkspaceDetailPageState extends State<WorkspaceDetailPage> {
 
     // Filter sessions by workspace (cwd matches by path or dir name)
     final sessions = chatProvider.state.sessions.where((s) {
+      if (chatProvider.useHerdrBackend && s.source != 'herdr') return false;
+      if (!chatProvider.useHerdrBackend &&
+          (s.source == 'herdr' || s.sessionId.startsWith('herdr:'))) {
+        return false;
+      }
       if (s.cwd == null || s.cwd!.isEmpty) return false;
       final normCwd = s.cwd!.replaceAll('\\', '/').replaceAll(RegExp(r'/+$'), '');
       if (workspacePath.isNotEmpty) {

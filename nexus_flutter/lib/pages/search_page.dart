@@ -73,6 +73,11 @@ class _SearchPageState extends State<SearchPage> {
     // ── Search session titles ──
     if (_filter == _Filter.all || _filter == _Filter.sessions) {
       for (final s in sessions) {
+        if (chatProvider.useHerdrBackend && s.source != 'herdr') continue;
+        if (!chatProvider.useHerdrBackend &&
+            (s.source == 'herdr' || s.sessionId.startsWith('herdr:'))) {
+          continue;
+        }
         if (s.title != null && s.title!.isNotEmpty && s.title!.toLowerCase().contains(query)) {
           results.add(_SearchResult(
             sessionId: s.sessionId,

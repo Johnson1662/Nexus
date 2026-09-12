@@ -23,7 +23,7 @@ import {
  computeSessionDiff,
  mergeSessionStatus,
  getLocalAgentLocations,
-} from "./dist/discovery/session-watcher.mjs";
+} from "../dist/discovery/session-watcher.mjs";
 
 let testsPassed = 0;
 let testsFailed = 0;

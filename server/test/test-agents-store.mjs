@@ -52,7 +52,7 @@ function readAgentInChild(moduleUrl, storeDir, agentId) {
 async function main() {
   const storeDir = mkdtempSync(join(tmpdir(), "nexus-agents-store-"));
   const storeFile = join(storeDir, "installed-agents.json");
-  const moduleUrl = new URL("./dist/agents-store.mjs", import.meta.url).href;
+  const moduleUrl = new URL("../dist/agents-store.mjs", import.meta.url).href;
   process.env.NEXUS_AGENTS_STORE_DIR = storeDir;
 
   writeFileSync(storeFile, JSON.stringify({
@@ -76,7 +76,7 @@ async function main() {
       installAgent,
       setAgentEnvOverrides,
       uninstallAgent,
-    } = await import("./dist/agents-store.mjs");
+    } = await import("../dist/agents-store.mjs");
 
     const loaded = getInstalledAgents();
     assert(loaded.length === 1 && loaded[0].agentId === "valid-agent", "非法条目被逐条过滤");

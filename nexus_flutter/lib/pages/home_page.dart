@@ -29,7 +29,12 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> _onRefresh() async {
     if (!mounted) return;
-    context.read<ChatProvider>().requestSessionList();
+    final chat = context.read<ChatProvider>();
+    chat.requestSessionList();
+    if (chat.useHerdrBackend) {
+      chat.requestHerdrWorkspaces();
+    }
+    await Future.delayed(const Duration(milliseconds: 300));
   }
 
   // ── Build ──
@@ -315,27 +320,23 @@ class _HomePageState extends State<HomePage> {
       );
     }
 
-    // Show workspace cards from provider
-    if (workspaceProvider.workspaces.isNotEmpty) {
+    // Show workspace cards from provider (filtered by active backend mode)
+    final filteredWorkspaces = workspaceProvider.workspaces.where((w) {
+      final hasHerdrId = (w['workspaceId'] ?? '').isNotEmpty;
+      if (chatProvider.useHerdrBackend) {
+        return hasHerdrId;
+      }
+      return !hasHerdrId;
+    }).toList();
+
+    if (filteredWorkspaces.isNotEmpty) {
       return Column(
-        children: workspaceProvider.workspaces.map((w) {
+        children: filteredWorkspaces.map((w) {
           final name = w['name'] ?? (w['path']?.split('/').lastOrNull ?? '');
           final path = w['path'] ?? '';
           final workspaceId = w['workspaceId'] ?? '';
           return _buildWorkspaceCard(context, name, path, chatProvider, workspaceId: workspaceId);
         }).toList(),
-      );
-    }
-
-    // Fallback: show current workspace if set
-    if (chatProvider.state.currentWorkspace.isNotEmpty) {
-      final name =
-          chatProvider.state.currentWorkspace.split(RegExp(r'[/\\]')).last;
-      return _buildWorkspaceCard(
-        context,
-        name,
-        chatProvider.state.currentWorkspace,
-        chatProvider,
       );
     }
 
@@ -405,12 +406,32 @@ class _HomePageState extends State<HomePage> {
     List<Map<String, String>> addedWorkspaces,
     ChatProvider chatProvider,
   ) {
+    final validWorkspacePaths = addedWorkspaces
+        .where((w) => (w['workspaceId'] ?? '').isEmpty)
+        .map((w) => w['path'] ?? '')
+        .where((p) => p.isNotEmpty)
+        .map((p) => p.replaceAll('\\', '/').replaceAll(RegExp(r'/+$'), ''))
+        .toSet();
+
     final filtered = sessions.where((s) {
       if (chatProvider.useHerdrBackend) {
         return s.source == 'herdr';
       }
-      // On home page, display all recent sessions (active Herdr sessions and past sessions)
-      return true;
+      if (s.source == 'herdr' || s.sessionId.startsWith('herdr:')) {
+        return false;
+      }
+      // If user hasn't added any workspace in non-Herdr mode, don't show random filesystem sessions (e.g. ~ or /tmp)
+      if (validWorkspacePaths.isEmpty) {
+        return s.sessionId == chatProvider.state.sessionId;
+      }
+      if (s.sessionId == chatProvider.state.sessionId) {
+        return true;
+      }
+      if (s.cwd == null || s.cwd!.isEmpty) return false;
+      final normCwd =
+          s.cwd!.replaceAll('\\', '/').replaceAll(RegExp(r'/+$'), '');
+      return validWorkspacePaths
+          .any((p) => normCwd == p || normCwd.startsWith('$p/'));
     }).toList();
 
     filtered.sort((a, b) {

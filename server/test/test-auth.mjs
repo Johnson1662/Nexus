@@ -4,7 +4,7 @@ import WebSocket from "ws";
 
 process.env.NEXUS_AUTH_TOKEN = "test-bridge-token";
 
-const { createBridgeServer } = await import("./dist/server.mjs");
+const { createBridgeServer } = await import("../dist/server.mjs");
 
 const app = createBridgeServer({ port: 0, hostId: "test-host" });
 await once(app.httpServer, "listening");

@@ -1,5 +1,5 @@
-import { sessionManager } from "./dist/session-manager.mjs";
-import { handleLoadSession } from "./dist/handlers/load-session.mjs";
+import { sessionManager } from "../dist/session-manager.mjs";
+import { handleLoadSession } from "../dist/handlers/load-session.mjs";
 
 let passed = 0;
 let failed = 0;

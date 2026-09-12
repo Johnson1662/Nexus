@@ -2,7 +2,7 @@ import assert from "node:assert";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { HerdrSessionTailer, HerdrTailerRegistry } from "./dist/discovery/herdr-session-tailer.mjs";
+import { HerdrSessionTailer, HerdrTailerRegistry } from "../dist/discovery/herdr-session-tailer.mjs";
 
 console.log("=== Testing herdr-session-tailer ===");
 

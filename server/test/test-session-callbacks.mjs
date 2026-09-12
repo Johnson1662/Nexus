@@ -51,8 +51,8 @@ async function main() {
   const {
     SessionManager,
     sessionManager: globalSessionManager,
-  } = await import("./dist/session-manager.mjs");
-  const { handlePermissionResponse } = await import("./dist/handlers/permission.mjs");
+  } = await import("../dist/session-manager.mjs");
+  const { handlePermissionResponse } = await import("../dist/handlers/permission.mjs");
 
   const sessionId = "real-session-id";
   const captured = [];

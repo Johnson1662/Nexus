@@ -1,5 +1,5 @@
 import assert from "node:assert";
-import { handleListHerdrWorkspaces, handleFocusHerdrTarget } from "./dist/handlers/herdr-actions.mjs";
+import { handleListHerdrWorkspaces, handleFocusHerdrTarget } from "../dist/handlers/herdr-actions.mjs";
 
 console.log("=== Testing Herdr Actions Handler ===");
 
@@ -28,7 +28,8 @@ const focusWs = {
     focusResult = JSON.parse(data);
   }
 };
-await handleFocusHerdrTarget(focusWs, { workspaceId: "w2" });
+const targetWorkspaceId = sentMessage.workspaces.length > 0 ? sentMessage.workspaces[0].workspaceId : "mock_w1";
+await handleFocusHerdrTarget(focusWs, { workspaceId: targetWorkspaceId });
 assert(focusResult, "should receive focus response");
 assert.strictEqual(focusResult.type, "focus_herdr_target_done");
 assert.strictEqual(focusResult.ok, true);

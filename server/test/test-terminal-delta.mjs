@@ -1,8 +1,8 @@
 import { EventEmitter } from "node:events";
 import process from "node:process";
 import { StringDecoder } from "node:string_decoder";
-import { appendTerminalOutput, createAcpCallbacks } from "./dist/acp-callbacks.mjs";
-import { sessionManager } from "./dist/session-manager.mjs";
+import { appendTerminalOutput, createAcpCallbacks } from "../dist/acp-callbacks.mjs";
+import { sessionManager } from "../dist/session-manager.mjs";
 
 let passed = 0;
 let failed = 0;

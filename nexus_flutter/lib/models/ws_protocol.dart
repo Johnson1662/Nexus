@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 /// Canonical replay cursor assigned by the bridge (`sessionId:seq`).
 class SessionMessageCursor {
   final String sessionId;
@@ -272,7 +274,16 @@ class ServerMessage {
       String? toolInput;
       final rawInput = e['rawInput'] ?? e['arguments'];
       if (rawInput is Map) {
-        toolInput = (rawInput['command'] ?? rawInput['path'] ?? rawInput['intent'] ?? rawInput['query'] ?? rawInput['title'])?.toString();
+        if (rawInput['questions'] != null || rawInput['question'] != null) {
+          toolInput = jsonEncode(rawInput);
+        } else {
+          toolInput = (rawInput['command'] ?? rawInput['path'] ?? rawInput['intent'] ?? rawInput['query'] ?? rawInput['title'])?.toString();
+          if (toolInput == null || toolInput.isEmpty) {
+            toolInput = jsonEncode(rawInput);
+          }
+        }
+      } else if (rawInput != null) {
+        toolInput = rawInput.toString();
       }
 
       return AcpUpdate(
@@ -295,7 +306,10 @@ class ServerMessage {
         messageText: extractedText,
         usage: e['usage'] != null ? UsageInfo.fromJson(e['usage'] as Map<String, dynamic>) : null,
         planContent: e['planContent'] != null ? AcpContent.fromJson(e['planContent'] as Map<String, dynamic>) : null,
-        commands: (e['commands'] as List<dynamic>?)?.map((c) => AvailableCommand.fromJson(c as Map<String, dynamic>)).toList(),
+        commands: ((e['availableCommands'] ?? e['commands']) as List<dynamic>?)
+            ?.whereType<Map>()
+            .map((c) => AvailableCommand.fromJson(Map<String, dynamic>.from(c)))
+            .toList(),
         config: (e['config'] as List<dynamic>?)?.map((c) => ConfigOption.fromJson(c as Map<String, dynamic>)).toList(),
         planEntries: (e['planEntries'] as List<dynamic>?)?.map((p) => PlanEntry.fromJson(p as Map<String, dynamic>)).toList(),
       );
@@ -674,17 +688,24 @@ class PendingToolCall {
 }
 
 class AvailableCommand {
-  final String command;
+  final String name;
   final String description;
-  final String? args;
+  final String? inputHint;
 
-  AvailableCommand({required this.command, required this.description, this.args});
+  AvailableCommand({required this.name, required this.description, this.inputHint});
 
-  factory AvailableCommand.fromJson(Map<String, dynamic> json) => AvailableCommand(
-        command: json['command'] as String? ?? '',
-        description: json['description'] as String? ?? '',
-        args: json['args'] as String?,
-      );
+  String get command => name.startsWith('/') ? name : '/$name';
+
+  factory AvailableCommand.fromJson(Map<String, dynamic> json) {
+    final rawName = (json['name'] ?? json['command'] ?? '').toString();
+    final cleanName = rawName.startsWith('/') ? rawName.substring(1) : rawName;
+    final hint = (json['input'] is Map ? json['input']['hint'] : json['args'] ?? json['inputHint'])?.toString();
+    return AvailableCommand(
+      name: cleanName,
+      description: (json['description'] ?? '').toString(),
+      inputHint: hint,
+    );
+  }
 }
 
 class PlanEntry {

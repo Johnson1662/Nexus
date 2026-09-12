@@ -1,6 +1,6 @@
 import { EventEmitter } from "node:events";
-import { sessionManager } from "./dist/session-manager.mjs";
-import { createAcpCallbacks } from "./dist/acp-callbacks.mjs";
+import { sessionManager } from "../dist/session-manager.mjs";
+import { createAcpCallbacks } from "../dist/acp-callbacks.mjs";
 
 let passed = 0;
 let failed = 0;

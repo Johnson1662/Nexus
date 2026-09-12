@@ -107,16 +107,34 @@ class _WorkspaceListPageState extends State<WorkspaceListPage> {
     final workspaceProvider = context.watch<WorkspaceProvider>();
     final hostStore = context.watch<HostStore>();
 
-    final workspaces = workspaceProvider.workspaces;
+    final workspaces = workspaceProvider.workspaces.where((w) {
+      final hasHerdrId = (w['workspaceId'] ?? '').isNotEmpty;
+      if (chatProvider.useHerdrBackend) {
+        return hasHerdrId;
+      }
+      return !hasHerdrId;
+    }).toList();
 
     // Derive workspace card data
     final workspaceCards = workspaces.map((w) {
       final path = w['path'] ?? '';
       final name =
           w['name'] ?? (path.split(RegExp(r'[/\\]')).lastOrNull ?? '未命名');
+      final workspaceId = w['workspaceId'] ?? '';
       final isActive = path == chatProvider.state.currentWorkspace;
       final sessionsForWs =
-          chatProvider.state.sessions.where((s) => s.cwd == path).toList();
+          chatProvider.state.sessions.where((s) {
+            if (chatProvider.useHerdrBackend && s.source != 'herdr') return false;
+            if (!chatProvider.useHerdrBackend &&
+                (s.source == 'herdr' || s.sessionId.startsWith('herdr:'))) {
+              return false;
+            }
+            if (s.cwd == null || s.cwd!.isEmpty) return false;
+            final normCwd = s.cwd!.replaceAll('\\', '/').replaceAll(RegExp(r'/+$'), '');
+            final normTarget = path.replaceAll('\\', '/').replaceAll(RegExp(r'/+$'), '');
+            if (normTarget.isEmpty) return false;
+            return normCwd == normTarget || normCwd.startsWith('$normTarget/');
+          }).toList();
       final sessionCount = sessionsForWs.length;
       final lastTime = sessionsForWs.isNotEmpty
           ? sessionsForWs
@@ -147,6 +165,7 @@ class _WorkspaceListPageState extends State<WorkspaceListPage> {
       return _WorkspaceCardData(
         name: name,
         path: path,
+        workspaceId: workspaceId,
         deviceName: deviceName,
         lastSessionTime: lastTime,
         sessionCount: sessionCount,
@@ -317,7 +336,7 @@ class _WorkspaceListPageState extends State<WorkspaceListPage> {
         Navigator.pushNamed(
           context,
           '/workspace-detail',
-          arguments: {'name': card.name, 'path': card.path},
+          arguments: {'name': card.name, 'path': card.path, 'workspaceId': card.workspaceId},
         );
       },
       borderRadius: BorderRadius.circular(AppRadius.md),
@@ -493,6 +512,7 @@ class _WorkspaceListPageState extends State<WorkspaceListPage> {
 class _WorkspaceCardData {
   final String name;
   final String path;
+  final String workspaceId;
   final String deviceName;
   final int lastSessionTime;
   final int sessionCount;
@@ -501,6 +521,7 @@ class _WorkspaceCardData {
   _WorkspaceCardData({
     required this.name,
     required this.path,
+    this.workspaceId = '',
     required this.deviceName,
     required this.lastSessionTime,
     required this.sessionCount,

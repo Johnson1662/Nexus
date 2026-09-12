@@ -86,7 +86,14 @@ class _AgentDetailPageState extends State<AgentDetailPage>
         ? DeviceAgentStore().getAgents(device.hostId)
         : <AgentInfo>[];
 
-    final sessions = chatProvider.state.sessions;
+    final sessions = chatProvider.state.sessions.where((s) {
+      if (chatProvider.useHerdrBackend && s.source != 'herdr') return false;
+      if (!chatProvider.useHerdrBackend &&
+          (s.source == 'herdr' || s.sessionId.startsWith('herdr:'))) {
+        return false;
+      }
+      return true;
+    }).toList();
 
     return Scaffold(
       appBar: AppBar(

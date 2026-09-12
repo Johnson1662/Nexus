@@ -1,6 +1,6 @@
 import { Buffer } from "node:buffer";
 
-import { sessionManager } from "./dist/session-manager.mjs";
+import { sessionManager } from "../dist/session-manager.mjs";
 import {
   boundFileEventPayload,
   boundAgentEventPayload,
@@ -9,7 +9,7 @@ import {
   MAX_FILE_EVENT_BYTES,
   MAX_TOOL_CONTENT_BYTES,
   truncateUtf8,
-} from "./dist/payload-budget.mjs";
+} from "../dist/payload-budget.mjs";
 
 let passed = 0;
 let failed = 0;

@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const { handleFileRead, handleListWorkspaceFiles } = await import("./dist/handlers/workspace-files.mjs");
+const { handleFileRead, handleListWorkspaceFiles } = await import("../dist/handlers/workspace-files.mjs");
 const root = await mkdtemp(join(tmpdir(), "nexus-workspace-"));
 const outside = `${root}-outside.txt`;
 await writeFile(join(root, "inside.txt"), "safe", "utf8");

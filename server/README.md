@@ -992,10 +992,10 @@ npm test
 
 ```powershell
 npm run build
-node server/test-session-watcher.mjs
-node server/test-cancel-lifecycle.mjs
-node server/test-workspace-files.mjs
-node server/test-agents-store.mjs
+node server/test/test-session-watcher.mjs
+node server/test/test-cancel-lifecycle.mjs
+node server/test/test-workspace-files.mjs
+node server/test/test-agents-store.mjs
 ```
 
 `test-session-watcher.mjs` 覆盖本地会话扫描、运行状态分类、增删改 diff、Watcher 回调和 WebSocket 状态广播。
@@ -1004,7 +1004,7 @@ node server/test-agents-store.mjs
 
 ```powershell
 npm run build
-node server/test-live-opencode.mjs
+node server/test/test-live-opencode.mjs
 ```
 
 该测试需要本机已经安装并可执行 OpenCode，适合联调，不适合作为无依赖的 CI 单元测试。

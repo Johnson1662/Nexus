@@ -370,6 +370,26 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
     _setCurrentSessionStatus('running');
   }
 
+  /// 回答 ask 工具的卡住提问：先取消当前回合再把答案作为跟进消息发出。
+  /// 直接 sendMessage 会因 turnActive 被拒（或消息发出去但 agent 不消费），
+  /// 进程永远停在 ask 工具这里。Herdr 侧 cancel 即终端 Ctrl+C，
+  /// ACP 侧 cancel 即 session/cancel，两端随后都走正常 input 通道。
+  Future<void> answerAsk(String answerText) async {
+    final text = answerText.trim();
+    if (text.isEmpty || _state.sessionId.isEmpty || !_ws.isConnected) return;
+    final sid = _state.sessionId;
+    _state.cancelling = true;
+    _clearTurnRequest();
+    _ws.send(ClientMessage(type: 'cancel', sessionId: sid));
+    notifyListeners();
+    final deadline = DateTime.now().add(const Duration(seconds: 8));
+    while (_state.turnActive && DateTime.now().isBefore(deadline)) {
+      await Future.delayed(const Duration(milliseconds: 200));
+    }
+    _state.cancelling = false;
+    sendMessage(text);
+  }
+
   void _armTurnRequestTimeout(String kind) {
     _turnRequestTimer?.cancel();
     _turnRequestTimer = Timer(
@@ -607,6 +627,9 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
     final storage = await StorageService.getInstance();
     await storage.setUseHerdrBackend(value);
     requestSessionList(useHerdr: value);
+    if (value) {
+      requestHerdrWorkspaces();
+    }
     notifyListeners();
   }
 
@@ -1016,16 +1039,9 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
           }
           _state.sessions = sessions;
 
-          if (_useHerdrBackend) {
-            final herdrCwds = sessions
-                .where((s) => s.source == 'herdr' && s.cwd != null && s.cwd!.isNotEmpty)
-                .map((s) => s.cwd!)
-                .toSet()
-                .toList();
-            if (herdrCwds.isNotEmpty) {
-              _workspaceProvider?.syncFromServer(herdrCwds);
-            }
-          }
+          // NOTE: Herdr 模式下工作区以 herdr_workspaces_list 为准，
+          // 不再用会话 cwd 经 syncFromServer 写入无 workspaceId 条目，
+          // 否则会被首页/列表页的 hasHerdrId 过滤隐藏，造成工作区凭空消失。
         }
         notifyListeners();
         break;
@@ -1666,7 +1682,9 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
       final content = map['content'];
       String text = '';
       if (content is Map && content['text'] != null) {
-        text = content['text'] as String;
+        // 单个异形事件（如 text 为嵌套对象）不能抛异常，
+        // 否则整个 history_full 中断，聊天页只剩最近一轮而大面积空白。
+        text = content['text'].toString();
       } else if (content is String) {
         text = content;
       }
@@ -1719,7 +1737,13 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
           String toolInput = '';
           final rawInput = map['rawInput'] ?? map['arguments'];
           if (rawInput is Map) {
-            toolInput = (rawInput['command'] ?? rawInput['path'] ?? rawInput['intent'] ?? rawInput['query'] ?? rawInput['title'])?.toString() ?? '';
+            if (rawInput['questions'] != null || rawInput['question'] != null) {
+              toolInput = jsonEncode(rawInput);
+            } else {
+              toolInput = (rawInput['command'] ?? rawInput['path'] ?? rawInput['intent'] ?? rawInput['query'] ?? rawInput['title'])?.toString() ?? jsonEncode(rawInput);
+            }
+          } else if (rawInput != null) {
+            toolInput = rawInput.toString();
           }
           fullList.add(MessageData(
             role: 'assistant',
@@ -1742,12 +1766,12 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
               if (item is Map) {
                 final type = item['type'] as String? ?? '';
                 if (type == 'content' && item['content'] is Map && item['content']['text'] != null) {
-                  toolContent += item['content']['text'] as String;
+                  toolContent += item['content']['text'].toString();
                   if (toolContentType.isEmpty) toolContentType = 'content';
                 } else if (type == 'text' && item['text'] != null) {
-                  toolContent += item['text'] as String;
+                  toolContent += item['text'].toString();
                 } else if (item['text'] != null) {
-                  toolContent += item['text'] as String;
+                  toolContent += item['text'].toString();
                 }
               }
             }
@@ -2149,3 +2173,4 @@ class WorkspaceProvider extends ChangeNotifier {
           })
       .toList();
 }
+

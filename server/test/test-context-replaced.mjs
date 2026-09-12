@@ -1,4 +1,4 @@
-import { sessionManager } from "./dist/session-manager.mjs";
+import { sessionManager } from "../dist/session-manager.mjs";
 
 let passed = 0;
 let failed = 0;

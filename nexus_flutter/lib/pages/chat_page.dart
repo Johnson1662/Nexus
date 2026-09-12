@@ -332,6 +332,7 @@ class _ChatPageState extends State<ChatPage> {
                 disabled: !state.connected || state.loadingSession,
                 showCancel: state.turnActive,
                 configLabel: _configLabel(state),
+                availableCommands: state.availableCommands,
                 onSend: (text) {
                   chatProvider.sendMessage(text);
                   _autoScrollToBottom();
@@ -421,34 +422,18 @@ class _ChatPageState extends State<ChatPage> {
             ),
           ),
           const SizedBox(width: AppSpacing.xs),
-          // Component 3: history + files icons inside one capsule
+          // Component 3: files icon inside one capsule
           _capsule(
             height: 42,
             padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxs),
             alignment: Alignment.center,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (state.sessionId.startsWith('herdr:'))
-                  _roundIconButton(
-                    Icons.laptop_chromebook_rounded,
-                    () => context.read<ChatProvider>().focusOnPc(paneId: state.sessionId),
-                    size: 34,
-                  ),
-                _roundIconButton(
-                  Icons.history_rounded,
-                  () => _showHistoryPlaceholder(context),
-                  size: 34,
-                ),
-                _roundIconButton(
-                  Icons.folder_open_rounded,
-                  () {
-                    setState(() => _fileDrawerOpen = true);
-                    context.read<ChatProvider>().requestWorkspaceFiles();
-                  },
-                  size: 34,
-                ),
-              ],
+            child: _roundIconButton(
+              Icons.folder_open_rounded,
+              () {
+                setState(() => _fileDrawerOpen = true);
+                context.read<ChatProvider>().requestWorkspaceFiles();
+              },
+              size: 34,
             ),
           ),
         ],
@@ -651,40 +636,6 @@ class _ChatPageState extends State<ChatPage> {
           width: size,
           height: size,
           child: iconChild,
-        ),
-      ),
-    );
-  }
-
-  /// History icon placeholder — functionality deferred.
-  void _showHistoryPlaceholder(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppColors.surfaceElevatedCtx(context),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
-      ),
-      builder: (_) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.xl),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('历史记录',
-                  style: TextStyle(
-                    fontSize: AppFontSize.xxl,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.foregroundCtx(context),
-                  )),
-              const SizedBox(height: AppSpacing.md),
-              Text('（待实现）显示你历史输入的提示词',
-                  style: TextStyle(
-                    fontSize: AppFontSize.sm,
-                    color: AppColors.foregroundMutedCtx(context),
-                  )),
-            ],
-          ),
         ),
       ),
     );

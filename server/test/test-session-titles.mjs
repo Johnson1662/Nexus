@@ -18,7 +18,7 @@ function removeFile() {
 }
 
 async function main() {
-  const titles = await import(`./dist/session-titles.mjs?test=${randomUUID()}`);
+  const titles = await import(`../dist/session-titles.mjs?test=${randomUUID()}`);
   removeFile();
   titles._resetCache();
 
