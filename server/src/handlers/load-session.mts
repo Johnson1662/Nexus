@@ -102,6 +102,7 @@ export async function handleLoadSession(
         paneId,
       );
       tailer.subscribe(ws);
+      if (r.agentStatus === "working") tailer.markWorking();
       ws.on("close", () => {
         tailer.unsubscribe(ws);
       });
@@ -313,7 +314,8 @@ export async function handleLoadSession(
       }
     }, 350);
 
-    return;
+    // JSONL is only the fast replay source. Continue below to restore the
+    // actual ACP session so later input has a live client.
   }
 
   let sess;

@@ -1,5 +1,8 @@
 import { sessionManager } from "../dist/session-manager.mjs";
 import { handleLoadSession } from "../dist/handlers/load-session.mjs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 
 let passed = 0;
 let failed = 0;
@@ -53,6 +56,27 @@ try {
 } finally {
   sessionManager.getOrCreate = originalGetOrCreate;
   sessionManager.replayBuffer = originalReplayBuffer;
+}
+
+const diskSessionId = `load-disk-${process.pid}-${Date.now()}`;
+const diskSessionDir = join(homedir(), ".omp", "agent", "sessions", `nexus-test-${process.pid}`);
+const diskSessionFile = join(diskSessionDir, `${diskSessionId}.jsonl`);
+mkdirSync(diskSessionDir, { recursive: true });
+writeFileSync(diskSessionFile, "");
+let restored = false;
+sessionManager.getOrCreate = async (_ws, params) => {
+  restored = params.sessionId === diskSessionId && params.mode === "load";
+  return { sessionId: diskSessionId };
+};
+try {
+  await handleLoadSession(transport, { sessionId: diskSessionId, agent: "omp", cwd: diskSessionDir });
+  assert(restored, "disk JSONL replay also restores a real ACP session for subsequent input");
+} catch (error) {
+  failed += 1;
+  console.error(`FAIL: disk session restore: ${error instanceof Error ? error.message : String(error)}`);
+} finally {
+  sessionManager.getOrCreate = originalGetOrCreate;
+  rmSync(diskSessionDir, { recursive: true, force: true });
 }
 
 console.log(`Load replay: ${passed} passed, ${failed} failed`);

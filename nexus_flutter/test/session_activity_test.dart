@@ -40,6 +40,7 @@ void main() {
       WidgetTester tester, {
       required String status,
       required int lastActivity,
+      String sessionId = 's1',
     }) {
       return tester.pumpWidget(
         MaterialApp(
@@ -47,7 +48,7 @@ void main() {
           home: Scaffold(
             body: SessionTile(
               session: ServerSessionData(
-                sessionId: 's1',
+                sessionId: sessionId,
                 title: 'Chat',
                 agent: 'codex',
                 createdAt: lastActivity,
@@ -81,6 +82,21 @@ void main() {
 
       expect(find.text('等待输入'), findsOneWidget);
       expect(find.text('进行中'), findsNothing);
+    });
+
+    testWidgets('Herdr session menu does not offer rename', (tester) async {
+      await pumpTile(
+        tester,
+        status: 'idle',
+        lastActivity: DateTime.now().millisecondsSinceEpoch,
+        sessionId: 'herdr:pane',
+      );
+
+      await tester.tap(find.byIcon(Icons.more_horiz_rounded));
+      await tester.pumpAndSettle();
+
+      expect(find.text('重命名'), findsNothing);
+      expect(find.text('关闭会话'), findsOneWidget);
     });
   });
 }

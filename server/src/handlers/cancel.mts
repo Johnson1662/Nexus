@@ -13,7 +13,6 @@ export function handleCancel(
     });
     try {
       ws.send(JSON.stringify({ type: "session_cancelled", sessionId }));
-      ws.send(JSON.stringify({ type: "turn_ended", sessionId }));
     } catch {}
     return;
   }

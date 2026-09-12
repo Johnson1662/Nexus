@@ -83,6 +83,34 @@ void main() {
     expect(provider.state.errorMessage, contains('正在运行'));
   });
 
+  test('Herdr mode without a pane never starts a Native ACP session', () async {
+    final ws = _FakeWSClient();
+    final provider = ChatProvider(ws);
+    addTearDown(provider.dispose);
+    await provider.setUseHerdrBackend(true);
+    ws.sent.clear();
+
+    provider.sendMessage('hello');
+
+    expect(ws.sent.where((message) => message.type == 'start'), isEmpty);
+    expect(provider.state.errorMessage, contains('Herdr'));
+  });
+
+  test('Herdr close waits for server confirmation before removing the session', () {
+    final ws = _FakeWSClient();
+    final provider = ChatProvider(ws);
+    addTearDown(provider.dispose);
+    provider.state.sessions = [
+      ServerSessionData(sessionId: 'herdr:pane', title: 'Pane'),
+    ];
+
+    provider.closeSession('herdr:pane');
+    expect(provider.state.sessions, hasLength(1));
+
+    ws.emit(ServerMessage(type: 'session_closed', sessionId: 'herdr:pane'));
+    expect(provider.state.sessions, isEmpty);
+  });
+
   test('创建 Herdr Agent 会先清空旧会话状态', () {
     final ws = _FakeWSClient();
     final provider = ChatProvider(ws);

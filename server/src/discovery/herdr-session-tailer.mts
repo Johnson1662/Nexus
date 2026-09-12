@@ -48,6 +48,10 @@ export class HerdrSessionTailer {
     this.isWorking = true;
   }
 
+  markWorking(): void {
+    this.isWorking = true;
+  }
+
   setByteOffset(offset: number): void {
     this.byteOffset = offset;
     this.remainderBuffer = "";

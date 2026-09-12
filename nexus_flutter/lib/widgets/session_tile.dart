@@ -40,6 +40,7 @@ class SessionTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final fg = AppColors.foregroundCtx(context);
     final muted = AppColors.foregroundMutedCtx(context);
+    final isHerdr = session.sessionId.startsWith('herdr:');
 
     final title = AgentUtils.cleanTitle(session.title);
     final agent = session.agent ?? '';
@@ -208,10 +209,11 @@ class SessionTile extends StatelessWidget {
                 }
               },
               itemBuilder: (_) => [
-                const PopupMenuItem(
-                  value: 'rename',
-                  child: Text('重命名'),
-                ),
+                if (!isHerdr)
+                  const PopupMenuItem(
+                    value: 'rename',
+                    child: Text('重命名'),
+                  ),
                 const PopupMenuItem(
                   value: 'pin',
                   child: Text('置顶'),

@@ -540,6 +540,10 @@ export function handleIncomingConnection(transport: any, hostId: string = HOST_I
 
       case "close_session":
         console.log(`[server] handleCloseSession session="${sessionMsg.sessionId?.slice(0, 20)}"`);
+        if (sessionMsg.sessionId?.startsWith("herdr:")) {
+          sessionManager.enqueueWsOp(transport, () => handleCloseSession(transport, sessionMsg.sessionId));
+          break;
+        }
         try {
           // Reserve the close before queueing the ACP await so a following
           // input cannot claim the same session while closeSession is pending.
@@ -612,6 +616,10 @@ export function handleIncomingConnection(transport: any, hostId: string = HOST_I
         const syncSessionId = sessionMsg.sessionId as string;
         const lastMessageId = sessionMsg.lastMessageId as string || '';
         console.log(`[server] sync_request session="${syncSessionId?.slice(0, 20)}" lastMessageId="${lastMessageId?.slice(0, 20)}"`);
+        if (syncSessionId.startsWith("herdr:")) {
+          sessionManager.enqueueWsOp(transport, () => handleLoadSession(transport, { sessionId: syncSessionId }));
+          break;
+        }
         const sess = sessionManager.reclaimOrphanedSession(syncSessionId, transport);
         if (sess) {
           const syncResult = sessionManager.replayBuffer(syncSessionId, lastMessageId, transport);

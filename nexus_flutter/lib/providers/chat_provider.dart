@@ -327,6 +327,11 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
 
     final starting = _state.sessionId.isEmpty;
     if (starting) {
+      if (_useHerdrBackend) {
+        _state.errorMessage = 'Herdr 模式下请先从工作区新建 Agent';
+        notifyListeners();
+        return;
+      }
       _state.contextReplacedNotice = '';
       _startInFlight = true;
       _state.turnActive = true;
@@ -582,6 +587,7 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   void closeSession(String sessionId) {
     _ws.send(ClientMessage(type: 'close_session', sessionId: sessionId));
+    if (sessionId.startsWith('herdr:')) return;
     _state.sessions.removeWhere((s) => s.sessionId == sessionId);
     if (_state.sessionId == sessionId) {
       _clearTurnRequest();
@@ -596,6 +602,7 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   void renameSession(String sessionId, String newTitle) {
+    if (sessionId.startsWith('herdr:')) return;
     // Optimistic local update
     final idx = _state.sessions.indexWhere((s) => s.sessionId == sessionId);
     if (idx >= 0) {
@@ -1142,8 +1149,11 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
         }
         break;
       case 'session_closed':
-        if (msg.sessionId != null &&
-            !_isEventForCurrentSession(msg.sessionId)) {
+        final closedSessionId = msg.sessionId;
+        if (closedSessionId == null) break;
+        _state.sessions.removeWhere((session) => session.sessionId == closedSessionId);
+        if (!_isEventForCurrentSession(closedSessionId)) {
+          notifyListeners();
           break;
         }
         _clearTurnRequest();
@@ -1884,7 +1894,6 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
       case 'turn_ended':
       case 'permission_request':
       case 'session_ended':
-      case 'session_closed':
       case 'sync_response':
       case 'session_loaded':
       case 'history_full':

@@ -239,7 +239,6 @@ export class HerdrAdapter {
   }
 
   static async closePane(paneId: string): Promise<void> {
-    if (!this.isAvailable()) return;
     await sendHerdrRequest("pane.close", { pane_id: paneId });
   }
 
@@ -318,6 +317,7 @@ export class HerdrAdapter {
     agent: string;
     paneId: string;
     title?: string;
+    agentStatus?: HerdrAgentInfo["agent_status"];
   } | null> {
     const targetPaneId = paneId.replace(/^herdr:/, "");
     const agents = await this.listAgents();
@@ -367,6 +367,7 @@ export class HerdrAdapter {
         agent: match.agent,
         paneId: targetPaneId,
         title: fileTitle || match.terminal_title_stripped || match.terminal_title,
+        agentStatus: match.agent_status,
       };
     }
 
@@ -374,6 +375,7 @@ export class HerdrAdapter {
       agent: match.agent,
       paneId: targetPaneId,
       title: match.terminal_title_stripped || match.terminal_title,
+      agentStatus: match.agent_status,
     };
   }
 }
@@ -392,6 +394,12 @@ interface StreamSession {
 const activeStreams = new Map<string, StreamSession>();
 
 export class HerdrStreamer {
+  static stop(paneId: string): void {
+    const session = activeStreams.get(paneId);
+    if (session?.timer) clearInterval(session.timer);
+    activeStreams.delete(paneId);
+  }
+
   /**
    * Subscribe a client callback to live updates of a Herdr pane.
    */

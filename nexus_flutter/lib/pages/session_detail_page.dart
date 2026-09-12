@@ -142,21 +142,23 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
           // ── Session management actions ──
           Row(
             children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: () => _showRenameDialog(context, chatProvider),
-                  icon: const Icon(Icons.edit_outlined, size: 16),
-                  label: const Text('重命名'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.foregroundC(context),
-                    side: BorderSide(color: AppColors.border),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(AppRadius.md),
+              if (!session.sessionId.startsWith('herdr:')) ...[
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _showRenameDialog(context, chatProvider),
+                    icon: const Icon(Icons.edit_outlined, size: 16),
+                    label: const Text('重命名'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.foregroundC(context),
+                      side: BorderSide(color: AppColors.border),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(AppRadius.md),
+                      ),
                     ),
                   ),
                 ),
-              ),
-              const SizedBox(width: AppSpacing.sm),
+                const SizedBox(width: AppSpacing.sm),
+              ],
               Expanded(
                 child: OutlinedButton.icon(
                   onPressed: () => _showDeleteConfirmDialog(context, chatProvider),

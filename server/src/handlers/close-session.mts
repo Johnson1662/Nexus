@@ -1,5 +1,7 @@
 import type { WebSocket } from "ws";
 import { SessionOperationError, SessionOwnerError, sessionManager } from "../session-manager.mjs";
+import { HerdrAdapter, HerdrStreamer } from "../discovery/herdr-adapter.mjs";
+import { HerdrTailerRegistry } from "../discovery/herdr-session-tailer.mjs";
 
 export async function handleCloseSession(
   ws: WebSocket,
@@ -7,6 +9,19 @@ export async function handleCloseSession(
 ): Promise<void> {
   if (!sessionId) {
     try { ws.send(JSON.stringify({ type: "error", text: "sessionId is required" })); } catch {}
+    return;
+  }
+  if (sessionId.startsWith("herdr:")) {
+    const paneId = sessionId.slice("herdr:".length);
+    try {
+      await HerdrAdapter.closePane(paneId);
+      HerdrTailerRegistry.get(sessionId)?.destroy();
+      HerdrStreamer.stop(paneId);
+      try { ws.send(JSON.stringify({ type: "session_closed", sessionId })); } catch {}
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      try { ws.send(JSON.stringify({ type: "error", sessionId, code: "HERDR_CLOSE_FAILED", text: message })); } catch {}
+    }
     return;
   }
   try {
