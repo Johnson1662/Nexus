@@ -18,6 +18,9 @@ export async function createTempClient(
   if (!launch || !launch.cmd || launch.args.some((arg: unknown) => typeof arg !== "string")) {
     throw new Error(`invalid or unavailable agent: ${agent}`);
   }
+  if (!launch.installed) {
+    throw new Error(`agent is not installed: ${agent}`);
+  }
   if (!launch.native.enabled) {
     throw new Error(`agent does not provide native ACP transport: ${agent}`);
   }

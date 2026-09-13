@@ -53,7 +53,11 @@ assert.equal(getHerdrConfig("claude").enabled, true, "claude must be available t
 
 const codexHerdr = getHerdrConfig("codex");
 assert.equal(getNativeConfig("codex").enabled, false, "codex has no native ACP adapter");
-assert.equal(codexHerdr.structuredHistory, true, "codex herdr rollout history is structured");
+assert.equal(
+  codexHerdr.structuredHistory,
+  false,
+  "codex has no cross-platform transcript resolver yet, so its Herdr backend is terminal-only",
+);
 assert.equal(codexHerdr.kind, "codex", "codex herdr kind");
 
 // Cursor: structured natively, terminal-only through Herdr.

@@ -49,6 +49,7 @@ class ClientMessage {
   final int? before;
   final String? key;
   final String? label;
+  final String? target;
   final bool? asText;
 
   ClientMessage({
@@ -80,6 +81,7 @@ class ClientMessage {
     this.before,
     this.key,
     this.label,
+    this.target,
     this.asText,
   });
 
@@ -112,6 +114,7 @@ class ClientMessage {
         if (before != null) 'before': before,
         if (key != null && key!.isNotEmpty) 'key': key,
         if (label != null && label!.isNotEmpty) 'label': label,
+        if (target != null && target!.isNotEmpty) 'target': target,
         if (asText != null) 'asText': asText,
       };
 }

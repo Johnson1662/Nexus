@@ -52,11 +52,12 @@ assert.equal(omp.native.structuredHistory, true, "omp native history is structur
 assert.equal(omp.herdr.structuredHistory, true, "omp herdr history is structured");
 assert.equal(omp.herdr.authentication, false, "omp herdr has no authentication");
 
-// Codex: structured history comes from Herdr only.
+// Codex: no native backend and, until a cross-platform transcript resolver
+// exists, no structured Herdr history either.
 const codex = caps.agents.find((a) => a.id === "codex");
 assert(codex, "codex must exist");
 assert.equal(codex.native.supported, false, "codex has no native ACP adapter");
-assert.equal(codex.herdr.structuredHistory, true, "codex herdr rollout history is structured");
+assert.equal(codex.herdr.structuredHistory, false, "codex herdr history is terminal-only");
 
 const pi = caps.agents.find((a) => a.id === "pi");
 assert(pi, "pi must exist");

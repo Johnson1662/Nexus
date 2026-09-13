@@ -41,7 +41,7 @@ import { setTitle as setSessionTitle } from "./session-titles.mjs";
 import { parseClientMessage, type JsonRecord } from "./protocol-validation.mjs";
 import { handleListHerdrWorkspaces, handleCreateHerdrWorkspace, handleCreateHerdrAgent, handleFocusHerdrTarget, handleInteractHerdrBlocked, handleListHerdrIntegrations, handleInstallHerdrIntegration } from "./handlers/herdr-actions.mjs";
 import { watchAmbientSessions, listAmbientSessions } from "./discovery/ambient-session.mjs";
-import { detectHostCapabilities } from "./discovery/host-capabilities.mjs";
+import { detectHostCapabilities, invalidateHostCapabilities } from "./discovery/host-capabilities.mjs";
 
 const PORT = parseInt(process.env.PORT || "", 10) || 12138;
 const HOST_ID = getOrCreateHostId();
@@ -511,6 +511,7 @@ export function handleIncomingConnection(transport: any, hostId: string = HOST_I
         try {
           if (!agentId) throw new Error("missing agentId");
           installAgent(agentId, "registry");
+          invalidateHostCapabilities();
           transport.send(JSON.stringify({ type: "install_agent_done", agentId, ok: true }));
         } catch (e: any) {
           console.log(`[server] install_agent error: ${e.message}`);
@@ -525,6 +526,7 @@ export function handleIncomingConnection(transport: any, hostId: string = HOST_I
         try {
           if (!agentId) throw new Error("missing agentId");
           const removed = uninstallAgent(agentId);
+          invalidateHostCapabilities();
           transport.send(JSON.stringify({ type: "uninstall_agent_done", agentId, ok: removed }));
         } catch (e: any) {
           console.log(`[server] uninstall_agent error: ${e.message}`);
@@ -541,6 +543,7 @@ export function handleIncomingConnection(transport: any, hostId: string = HOST_I
         try {
           if (!command) throw new Error("missing command");
           installAgent(name, "custom", { command, args });
+          invalidateHostCapabilities();
           transport.send(JSON.stringify({ type: "install_agent_done", agentId: name, ok: true }));
         } catch (e: any) {
           console.log(`[server] install_custom_agent error: ${e.message}`);

@@ -52,7 +52,7 @@ class AgentRegistryService {
       ? getInstalledAgents().filter((a) => a.agentId === agentFilter)
       : getInstalledAgents()).filter((item) => {
         const runtime = resolveAgentRuntime(item.agentId);
-        return runtime?.native.enabled === true && runtime.executablePath !== null;
+        return runtime?.installed === true && runtime.native.enabled && runtime.executablePath !== null;
       });
     const allSessions: any[] = [];
     const resolvedCwd = resolveWorkspacePath(cwd);

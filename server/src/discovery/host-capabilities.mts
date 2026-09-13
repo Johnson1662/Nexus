@@ -1,4 +1,4 @@
-import { findExecutable, findAgentExecutable, resolveAgentRuntime } from "../agents-store.mjs";
+import { findExecutable, resolveAgentRuntime } from "../agents-store.mjs";
 import { listRegistryAgents, loadRegistry, getNativeConfig, getHerdrConfig } from "../registry/registry.mjs";
 import { HerdrAdapter } from "./herdr-adapter.mjs";
 
@@ -55,6 +55,16 @@ let cachedCapabilities: HostCapabilities | null = null;
 let lastDetectTime = 0;
 const CACHE_TTL_MS = 3000;
 
+/**
+ * Drop the cached snapshot. Call after anything that changes runtime
+ * availability (agent install/uninstall, integration install) so the next
+ * get/refresh reports the new state instead of a stale 3s window.
+ */
+export function invalidateHostCapabilities(): void {
+  cachedCapabilities = null;
+  lastDetectTime = 0;
+}
+
 export async function detectHostCapabilities(forceRefresh = false): Promise<HostCapabilities> {
   const now = Date.now();
   if (!forceRefresh && cachedCapabilities && now - lastDetectTime < CACHE_TTL_MS) {
@@ -69,13 +79,14 @@ export async function detectHostCapabilities(forceRefresh = false): Promise<Host
   const integrations = await HerdrAdapter.getIntegrationStatus();
 
   const agents: AgentRuntimeCapability[] = regAgents.map((agent) => {
+    // Capability is a property of the agent, not of its install state, so the
+    // resolver reports the executable even for agents this host has not
+    // installed yet; `installed` is what the UI toggles.
     const runtime = resolveAgentRuntime(agent.id);
-    // Capability is a property of the agent, not of its install state: fall
-    // back to registry metadata when this host has not installed it yet.
     const nativeCfg = runtime?.native ?? getNativeConfig(agent.id);
     const herdrCfg = runtime?.herdr ?? getHerdrConfig(agent.id);
-    const execPath = runtime ? runtime.executablePath : (findAgentExecutable(agent.id)?.path ?? null);
-    const execSource = runtime?.executableSource ?? findAgentExecutable(agent.id)?.source ?? undefined;
+    const execPath = runtime?.executablePath ?? null;
+    const execSource = runtime?.executableSource ?? undefined;
     const nativeSupported = Boolean(nativeCfg?.enabled);
     const nativeReady = nativeSupported && execPath !== null;
     const herdrSupported = Boolean(herdrCfg?.enabled);
@@ -86,7 +97,7 @@ export async function detectHostCapabilities(forceRefresh = false): Promise<Host
     return {
       id: agent.id,
       name: agent.name,
-      enabled: runtime !== null,
+      enabled: runtime?.installed ?? false,
       native: {
         supported: nativeSupported,
         ready: nativeReady,

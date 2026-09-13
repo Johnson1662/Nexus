@@ -16,7 +16,7 @@ function herdrErrorCode(err: unknown): string {
 
 export async function handleListHerdrWorkspaces(ws: WebSocket): Promise<void> {
   try {
-    const rawList = await HerdrAdapter.listWorkspaces();
+    const rawList = await HerdrAdapter.listWorkspacesStrict();
     const agents = await HerdrAdapter.listAgents();
     const workspaces = rawList.map((w) => {
       // Find matching panes/agents for this workspace to get real CWD
@@ -113,36 +113,44 @@ export async function handleCreateHerdrAgent(
     try { await HerdrAdapter.closePane(targetPaneId); } catch {}
   };
 
-  try {
-    if (creationMode === "new_tab") {
-      targetPaneId = await HerdrAdapter.createTab({
-        workspace_id: workspaceId,
-        label: title || runtime.displayName,
-        cwd,
-      });
-      if (!targetPaneId) {
-        console.log(`[herdr-actions] tab.create failed, falling back to pane.split`);
-        targetPaneId = await HerdrAdapter.splitPane({
-          workspace_id: workspaceId,
-          direction: "right",
-          cwd,
-        });
-      }
-    } else {
-      targetPaneId = await HerdrAdapter.splitPane({
-        workspace_id: workspaceId,
-        direction: "right",
-        cwd,
-      });
-      if (!targetPaneId) {
-        console.log(`[herdr-actions] pane.split failed, falling back to tab.create`);
-        targetPaneId = await HerdrAdapter.createTab({
-          workspace_id: workspaceId,
-          label: title || runtime.displayName,
-          cwd,
-        });
+  /**
+   * Allocate a pane for the agent, preferring the requested mode but falling
+   * back to the other one. Both a refused call and a thrown failure count as
+   * "try the other strategy" — a workspace with no splittable pane, for
+   * example, can still be served by a new tab.
+   */
+  const allocatePane = async (): Promise<string | null> => {
+    const trySplit = () => HerdrAdapter.splitPane({
+      workspace_id: workspaceId,
+      direction: "right",
+      cwd,
+    });
+    const tryTab = () => HerdrAdapter.createTab({
+      workspace_id: workspaceId,
+      label: title || runtime.displayName,
+      cwd,
+    });
+    const strategies = creationMode === "new_tab"
+      ? [["tab.create", tryTab], ["pane.split", trySplit]]
+      : [["pane.split", trySplit], ["tab.create", tryTab]];
+
+    let lastError: unknown = null;
+    for (const [label, strategy] of strategies as Array<[string, () => Promise<string | null>]>) {
+      try {
+        const paneId = await strategy();
+        if (paneId) return paneId;
+        console.log(`[herdr-actions] ${label} returned no pane`);
+      } catch (err) {
+        lastError = err;
+        console.log(`[herdr-actions] ${label} failed: ${String(err)}`);
       }
     }
+    if (lastError) console.log(`[herdr-actions] pane allocation exhausted: ${String(lastError)}`);
+    return null;
+  };
+
+  try {
+    targetPaneId = await allocatePane();
 
     if (!targetPaneId) {
       ws.send(

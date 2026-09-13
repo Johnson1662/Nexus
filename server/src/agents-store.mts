@@ -271,9 +271,16 @@ export function installAgent(
   if (source === "registry" && !getRegistryAgent(agentId)) {
     throw new Error(`unknown registry agent: ${agentId}`);
   }
-  const command = source === "custom" ? options?.command : resolveDistributionCommand(agentId)?.cmd;
-  if (!command || !findExecutable(command)) {
-    throw new Error(`agent command not found in PATH: ${command || agentId}`);
+  if (source === "custom") {
+    const command = options?.command;
+    if (!command || !findExecutable(command)) {
+      throw new Error(`agent command not found in PATH: ${command || agentId}`);
+    }
+  } else {
+    const runtime = resolveAgentRuntime(agentId);
+    if (!runtime?.executablePath) {
+      throw new Error(`agent command not found in PATH: ${runtime?.cmd || agentId}`);
+    }
   }
   const agents = loadFromDisk().map((agent) => ({ ...agent }));
   if (agents.some((a) => a.agentId === agentId)) {
@@ -330,6 +337,12 @@ export interface AgentRuntime {
   agentId: string;
   displayName: string;
   source: "registry" | "custom";
+  installed: boolean;
+  /**
+   * The command to spawn. When the executable was resolved this is its absolute
+   * path, so a PATH/alias/override resolution is honoured by the actual launch
+   * instead of only by the capability probe.
+   */
   cmd: string;
   args: string[];
   env: Record<string, string>;
@@ -345,21 +358,24 @@ export interface AgentRuntime {
  * Single resolution entry point for an agent's launch info, capabilities and
  * Herdr identity. Detection, install validation, Native launch and the agent
  * management UI all read this result so they can never disagree.
- * Returns null only when the agent is not installed.
+ *
+ * Returns a result for any known agent — installed or not — so install
+ * validation can use the same resolver. Returns null only for an unknown id.
  */
 export function resolveAgentRuntime(agentId: string): AgentRuntime | null {
   const installedAgent = loadFromDisk().find((a) => a.agentId === agentId);
-  if (!installedAgent) return null;
+  const installed = installedAgent !== undefined;
 
   // Custom agent — use user-provided command/args
-  if (installedAgent.source === "custom") {
+  if (installedAgent?.source === "custom") {
     if (!installedAgent.customCommand) return null;
     const found = findExecutableDetailed(installedAgent.customCommand);
     return {
       agentId,
       displayName: agentId,
       source: "custom",
-      cmd: installedAgent.customCommand,
+      installed,
+      cmd: found?.path ?? installedAgent.customCommand,
       args: installedAgent.customArgs || [],
       env: installedAgent.customEnv || {},
       executablePath: found?.path ?? null,
@@ -392,14 +408,18 @@ export function resolveAgentRuntime(agentId: string): AgentRuntime | null {
   if (!native || !herdr) return null;
   const resolved = resolveDistributionCommand(agentId);
   const found = findAgentExecutable(agentId);
+  const fallbackCmd = resolved?.cmd ?? native.command ?? "";
 
   return {
     agentId,
     displayName: getAgentDisplayName(agentId),
     source: "registry",
-    cmd: resolved?.cmd ?? native.command ?? "",
+    installed,
+    // Spawn exactly what was resolved; the bare command is only a fallback for
+    // the message shown when nothing was found.
+    cmd: found?.path ?? fallbackCmd,
     args: resolved?.args ?? native.args ?? [],
-    env: { ...(resolved?.env || {}), ...(installedAgent.customEnv || {}) },
+    env: { ...(resolved?.env || {}), ...(installedAgent?.customEnv || {}) },
     executablePath: found?.path ?? null,
     executableSource: found?.source ?? null,
     native,

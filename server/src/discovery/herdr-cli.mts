@@ -80,10 +80,11 @@ export class HerdrCliClient {
             reject(new HerdrCliError("HERDR_BIN_NOT_FOUND", `Herdr executable not found at ${binary}`));
             return;
           }
-          // Herdr reports RPC failures as an error envelope on stdout *and* a
-          // non-zero exit, so prefer that envelope: callers match on its code
+          // Herdr reports RPC failures as a JSON error envelope on **stderr**
+          // with exit code 1 (stdout stays empty), so both streams are probed
+          // before falling back to a plain message. Callers match on the code
           // (agent_not_found / pane_not_found) to tell "gone" from "broken".
-          const envelope = parseErrorEnvelope(stdout);
+          const envelope = parseErrorEnvelope(stderr) ?? parseErrorEnvelope(stdout);
           if (envelope) {
             reject(
               new HerdrCliError(
@@ -132,13 +133,23 @@ export class HerdrCliClient {
   }
 }
 
-function parseErrorEnvelope(stdout: string): { code?: string; message?: string } | null {
-  const trimmed = stdout?.trim();
-  if (!trimmed || !trimmed.startsWith("{")) return null;
-  try {
-    const parsed = JSON.parse(trimmed.split("\n")[0]) as { error?: { code?: string; message?: string } };
-    return parsed?.error ?? null;
-  } catch {
-    return null;
+/**
+ * Herdr writes RPC failures as `{"error":{"code","message"},"id":"cli:..."}`.
+ * The stream differs by command (stderr for the real CLI), so callers probe
+ * both rather than assuming.
+ */
+function parseErrorEnvelope(stream: string): { code?: string; message?: string } | null {
+  const trimmed = stream?.trim();
+  if (!trimmed) return null;
+  for (const line of trimmed.split("\n")) {
+    const candidate = line.trim();
+    if (!candidate.startsWith("{")) continue;
+    try {
+      const parsed = JSON.parse(candidate) as { error?: { code?: string; message?: string } };
+      if (parsed?.error?.code) return parsed.error;
+    } catch {
+      // Not an envelope line; keep looking.
+    }
   }
+  return null;
 }

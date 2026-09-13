@@ -27,7 +27,9 @@ const HERDR_INTEGRATIONS = new Set([
 const EXPECTED = {
   omp: { executables: ["omp"], kind: "omp", integration: "omp", native: "omp", nativeHistory: true, herdrHistory: true },
   claude: { executables: ["claude"], kind: "claude", integration: "claude", native: null, nativeHistory: false, herdrHistory: false },
-  codex: { executables: ["codex"], kind: "codex", integration: "codex", native: null, nativeHistory: false, herdrHistory: true },
+  // Codex rollouts are only resolvable through a Linux /proc scan plus an
+  // omp-specific session search, so the Herdr backend is terminal-only for now.
+  codex: { executables: ["codex"], kind: "codex", integration: "codex", native: null, nativeHistory: false, herdrHistory: false },
   opencode: { executables: ["opencode"], kind: "opencode", integration: "opencode", native: "opencode", nativeHistory: true, herdrHistory: false },
   cursor: { executables: ["agent", "cursor-agent"], kind: "cursor", integration: "cursor", native: "agent", nativeHistory: true, herdrHistory: false },
   copilot: { executables: ["copilot"], kind: "copilot", integration: "copilot", native: null, nativeHistory: false, herdrHistory: false },

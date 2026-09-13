@@ -222,7 +222,23 @@ export async function handleLoadSession(
 
   if (targetSessionId.startsWith("herdr:")) {
     const paneId = targetSessionId.slice("herdr:".length);
-    const resolved = await HerdrAdapter.resolveSessionFile(paneId);
+    let resolved: Awaited<ReturnType<typeof HerdrAdapter.resolveSessionFile>>;
+    try {
+      resolved = await HerdrAdapter.resolveSessionFile(paneId);
+    } catch (err) {
+      // The Herdr CLI failed; report it instead of leaving the client waiting
+      // for a session_started that will never arrive.
+      console.error(`[load-session] Herdr resolution failed for ${targetSessionId}: ${err}`);
+      try {
+        ws.send(JSON.stringify({
+          type: "error",
+          sessionId: targetSessionId,
+          code: "HERDR_CLI_FAILED",
+          text: err instanceof Error ? err.message : String(err),
+        }));
+      } catch { /* socket gone */ }
+      return;
+    }
     const resolvedAgent = resolved?.agent || agent;
 
     const enterTerminalMode = async () => {

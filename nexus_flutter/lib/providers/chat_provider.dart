@@ -782,7 +782,7 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   void installHerdrIntegration(String target) {
-    _ws.send(ClientMessage(type: 'install_herdr_integration', label: target));
+    _ws.send(ClientMessage(type: 'install_herdr_integration', target: target));
   }
 
   /// Integration install state for a Herdr target, from the last list reply.
@@ -1412,6 +1412,9 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
         }
         _ws.send(ClientMessage(type: 'list_agents'));
         _ws.send(ClientMessage(type: 'list_registry_agents'));
+        // Runtime availability changed: without this the newly enabled agent
+        // would stay out of the Herdr creation list until the next reconnect.
+        if (msg.ok != false) refreshHostCapabilities();
         notifyListeners();
         break;
       case 'error':

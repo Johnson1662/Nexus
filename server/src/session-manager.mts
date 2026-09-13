@@ -76,6 +76,9 @@ function resolveAgentLaunch(agent: string): { cmd: string; args: string[]; env: 
   if (!runtime || !runtime.cmd || !Array.isArray(runtime.args) || runtime.args.some((arg: unknown) => typeof arg !== "string")) {
     throw new Error(`invalid or unavailable agent: ${agent}`);
   }
+  if (!runtime.installed) {
+    throw new Error(`agent is not installed: ${agent}`);
+  }
   if (!runtime.native.enabled) {
     throw new Error(`agent does not provide native ACP transport: ${agent}`);
   }

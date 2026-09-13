@@ -26,6 +26,18 @@ export interface HerdrAgentInfo {
   };
 }
 
+export interface HerdrPaneInfo {
+  pane_id: string;
+  workspace_id?: string;
+  tab_id?: string;
+  focused?: boolean;
+  label?: string;
+  cwd?: string;
+  foreground_cwd?: string;
+  agent?: string | null;
+  agent_status?: string;
+}
+
 export interface HerdrIntegrationInfo {
   target: string;
   label: string;
@@ -137,8 +149,7 @@ export class HerdrAdapter {
 
   static async listWorkspaces(): Promise<HerdrWorkspaceInfo[]> {
     try {
-      const res = await HerdrCliClient.runJson<{ workspaces?: HerdrWorkspaceInfo[] }>(["workspace", "list"]);
-      return res?.workspaces ?? [];
+      return await this.listWorkspacesStrict();
     } catch (err) {
       console.log(`[herdr-adapter] listWorkspaces error: ${String(err)}`);
       return [];
@@ -159,16 +170,38 @@ export class HerdrAdapter {
     await HerdrCliClient.run(["workspace", "focus", workspaceId]);
   }
 
+  /**
+   * Resolve which pane to split.
+   *
+   * `pane split` targets a concrete pane id, so a workspace id is never valid
+   * here. Without an explicit target we pick the workspace's focused pane, else
+   * its first pane, and report pane_not_found when the workspace has none.
+   */
+  static async resolveSplitTarget(options: {
+    workspace_id?: string;
+    target_pane_id?: string;
+  }): Promise<string> {
+    if (options.target_pane_id) return options.target_pane_id;
+    const panes = await this.listPanes(options.workspace_id);
+    const target = panes.find((pane) => pane.focused) ?? panes[0];
+    if (!target?.pane_id) {
+      throw new HerdrCliError(
+        "HERDR_EXIT",
+        `No pane available to split in workspace ${options.workspace_id ?? "(current)"}`,
+        "pane_not_found",
+      );
+    }
+    return target.pane_id;
+  }
+
   static async splitPane(options: {
     workspace_id?: string;
     target_pane_id?: string;
     direction?: "right" | "down";
     cwd?: string;
   }): Promise<string | null> {
-    const target = options.target_pane_id ?? options.workspace_id;
-    const args = ["pane", "split"];
-    if (target) args.push("--pane", target);
-    args.push("--direction", options.direction ?? "right");
+    const target = await this.resolveSplitTarget(options);
+    const args = ["pane", "split", "--pane", target, "--direction", options.direction ?? "right"];
     if (options.cwd) args.push("--cwd", options.cwd);
     const res = await HerdrCliClient.runJson<{ pane?: { pane_id: string } }>(args, {
       timeoutMs: 15000,
@@ -233,14 +266,37 @@ export class HerdrAdapter {
     await HerdrCliClient.run(["agent", "focus", target.replace(/^herdr:/, "")]);
   }
 
+  /**
+   * Strict agent listing: a CLI failure propagates so "Herdr is down" is never
+   * rendered as "there are no agents".
+   */
+  static async listAgentsStrict(): Promise<HerdrAgentInfo[]> {
+    const res = await HerdrCliClient.runJson<{ agents?: HerdrAgentInfo[] }>(["agent", "list"]);
+    return res?.agents ?? [];
+  }
+
+  /** Lenient variant for background pollers, where an empty result is harmless. */
   static async listAgents(): Promise<HerdrAgentInfo[]> {
     try {
-      const res = await HerdrCliClient.runJson<{ agents?: HerdrAgentInfo[] }>(["agent", "list"]);
-      return res?.agents ?? [];
+      return await this.listAgentsStrict();
     } catch (err) {
       console.log(`[herdr-adapter] listAgents error: ${String(err)}`);
       return [];
     }
+  }
+
+  /** Strict workspace listing; see listAgentsStrict. */
+  static async listWorkspacesStrict(): Promise<HerdrWorkspaceInfo[]> {
+    const res = await HerdrCliClient.runJson<{ workspaces?: HerdrWorkspaceInfo[] }>(["workspace", "list"]);
+    return res?.workspaces ?? [];
+  }
+
+  /** Panes of a workspace. */
+  static async listPanes(workspaceId?: string): Promise<HerdrPaneInfo[]> {
+    const args = ["pane", "list"];
+    if (workspaceId) args.push("--workspace", workspaceId);
+    const res = await HerdrCliClient.runJson<{ panes?: HerdrPaneInfo[] }>(args);
+    return res?.panes ?? [];
   }
 
   static async readTerminal(
@@ -300,7 +356,8 @@ export class HerdrAdapter {
     let lastError: unknown = null;
     for (let attempt = 0; attempt < 10; attempt += 1) {
       try {
-        const agent = (await this.listAgents()).find((item) => item.pane_id === paneId);
+        // Strict: a dead CLI must raise, not look like an unready agent.
+        const agent = (await this.listAgentsStrict()).find((item) => item.pane_id === paneId);
         if (!agent || agent.agent_status === "unknown") {
           throw new HerdrCliError(
             "HERDR_EXIT",
@@ -339,7 +396,8 @@ export class HerdrAdapter {
     lastActivity?: number;
   } | null> {
     const targetPaneId = paneId.replace(/^herdr:/, "");
-    const agents = await this.listAgents();
+    // Strict: a pane that vanished must be distinguishable from a failed CLI.
+    const agents = await this.listAgentsStrict();
     const match = agents.find((a) => a.pane_id === targetPaneId);
     if (!match) return null;
 
@@ -481,7 +539,10 @@ export class HerdrStreamer {
   }
 
   private static startPolling(sess: StreamSession): void {
-    const pollInterval = 300; // 300ms 黄金刷新率，平滑流畅且不占用 CPU
+    // Every tick spawns a `herdr agent read` process, so the interval is a
+    // process-rate budget, not just a latency knob: 800ms keeps terminal mode
+    // responsive while cutting the spawn rate to roughly a third.
+    const pollInterval = 800;
     sess.timer = setInterval(async () => {
       if (sess.subscribers.size === 0) {
         if (sess.timer) clearInterval(sess.timer);
@@ -520,9 +581,10 @@ export class HerdrStreamer {
           }
         }
 
-        // Check status change every 4 polls (2 seconds)
+        // Status checks spawn a second process per tick; sample them far less
+        // often than the content reads.
         sess.pollCount += 1;
-        if (sess.pollCount % 4 === 0) {
+        if (sess.pollCount % 6 === 0) {
           const agents = await HerdrAdapter.listAgents();
           const info = agents.find((a) => a.pane_id === sess.paneId);
           if (info && info.agent_status !== sess.lastStatus) {

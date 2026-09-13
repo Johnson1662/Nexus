@@ -116,7 +116,9 @@ async function main() {
     const received = [];
     const listener = (event) => received.push(event);
     HerdrStreamer.subscribe("mock_stream", listener);
-    await new Promise((resolve) => setTimeout(resolve, 900));
+    // Two poll intervals (800ms) plus margin: the first poll seeds the snapshot,
+    // the second produces the delta.
+    await new Promise((resolve) => setTimeout(resolve, 2100));
     assert(received.length >= 1, "HerdrStreamer receives a delta event");
     assert(received[0]?.type === "agent_event", "streamer event type is agent_event");
     assert(received[0]?.event?.sessionUpdate === "agent_message_chunk", "streamer nests sessionUpdate");

@@ -7,12 +7,16 @@
       "description": "High-performance coding agent harness",
       "version": "latest",
       "detection": {
-        "executables": ["omp"]
+        "executables": [
+          "omp"
+        ]
       },
       "native": {
         "enabled": true,
         "command": "omp",
-        "args": ["acp"],
+        "args": [
+          "acp"
+        ],
         "structuredHistory": true,
         "modelSelection": true,
         "modeSelection": true,
@@ -30,7 +34,9 @@
       "distribution": {
         "direct": {
           "cmd": "omp",
-          "args": ["acp"]
+          "args": [
+            "acp"
+          ]
         }
       }
     },
@@ -40,7 +46,9 @@
       "description": "Anthropic Claude Code CLI",
       "version": "latest",
       "detection": {
-        "executables": ["claude"]
+        "executables": [
+          "claude"
+        ]
       },
       "native": {
         "enabled": false,
@@ -71,7 +79,9 @@
       "description": "OpenAI Codex CLI / ACP Agent",
       "version": "latest",
       "detection": {
-        "executables": ["codex"]
+        "executables": [
+          "codex"
+        ]
       },
       "native": {
         "enabled": false,
@@ -84,7 +94,7 @@
         "enabled": true,
         "kind": "codex",
         "integration": "codex",
-        "structuredHistory": true,
+        "structuredHistory": false,
         "modelSelection": false,
         "modeSelection": false,
         "authentication": false
@@ -102,12 +112,16 @@
       "description": "ACP-compatible coding agent",
       "version": "latest",
       "detection": {
-        "executables": ["opencode"]
+        "executables": [
+          "opencode"
+        ]
       },
       "native": {
         "enabled": true,
         "command": "opencode",
-        "args": ["acp"],
+        "args": [
+          "acp"
+        ],
         "structuredHistory": true,
         "modelSelection": true,
         "modeSelection": true,
@@ -125,7 +139,9 @@
       "distribution": {
         "direct": {
           "cmd": "opencode",
-          "args": ["acp"]
+          "args": [
+            "acp"
+          ]
         }
       }
     },
@@ -135,12 +151,17 @@
       "description": "Cursor CLI Agent / Native ACP",
       "version": "latest",
       "detection": {
-        "executables": ["agent", "cursor-agent"]
+        "executables": [
+          "agent",
+          "cursor-agent"
+        ]
       },
       "native": {
         "enabled": true,
         "command": "agent",
-        "args": ["acp"],
+        "args": [
+          "acp"
+        ],
         "structuredHistory": true,
         "modelSelection": true,
         "modeSelection": true,
@@ -158,7 +179,9 @@
       "distribution": {
         "direct": {
           "cmd": "agent",
-          "args": ["acp"]
+          "args": [
+            "acp"
+          ]
         }
       }
     },
@@ -168,7 +191,9 @@
       "description": "GitHub Copilot CLI Agent",
       "version": "latest",
       "detection": {
-        "executables": ["copilot"]
+        "executables": [
+          "copilot"
+        ]
       },
       "native": {
         "enabled": false,
@@ -199,7 +224,9 @@
       "description": "Cognition Devin CLI",
       "version": "latest",
       "detection": {
-        "executables": ["devin"]
+        "executables": [
+          "devin"
+        ]
       },
       "native": {
         "enabled": false,
@@ -230,7 +257,9 @@
       "description": "Factory Droid Coding Agent CLI",
       "version": "latest",
       "detection": {
-        "executables": ["droid"]
+        "executables": [
+          "droid"
+        ]
       },
       "native": {
         "enabled": false,
@@ -261,12 +290,16 @@
       "description": "Moonshot Kimi Code CLI",
       "version": "latest",
       "detection": {
-        "executables": ["kimi"]
+        "executables": [
+          "kimi"
+        ]
       },
       "native": {
         "enabled": true,
         "command": "kimi",
-        "args": ["acp"],
+        "args": [
+          "acp"
+        ],
         "structuredHistory": true,
         "modelSelection": true,
         "modeSelection": true,
@@ -284,7 +317,9 @@
       "distribution": {
         "direct": {
           "cmd": "kimi",
-          "args": ["acp"]
+          "args": [
+            "acp"
+          ]
         }
       }
     },
@@ -294,7 +329,9 @@
       "description": "Alibaba Qwen Code CLI",
       "version": "latest",
       "detection": {
-        "executables": ["qwen"]
+        "executables": [
+          "qwen"
+        ]
       },
       "native": {
         "enabled": false,
@@ -325,7 +362,9 @@
       "description": "xAI Grok CLI",
       "version": "latest",
       "detection": {
-        "executables": ["grok"]
+        "executables": [
+          "grok"
+        ]
       },
       "native": {
         "enabled": false,
@@ -356,7 +395,9 @@
       "description": "Pi Coding Agent CLI",
       "version": "latest",
       "detection": {
-        "executables": ["pi"]
+        "executables": [
+          "pi"
+        ]
       },
       "native": {
         "enabled": false,
@@ -387,7 +428,9 @@
       "description": "Kilo Code Agent CLI",
       "version": "latest",
       "detection": {
-        "executables": ["kilo"]
+        "executables": [
+          "kilo"
+        ]
       },
       "native": {
         "enabled": false,
@@ -418,7 +461,9 @@
       "description": "Nous Research Hermes Agent",
       "version": "latest",
       "detection": {
-        "executables": ["hermes"]
+        "executables": [
+          "hermes"
+        ]
       },
       "native": {
         "enabled": false,
@@ -449,7 +494,9 @@
       "description": "Qoder Coding Agent CLI",
       "version": "latest",
       "detection": {
-        "executables": ["qodercli"]
+        "executables": [
+          "qodercli"
+        ]
       },
       "native": {
         "enabled": false,
@@ -480,7 +527,9 @@
       "description": "Mastra AI Coding Agent CLI",
       "version": "latest",
       "detection": {
-        "executables": ["mastracode"]
+        "executables": [
+          "mastracode"
+        ]
       },
       "native": {
         "enabled": false,
@@ -511,7 +560,9 @@
       "description": "Google Antigravity Agent CLI",
       "version": "latest",
       "detection": {
-        "executables": ["agy"]
+        "executables": [
+          "agy"
+        ]
       },
       "native": {
         "enabled": false,

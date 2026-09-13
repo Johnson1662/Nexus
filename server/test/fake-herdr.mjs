@@ -35,21 +35,32 @@ try { state = JSON.parse(fs.readFileSync(process.env.FAKE_HERDR_STATE, "utf8"));
 const out = (o) => process.stdout.write(JSON.stringify(o) + "\\n");
 const group = argv[0], cmd = argv[1];
 const fail = (state.errors || {})[group + " " + cmd];
-if (fail) { out({ id: "cli:" + group + ":" + cmd, error: { code: fail, message: group + "." + cmd + " failed" } }); process.exit(1); }
+if (fail) {
+  // The real CLI writes the error envelope to stderr and exits 1.
+  process.stderr.write(JSON.stringify({ error: { code: fail, message: group + "." + cmd + " failed" }, id: "cli:" + group + ":" + cmd }) + "\\n");
+  process.exit(1);
+}
 const agents = () => (state.agents || []).map((a) => Object.assign({}, a, state.status ? { agent_status: state.status } : {}));
 const paneId = argv[2];
 if (group === "agent" && cmd === "list") out({ id: "cli:agent:list", result: { type: "agent_list", agents: agents() } });
 else if (group === "agent" && cmd === "read") process.stdout.write(state.readText || "");
 else if (group === "agent" && (cmd === "get" || cmd === "wait")) {
   const agent = agents().find((a) => a.pane_id === paneId);
-  if (!agent) { out({ id: "cli:agent:" + cmd, error: { code: "agent_not_found", message: "agent target " + paneId + " not found" } }); process.exit(1); }
+  if (!agent) { process.stderr.write(JSON.stringify({ error: { code: "agent_not_found", message: "agent target " + paneId + " not found" }, id: "cli:agent:" + cmd }) + "\\n"); process.exit(1); }
   out({ id: "cli:agent:" + cmd, result: { type: "agent_info", agent } });
 }
 else if (group === "agent" && cmd === "prompt") out({ id: "cli:agent:prompt", result: { type: "agent_prompted", agent: { pane_id: paneId } } });
 else if (group === "agent" && cmd === "send-keys") out({ id: "cli:agent:send-keys", result: { type: "ok" } });
 else if (group === "agent" && cmd === "start") out({ id: "cli:agent:start", result: { type: "agent_started", agent: { pane_id: paneId, agent: "mock", agent_status: "working", cwd: "/tmp" }, argv: [] } });
+else if (group === "pane" && cmd === "list") {
+  out({ id: "cli:pane:list", result: { type: "pane_list", panes: state.panes || [
+    { pane_id: "w1:p1", workspace_id: "w1", focused: true },
+    { pane_id: "w1:p2", workspace_id: "w1", focused: false },
+  ] } });
+}
+else if (group === "pane" && cmd === "send-text") out({ id: "cli:pane:send-text", result: { type: "ok" } });
 else if (group === "pane" && (cmd === "close" || cmd === "focus")) out({ id: "cli:pane:" + cmd, result: { type: "ok" } });
-else if (group === "pane" && cmd === "split") out({ id: "cli:pane:split", result: { type: "pane_info", pane: { pane_id: "w1:p" + Math.floor(Math.random() * 1000) } } });
+else if (group === "pane" && cmd === "split") out({ id: "cli:pane:split", result: { type: "pane_info", pane: { pane_id: "w1:pSPLIT" } } });
 else if (group === "tab" && cmd === "create") out({ id: "cli:tab:create", result: { type: "tab_created", tab: { tab_id: "w1:t9" }, root_pane: { pane_id: "w1:p9" } } });
 else if (group === "workspace" && cmd === "list") out({ id: "cli:workspace:list", result: { type: "workspace_list", workspaces: state.workspaces || [] } });
 else if (group === "workspace" && cmd === "create") out({ id: "cli:workspace:create", result: { type: "workspace_created", workspace: { workspace_id: "w-new" }, tab: { tab_id: "w-new:t1" }, root_pane: { pane_id: "w-new:p1" } } });
