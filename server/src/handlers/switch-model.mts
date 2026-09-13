@@ -6,6 +6,15 @@ export async function handleSwitchModel(
   sessionId: string,
   model: string,
 ): Promise<void> {
+  if (sessionId.startsWith("herdr:") || sessionId.startsWith("ambient:")) {
+    try { ws.send(JSON.stringify({
+      type: "error",
+      sessionId,
+      code: "MODEL_SWITCH_UNSUPPORTED",
+      text: "该终端会话的模型由 Agent 自身管理",
+    })); } catch {}
+    return;
+  }
   try {
     await sessionManager.switchModel(sessionId, model, ws);
     try { ws.send(JSON.stringify({ type: "model_switched", sessionId, model })); } catch {}

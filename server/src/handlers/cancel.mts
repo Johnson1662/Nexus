@@ -1,11 +1,22 @@
 import type { WebSocket } from "ws";
 import { SessionOwnerError, sessionManager } from "../session-manager.mjs";
 import { HerdrAdapter } from "../discovery/herdr-adapter.mjs";
+import { sendAmbientCommand } from "../discovery/ambient-session.mjs";
 
 export function handleCancel(
   ws: WebSocket,
   sessionId: string,
 ): void {
+  if (sessionId.startsWith("ambient:")) {
+    sendAmbientCommand(sessionId, { type: "cancel" }).catch((err) => {
+      console.log(`[cancel] Ambient sendCancel error: ${err}`);
+    });
+    try {
+      ws.send(JSON.stringify({ type: "session_cancelled", sessionId }));
+    } catch {}
+    return;
+  }
+
   if (sessionId.startsWith("herdr:")) {
     const paneId = sessionId.slice("herdr:".length);
     HerdrAdapter.sendKeys(paneId, ["Ctrl+C"]).catch((err) => {

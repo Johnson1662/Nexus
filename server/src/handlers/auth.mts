@@ -17,8 +17,21 @@ export async function handleAuth(
   }
 
   try {
-    const result = await sess.client.authenticate(methodId);
-    ws.send(JSON.stringify({ type: "auth_result", sessionId, result }));
+    sess = await sessionManager.authenticatePending(sessionId, methodId, ws);
+    ws.send(JSON.stringify({
+      type: "auth_result",
+      sessionId: sess.sessionId,
+      configOptions: sess.client.configOptions,
+    }));
+    if (sessionId !== sess.sessionId) {
+      ws.send(JSON.stringify({
+        type: "session_started",
+        sessionId: sess.sessionId,
+        agent: sess.agent,
+        title: "New Session",
+        configOptions: sess.client.configOptions,
+      }));
+    }
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     ws.send(JSON.stringify({ type: "error", sessionId, text: `auth failed: ${msg}` }));

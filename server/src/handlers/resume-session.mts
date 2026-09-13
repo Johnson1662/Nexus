@@ -10,7 +10,7 @@ export async function handleResumeSession(
     model?: string;
   },
 ): Promise<void> {
-  const { sessionId: targetSessionId, cwd, agent = "opencode", model } = params;
+  const { sessionId: targetSessionId, cwd, agent = "omp", model } = params;
 
   if (!targetSessionId) {
     try { ws.send(JSON.stringify({ type: "error", text: "sessionId is required" })); } catch {}
@@ -39,6 +39,8 @@ export async function handleResumeSession(
       agent,
       resumed: true,
       ...(model ? { model } : {}),
+      authMethods: sess.client.authMethods,
+      configOptions: sess.client.configOptions,
     }));
   } catch { /* WS gone */ }
 }

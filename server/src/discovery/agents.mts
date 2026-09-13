@@ -15,6 +15,9 @@ export interface AgentInfo {
   source: string;
   binaryPath: string;
   installed: boolean;
+  ready: boolean;
+  error?: string;
+  capabilities: NonNullable<ReturnType<typeof getRegistryAgent>>["capabilities"];
 }
 
 // ── Agent list (from installed + registry) ────────────────────────────
@@ -28,13 +31,26 @@ export function discoverAgents(): AgentInfo[] {
   const installed = getInstalledAgents();
   return installed.map((entry) => {
     const reg = getRegistryAgent(entry.agentId);
+    const resolved = resolveAgentInfo(entry.agentId);
+    const capabilities = resolved?.capabilities ?? {
+      nativeAcp: true,
+      herdr: false,
+      structuredHistory: false,
+      modelSelection: true,
+      modeSelection: true,
+      authentication: true,
+    };
+    const ready = resolved?.executablePath !== null && resolved?.executablePath !== undefined;
     return {
       name: entry.agentId,
       title: reg?.name ?? entry.agentId,
       version: reg?.version ?? "unknown",
       source: entry.source,
-      binaryPath: entry.customCommand || "",
+      binaryPath: resolved?.executablePath || "",
       installed: true,
+      ready,
+      ...(!ready ? { error: `Command not found: ${resolved?.cmd || entry.customCommand || entry.agentId}` } : {}),
+      capabilities,
     };
   });
 }

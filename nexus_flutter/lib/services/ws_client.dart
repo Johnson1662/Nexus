@@ -93,14 +93,19 @@ class WSClient {
   Future<String?> probeBest(List<String> candidates, String hostKey,
       {String? authToken}) async {
     final normalizedToken = _normalizeToken(authToken);
-    for (final url in candidates) {
-      try {
-        if (await probeCandidate(url, authToken: normalizedToken)) {
-          return url;
-        }
-      } catch (_) {}
+    final urls = candidates.toSet().toList();
+    if (urls.isEmpty) return null;
+    final result = Completer<String?>();
+    var remaining = urls.length;
+    for (final url in urls) {
+      unawaited(() async {
+        final available = await probeCandidate(url, authToken: normalizedToken);
+        if (available && !result.isCompleted) result.complete(url);
+        remaining -= 1;
+        if (remaining == 0 && !result.isCompleted) result.complete(null);
+      }());
     }
-    return null;
+    return result.future;
   }
 
   void disconnect() {
@@ -276,10 +281,6 @@ class WSClient {
       if (gen != _connectionGeneration) return;
       if (_currentUrl.isNotEmpty && !_intentionalClose) {
         _reconnectAttempt++;
-        if (_reconnectAttempt > 12) {
-          _notifyPhase(HostPhase.offline);
-          return;
-        }
         _doConnect(_currentUrl);
       }
     });
@@ -350,7 +351,9 @@ class WSClient {
       }
 
       _routeMessage(msg);
-    } catch (_) {}
+    } catch (error, stackTrace) {
+      debugPrint('[WSClient] protocol parse error: $error\n$stackTrace');
+    }
   }
 
   void _routeMessage(ServerMessage msg) {

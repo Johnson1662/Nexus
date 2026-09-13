@@ -1,9 +1,54 @@
-import { readFileSync, createReadStream } from "node:fs";
+import { closeSync, createReadStream, fstatSync, openSync, readFileSync, readSync } from "node:fs";
 import readline from "node:readline";
 
 export interface AcpEventPayload {
   sessionUpdate: string;
   [key: string]: unknown;
+}
+
+function codexToolInput(value: unknown): unknown {
+  if (typeof value !== "string") return value ?? {};
+  try { return JSON.parse(value); } catch { return value; }
+}
+
+function convertCodexRecord(record: Record<string, any>): AcpEventPayload[] | null {
+  if (record.type !== "response_item" || !record.payload) return null;
+  const item = record.payload;
+  if (item.type === "message") {
+    const text = extractText(item.content);
+    if (!text || (item.role !== "user" && item.role !== "assistant")) return [];
+    return [{
+      sessionUpdate: item.role === "user" ? "user_message_chunk" : "agent_message_chunk",
+      content: { type: "text", text },
+    }];
+  }
+  if (item.type === "reasoning") {
+    const text = extractText(item.summary).trim();
+    return text ? [{ sessionUpdate: "agent_thought_chunk", content: { type: "text", text } }] : [];
+  }
+  if (item.type === "custom_tool_call" || item.type === "function_call") {
+    const toolCallId = item.call_id || item.id;
+    return toolCallId ? [{
+      sessionUpdate: "tool_call",
+      toolCallId: String(toolCallId),
+      title: String(item.name || item.type),
+      rawInput: codexToolInput(item.input ?? item.arguments),
+    }] : [];
+  }
+  if (item.type === "custom_tool_call_output" || item.type === "function_call_output") {
+    const toolCallId = item.call_id || item.id;
+    if (!toolCallId) return [];
+    return [{
+      sessionUpdate: "tool_call_update",
+      toolCallId: String(toolCallId),
+      status: item.status === "failed" ? "failed" : "completed",
+      content: [{
+        type: "content",
+        content: { type: "text", text: extractText(item.output) },
+      }],
+    }];
+  }
+  return [];
 }
 
 /**
@@ -44,6 +89,8 @@ export function extractText(content: unknown): string {
  */
 export function convertJsonlRecordToAcpUpdates(record: Record<string, any>): AcpEventPayload[] {
   if (!record || typeof record !== "object") return [];
+  const codex = convertCodexRecord(record);
+  if (codex !== null) return codex;
 
   const type = record.type;
   const updates: AcpEventPayload[] = [];
@@ -190,6 +237,21 @@ export async function readSessionJsonlToAcpUpdates(
   return convertJsonlLinesToAcpUpdates(sliced);
 }
 
+function readTailLines(filePath: string, maxBytes = 512 * 1024): string[] {
+  const fd = openSync(filePath, "r");
+  try {
+    const size = fstatSync(fd).size;
+    const length = Math.min(size, maxBytes);
+    const buffer = Buffer.allocUnsafe(length);
+    readSync(fd, buffer, 0, length, size - length);
+    const lines = buffer.toString("utf8").split("\n");
+    if (size > length) lines.shift();
+    return lines.filter((line) => line.trim().length > 0);
+  } finally {
+    closeSync(fd);
+  }
+}
+
 /**
  * Extracts ONLY the latest conversation turn (from the last user prompt to EOF).
  * Enables sub-10ms initial session open with zero lag.
@@ -198,10 +260,8 @@ export async function readSessionJsonlRecentTurn(
   filePath: string,
   minTimestampMs?: number,
 ): Promise<AcpEventPayload[]> {
-  const content = readFileSync(filePath, "utf8");
-  const rawLines = content.split("\n");
   const lines = filterLinesSince(
-    rawLines.filter((l) => l.trim().length > 0),
+    readTailLines(filePath),
     minTimestampMs,
   );
 
@@ -209,7 +269,8 @@ export async function readSessionJsonlRecentTurn(
   for (let i = lines.length - 1; i >= 0; i--) {
     try {
       const o = JSON.parse(lines[i]);
-      if (o.type === "message" && o.message?.role === "user") {
+      if ((o.type === "message" && o.message?.role === "user")
+          || (o.type === "response_item" && o.payload?.type === "message" && o.payload?.role === "user")) {
         lastUserIdx = i;
         break;
       }
@@ -230,11 +291,15 @@ export async function readSessionJsonlFullHistory(
   filePath: string,
   minTimestampMs?: number,
 ): Promise<AcpEventPayload[]> {
-  const content = readFileSync(filePath, "utf8");
-  const rawLines = content.split("\n");
-  const lines = filterLinesSince(
-    rawLines.filter((l) => l.trim().length > 0),
-    minTimestampMs,
-  );
-  return convertJsonlLinesToAcpUpdates(lines);
+  const updates: AcpEventPayload[] = [];
+  const input = createReadStream(filePath, { encoding: "utf8" });
+  const lines = readline.createInterface({ input, crlfDelay: Infinity });
+  for await (const line of lines) {
+    if (!line.trim()) continue;
+    if (minTimestampMs !== undefined && filterLinesSince([line], minTimestampMs).length === 0) continue;
+    try {
+      updates.push(...convertJsonlRecordToAcpUpdates(JSON.parse(line)));
+    } catch { /* incomplete record */ }
+  }
+  return updates;
 }

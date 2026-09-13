@@ -4,7 +4,20 @@
   "bin": {
     "nexus": "./dist/cli.mjs"
   },
+  "engines": {
+    "node": ">=20"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc && node scripts/copy-assets.mjs",
+    "prepack": "npm run build"
+  },
   "dependencies": {
-    "@agentclientprotocol/sdk": "^0.21.1"
+    "@agentclientprotocol/sdk": "^0.21.1",
+    "tree-kill": "^1.2.2",
+    "ws": "^8.21.3"
   }
 }

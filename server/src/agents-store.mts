@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync, unlinkSync, chmodSync } from "node:fs";
 import path from "node:path";
 import { homedir } from "node:os";
-import { getRegistryAgent, resolveAgentCommand, getAgentDisplayName } from "./registry/registry.mjs";
+import { getRegistryAgent, resolveAgentCommand, getAgentDisplayName, type AgentCapabilities } from "./registry/registry.mjs";
 
 // ── Types ─────────────────────────────────────────────────────────────
 
@@ -37,6 +37,24 @@ function ensureDir(): void {
       // Unix 权限设置尽力而为，不阻断存储目录创建。
     }
   }
+}
+
+export function findExecutable(command: string): string | null {
+  const names = process.platform === "win32" && !path.extname(command)
+    ? (process.env.PATHEXT ?? ".EXE;.CMD;.BAT;.COM").split(";").map((ext) => command + ext.toLowerCase())
+    : [command];
+  if (path.isAbsolute(command) || command.includes("/") || command.includes("\\")) {
+    const resolved = path.resolve(command);
+    return existsSync(resolved) ? resolved : null;
+  }
+  for (const dir of (process.env.PATH ?? "").split(path.delimiter)) {
+    if (!dir) continue;
+    for (const name of names) {
+      const candidate = path.join(dir, name);
+      if (existsSync(candidate)) return candidate;
+    }
+  }
+  return null;
 }
 
 function isValidStringRecord(value: unknown): value is Record<string, string> {
@@ -134,7 +152,10 @@ function getDefaultInstallations(): InstalledAgent[] {
       installedAt: now,
       source: "registry" as const,
     }))
-    .filter((a) => getRegistryAgent(a.agentId) !== undefined);
+    .filter((a) => {
+      const launch = resolveAgentCommand(a.agentId);
+      return launch !== null && findExecutable(launch.cmd) !== null;
+    });
 }
 
 // ── Public API ────────────────────────────────────────────────────────
@@ -151,11 +172,18 @@ export function installAgent(
   agentId: string,
   source: "registry" | "custom" = "registry",
   options?: { command?: string; args?: string[]; env?: Record<string, string> },
-): void {
+): boolean {
+  if (source === "registry" && !getRegistryAgent(agentId)) {
+    throw new Error(`unknown registry agent: ${agentId}`);
+  }
+  const command = source === "custom" ? options?.command : resolveAgentCommand(agentId)?.cmd;
+  if (!command || !findExecutable(command)) {
+    throw new Error(`agent command not found in PATH: ${command || agentId}`);
+  }
   const agents = loadFromDisk().map((agent) => ({ ...agent }));
   if (agents.some((a) => a.agentId === agentId)) {
     console.log(`[agents-store] agent ${agentId} already installed`);
-    return;
+    return true;
   }
   const entry: InstalledAgent = {
     agentId,
@@ -168,7 +196,9 @@ export function installAgent(
     entry.customEnv = options?.env;
   }
   agents.push(entry);
-  if (saveToDisk(agents)) console.log(`[agents-store] installed agent: ${agentId}`);
+  if (!saveToDisk(agents)) return false;
+  console.log(`[agents-store] installed agent: ${agentId}`);
+  return true;
 }
 
 export function uninstallAgent(agentId: string): boolean {
@@ -208,6 +238,8 @@ export interface ResolvedAgentInfo {
   args: string[];
   env: Record<string, string>;
   source: "registry" | "custom";
+  executablePath: string | null;
+  capabilities: AgentCapabilities;
 }
 
 /**
@@ -229,6 +261,15 @@ export function resolveAgentInfo(agentId: string): ResolvedAgentInfo | null {
       args: installedAgent.customArgs || [],
       env: installedAgent.customEnv || {},
       source: "custom",
+      executablePath: findExecutable(installedAgent.customCommand),
+      capabilities: {
+        nativeAcp: true,
+        herdr: false,
+        structuredHistory: false,
+        modelSelection: true,
+        modeSelection: true,
+        authentication: true,
+      },
     };
   }
 
@@ -244,6 +285,8 @@ export function resolveAgentInfo(agentId: string): ResolvedAgentInfo | null {
     args: resolved.args,
     env: { ...(resolved.env || {}), ...(installedAgent.customEnv || {}) },
     source: "registry",
+    executablePath: findExecutable(resolved.cmd),
+    capabilities: getRegistryAgent(agentId)!.capabilities,
   };
 }
 

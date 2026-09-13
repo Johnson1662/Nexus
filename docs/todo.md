@@ -3,6 +3,12 @@
 ## 已经完成 (Completed)
 
 ### 架构与服务端深模块
+- [x] **单一 Agent 能力契约与就绪校验**：在 `agents.json` 与 `registry.mts` 建立 6 维单一能力契约（`nativeAcp`、`herdr`、`structuredHistory`、`modelSelection`、`modeSelection`、`authentication`），并在安装和启动时强制验证可执行文件就绪与原生 ACP 传输可用性。
+- [x] **双后端生命周期隔离与精确解析**：分离 Herdr 终端分屏与 Native ACP 进程池生命周期，收紧 `/proc/<pid>/fd` 会话句柄匹配，停止假成功并接通终端阻塞按键交互（Y/N/Enter/Esc）。
+- [x] **ACP 认证交互与动态配置全链路**：接通 Agent 启动前认证（`authentication_required` / `authenticate` / `auth_result`）与运行时动态配置更新（`set_config` / `config_option_updated`），支持开关与下拉单选。
+- [x] **守护进程日志脱敏与大小限制**：实现 `log-governance.mts`，自动遮蔽 Bearer Token、密码与 API Key，并在启动与运行时自动轮转超限日志（5MB 上限）。
+- [x] **历史会话截断提示与平滑续载**：服务端实现 `load_history_page` 结合对话轮次边界回退切片，Flutter 端展示截断提示与加载更早记录按钮，避免超长巨型历史卡死手机。
+- [x] **通用无感伴侣模式 (Ambient Terminal Sync)**：实现独立于 Herdr 的多终端 Agent 自动感知。通过 `~/.nexus/ambient/sessions/` 跨平台私有注册目录、Loopback TCP 本地安全控制通道与 OMP 扩展自动安装，支持用户直接在系统终端运行 `omp` 时手机端自动置顶发现、富文本卡片双向监视、Prompt 注入与取消，且 npm 包独立封装资产与依赖。
 - [x] **统一 Session ID 架构**：移除 `bridgeSessionId` (`acp-timestamp-...`)，全链路（Flutter App → WebSocket 协议 → Node.js Bridge → ACP Agent）统一使用 Agent 原生 `sessionId`（UUID / `ses_...`）。
 - [x] **Herdr 原生 ACP 结构化桥接**：实现 `HerdrAdapter` 四级活跃句柄解析（直接读取 `/proc/<pid>/fd`），将 Herdr 终端分屏以原生 ACP 协议输出（Thinking 折叠、ToolCallCard 与 Markdown），消除 TUI 乱码与字符滞后。
 - [x] **两阶段秒开与零抖动平滑加载**：首屏以 `readSessionJsonlRecentTurn` 实现 <5ms 当前轮次秒开；后台静默拉取全量历史（`history_full`）；列表启用 `ListView(reverse: true)` 底部物理锚定，彻底消除因高度计算触发 `jumpTo` 导致的画面闪烁与抖动。

@@ -18,6 +18,12 @@ export async function createTempClient(
   if (!launch || !launch.cmd || launch.args.some(arg => typeof arg !== "string")) {
     throw new Error(`invalid or unavailable agent: ${agent}`);
   }
+  if (!launch.capabilities.nativeAcp) {
+    throw new Error(`agent does not provide native ACP transport: ${agent}`);
+  }
+  if (!launch.executablePath) {
+    throw new Error(`agent command not found in PATH: ${launch.cmd}`);
+  }
   const ANYWHERE_DIR = join(homedir(), ".nexus");
   mkdirSync(ANYWHERE_DIR, { recursive: true, mode: 0o700 });
   const requestedCwd = resolveWorkspacePath(cwd);
@@ -55,7 +61,7 @@ export async function createTempClient(
     proc.once("error", onProcessError);
   });
   const timeout = new Promise<never>((_resolve, reject) => {
-    timer = setTimeout(() => reject(new Error("agent initialize timeout")), 30_000);
+    timer = setTimeout(() => reject(new Error("agent initialize timeout")), 8_000);
   });
   try {
     await Promise.race([client.initialize(), processError, timeout]);

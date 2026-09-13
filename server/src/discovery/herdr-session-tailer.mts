@@ -2,6 +2,7 @@ import fs from "node:fs";
 import type { WebSocket } from "ws";
 import { convertJsonlRecordToAcpUpdates } from "./herdr-acp-converter.mjs";
 import { HerdrAdapter } from "./herdr-adapter.mjs";
+import { getAmbientSession } from "./ambient-session.mjs";
 
 export interface TailerEventCallback {
   (message: Record<string, unknown>, senderWs?: WebSocket): void;
@@ -21,11 +22,23 @@ export class HerdrSessionTailer {
   private lastInjectedPrompt: string | null = null;
   private lastInjectedWs: WebSocket | null = null;
   private isDestroyed = false;
+  private trackHerdrStatus = true;
+  private lastAgentStatus = "unknown";
+  private checkingStatus = false;
+  private awaitingAgentStart = false;
+  private promptAcceptedAt = 0;
 
-  constructor(filePath: string, sessionId: string, paneId: string, initialOffset?: number) {
+  constructor(
+    filePath: string,
+    sessionId: string,
+    paneId: string,
+    initialOffset?: number,
+    trackHerdrStatus = true,
+  ) {
     this.filePath = filePath;
     this.sessionId = sessionId;
     this.paneId = paneId;
+    this.trackHerdrStatus = trackHerdrStatus;
 
     if (typeof initialOffset === "number") {
       this.byteOffset = initialOffset;
@@ -46,6 +59,8 @@ export class HerdrSessionTailer {
     this.lastInjectedPrompt = text.trim();
     this.lastInjectedWs = ws ?? null;
     this.isWorking = true;
+    this.awaitingAgentStart = true;
+    this.promptAcceptedAt = Date.now();
   }
 
   markWorking(): void {
@@ -155,6 +170,7 @@ export class HerdrSessionTailer {
         const updates = convertJsonlRecordToAcpUpdates(record);
         if (updates.length > 0) {
           this.isWorking = true;
+          this.awaitingAgentStart = false;
           for (const update of updates) {
             this.broadcast({
               type: "agent_event",
@@ -170,27 +186,42 @@ export class HerdrSessionTailer {
   }
 
   private async checkAgentStatus(): Promise<void> {
-    if (this.isDestroyed || !this.isWorking) return;
+    if (this.isDestroyed || !this.trackHerdrStatus || this.checkingStatus) return;
+    this.checkingStatus = true;
 
     try {
-      const agents = await HerdrAdapter.listAgents();
-      const targetPane = this.paneId.replace(/^herdr:/, "");
-      const current = agents.find((a) => a.pane_id === targetPane);
-
-      if (current) {
-        if (current.agent_status === "idle" || current.agent_status === "done") {
-          // Agent finished turn
-          this.isWorking = false;
+      const currentStatus = this.sessionId.startsWith("ambient:")
+        ? getAmbientSession(this.sessionId)?.status
+        : (await HerdrAdapter.listAgents())
+          .find((a) => a.pane_id === this.paneId.replace(/^herdr:/, ""))
+          ?.agent_status;
+      if (currentStatus) {
+        if (currentStatus !== this.lastAgentStatus) {
+          this.lastAgentStatus = currentStatus;
           this.broadcast({
-            type: "turn_ended",
+            type: "session_status",
             sessionId: this.sessionId,
+            status: currentStatus,
           });
-        } else if (current.agent_status === "working") {
+        }
+        if (currentStatus === "idle" || currentStatus === "done") {
+          if (this.awaitingAgentStart && Date.now() - this.promptAcceptedAt < 3000) return;
+          if (this.isWorking) {
+          // Agent finished turn
+            this.isWorking = false;
+            this.broadcast({ type: "turn_ended", sessionId: this.sessionId });
+          }
+        } else if (currentStatus === "working" || currentStatus === "running") {
           this.isWorking = true;
+          this.awaitingAgentStart = false;
+        } else if (currentStatus === "blocked" || currentStatus === "waiting_input") {
+          this.awaitingAgentStart = false;
         }
       }
     } catch {
       // Ignore status check errors
+    } finally {
+      this.checkingStatus = false;
     }
   }
 
@@ -239,10 +270,11 @@ export class HerdrTailerRegistry {
     sessionId: string,
     paneId: string,
     initialOffset?: number,
+    trackHerdrStatus = true,
   ): HerdrSessionTailer {
     let tailer = this.tailers.get(sessionId);
     if (!tailer) {
-      tailer = new HerdrSessionTailer(filePath, sessionId, paneId, initialOffset);
+      tailer = new HerdrSessionTailer(filePath, sessionId, paneId, initialOffset, trackHerdrStatus);
       this.tailers.set(sessionId, tailer);
     }
     return tailer;

@@ -58,19 +58,20 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Color _phaseDotColor(HostPhase phase, BuildContext context) {
+    final fg = AppColors.foregroundCtx(context);
+    final muted = AppColors.foregroundMutedCtx(context);
     switch (phase) {
       case HostPhase.online:
       case HostPhase.syncing:
-        return AppColors.success;
+        return fg;
       case HostPhase.connecting:
       case HostPhase.waitingHost:
       case HostPhase.reconnecting:
-        return AppColors.warning;
+        return muted;
       case HostPhase.error:
-        return AppColors.error;
       case HostPhase.offline:
       case HostPhase.unknown:
-        return AppColors.foregroundLight;
+        return muted.withValues(alpha: 0.35);
     }
   }
 
@@ -282,6 +283,8 @@ class _SettingsPageState extends State<SettingsPage> {
     final phase = runtimeStore.getDevicePhase(device.hostId);
     final runtimeState = runtimeStore.getStatusOrNull(device.hostId);
     final isExpanded = _expandedHostIds.contains(device.hostId);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final fg = AppColors.foregroundCtx(context);
     final dotColor = _phaseDotColor(phase, context);
     final endpoint = device.urls.isEmpty
         ? '未配置连接地址'
@@ -296,8 +299,8 @@ class _SettingsPageState extends State<SettingsPage> {
       background: Container(
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.only(right: AppSpacing.lg),
-        color: AppColors.error,
-        child: const Icon(Icons.delete_outline, color: Colors.white),
+        color: isDark ? const Color(0xFF2C2C2E) : const Color(0xFFE5E5EA),
+        child: Icon(Icons.delete_outline, color: fg),
       ),
       confirmDismiss: (_) async {
         if (!mounted) return false;
@@ -325,9 +328,9 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
               TextButton(
                 onPressed: () => Navigator.pop(ctx, true),
-                child: const Text(
+                child: Text(
                   '删除',
-                  style: TextStyle(color: AppColors.error),
+                  style: TextStyle(color: fg, fontWeight: FontWeight.bold),
                 ),
               ),
             ],
@@ -744,14 +747,14 @@ class _SettingsPageState extends State<SettingsPage> {
   // ── Section 3: Preferences ──
 
   Widget _buildPreferencesSection(BuildContext context) {
-    final dark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Container(
       decoration: BoxDecoration(
         color: AppColors.surfaceCtx(context),
         borderRadius: BorderRadius.circular(AppRadius.lg),
         border: Border.all(
-          color: dark
+          color: isDark
               ? Colors.white.withOpacity(0.06)
               : Colors.black.withOpacity(0.05),
           width: 0.8,
@@ -780,6 +783,9 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
             ),
             activeColor: AppColors.foregroundCtx(context),
+            activeTrackColor: isDark ? Colors.white38 : Colors.black26,
+            inactiveThumbColor: isDark ? const Color(0xFF636366) : const Color(0xFFAEAEB2),
+            inactiveTrackColor: isDark ? const Color(0xFF2C2C2E) : const Color(0xFFE5E5EA),
             secondary: Icon(
               Icons.psychology_outlined,
               size: 20,
@@ -810,6 +816,9 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
             ),
             activeColor: AppColors.foregroundCtx(context),
+            activeTrackColor: isDark ? Colors.white38 : Colors.black26,
+            inactiveThumbColor: isDark ? const Color(0xFF636366) : const Color(0xFFAEAEB2),
+            inactiveTrackColor: isDark ? const Color(0xFF2C2C2E) : const Color(0xFFE5E5EA),
             secondary: Icon(
               Icons.build_outlined,
               size: 20,
@@ -842,6 +851,9 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
             ),
             activeColor: AppColors.foregroundCtx(context),
+            activeTrackColor: isDark ? Colors.white38 : Colors.black26,
+            inactiveThumbColor: isDark ? const Color(0xFF636366) : const Color(0xFFAEAEB2),
+            inactiveTrackColor: isDark ? const Color(0xFF2C2C2E) : const Color(0xFFE5E5EA),
             secondary: Icon(
               Icons.terminal_outlined,
               size: 20,
@@ -929,9 +941,10 @@ class _SettingsPageState extends State<SettingsPage> {
     final selected = _herdrCreationMode == mode;
     final fg = AppColors.foregroundCtx(context);
     final muted = AppColors.foregroundMutedCtx(context);
-    final border = selected ? AppColors.accent : AppColors.borderCtx(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final border = selected ? fg : AppColors.borderCtx(context);
     final bg = selected
-        ? AppColors.accent.withAlpha(20)
+        ? (isDark ? Colors.white.withValues(alpha: 0.12) : Colors.black.withValues(alpha: 0.06))
         : AppColors.surface2Ctx(context).withAlpha(40);
 
     return InkWell(
@@ -963,7 +976,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   ),
                 ),
                 if (selected)
-                  Icon(Icons.check_circle, size: 16, color: AppColors.accent),
+                  Icon(Icons.check_circle_rounded, size: 16, color: fg),
               ],
             ),
             const SizedBox(height: 2),
@@ -972,7 +985,7 @@ class _SettingsPageState extends State<SettingsPage> {
               style: TextStyle(
                 fontFamily: 'monospace',
                 fontSize: 10,
-                color: selected ? AppColors.accent : muted,
+                color: selected ? fg : muted,
               ),
             ),
             const SizedBox(height: 4),

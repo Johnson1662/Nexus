@@ -23,6 +23,8 @@ import { createDaemonShutdownController } from "./shutdown.mjs";
 import { startControlServer } from "./control-server.mjs";
 import { sessionManager } from "../session-manager.mjs";
 import type { DaemonLockPayload } from "./pid-lock.mjs";
+import { ensureOmpAmbientIntegration } from "../discovery/ambient-session.mjs";
+import { installLogSanitizer, rotateLogFile } from "./log-governance.mjs";
 
 // ── Paths ─────────────────────────────────────────────────────────
 
@@ -52,6 +54,7 @@ export interface DaemonStatus {
 
 export async function startDaemon(config: DaemonStartConfig): Promise<void> {
   ensureDataDir();
+  ensureOmpAmbientIntegration();
 
   const shutdown = createDaemonShutdownController();
 
@@ -72,6 +75,10 @@ export async function startDaemon(config: DaemonStartConfig): Promise<void> {
   const daemonToken = randomUUID();
   const startedAt = Date.now();
   chmodSync(DATA_DIR, 0o700);
+  const uninstallSanitizer = installLogSanitizer([daemonToken]);
+  const logCheckInterval = setInterval(() => {
+    rotateLogFile(join(DATA_DIR, "daemon.log"));
+  }, 10 * 60 * 1000);
   // Write token so cli.mjs can authenticate
   import('fs/promises').then(fs => fs.writeFile(TOKEN_FILE, daemonToken, 'utf-8')).catch(() => {});
 
@@ -103,6 +110,8 @@ export async function startDaemon(config: DaemonStartConfig): Promise<void> {
   // 6. Register cleanup tasks
   shutdown.registerCleanupTask(async () => {
     console.log("[nexus] Stopping bridge server...");
+    clearInterval(logCheckInterval);
+    uninstallSanitizer();
     await app.stop();
   });
   shutdown.registerCleanupTask(async () => {

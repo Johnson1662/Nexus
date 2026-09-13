@@ -40,7 +40,6 @@ class _ChatPageState extends State<ChatPage> {
   bool _scrollCallbackScheduled = false;
   String _lastScrollSignature = '';
   PendingPermission? _lastPermission;
-  bool _fileDrawerOpen = false;
 
   @override
   void initState() {
@@ -165,6 +164,13 @@ class _ChatPageState extends State<ChatPage> {
 
   void _openConfigPanel() {
     if (!mounted) return;
+    final sessionId = context.read<ChatProvider>().state.sessionId;
+    if (sessionId.startsWith('herdr:') || sessionId.startsWith('ambient:')) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('模型与模式由终端 Agent 管理')),
+      );
+      return;
+    }
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -230,9 +236,7 @@ class _ChatPageState extends State<ChatPage> {
     return Scaffold(
       resizeToAvoidBottomInset: true,
       appBar: _buildAppBar(context, state, hostStore, hostKey, phase),
-      body: Stack(
-        children: [
-          Column(
+      body: Column(
         children: [
           // Reconnect banner
           if (phase == 'offline' || phase == 'reconnecting' || phase == 'error')
@@ -247,6 +251,34 @@ class _ChatPageState extends State<ChatPage> {
                   chatProvider.connectBest(candidates, hostKey: hostKey);
                 }
               },
+            ),
+
+          if (state.errorMessage.isNotEmpty)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.only(
+                left: AppSpacing.md,
+                top: AppSpacing.xs,
+                bottom: AppSpacing.xs,
+              ),
+              color: AppColors.error.withOpacity(0.08),
+              child: Row(
+                children: [
+                  const Icon(Icons.error_outline, size: 16, color: AppColors.error),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: Text(
+                      state.errorMessage,
+                      style: const TextStyle(fontSize: AppFontSize.sm, color: AppColors.error),
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: '关闭',
+                    onPressed: chatProvider.clearError,
+                    icon: const Icon(Icons.close, size: 16),
+                  ),
+                ],
+              ),
             ),
 
           // ACP 上下文重建提示：保持显示到切换/新建会话。
@@ -273,6 +305,21 @@ class _ChatPageState extends State<ChatPage> {
                   ),
                 ],
               ),
+            ),
+
+          if (state.historyHasMore || state.loadingOlderHistory)
+            TextButton.icon(
+              onPressed: state.loadingOlderHistory ? null : chatProvider.requestOlderHistory,
+              icon: state.loadingOlderHistory
+                  ? const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.expand_less, size: 18),
+              label: Text(state.loadingOlderHistory
+                  ? '正在加载更早记录'
+                  : '加载更早记录（已载入 ${state.historyTotal - state.historyOffset}/${state.historyTotal}）'),
             ),
 
           // Chat content
@@ -325,6 +372,29 @@ class _ChatPageState extends State<ChatPage> {
           ),
 
           // Input bar (always at bottom)
+          if (state.terminalBlocked && state.sessionId.startsWith('herdr:'))
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+              child: Row(
+                children: [
+                  Text('终端等待输入', style: TextStyle(
+                    fontSize: AppFontSize.xs,
+                    color: AppColors.foregroundMutedCtx(context),
+                  )),
+                  const Spacer(),
+                  for (final action in const [
+                    ('Y', 'y'),
+                    ('N', 'n'),
+                    ('Enter', 'enter'),
+                    ('Esc', 'esc'),
+                  ])
+                    TextButton(
+                      onPressed: () => chatProvider.interactHerdrBlocked(action.$2),
+                      child: Text(action.$1),
+                    ),
+                ],
+              ),
+            ),
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.only(bottom: AppSpacing.sm),
@@ -333,6 +403,9 @@ class _ChatPageState extends State<ChatPage> {
                 showCancel: state.turnActive,
                 configLabel: _configLabel(state),
                 availableCommands: state.availableCommands,
+                hintText: state.sessionId.startsWith('ambient:')
+                    ? '向终端发送指令...'
+                    : null,
                 onSend: (text) {
                   chatProvider.sendMessage(text);
                   _autoScrollToBottom();
@@ -346,9 +419,6 @@ class _ChatPageState extends State<ChatPage> {
           ),
         ],
       ),
-      _buildFileOverlay(context),
-    ],
-    )
     );
   }
 
@@ -430,8 +500,8 @@ class _ChatPageState extends State<ChatPage> {
             child: _roundIconButton(
               Icons.folder_open_rounded,
               () {
-                setState(() => _fileDrawerOpen = true);
                 context.read<ChatProvider>().requestWorkspaceFiles();
+                Navigator.pushNamed(context, '/workspace-files');
               },
               size: 34,
             ),
@@ -641,233 +711,6 @@ class _ChatPageState extends State<ChatPage> {
     );
   }
 
-  /// Right-side file manager — custom slide-in overlay (no Scaffold endDrawer,
-  /// so Flutter won't inject its own ≡ button). UI shell only; deferred.
-  static const double _filePanelWidth = 300;
-
-  Widget _buildFileOverlay(BuildContext context) {
-    return Stack(
-      children: [
-        AnimatedOpacity(
-          opacity: _fileDrawerOpen ? 1 : 0,
-          duration: const Duration(milliseconds: 200),
-          child: IgnorePointer(
-            ignoring: !_fileDrawerOpen,
-            child: GestureDetector(
-              onTap: () => setState(() => _fileDrawerOpen = false),
-              child: Container(color: Colors.black54),
-            ),
-          ),
-        ),
-        AnimatedPositioned(
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeOut,
-          right: _fileDrawerOpen ? 0 : -_filePanelWidth,
-          top: 0,
-          bottom: 0,
-          width: _filePanelWidth,
-          child: _buildFilePanel(context),
-        ),
-      ],
-    );
-  }
-
-  /// File manager panel — real workspace file browser with git diff.
-  Widget _buildFilePanel(BuildContext context) {
-    final dark = Theme.of(context).brightness == Brightness.dark;
-    final provider = context.watch<ChatProvider>();
-    final state = provider.state;
-    final fg = AppColors.foregroundCtx(context);
-    final muted = AppColors.foregroundMutedCtx(context);
-
-    // Build git-status-aware file list
-    final changedFiles = state.workspaceFiles
-        .where((f) => f['status'] != null && (f['status'] as String).isNotEmpty)
-        .toList();
-    final allFiles = state.workspaceFiles;
-
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surfaceElevatedCtx(context),
-        borderRadius: const BorderRadius.horizontal(left: Radius.circular(AppRadius.xl)),
-        boxShadow: [
-          BoxShadow(
-            color: dark ? const Color(0x40000000) : const Color(0x20000000),
-            blurRadius: 16,
-            offset: const Offset(-4, 0),
-          ),
-        ],
-      ),
-      child: SafeArea(
-        child: Column(
-          children: [
-            // Header
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
-              child: Row(
-                children: [
-                  if (state.selectedFilePath != null)
-                    _roundIconButton(Icons.arrow_back_rounded, () {
-                      provider.requestWorkspaceFiles();
-                    })
-                  else
-                    Icon(Icons.folder_outlined, size: 20, color: fg),
-                  const SizedBox(width: AppSpacing.sm),
-                  Expanded(
-                    child: Text(
-                      state.selectedFilePath != null
-                          ? state.selectedFilePath!.split('/').last
-                          : '文件浏览器',
-                      style: TextStyle(fontSize: AppFontSize.lg, fontWeight: FontWeight.w600, color: fg),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  _roundIconButton(Icons.close_rounded, () => setState(() => _fileDrawerOpen = false)),
-                ],
-              ),
-            ),
-            Divider(color: AppColors.borderCtx(context), height: 0.5),
-
-            // Content
-            Expanded(
-              child: _buildFileContent(context, provider, state, changedFiles, allFiles, fg, muted),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildFileContent(
-    BuildContext context,
-    ChatProvider provider,
-    ChatState state,
-    List<Map<String, dynamic>> changedFiles,
-    List<Map<String, dynamic>> allFiles,
-    Color fg,
-    Color muted,
-  ) {
-    // Show diff view for selected file
-    if (state.selectedFilePath != null) {
-      if (state.fileDiff != null) {
-        return ListView(
-          padding: const EdgeInsets.all(AppSpacing.md),
-          children: [
-            // File info
-            Container(
-              padding: const EdgeInsets.all(AppSpacing.sm),
-              margin: const EdgeInsets.only(bottom: AppSpacing.md),
-              decoration: BoxDecoration(
-                color: Theme.of(context).brightness == Brightness.dark
-                    ? Colors.white10 : Colors.black.withOpacity(0.04),
-                borderRadius: BorderRadius.circular(AppRadius.sm),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.insert_drive_file_outlined, size: 16, color: muted),
-                  const SizedBox(width: AppSpacing.xs),
-                  Expanded(
-                    child: Text(state.selectedFilePath!, style: TextStyle(fontSize: AppFontSize.xs, color: muted)),
-                  ),
-                  TextButton.icon(
-                    icon: Icon(Icons.history, size: 14, color: fg),
-                    label: Text('历史', style: TextStyle(fontSize: AppFontSize.xs, color: fg)),
-                    onPressed: () => provider.requestFileLog(state.selectedFilePath!),
-                  ),
-                ],
-              ),
-            ),
-            // Git log (if loaded)
-            if (state.fileLogEntries.isNotEmpty) ...[
-              Padding(
-                padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-                child: Text('最近提交', style: TextStyle(fontSize: AppFontSize.sm, fontWeight: FontWeight.w600, color: fg)),
-              ),
-              ...state.fileLogEntries.take(5).map((e) => Container(
-                    padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
-                    margin: const EdgeInsets.only(bottom: AppSpacing.xxs),
-                    child: Row(
-                      children: [
-                        Text(e['hash'] as String? ?? '', style: TextStyle(fontSize: AppFontSize.xxs, color: AppColors.accent, fontFamily: 'monospace')),
-                        const SizedBox(width: AppSpacing.sm),
-                        Expanded(child: Text(e['message'] as String? ?? '', style: TextStyle(fontSize: AppFontSize.xxs, color: fg), maxLines: 1, overflow: TextOverflow.ellipsis)),
-                        Text(e['date'] as String? ?? '', style: TextStyle(fontSize: AppFontSize.xxs, color: muted)),
-                      ],
-                    ),
-                  )),
-              const Divider(),
-            ],
-            // Diff content
-            if (state.fileDiff!.isNotEmpty)
-              Text(
-                state.fileDiff!,
-                style: TextStyle(fontSize: AppFontSize.xxs, color: fg, fontFamily: 'monospace', height: 1.5),
-              )
-            else
-              Padding(
-                padding: const EdgeInsets.all(AppSpacing.md),
-                child: Text('此文件无变更内容', style: TextStyle(fontSize: AppFontSize.sm, color: muted)),
-              ),
-          ],
-        );
-      }
-      // Loading diff
-      return const Center(child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2)));
-    }
-
-    // File list
-    if (state.loadingFiles) {
-      return const Center(child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2)));
-    }
-
-    if (allFiles.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.folder_open_outlined, size: 40, color: muted),
-            const SizedBox(height: AppSpacing.md),
-            Text('暂无文件', style: TextStyle(fontSize: AppFontSize.base, color: muted)),
-          ],
-        ),
-      );
-    }
-
-    return ListView.builder(
-      padding: const EdgeInsets.all(AppSpacing.sm),
-      itemCount: allFiles.length,
-      itemBuilder: (ctx, i) {
-        final f = allFiles[i];
-        final path = f['path'] as String? ?? '';
-        final name = f['name'] as String? ?? '';
-        final status = f['status'] as String? ?? '';
-        final isDir = f['type'] == 'directory';
-
-        // Skip directories in list view
-        if (isDir) return const SizedBox.shrink();
-
-        IconData statusIcon;
-        Color statusColor;
-        switch (status) {
-          case 'M': statusIcon = Icons.edit_outlined; statusColor = const Color(0xFFE6A817); break;
-          case 'A': statusIcon = Icons.add_circle_outline; statusColor = const Color(0xFF2DA44E); break;
-          case 'D': statusIcon = Icons.remove_circle_outline; statusColor = const Color(0xFFCF222E); break;
-          case '??': statusIcon = Icons.help_outline; statusColor = muted; break;
-          default: statusIcon = Icons.insert_drive_file_outlined; statusColor = muted; break;
-        }
-
-        return ListTile(
-          dense: true,
-          leading: Icon(statusIcon, size: 16, color: statusColor),
-          title: Text(name, style: TextStyle(fontSize: AppFontSize.sm, color: fg)),
-          subtitle: path.isNotEmpty ? Text(path, style: TextStyle(fontSize: AppFontSize.xxs, color: muted), maxLines: 1, overflow: TextOverflow.ellipsis) : null,
-          onTap: () => provider.requestFileDiff(path),
-        );
-      },
-    );
-  }
-
   // ── List item builder ──
 
   Widget _buildItem(BuildContext context, ChatState state, _ListItem item) {
@@ -959,12 +802,39 @@ class _ChatPageState extends State<ChatPage> {
   /// Label for the model chip in the input bar: the current Model name,
   /// falling back to the Agent name, then a neutral prompt.
   String _configLabel(ChatState state) {
+    // 1. Prioritize the session's actual current model ID if known
+    if (state.sessionCurrentModelId.isNotEmpty) {
+      final currentId = state.sessionCurrentModelId;
+      // First check if any loaded model matches this real ID
+      for (final m in state.models) {
+        if (m.id == currentId ||
+            m.modelId == currentId ||
+            m.id.endsWith('/$currentId') ||
+            currentId.endsWith('/${m.id}') ||
+            m.name.toLowerCase() == currentId.toLowerCase()) {
+          return m.name;
+        }
+      }
+      // If not in the list, format the raw ID directly (e.g. "google-antigravity/gemini-3.8-flash" -> "Gemini 3.8 Flash")
+      final simple = currentId.contains('/') ? currentId.split('/').last : currentId;
+      final formatted = simple
+          .split('-')
+          .map((w) => w.isNotEmpty ? '${w[0].toUpperCase()}${w.substring(1)}' : '')
+          .join(' ');
+      return formatted.isNotEmpty ? formatted : simple;
+    }
+
+    // 2. Fall back to user-selected model from the models list
     if (state.modelIndex >= 0 &&
         state.modelIndex < state.models.length &&
         state.models[state.modelIndex].name.isNotEmpty) {
       return state.models[state.modelIndex].name;
     }
-    if (state.selectedAgentName.isNotEmpty) return state.selectedAgentName;
+
+    // 3. Fall back to Agent display name
+    if (state.selectedAgentName.isNotEmpty) {
+      return AgentUtils.getDisplayName(state.selectedAgentName);
+    }
     return '选择模型';
   }
 

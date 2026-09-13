@@ -14,15 +14,32 @@ class HomePage extends StatefulWidget {
   State<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageState extends State<HomePage> {
+class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   bool _entered = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) setState(() => _entered = true);
+      if (mounted) {
+        setState(() => _entered = true);
+        _onRefresh();
+      }
     });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && mounted) {
+      _onRefresh();
+    }
   }
 
   // ── Helpers ──
@@ -97,7 +114,7 @@ class _HomePageState extends State<HomePage> {
         actions: [
           IconButton(
             icon: const Icon(Icons.more_horiz, size: 22),
-            onPressed: () => Navigator.pushNamed(context, '/settings'),
+            onPressed: () => Navigator.pushNamed(context, '/settings').then((_) => _onRefresh()),
             tooltip: '设置',
           ),
         ],
@@ -207,7 +224,7 @@ class _HomePageState extends State<HomePage> {
               ),
               const Spacer(),
               InkWell(
-                onTap: () => Navigator.pushNamed(context, '/workspace-list'),
+                onTap: () => Navigator.pushNamed(context, '/workspace-list').then((_) => _onRefresh()),
                 borderRadius: BorderRadius.circular(AppRadius.sm),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(
@@ -238,14 +255,6 @@ class _HomePageState extends State<HomePage> {
             ],
           ),
         ),
-        // Item 1: Quick Chat entry (matches home1.jpg)
-        _buildProjectRow(
-          context,
-          icon: Icons.chat_bubble_outline_rounded,
-          title: '聊天',
-          onTap: () => Navigator.pushNamed(context, '/chat'),
-        ),
-
         // Workspace folders list
         _buildWorkspaceCards(
           context,
@@ -368,7 +377,7 @@ class _HomePageState extends State<HomePage> {
         context,
         '/workspace-detail',
         arguments: {'name': name, 'path': path, 'workspaceId': workspaceId},
-      ),
+      ).then((_) => _onRefresh()),
     );
   }
 
@@ -415,10 +424,14 @@ class _HomePageState extends State<HomePage> {
 
     final filtered = sessions.where((s) {
       if (chatProvider.useHerdrBackend) {
-        return s.source == 'herdr';
+        return s.source == 'herdr' || s.sessionId.startsWith('herdr:');
       }
       if (s.source == 'herdr' || s.sessionId.startsWith('herdr:')) {
         return false;
+      }
+      // Ambient sessions always pass through without workspace restriction
+      if (s.source == 'ambient' || s.sessionId.startsWith('ambient:')) {
+        return true;
       }
       // If user hasn't added any workspace in non-Herdr mode, don't show random filesystem sessions (e.g. ~ or /tmp)
       if (validWorkspacePaths.isEmpty) {
@@ -438,6 +451,10 @@ class _HomePageState extends State<HomePage> {
       final aPinned = chatProvider.isPinned(a.sessionId);
       final bPinned = chatProvider.isPinned(b.sessionId);
       if (aPinned != bPinned) return aPinned ? -1 : 1;
+
+      final aAmbient = a.source == 'ambient' || a.sessionId.startsWith('ambient:');
+      final bAmbient = b.source == 'ambient' || b.sessionId.startsWith('ambient:');
+      if (aAmbient != bAmbient) return aAmbient ? -1 : 1;
 
       final aActive = a.status == 'running' || a.status == 'waiting_input';
       final bActive = b.status == 'running' || b.status == 'waiting_input';
@@ -495,7 +512,7 @@ class _HomePageState extends State<HomePage> {
                 onTap: () {
                   chatProvider.loadSession(s.sessionId,
                       agent: s.agent, cwd: s.cwd);
-                  Navigator.pushNamed(context, '/chat');
+                  Navigator.pushNamed(context, '/chat').then((_) => _onRefresh());
                 },
               )),
       ],
@@ -518,7 +535,7 @@ class _HomePageState extends State<HomePage> {
               shadowColor: const Color(0x141A1A2E),
               child: InkWell(
                 borderRadius: BorderRadius.circular(AppRadius.full),
-                onTap: () => Navigator.pushNamed(context, '/search'),
+                onTap: () => Navigator.pushNamed(context, '/search').then((_) => _onRefresh()),
                 child: Container(
                   height: 50,
                   padding: const EdgeInsets.only(left: AppSpacing.lg),
@@ -555,7 +572,7 @@ class _HomePageState extends State<HomePage> {
               borderRadius: BorderRadius.circular(AppRadius.full),
               onTap: () {
                 context.read<ChatProvider>().newChat();
-                Navigator.pushNamed(context, '/chat');
+                Navigator.pushNamed(context, '/chat').then((_) => _onRefresh());
               },
               child: Container(
                 height: 50,

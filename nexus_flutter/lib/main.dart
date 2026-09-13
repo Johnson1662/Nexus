@@ -17,9 +17,9 @@ import 'pages/workspace_detail_page.dart';
 import 'pages/workspace_list_page.dart';
 import 'pages/agent_detail_page.dart';
 import 'pages/agent_manage_page.dart';
-import 'pages/new_session_wizard.dart';
 import 'pages/search_page.dart';
 import 'pages/session_detail_page.dart';
+import 'pages/workspace_files_page.dart';
 import 'models/ws_protocol.dart';
 
 void main() {
@@ -164,8 +164,8 @@ class NexusApp extends StatelessWidget {
           }
           return const SizedBox();
         },
-        '/new-session': (context) => const NewSessionWizard(),
         '/search': (context) => const SearchPage(),
+        '/workspace-files': (context) => const WorkspaceFilesPage(),
       },
       ),
     );

@@ -5,7 +5,7 @@ export async function handleSetConfig(
   ws: WebSocket,
   sessionId: string,
   configId: string,
-  value: string,
+  value: string | boolean,
 ): Promise<void> {
   try {
     const result = await sessionManager.setConfig(sessionId, configId, value, ws);
@@ -13,7 +13,7 @@ export async function handleSetConfig(
       ws.send(JSON.stringify({
         type: "config_option_updated",
         sessionId,
-        configOptions: result,
+        configOptions: result.configOptions ?? [],
       }));
     } catch {}
   } catch (err: any) {

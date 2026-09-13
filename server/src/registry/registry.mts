@@ -4,6 +4,15 @@ import { fileURLToPath } from "node:url";
 
 // ── Types ─────────────────────────────────────────────────────────────
 
+export interface AgentCapabilities {
+  nativeAcp: boolean;
+  herdr: boolean;
+  structuredHistory: boolean;
+  modelSelection: boolean;
+  modeSelection: boolean;
+  authentication: boolean;
+}
+
 export interface RegistryAgent {
   id: string;
   name: string;
@@ -11,6 +20,7 @@ export interface RegistryAgent {
   version: string;
   repository?: string;
   icon?: string;
+  capabilities: AgentCapabilities;
   distribution: {
     direct?: {
       cmd: string;
@@ -57,12 +67,24 @@ function validLaunch(value: unknown): value is { cmd: string; args: string[]; en
   return validCommand(launch.cmd) && validArgs(launch.args);
 }
 
-function validRegistryAgent(value: unknown): value is RegistryAgent {
+export function isValidCapabilities(capabilities: unknown): capabilities is AgentCapabilities {
+  if (!capabilities || typeof capabilities !== "object") return false;
+  const c = capabilities as Partial<AgentCapabilities>;
+  return typeof c.nativeAcp === "boolean"
+    && typeof c.herdr === "boolean"
+    && typeof c.structuredHistory === "boolean"
+    && typeof c.modelSelection === "boolean"
+    && typeof c.modeSelection === "boolean"
+    && typeof c.authentication === "boolean";
+}
+
+export function validRegistryAgent(value: unknown): value is RegistryAgent {
   if (!value || typeof value !== "object") return false;
   const agent = value as Partial<RegistryAgent>;
   return typeof agent.id === "string" && agent.id.length > 0
     && typeof agent.name === "string"
-    && !!agent.distribution && typeof agent.distribution === "object";
+    && !!agent.distribution && typeof agent.distribution === "object"
+    && isValidCapabilities(agent.capabilities);
 }
 
 // ── Public API ────────────────────────────────────────────────────────
@@ -92,6 +114,10 @@ export function getRegistryAgent(agentId: string): RegistryAgent | undefined {
 export function listRegistryAgents(): RegistryAgent[] {
   if (!registry) loadRegistry();
   return registry!.agents;
+}
+
+export function getAgentCapabilities(agentId: string): AgentCapabilities | null {
+  return getRegistryAgent(agentId)?.capabilities ?? null;
 }
 
 /**

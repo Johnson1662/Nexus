@@ -10,6 +10,15 @@ export async function handleSetMode(
     try { ws.send(JSON.stringify({ type: "error", text: "sessionId and modeId are required" })); } catch {}
     return;
   }
+  if (sessionId.startsWith("herdr:") || sessionId.startsWith("ambient:")) {
+    try { ws.send(JSON.stringify({
+      type: "error",
+      sessionId,
+      code: "MODE_SWITCH_UNSUPPORTED",
+      text: "该终端会话的模式由 Agent 自身管理",
+    })); } catch {}
+    return;
+  }
   try {
     await sessionManager.setMode(sessionId, modeId, ws);
     try { ws.send(JSON.stringify({ type: "mode_set", sessionId, modeId })); } catch {}

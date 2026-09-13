@@ -149,10 +149,10 @@ class _WorkspaceDetailPageState extends State<WorkspaceDetailPage> {
     String workspaceId,
     String workspacePath,
   ) {
-    // ponytail: reuse the live agent list from list_agents instead of a hardcoded menu
-    final availableKinds = chatProvider.state.agentNames.isNotEmpty
-        ? chatProvider.state.agentNames
-        : chatProvider.state.registryAgents.map((a) => a.id.isNotEmpty ? a.id : a.name).toList();
+    final availableKinds = chatProvider.state.registryAgents
+        .where((a) => a.ready && a.capabilities.herdr)
+        .map((a) => a.id)
+        .toList();
     String selectedKind = availableKinds.contains('omp')
         ? 'omp'
         : (availableKinds.isNotEmpty ? availableKinds.first : '');

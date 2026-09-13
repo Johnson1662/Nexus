@@ -18,8 +18,8 @@ import { isAuthorizedHeader } from "./auth-token.mjs";
 // transport-level types, then routes everything else to the session dispatch.
 
 import { discoverAgents } from "./discovery/agents.mjs";
-import { loadRegistry, listRegistryAgents } from "./registry/registry.mjs";
-import { getInstalledAgents, installAgent, uninstallAgent } from "./agents-store.mjs";
+import { loadRegistry, listRegistryAgents, resolveAgentCommand } from "./registry/registry.mjs";
+import { findExecutable, getInstalledAgents, installAgent, uninstallAgent } from "./agents-store.mjs";
 import { handleStart } from "./handlers/start.mjs";
 import { handleInput } from "./handlers/input.mjs";
 import { handleCancel } from "./handlers/cancel.mjs";
@@ -27,7 +27,7 @@ import { handleListModels } from "./handlers/list-models.mjs";
 import { handleListSessions } from "./handlers/list-sessions.mjs";
 import { handleSetMode } from "./handlers/set-mode.mjs";
 import { handleSwitchModel } from "./handlers/switch-model.mjs";
-import { handleLoadSession } from "./handlers/load-session.mjs";
+import { handleLoadHistoryPage, handleLoadSession } from "./handlers/load-session.mjs";
 import { handleResumeSession } from "./handlers/resume-session.mjs";
 import { handleCloseSession } from "./handlers/close-session.mjs";
 import { handleSetConfig } from "./handlers/set-config.mjs";
@@ -41,6 +41,7 @@ import { setTitle as setSessionTitle } from "./session-titles.mjs";
 import { parseClientMessage, type JsonRecord } from "./protocol-validation.mjs";
 import { handleListHerdrWorkspaces, handleCreateHerdrAgent, handleFocusHerdrTarget, handleInteractHerdrBlocked } from "./handlers/herdr-actions.mjs";
 import { HerdrEventBus } from "./discovery/herdr-adapter.mjs";
+import { watchAmbientSessions, listAmbientSessions } from "./discovery/ambient-session.mjs";
 
 const PORT = parseInt(process.env.PORT || "", 10) || 12138;
 const HOST_ID = getOrCreateHostId();
@@ -225,11 +226,27 @@ function startSessionWatcher(wss: WebSocketServer): () => void {
     clearTimeout(debounceTimer);
     debounceTimer = setTimeout(flushPending, 500);
   });
+
+  const stopAmbientWatcher = watchAmbientSessions(() => {
+    const ambientSessions = listAmbientSessions();
+    if (ambientSessions.length === 0) return;
+    for (const amb of ambientSessions) {
+      pendingSessions.set(amb.sessionId, {
+        sessionId: amb.sessionId,
+        status: amb.status,
+        lastActivity: amb.updatedAt,
+      });
+    }
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(flushPending, 500);
+  });
+
   watcher.start();
   console.log("[server] session watcher started (5s interval, 500ms debounce)");
   return () => {
     clearTimeout(debounceTimer);
     pendingSessions.clear();
+    try { stopAmbientWatcher(); } catch {}
     watcher.stop();
   };
 }
@@ -387,7 +404,7 @@ export function handleIncomingConnection(transport: any, hostId: string = HOST_I
 
     switch (sessionMsg.type) {
       case "start":
-        console.log(`[server] handleStart agent="${sessionMsg.agent || "opencode"}" cwd="${sessionMsg.cwd || process.cwd()}"`);
+        console.log(`[server] handleStart agent="${sessionMsg.agent || "omp"}" cwd="${sessionMsg.cwd || process.cwd()}"`);
         // handleStart 到达 getOrCreate 的首个 await 前会同步设置 pendingCreates；WS 消息有序，下一条 Start 必然看到准入锁。
         if (sessionManager.hasPendingCreate(transport)) {
           // 拒绝重复 Start：已有创建任务进行中，不占准入锁也不发 start_ack
@@ -433,7 +450,13 @@ export function handleIncomingConnection(transport: any, hostId: string = HOST_I
       case "list_registry_agents": {
         try {
           loadRegistry();
-          const regAgents = listRegistryAgents();
+          const regAgents = listRegistryAgents().map((agent) => {
+            const launch = resolveAgentCommand(agent.id);
+            return {
+              ...agent,
+              ready: launch !== null && findExecutable(launch.cmd) !== null,
+            };
+          });
           console.log(`[server] → registry_agents_list (${regAgents.length} agents)`);
           transport.send(JSON.stringify({ type: "registry_agents_list", agents: regAgents }));
         } catch (e: any) {
@@ -529,18 +552,22 @@ export function handleIncomingConnection(transport: any, hostId: string = HOST_I
         break;
 
       case "load_session":
-        console.log(`[server] handleLoadSession target="${sessionMsg.sessionId?.slice(0, 20)}" agent="${sessionMsg.agent || "opencode"}"`);
+        console.log(`[server] handleLoadSession target="${sessionMsg.sessionId?.slice(0, 20)}" agent="${sessionMsg.agent || "omp"}"`);
         sessionManager.enqueueWsOp(transport, () => handleLoadSession(transport, sessionMsg));
         break;
 
+      case "load_history_page":
+        sessionManager.enqueueWsOp(transport, () => handleLoadHistoryPage(transport, sessionMsg));
+        break;
+
       case "resume_session":
-        console.log(`[server] handleResumeSession target="${sessionMsg.sessionId?.slice(0, 20)}" agent="${sessionMsg.agent || "opencode"}"`);
+        console.log(`[server] handleResumeSession target="${sessionMsg.sessionId?.slice(0, 20)}" agent="${sessionMsg.agent || "omp"}"`);
         sessionManager.enqueueWsOp(transport, () => handleResumeSession(transport, sessionMsg));
         break;
 
       case "close_session":
         console.log(`[server] handleCloseSession session="${sessionMsg.sessionId?.slice(0, 20)}"`);
-        if (sessionMsg.sessionId?.startsWith("herdr:")) {
+        if (sessionMsg.sessionId?.startsWith("herdr:") || sessionMsg.sessionId?.startsWith("ambient:")) {
           sessionManager.enqueueWsOp(transport, () => handleCloseSession(transport, sessionMsg.sessionId));
           break;
         }
@@ -616,7 +643,7 @@ export function handleIncomingConnection(transport: any, hostId: string = HOST_I
         const syncSessionId = sessionMsg.sessionId as string;
         const lastMessageId = sessionMsg.lastMessageId as string || '';
         console.log(`[server] sync_request session="${syncSessionId?.slice(0, 20)}" lastMessageId="${lastMessageId?.slice(0, 20)}"`);
-        if (syncSessionId.startsWith("herdr:")) {
+        if (syncSessionId.startsWith("herdr:") || syncSessionId.startsWith("ambient:")) {
           sessionManager.enqueueWsOp(transport, () => handleLoadSession(transport, { sessionId: syncSessionId }));
           break;
         }

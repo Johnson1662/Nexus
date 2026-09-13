@@ -3,6 +3,7 @@ import path from "node:path";
 import { homedir } from "node:os";
 import { existsSync, readdirSync, readlinkSync, statSync, realpathSync, readFileSync } from "node:fs";
 import { execSync } from "node:child_process";
+import { getAgentCapabilities } from "../registry/registry.mjs";
 
 // ── Types ─────────────────────────────────────────────────────────────
 
@@ -318,6 +319,8 @@ export class HerdrAdapter {
     paneId: string;
     title?: string;
     agentStatus?: HerdrAgentInfo["agent_status"];
+    createdAt?: number;
+    lastActivity?: number;
   } | null> {
     const targetPaneId = paneId.replace(/^herdr:/, "");
     const agents = await this.listAgents();
@@ -326,19 +329,29 @@ export class HerdrAdapter {
 
     const targetCwd = match.foreground_cwd || match.cwd;
     let sessionPath: string | undefined;
+    const supportsStructuredHistory = getAgentCapabilities(match.agent)?.structuredHistory === true;
+
+    // 1. Absolute highest priority: The .jsonl file actually held open by the active process in this pane!
+    // This circumvents stale or outdated agent_session metadata from Herdr IPC when sessions are resumed or switched.
+    const activeProcFile = supportsStructuredHistory
+      ? findActiveSessionFileForPane(targetPaneId, match.agent)
+      : null;
+    if (activeProcFile) {
+      sessionPath = activeProcFile;
+    }
 
     const ownSession = match.agent_session?.value as string | undefined;
-    if (match.agent_session?.kind === "id" && ownSession) {
+    if (supportsStructuredHistory && !sessionPath && match.agent_session?.kind === "id" && ownSession) {
       // Pane-attributed session id (no path): resolve to its file when present.
       const byId = findSessionFileById(ownSession);
       if (byId) sessionPath = byId;
-    } else if (match.agent_session?.kind === "path" && ownSession) {
+    } else if (supportsStructuredHistory && !sessionPath && match.agent_session?.kind === "path" && ownSession) {
       // Pane-attributed path is authoritative. When it is not on disk yet
       // (fresh agent, first flush pending) we MUST NOT fall through to
       // cwd-based guessing: in a shared cwd that would replay a stale
       // session into this pane. Terminal mode + upgrade poller cover the gap.
-      if (existsSync(ownSession)) sessionPath = ownSession;
-    } else if (targetCwd) {
+      if (existsSync(ownSession) && ownSession.endsWith(".jsonl")) sessionPath = ownSession;
+    } else if (supportsStructuredHistory && match.agent === "omp" && !sessionPath && targetCwd) {
       // No pane attribution at all: guess from cwd, but never reuse files
       // already attributed to OTHER panes sharing this cwd.
       const claimed = new Set(
@@ -371,11 +384,15 @@ export class HerdrAdapter {
       };
     }
 
+    let fileStat: ReturnType<typeof statSync> | null = null;
+    try { fileStat = sessionPath ? statSync(sessionPath) : null; } catch {}
     return {
       agent: match.agent,
       paneId: targetPaneId,
       title: match.terminal_title_stripped || match.terminal_title,
       agentStatus: match.agent_status,
+      createdAt: fileStat?.birthtimeMs || fileStat?.ctimeMs,
+      lastActivity: fileStat?.mtimeMs,
     };
   }
 }
@@ -495,6 +512,14 @@ export class HerdrStreamer {
           if (info && info.agent_status !== sess.lastStatus) {
             const oldStatus = sess.lastStatus;
             sess.lastStatus = info.agent_status;
+            const statusMsg = {
+              type: "session_status",
+              sessionId: `herdr:${sess.paneId}`,
+              status: info.agent_status,
+            };
+            for (const sub of sess.subscribers) {
+              try { sub(statusMsg); } catch { /* closed subscriber */ }
+            }
             if (oldStatus === "working" && (info.agent_status === "idle" || info.agent_status === "done")) {
               const turnEndMsg = {
                 type: "turn_ended",
@@ -574,6 +599,44 @@ function findActiveSessionFileForCwd(targetCwd: string, exclude?: Set<string>): 
               }
             } catch {}
           }
+        }
+      } catch {}
+    }
+  } catch {}
+  return null;
+}
+
+function isStructuredSessionPath(agent: string, candidate: string): boolean {
+  const resolved = path.resolve(candidate);
+  if (agent === "omp") {
+    return resolved.includes(path.join(".omp", "agent", "sessions")) || resolved.endsWith(".jsonl");
+  }
+  if (agent === "codex") {
+    return resolved.includes(path.join(".codex", "sessions"))
+      && path.basename(resolved).startsWith("rollout-");
+  }
+  return false;
+}
+
+function findActiveSessionFileForPane(targetPaneId: string, agent: string): string | null {
+  try {
+    const pids = readdirSync("/proc").filter((p) => /^\d+$/.test(p));
+    for (const pid of pids) {
+      try {
+        const environ = readFileSync(`/proc/${pid}/environ`, "utf8").split("\0");
+        const hasPane = environ.some((e) => e === `HERDR_PANE_ID=${targetPaneId}`);
+        if (!hasPane) continue;
+
+        const fdDir = `/proc/${pid}/fd`;
+        if (!existsSync(fdDir)) continue;
+        const fds = readdirSync(fdDir);
+        for (const fd of fds) {
+          try {
+            const link = readlinkSync(`${fdDir}/${fd}`);
+            if (link.endsWith(".jsonl") && existsSync(link) && isStructuredSessionPath(agent, link)) {
+              return link;
+            }
+          } catch {}
         }
       } catch {}
     }

@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { homedir } from "node:os";
 import type { WebSocket } from "ws";
 import { AcpClient, type AcpClientCallbacks } from "./acp/client.mjs";
-import type { RequestPermissionRequest, RequestPermissionResponse } from "@agentclientprotocol/sdk";
+import type { AuthMethod, RequestPermissionRequest, RequestPermissionResponse } from "@agentclientprotocol/sdk";
 import type { SessionState } from "./acp/types.mjs";
 import { resolveAgentInfo } from "./agents-store.mjs";
 import { resolveWorkspacePath } from "./path-utils.mjs";
@@ -60,10 +60,27 @@ export class AcpDeadlineError extends Error {
   }
 }
 
+export class AuthenticationRequiredError extends Error {
+  constructor(
+    public readonly sessionId: string,
+    public readonly authMethods: AuthMethod[],
+    cause: unknown,
+  ) {
+    super(cause instanceof Error ? cause.message : String(cause));
+    this.name = "AuthenticationRequiredError";
+  }
+}
+
 function resolveAgentLaunch(agent: string): { cmd: string; args: string[]; env: Record<string, string> } {
   const resolved = resolveAgentInfo(agent);
   if (!resolved || !resolved.cmd || !Array.isArray(resolved.args) || resolved.args.some(arg => typeof arg !== "string")) {
     throw new Error(`invalid or unavailable agent: ${agent}`);
+  }
+  if (!resolved.capabilities.nativeAcp) {
+    throw new Error(`agent does not provide native ACP transport: ${agent}`);
+  }
+  if (!resolved.executablePath) {
+    throw new Error(`agent command not found in PATH: ${resolved.cmd}`);
   }
   return { cmd: resolved.cmd, args: [...resolved.args], env: { ...resolved.env } };
 }
@@ -77,6 +94,11 @@ function spawnAgentProcess(agent: string, cwd: string): ChildProcess {
     shell: false,
     windowsHide: true,
   });
+}
+
+function isAuthenticationFailure(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /auth(?:entication|orization)?|log[ -]?in|credential|unauthorized|forbidden|\b40[13]\b/i.test(message);
 }
 
 export function withAcpDeadline<T>(
@@ -285,7 +307,7 @@ export class SessionManager {
 
   private async getOrCreateInternal(ws: WebSocket, params: CreateSessionParams): Promise<SessionState> {
     const {
-      agent = "opencode",
+      agent = "omp",
       cwd,
       model,
       mode = "create",
@@ -507,6 +529,13 @@ export class SessionManager {
         sessionId = result.sessionId;
       }
     } catch (err: unknown) {
+      if (!targetSessionId && client.authMethods.length > 0 && isAuthenticationFailure(err)) {
+        sessionId = `auth:${randomUUID()}`;
+        sess.sessionId = sessionId;
+        this.sessions.set(sessionId, sess);
+        this.ensureIdleCleanupRunning();
+        throw new AuthenticationRequiredError(sessionId, client.authMethods, err);
+      }
       // Tear down on any init/create/load/resume failure. In particular,
       // targetSessionId may already be present in the map as a partial
       // session, so leaving it there would poison the next request.
@@ -977,7 +1006,7 @@ export class SessionManager {
 
     console.log(`[session-manager] switching model for ${sessionId.slice(0, 20)} to ${model}`);
     await sess.client.setSessionModel(sess.sessionId, model);
-    setLastModel(sess.agent || "opencode", model);
+    setLastModel(sess.agent || "omp", model);
     console.log(`[session-manager] model switched for ${sessionId.slice(0, 20)} to ${model}`);
   }
 
@@ -985,7 +1014,7 @@ export class SessionManager {
    *  Set a session config option on a live ACP session.
    *  Returns the ACP result for the caller to forward to the client.
    */
-  async setConfig(sessionId: string, configId: string, value: string, ownerTransport: WebSocket): Promise<any> {
+  async setConfig(sessionId: string, configId: string, value: string | boolean, ownerTransport: WebSocket): Promise<any> {
     const sess = this.assertOwner(sessionId, ownerTransport);
     if (!sess.sessionId) throw new SessionOwnerError("SESSION_NOT_FOUND", "session is not initialized");
 
@@ -996,6 +1025,26 @@ export class SessionManager {
     );
     invalidateModelListCache(sess.agent || undefined);
     return result;
+  }
+
+  async authenticatePending(sessionId: string, methodId: string, ownerTransport: WebSocket): Promise<SessionState> {
+    const sess = this.assertOwner(sessionId, ownerTransport);
+    if (!sessionId.startsWith("auth:")) {
+      await sess.client.authenticate(methodId);
+      return sess;
+    }
+
+    await sess.client.authenticate(methodId);
+    const result = await withAcpDeadline(
+      "createSessionAfterAuth",
+      () => sess.client.createSession(sess.cwd),
+      this.acpSessionOperationTimeoutMs,
+    );
+    this.sessions.delete(sessionId);
+    sess.sessionId = result.sessionId;
+    this.sessions.set(sess.sessionId, sess);
+    this.updateSessionActivity(sess.sessionId);
+    return sess;
   }
 
   /** ── setMode ────────────────────────────────────────────────

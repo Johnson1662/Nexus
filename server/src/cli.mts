@@ -7,6 +7,7 @@ import { join } from 'path';
 import { homedir } from 'os';
 import { startDaemon, stopDaemon, getDaemonStatus } from './daemon/bootstrap.mjs';
 import { isDaemonRunning, readDaemonLock } from './daemon/pid-lock.mjs';
+import { rotateLogFile } from './daemon/log-governance.mjs';
 
 function printUsage(): void {
   console.log(`Usage: nexus <command> [options]
@@ -64,6 +65,7 @@ async function main(): Promise<void> {
         const logDir = join(homedir(), '.nexus');
         const logFile = join(logDir, 'daemon.log');
         mkdirSync(logDir, { recursive: true });
+        rotateLogFile(logFile);
         const fd = openSync(logFile, 'a');
 
         const child = spawn(process.execPath, [
@@ -152,6 +154,7 @@ async function main(): Promise<void> {
       const logDir = join(homedir(), '.nexus');
       const logFile = join(logDir, 'daemon.log');
       mkdirSync(logDir, { recursive: true });
+      rotateLogFile(logFile);
       const fd = openSync(logFile, 'a');
       const child = spawn(process.execPath, [
         process.argv[1], 'start', '--foreground', `--port=${nextBridgePort}`

@@ -37,6 +37,7 @@ class ChatState {
   String selectedAgentName = '';
   String agentType = '';
   List<String> agentNames = [];
+  List<AgentInfo> installedAgents = [];
   List<ModelItem> models = [];
   int modelIndex = 0;
   String lastModelId = '';
@@ -44,6 +45,12 @@ class ChatState {
   int modeIndex = 0;
   bool loadingModels = false;
   List<ConfigOption> configOptions = [];
+  List<Map<String, String>> authMethods = [];
+  bool terminalBlocked = false;
+  int historyOffset = 0;
+  int historyTotal = 0;
+  bool historyHasMore = false;
+  bool loadingOlderHistory = false;
 
   // Advanced
   List<RegistryAgentInfo> registryAgents = [];
@@ -79,10 +86,25 @@ class ChatState {
     turnActive = false;
     cancelling = false;
     contextReplacedNotice = '';
+    errorMessage = '';
     messages = [];
     streamingThinking = '';
     streamingText = '';
     accumulatorType = '';
+    sessionCurrentModelId = '';
+    modelIndex = -1;
+    modes = [];
+    modeIndex = -1;
+    configOptions = [];
+    authMethods = [];
+    terminalBlocked = false;
+    historyOffset = 0;
+    historyTotal = 0;
+    historyHasMore = false;
+    loadingOlderHistory = false;
+    availableCommands = [];
+    planEntries = [];
+    toolCallStack = [];
     lastUsage = null;
     pendingPermissions.clear();
   }

@@ -18,6 +18,8 @@ import type {
   SetSessionConfigOptionResponse,
   CloseSessionResponse,
   McpServer,
+  AuthMethod,
+  SessionConfigOption,
 } from "@agentclientprotocol/sdk";
 import type {
   ReadTextFileRequest,
@@ -90,6 +92,12 @@ export class AcpClient {
   private conn: ClientSideConnection;
   public agentInfo: { name: string; version?: string } | null = null;
   public cwd: string = "";
+  public authMethods: AuthMethod[] = [];
+  public configOptions: SessionConfigOption[] = [];
+
+  private captureSessionOptions(result: { configOptions?: SessionConfigOption[] | null }): void {
+    if (Array.isArray(result.configOptions)) this.configOptions = result.configOptions;
+  }
 
   constructor(proc: ChildProcess, callbacks: AcpClientCallbacks) {
     const input = Writable.toWeb(proc.stdin!) as WritableStream<Uint8Array>;
@@ -166,6 +174,7 @@ export class AcpClient {
       },
     });
     this.agentInfo = result.agentInfo ?? null;
+    this.authMethods = result.authMethods ?? [];
     console.log(`[acp] agent→bridge: initialized agent=${result?.agentInfo?.name} v=${result?.agentInfo?.version}`);
     return result;
   }
@@ -176,10 +185,12 @@ export class AcpClient {
   ): Promise<NewSessionResponse> {
     this.cwd = cwd;
     console.log(`[acp] bridge→agent: newSession cwd="${cwd}"`);
-    return await this.conn.newSession({
+    const result = await this.conn.newSession({
       cwd,
       mcpServers: mcpServers ? toMcpServers(mcpServers) : [],
     });
+    this.captureSessionOptions(result);
+    return result;
   }
 
   async loadSession(
@@ -189,11 +200,13 @@ export class AcpClient {
   ): Promise<LoadSessionResponse> {
     this.cwd = cwd;
     console.log(`[acp] bridge→agent: loadSession id="${sessionId.slice(0, 20)}"`);
-    return await this.conn.loadSession({
+    const result = await this.conn.loadSession({
       sessionId,
       cwd,
       mcpServers: mcpServers ? toMcpServers(mcpServers) : [],
     });
+    this.captureSessionOptions(result);
+    return result;
   }
 
   async resumeSession(
@@ -203,11 +216,13 @@ export class AcpClient {
   ): Promise<ResumeSessionResponse> {
     this.cwd = cwd;
     console.log(`[acp] bridge→agent: resumeSession id="${sessionId.slice(0, 20)}"`);
-    return await this.conn.resumeSession({
+    const result = await this.conn.resumeSession({
       sessionId,
       cwd,
       mcpServers: mcpServers ? toMcpServers(mcpServers) : [],
     });
+    this.captureSessionOptions(result);
+    return result;
   }
 
   async prompt(
@@ -235,7 +250,9 @@ export class AcpClient {
     methodId: string,
   ): Promise<AuthenticateResponse | void> {
     console.log(`[acp] bridge→agent: authenticate methodId="${methodId}"`);
-    return await this.conn.authenticate({ methodId });
+    const result = await this.conn.authenticate({ methodId });
+    this.authMethods = [];
+    return result;
   }
 
   async setSessionMode(
@@ -249,19 +266,24 @@ export class AcpClient {
     sessionId: string,
     modelId: string,
   ): Promise<SetSessionConfigOptionResponse> {
-    return await this.conn.setSessionConfigOption({ sessionId, configId: "model", value: modelId });
+    return await this.conn.setSessionConfigOption({
+      sessionId,
+      configId: "model",
+      value: modelId,
+    });
   }
 
   async setSessionConfigOption(
     sessionId: string,
     configId: string,
-    value: string,
+    value: string | boolean,
   ): Promise<SetSessionConfigOptionResponse> {
-    return await this.conn.setSessionConfigOption({
-      sessionId,
-      configId,
-      value,
-    });
+    const payload = typeof value === "boolean"
+      ? { sessionId, configId, type: "boolean" as const, value }
+      : { sessionId, configId, value };
+    const result = await this.conn.setSessionConfigOption(payload);
+    this.captureSessionOptions(result);
+    return result;
   }
 
   async listSessions(cwd?: string): Promise<ListSessionsResponse> {

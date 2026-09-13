@@ -2,14 +2,14 @@ import 'package:flutter/material.dart';
 
 import '../constants/theme.dart';
 import '../models/ws_protocol.dart';
-import 'agent_logo.dart';
 
 class ChatInputBar extends StatefulWidget {
   final bool disabled;
   final bool showCancel;
   final String configLabel;
   final List<AvailableCommand> availableCommands;
-  final void Function(String text) onSend;
+  final String? hintText;
+  final ValueChanged<String> onSend;
   final VoidCallback onCancel;
   final VoidCallback onOpenConfig;
 
@@ -19,6 +19,7 @@ class ChatInputBar extends StatefulWidget {
     required this.showCancel,
     this.configLabel = '选择模型',
     this.availableCommands = const [],
+    this.hintText,
     required this.onSend,
     required this.onCancel,
     required this.onOpenConfig,
@@ -170,7 +171,9 @@ class _ChatInputBarState extends State<ChatInputBar>
                       decoration: InputDecoration(
                         isCollapsed: true,
                         filled: false,
-                        hintText: widget.disabled ? '连接中...' : '输入消息...',
+                        hintText: widget.disabled
+                            ? '连接中...'
+                            : (widget.hintText ?? '输入消息...'),
                         hintStyle: TextStyle(
                           fontSize: AppFontSize.md,
                           color: muted,
@@ -277,52 +280,71 @@ class _ChatInputBarState extends State<ChatInputBar>
     required VoidCallback? onTap,
   }) {
     final dark = Theme.of(context).brightness == Brightness.dark;
+    final fg = AppColors.foregroundCtx(context);
     final muted = AppColors.foregroundMutedCtx(context);
 
     return Material(
       color: Colors.transparent,
-      borderRadius: BorderRadius.circular(AppRadius.full),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(AppRadius.full),
+        borderRadius: BorderRadius.circular(16),
+        splashColor: dark ? Colors.white12 : Colors.black12,
+        highlightColor: dark ? Colors.white10 : Colors.black.withValues(alpha: 0.05),
         child: Container(
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.sm + 2,
-            vertical: AppSpacing.xxs + 1,
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
           decoration: BoxDecoration(
-            color: dark ? const Color(0x18FFFFFF) : const Color(0x0F000000),
-            borderRadius: BorderRadius.circular(AppRadius.full),
+            color: dark ? const Color(0xFF22262C) : const Color(0xFFEEEEEE),
+            borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: dark
-                  ? Colors.white.withOpacity(0.06)
-                  : Colors.black.withOpacity(0.05),
+              color: dark ? Colors.white.withValues(alpha: 0.12) : Colors.black.withValues(alpha: 0.08),
               width: 0.8,
             ),
+            boxShadow: [
+              BoxShadow(
+                color: dark ? const Color(0x30000000) : const Color(0x10000000),
+                blurRadius: 4,
+                offset: const Offset(0, 1),
+              ),
+            ],
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              AgentLogo(
-                agentName: label,
-                size: 13,
-                color: muted,
+              Container(
+                width: 16,
+                height: 16,
+                decoration: BoxDecoration(
+                  color: dark ? Colors.white12 : Colors.black.withValues(alpha: 0.06),
+                  shape: BoxShape.circle,
+                ),
+                alignment: Alignment.center,
+                child: Icon(
+                  Icons.auto_awesome_rounded,
+                  size: 10,
+                  color: fg,
+                ),
               ),
-              const SizedBox(width: AppSpacing.xxs + 2),
-              Flexible(
+              const SizedBox(width: 6),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 160),
                 child: Text(
                   label,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontSize: AppFontSize.xs,
-                    fontWeight: FontWeight.w500,
-                    color: muted,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: fg,
+                    letterSpacing: -0.1,
                   ),
                 ),
               ),
-              const SizedBox(width: 2),
-              Icon(Icons.expand_more_rounded, size: 14, color: muted),
+              const SizedBox(width: 4),
+              Icon(
+                Icons.keyboard_arrow_down_rounded,
+                size: 14,
+                color: muted,
+              ),
             ],
           ),
         ),

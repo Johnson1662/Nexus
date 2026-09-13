@@ -1,5 +1,5 @@
 import type { WebSocket } from "ws";
-import { sessionManager } from "../session-manager.mjs";
+import { AuthenticationRequiredError, sessionManager } from "../session-manager.mjs";
 import { setTitle } from "../session-titles.mjs";
 
 interface StartParams {
@@ -13,7 +13,7 @@ export async function handleStart(
   ws: WebSocket,
   params: StartParams,
 ): Promise<void> {
-  const { agent = "opencode", prompt, cwd, model } = params;
+  const { agent = "omp", prompt, cwd, model } = params;
 
   let sess;
   try {
@@ -21,6 +21,17 @@ export async function handleStart(
       agent, cwd, model,
     });
   } catch (err: unknown) {
+    if (err instanceof AuthenticationRequiredError) {
+      try {
+        ws.send(JSON.stringify({
+          type: "authentication_required",
+          sessionId: err.sessionId,
+          authMethods: err.authMethods,
+          text: "Agent authentication required",
+        }));
+      } catch {}
+      return;
+    }
     const message = err instanceof Error ? err.message : String(err);
     try { ws.send(JSON.stringify({ type: "start_failed", code: "AGENT_START_FAILED", text: message })); } catch {}
     return;
@@ -46,6 +57,8 @@ export async function handleStart(
       ...(prompt ? { prompt } : {}),
       ...(model ? { model } : {}),
       title: sessionTitle,
+      authMethods: sess.client.authMethods,
+      configOptions: sess.client.configOptions,
     }));
   } catch { /* WS gone */ }
 

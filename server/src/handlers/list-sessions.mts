@@ -6,6 +6,22 @@ import { agentRegistry } from "../agent-registry-service.mjs";
 import { applyTitles } from "../session-titles.mjs";
 import { resolveWorkspacePath } from "../path-utils.mjs";
 import { HerdrAdapter } from "../discovery/herdr-adapter.mjs";
+import { listAmbientSessions } from "../discovery/ambient-session.mjs";
+import path from "node:path";
+
+const herdrSessionTimes = new Map<string, { createdAt: number; lastActivity: number; status: string }>();
+
+function getHerdrTimes(paneId: string, status: string, createdAt?: number, lastActivity?: number) {
+  const now = Date.now();
+  const previous = herdrSessionTimes.get(paneId);
+  const times = {
+    createdAt: createdAt || previous?.createdAt || now,
+    lastActivity: lastActivity || (previous?.status !== status ? now : previous?.lastActivity) || now,
+    status,
+  };
+  herdrSessionTimes.set(paneId, times);
+  return times;
+}
 
 export async function handleListSessions(
   ws: WebSocket,
@@ -29,15 +45,17 @@ export async function handleListSessions(
             if (normHa !== normTarget && !normHa.startsWith(normTarget + "/")) continue;
           }
           const resolved = await HerdrAdapter.resolveSessionFile(ha.pane_id);
+          const status = ha.agent_status === "working" ? "running" : (ha.agent_status === "blocked" ? "waiting_input" : "idle");
+          const times = getHerdrTimes(ha.pane_id, status, resolved?.createdAt, resolved?.lastActivity);
           herdrSessions.push({
             sessionId: `herdr:${ha.pane_id}`,
             title: resolved?.title || ha.terminal_title_stripped || ha.terminal_title || `${ha.agent} (${ha.pane_id})`,
             agent: resolved?.agent || ha.agent,
             cwd: haCwd,
-            status: ha.agent_status === "working" ? "running" : (ha.agent_status === "blocked" ? "waiting_input" : "idle"),
+            status,
             source: "herdr",
-            lastActivity: Date.now(),
-            createdAt: Date.now(),
+            lastActivity: times.lastActivity,
+            createdAt: times.createdAt,
           });
         }
       } catch (err) {
@@ -125,6 +143,7 @@ export async function handleListSessions(
         const resolvedSessionId = resolved?.sessionId;
         const title = resolved?.title || ha.terminal_title_stripped || ha.terminal_title || `${ha.agent} (${ha.pane_id})`;
         const status = ha.agent_status === "working" ? "running" : (ha.agent_status === "blocked" ? "waiting_input" : "idle");
+        const times = getHerdrTimes(ha.pane_id, status, resolved?.createdAt, resolved?.lastActivity);
 
         const existingIdx = sessions.findIndex((s) => s.sessionId === resolvedSessionId || s.sessionId === `herdr:${ha.pane_id}`);
         if (existingIdx >= 0) {
@@ -136,7 +155,7 @@ export async function handleListSessions(
             cwd: haCwd || existing.cwd,
             status,
             source: "herdr",
-            lastActivity: Date.now(),
+            lastActivity: times.lastActivity,
           });
         } else {
           sessions.unshift({
@@ -146,8 +165,8 @@ export async function handleListSessions(
             cwd: haCwd,
             status,
             source: "herdr",
-            lastActivity: Date.now(),
-            createdAt: Date.now(),
+            lastActivity: times.lastActivity,
+            createdAt: times.createdAt,
           });
         }
       }
@@ -173,6 +192,39 @@ export async function handleListSessions(
       );
     } catch (err) {
       console.log(`[list-sessions] failed to filter out herdr agents: ${err}`);
+    }
+  }
+
+  // Merge ambient sessions (when not in exclusive Herdr mode)
+  {
+    try {
+      const ambientList = listAmbientSessions();
+      for (const amb of ambientList) {
+        if (agent && amb.agent !== agent) continue;
+        if (resolvedCwd && amb.cwd) {
+          const normAmb = amb.cwd.replace(/[\/\\]+$/, "");
+          const normTarget = resolvedCwd.replace(/[\/\\]+$/, "");
+          if (normAmb !== normTarget && !normAmb.startsWith(normTarget + "/")) continue;
+        }
+        const existingIdx = sessions.findIndex(
+          (s) => s.sessionId === amb.realSessionId || s.sessionId === amb.sessionId,
+        );
+        if (existingIdx >= 0) {
+          sessions.splice(existingIdx, 1);
+        }
+        sessions.unshift({
+          sessionId: amb.sessionId,
+          title: `OMP (${path.basename(amb.cwd)})`,
+          agent: amb.agent,
+          cwd: amb.cwd,
+          status: amb.status,
+          source: "ambient",
+          lastActivity: amb.updatedAt,
+          createdAt: amb.updatedAt,
+        });
+      }
+    } catch (err) {
+      console.log(`[list-sessions] failed to merge ambient sessions: ${err}`);
     }
   }
 

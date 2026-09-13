@@ -58,6 +58,7 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
     _listenerDisposers.add(_ws.onServerInfo(_onServerInfo));
     _listenerDisposers.add(_ws.onError((error) {
       _state.errorMessage = error;
+      _markLatestUserStatus('failed');
       notifyListeners();
     }));
     _listenerDisposers.add(_ws.onAgentList(_onAgentList));
@@ -370,7 +371,7 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
     _state.messages = [
       ..._state.messages,
       MessageData(
-          role: 'user', content: text, type: 'text', sendStatus: 'sent'),
+          role: 'user', content: text, type: 'text', sendStatus: 'sending'),
     ];
     _setCurrentSessionStatus('running');
   }
@@ -408,6 +409,7 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
         _setCurrentSessionStatus('idle');
         _state.errorMessage =
             kind == 'start' ? '启动会话超时，请检查 Bridge 连接' : '发送消息超时，请重试';
+        _markLatestUserStatus('failed');
         _turnRequestTimer = null;
         notifyListeners();
       },
@@ -432,12 +434,27 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
     _inputInFlight = false;
     _turnRequestTimer?.cancel();
     _turnRequestTimer = null;
+    _markLatestUserStatus('sent');
+  }
+
+  void _markLatestUserStatus(String status) {
+    for (var i = _state.messages.length - 1; i >= 0; i--) {
+      final message = _state.messages[i];
+      if (message.role == 'user' && message.sendStatus == 'sending') {
+        message.sendStatus = status;
+        return;
+      }
+    }
+  }
+
+  void clearError() {
+    _state.errorMessage = '';
+    notifyListeners();
   }
 
   void retryMessage(MessageData msg) {
     if (msg.sendStatus == 'failed') {
-      msg.sendStatus = 'sending';
-      notifyListeners();
+      _state.messages = _state.messages.where((message) => message.id != msg.id).toList();
       sendMessage(msg.content);
     }
   }
@@ -508,6 +525,25 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
         ClientMessage(type: 'list_models', agent: _state.selectedAgentName));
   }
 
+  void setConfigOption(String configId, Object value) {
+    if (_state.sessionId.isEmpty) return;
+    _ws.send(ClientMessage(
+      type: 'set_config',
+      sessionId: _state.sessionId,
+      configId: configId,
+      value: value,
+    ));
+  }
+
+  void authenticate(String methodId) {
+    if (_state.sessionId.isEmpty) return;
+    _ws.send(ClientMessage(
+      type: 'authenticate',
+      sessionId: _state.sessionId,
+      methodId: methodId,
+    ));
+  }
+
   // ── Sessions ──
   void loadSession(String sessionId,
       {String? agent, String? cwd, String? title, int? freshAt}) {
@@ -571,6 +607,9 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
       agent: targetAgent,
       freshAt: freshAt,
     ));
+    if (targetAgent.isNotEmpty) {
+      _ws.send(ClientMessage(type: 'list_models', agent: targetAgent));
+    }
   }
 
   bool isPinned(String sessionId) =>
@@ -630,7 +669,15 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
   bool get useHerdrBackend => _useHerdrBackend;
 
   Future<void> setUseHerdrBackend(bool value) async {
+    if (_useHerdrBackend == value) return;
     _useHerdrBackend = value;
+    _loadingSessionId = '';
+    _clearTurnRequest();
+    _clearCancelling();
+    _resetCursor(clearPersisted: true);
+    _processedMessageIds.clear();
+    _state.resetForNewChat();
+    _state.sessions = [];
     final storage = await StorageService.getInstance();
     await storage.setUseHerdrBackend(value);
     requestSessionList(useHerdr: value);
@@ -646,6 +693,17 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
           useHerdr: useHerdr ?? _useHerdrBackend,
         ),
       );
+
+  void requestOlderHistory() {
+    if (_state.sessionId.isEmpty || !_state.historyHasMore || _state.loadingOlderHistory) return;
+    _state.loadingOlderHistory = true;
+    notifyListeners();
+    _ws.send(ClientMessage(
+      type: 'load_history_page',
+      sessionId: _state.sessionId,
+      before: _state.historyOffset,
+    ));
+  }
 
   String _herdrAgentCreationMode = 'pane_split';
   String get herdrAgentCreationMode => _herdrAgentCreationMode;
@@ -775,6 +833,15 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
         name: name));
   }
 
+  void interactHerdrBlocked(String key) {
+    if (!_state.sessionId.startsWith('herdr:')) return;
+    _ws.send(ClientMessage(
+      type: 'interact_herdr_blocked',
+      paneId: _state.sessionId,
+      key: key,
+    ));
+  }
+
   // ── Sync after reconnect ──
   void syncRequest() {
     final sessionId = _state.sessionId;
@@ -866,11 +933,22 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
         break;
       case 'input_ack':
         _markInputStarted();
+        notifyListeners();
         break;
       case 'start_failed':
         _clearTurnRequest();
         _state.turnActive = false;
         _state.errorMessage = msg.text ?? 'Agent 启动失败';
+        _markLatestUserStatus('failed');
+        notifyListeners();
+        break;
+      case 'authentication_required':
+        _clearTurnRequest();
+        _state.turnActive = false;
+        _state.sessionId = msg.sessionId ?? '';
+        _state.authMethods = msg.authMethods ?? [];
+        _state.errorMessage = '请先完成 Agent 认证，再重试消息';
+        _markLatestUserStatus('failed');
         notifyListeners();
         break;
       case 'session_context_replaced':
@@ -896,6 +974,7 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
         }
         _cursorSessionId = sessionId;
         _clearTurnRequest();
+        _markLatestUserStatus('sent');
         _syncInFlight = false;
         _syncRequestSessionId = '';
         if (_loadingSessionId == sessionId) _loadingSessionId = '';
@@ -911,6 +990,34 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
           _state.streamMode = msg.streamMode!;
         } else {
           _state.streamMode = sessionId.startsWith('herdr:') ? 'terminal' : 'acp';
+        }
+        final startedAgent = msg.agent ?? previous?.agent;
+        if (startedAgent != null && startedAgent.isNotEmpty) {
+          _state.selectedAgentName = startedAgent;
+          if (_state.models.isEmpty) {
+            _ws.send(ClientMessage(type: 'list_models', agent: startedAgent));
+          }
+        }
+        if (msg.model != null && msg.model!.isNotEmpty) {
+          _state.sessionCurrentModelId = msg.model!;
+          _state.lastModelId = msg.model!;
+          if (_state.models.isNotEmpty) {
+            final mIdx = _state.models.indexWhere((m) =>
+                m.id == msg.model ||
+                m.modelId == msg.model ||
+                m.id.endsWith('/${msg.model}') ||
+                msg.model!.endsWith('/${m.id}') ||
+                m.name.toLowerCase() == msg.model!.toLowerCase());
+            if (mIdx >= 0) {
+              _state.modelIndex = mIdx;
+            }
+          }
+        }
+        if (msg.authMethods != null) {
+          _state.authMethods = msg.authMethods!;
+        }
+        if (msg.configOptions != null) {
+          _state.configOptions = msg.configOptions!;
         }
         if (previous?.sessionId == sessionId &&
             prevMode.isNotEmpty &&
@@ -1005,6 +1112,9 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
       case 'history_full':
         _handleHistoryFull(msg);
         break;
+      case 'history_page':
+        _handleHistoryFull(msg);
+        break;
       case 'session_cancelled':
         // Cancel ACK only: 服务端已受理取消请求，不代表回合结束。
         // 不清 cancelling、不取消 10s 兜底 timer；由 turn_ended /
@@ -1023,8 +1133,35 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
         // Remove live view when turn completes
         LiveViewService.stop();
         break;
+      case 'session_status':
+        if (!_isRequiredSessionEventForCurrentSession(msg.sessionId)) break;
+        final status = msg.status ?? 'unknown';
+        _state.terminalBlocked =
+            status == 'blocked' || status == 'waiting_input';
+        if (status == 'working' || status == 'running') {
+          _state.turnActive = true;
+          _setCurrentSessionStatus('running');
+        } else if (status == 'idle' || status == 'done') {
+          _handleTurnEnded();
+        } else {
+          notifyListeners();
+        }
+        break;
       case 'model_list':
-        if (msg.models != null) _state.models = msg.models!;
+        if (msg.models != null) {
+          _state.models = msg.models!;
+          if (_state.sessionCurrentModelId.isNotEmpty) {
+            final mIdx = _state.models.indexWhere((m) =>
+                m.id == _state.sessionCurrentModelId ||
+                m.modelId == _state.sessionCurrentModelId ||
+                m.id.endsWith('/${_state.sessionCurrentModelId}') ||
+                _state.sessionCurrentModelId.endsWith('/${m.id}') ||
+                m.name.toLowerCase() == _state.sessionCurrentModelId.toLowerCase());
+            if (mIdx >= 0) {
+              _state.modelIndex = mIdx;
+            }
+          }
+        }
         if (msg.modes != null) _state.modes = msg.modes!;
         notifyListeners();
         break;
@@ -1054,10 +1191,7 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
         break;
       case 'agent_list':
         if (msg.agents != null) {
-          _state.agentNames = msg.agents!.map((a) => a.name).toList();
-          if (_state.currentDeviceId.isNotEmpty) {
-            DeviceAgentStore().saveAgents(_state.currentDeviceId, msg.agents!);
-          }
+          _applyAgentList(msg.agents!);
         }
         // Now we have agents, request sessions with the first one
         requestSessionList();
@@ -1067,6 +1201,21 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
         if (msg.registryAgents != null) {
           _state.registryAgents = msg.registryAgents!;
         }
+        notifyListeners();
+        break;
+      case 'config_option_updated':
+        if (msg.configOptions != null) {
+          _state.configOptions = msg.configOptions!;
+        }
+        notifyListeners();
+        break;
+      case 'auth_result':
+        if (msg.sessionId != null) _state.sessionId = msg.sessionId!;
+        if (msg.configOptions != null) {
+          _state.configOptions = msg.configOptions!;
+        }
+        _state.authMethods = [];
+        _state.errorMessage = '';
         notifyListeners();
         break;
       case 'herdr_workspaces_list':
@@ -1090,6 +1239,9 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
         break;
       case 'install_agent_done':
       case 'uninstall_agent_done':
+        if (msg.ok == false) {
+          _state.errorMessage = msg.error ?? 'Agent 操作失败';
+        }
         _ws.send(ClientMessage(type: 'list_agents'));
         _ws.send(ClientMessage(type: 'list_registry_agents'));
         notifyListeners();
@@ -1105,6 +1257,8 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
         _clearTurnRequest();
         _clearCancelling();
         _state.turnActive = false;
+        _state.loadingOlderHistory = false;
+        _markLatestUserStatus('failed');
         _state.pendingPermissions.clear();
         NotificationService.cancelAll();
         if (msg.text != null) {
@@ -1229,6 +1383,14 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
         if (msg.sessions != null && msg.sessions!.isNotEmpty) {
           bool updated = false;
           for (final updatedSession in msg.sessions!) {
+            if (updatedSession.sessionId == _state.sessionId) {
+              _state.terminalBlocked = updatedSession.status == 'waiting_input';
+              if (updatedSession.status == 'running') {
+                _state.turnActive = true;
+              } else if (updatedSession.status == 'idle' && _state.turnActive) {
+                _handleTurnEnded();
+              }
+            }
             final idx = _state.sessions.indexWhere(
               (s) => s.sessionId == updatedSession.sessionId,
             );
@@ -1241,6 +1403,12 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
                   title: _state.sessions[idx].title,
                   agent: _state.sessions[idx].agent,
                   cwd: _state.sessions[idx].cwd,
+                  source: _state.sessions[idx].source ??
+                      (updatedSession.sessionId.startsWith('herdr:')
+                          ? 'herdr'
+                          : (updatedSession.sessionId.startsWith('ambient:')
+                              ? 'ambient'
+                              : null)),
                   createdAt: _state.sessions[idx].createdAt,
                   lastActivity: updatedSession.lastActivity ??
                       _state.sessions[idx].lastActivity,
@@ -1681,7 +1849,14 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   void _handleHistoryFull(ServerMessage msg) {
-    if (msg.events == null || msg.events!.isEmpty) return;
+    _state.historyOffset = msg.historyOffset ?? 0;
+    _state.historyTotal = msg.historyTotal ?? 0;
+    _state.historyHasMore = msg.historyHasMore ?? (msg.historyTruncated ?? false);
+    _state.loadingOlderHistory = false;
+    if (msg.events == null || msg.events!.isEmpty) {
+      notifyListeners();
+      return;
+    }
     if (!_isRequiredSessionEventForCurrentSession(msg.sessionId)) return;
 
     final List<MessageData> fullList = [];
@@ -1800,8 +1975,13 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
       }
     }
 
-    if (fullList.isEmpty) return;
-    _state.messages = fullList;
+    if (fullList.isEmpty) {
+      notifyListeners();
+      return;
+    }
+    _state.messages = msg.type == 'history_page'
+        ? [...fullList, ..._state.messages]
+        : fullList;
     notifyListeners();
   }
 
@@ -1859,6 +2039,12 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
       title: current.title,
       agent: current.agent,
       cwd: current.cwd,
+      source: current.source ??
+          (current.sessionId.startsWith('herdr:')
+              ? 'herdr'
+              : (current.sessionId.startsWith('ambient:')
+                  ? 'ambient'
+                  : null)),
       createdAt: current.createdAt,
       lastActivity: DateTime.now().millisecondsSinceEpoch,
       status: status,
@@ -1897,6 +2083,8 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
       case 'sync_response':
       case 'session_loaded':
       case 'history_full':
+      case 'history_page':
+      case 'session_status':
         return true;
       default:
         return false;
@@ -1931,8 +2119,24 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   void _onAgentList(List<AgentInfo> agents) {
-    _state.agentNames = agents.map((a) => a.name).toList();
+    _applyAgentList(agents);
     notifyListeners();
+  }
+
+  void _applyAgentList(List<AgentInfo> agents) {
+    _state.installedAgents = agents;
+    _state.agentNames = agents
+        .where((a) => a.ready && a.capabilities.nativeAcp)
+        .map((a) => a.name)
+        .toList();
+    if (!_state.agentNames.contains(_state.selectedAgentName)) {
+      _state.selectedAgentName = _state.agentNames.contains('omp')
+          ? 'omp'
+          : (_state.agentNames.isNotEmpty ? _state.agentNames.first : '');
+    }
+    if (_state.currentDeviceId.isNotEmpty) {
+      DeviceAgentStore().saveAgents(_state.currentDeviceId, agents);
+    }
   }
 
   @override

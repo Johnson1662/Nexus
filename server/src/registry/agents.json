@@ -6,6 +6,7 @@
       "name": "Oh My Pi (OMP)",
       "description": "High-performance coding agent harness",
       "version": "latest",
+      "capabilities": { "nativeAcp": true, "herdr": true, "structuredHistory": true, "modelSelection": true, "modeSelection": true, "authentication": true },
       "distribution": {
         "direct": {
           "cmd": "omp",
@@ -20,6 +21,7 @@
       "name": "Claude Code",
       "description": "Anthropic Claude Code CLI",
       "version": "latest",
+      "capabilities": { "nativeAcp": false, "herdr": true, "structuredHistory": false, "modelSelection": false, "modeSelection": false, "authentication": false },
       "distribution": {
         "direct": {
           "cmd": "claude",
@@ -32,6 +34,7 @@
       "name": "Codex",
       "description": "OpenAI Codex CLI / ACP Agent",
       "version": "latest",
+      "capabilities": { "nativeAcp": false, "herdr": true, "structuredHistory": true, "modelSelection": false, "modeSelection": false, "authentication": false },
       "distribution": {
         "direct": {
           "cmd": "codex",
@@ -44,6 +47,7 @@
       "name": "OpenCode",
       "description": "ACP-compatible coding agent",
       "version": "latest",
+      "capabilities": { "nativeAcp": true, "herdr": true, "structuredHistory": false, "modelSelection": true, "modeSelection": true, "authentication": true },
       "distribution": {
         "direct": {
           "cmd": "opencode",
@@ -58,6 +62,7 @@
       "name": "Cursor Agent",
       "description": "Cursor CLI Agent",
       "version": "latest",
+      "capabilities": { "nativeAcp": false, "herdr": true, "structuredHistory": false, "modelSelection": false, "modeSelection": false, "authentication": false },
       "distribution": {
         "direct": {
           "cmd": "cursor",
@@ -72,6 +77,7 @@
       "name": "GitHub Copilot",
       "description": "GitHub Copilot CLI Agent",
       "version": "latest",
+      "capabilities": { "nativeAcp": false, "herdr": true, "structuredHistory": false, "modelSelection": false, "modeSelection": false, "authentication": false },
       "distribution": {
         "direct": {
           "cmd": "copilot",
@@ -84,6 +90,7 @@
       "name": "Devin",
       "description": "Cognition Devin CLI",
       "version": "latest",
+      "capabilities": { "nativeAcp": false, "herdr": true, "structuredHistory": false, "modelSelection": false, "modeSelection": false, "authentication": false },
       "distribution": {
         "direct": {
           "cmd": "devin",
@@ -96,6 +103,7 @@
       "name": "Factory Droid",
       "description": "Factory Droid Coding Agent CLI",
       "version": "latest",
+      "capabilities": { "nativeAcp": false, "herdr": true, "structuredHistory": false, "modelSelection": false, "modeSelection": false, "authentication": false },
       "distribution": {
         "direct": {
           "cmd": "droid",
@@ -108,6 +116,7 @@
       "name": "Kimi Code",
       "description": "Moonshot Kimi Code CLI",
       "version": "latest",
+      "capabilities": { "nativeAcp": true, "herdr": true, "structuredHistory": false, "modelSelection": true, "modeSelection": true, "authentication": true },
       "distribution": {
         "direct": {
           "cmd": "kimi",
@@ -122,6 +131,7 @@
       "name": "Qwen Code",
       "description": "Alibaba Qwen Code CLI",
       "version": "latest",
+      "capabilities": { "nativeAcp": false, "herdr": true, "structuredHistory": false, "modelSelection": false, "modeSelection": false, "authentication": false },
       "distribution": {
         "direct": {
           "cmd": "qwen",
@@ -134,6 +144,7 @@
       "name": "Grok Code",
       "description": "xAI Grok CLI",
       "version": "latest",
+      "capabilities": { "nativeAcp": false, "herdr": true, "structuredHistory": false, "modelSelection": false, "modeSelection": false, "authentication": false },
       "distribution": {
         "direct": {
           "cmd": "grok",
@@ -146,6 +157,7 @@
       "name": "Pi",
       "description": "Inflection Pi CLI",
       "version": "latest",
+      "capabilities": { "nativeAcp": false, "herdr": true, "structuredHistory": false, "modelSelection": false, "modeSelection": false, "authentication": false },
       "distribution": {
         "direct": {
           "cmd": "pi",
@@ -158,6 +170,7 @@
       "name": "Kilo Code",
       "description": "Kilo Code Agent CLI",
       "version": "latest",
+      "capabilities": { "nativeAcp": false, "herdr": true, "structuredHistory": false, "modelSelection": false, "modeSelection": false, "authentication": false },
       "distribution": {
         "direct": {
           "cmd": "kilo",
@@ -170,6 +183,7 @@
       "name": "Hermes Agent",
       "description": "Nous Research Hermes Agent",
       "version": "latest",
+      "capabilities": { "nativeAcp": false, "herdr": true, "structuredHistory": false, "modelSelection": false, "modeSelection": false, "authentication": false },
       "distribution": {
         "direct": {
           "cmd": "hermes",
@@ -182,6 +196,7 @@
       "name": "Qoder CLI",
       "description": "Qoder Coding Agent CLI",
       "version": "latest",
+      "capabilities": { "nativeAcp": false, "herdr": true, "structuredHistory": false, "modelSelection": false, "modeSelection": false, "authentication": false },
       "distribution": {
         "direct": {
           "cmd": "qodercli",
@@ -194,6 +209,7 @@
       "name": "Mastra Code",
       "description": "Mastra AI Coding Agent CLI",
       "version": "latest",
+      "capabilities": { "nativeAcp": false, "herdr": true, "structuredHistory": false, "modelSelection": false, "modeSelection": false, "authentication": false },
       "distribution": {
         "direct": {
           "cmd": "mastracode",
@@ -206,6 +222,7 @@
       "name": "Antigravity CLI",
       "description": "Google Antigravity Agent CLI",
       "version": "latest",
+      "capabilities": { "nativeAcp": false, "herdr": true, "structuredHistory": false, "modelSelection": false, "modeSelection": false, "authentication": false },
       "distribution": {
         "direct": {
           "cmd": "antigravity-cli",

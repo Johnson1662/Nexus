@@ -11,6 +11,13 @@ export async function handleCloseSession(
     try { ws.send(JSON.stringify({ type: "error", text: "sessionId is required" })); } catch {}
     return;
   }
+  if (sessionId.startsWith("ambient:")) {
+    HerdrTailerRegistry.get(sessionId)?.destroy();
+    try {
+      ws.send(JSON.stringify({ type: "session_closed", sessionId }));
+    } catch {}
+    return;
+  }
   if (sessionId.startsWith("herdr:")) {
     const paneId = sessionId.slice("herdr:".length);
     try {

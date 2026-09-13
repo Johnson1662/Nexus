@@ -2,6 +2,7 @@ import type { WebSocket } from "ws";
 import { SessionOperationError, SessionOwnerError, sessionManager } from "../session-manager.mjs";
 import { HerdrAdapter } from "../discovery/herdr-adapter.mjs";
 import { HerdrTailerRegistry } from "../discovery/herdr-session-tailer.mjs";
+import { sendAmbientCommand } from "../discovery/ambient-session.mjs";
 
 export function handleInput(
   ws: WebSocket,
@@ -17,16 +18,35 @@ export function handleInput(
     return;
   }
 
+  if (sessionId.startsWith("ambient:")) {
+    const tailer = HerdrTailerRegistry.get(sessionId);
+    sendAmbientCommand(sessionId, { type: "prompt", text })
+      .then(() => {
+        tailer?.setLastInjectedPrompt(text, ws);
+        try {
+          ws.send(JSON.stringify({ type: "input_ack", sessionId }));
+        } catch { /* WS gone */ }
+      })
+      .catch((err) => {
+        console.log(`[input] Ambient sendPrompt error: ${err}`);
+        try {
+          ws.send(JSON.stringify({
+            type: "error",
+            sessionId,
+            text: `Ambient prompt failed: ${String(err)}`,
+          }));
+        } catch { /* WS gone */ }
+      });
+    return;
+  }
+
   if (sessionId.startsWith("herdr:")) {
     const paneId = sessionId.slice("herdr:".length);
     const tailer = HerdrTailerRegistry.get(sessionId);
-    if (tailer) {
-      tailer.setLastInjectedPrompt(text, ws);
-    }
-    try {
-      ws.send(JSON.stringify({ type: "input_ack", sessionId }));
-    } catch { /* WS gone */ }
-    HerdrAdapter.sendPrompt(paneId, text).catch((err) => {
+    HerdrAdapter.sendPrompt(paneId, text).then(() => {
+      tailer?.setLastInjectedPrompt(text, ws);
+      try { ws.send(JSON.stringify({ type: "input_ack", sessionId })); } catch { /* WS gone */ }
+    }).catch((err) => {
       console.log(`[input] Herdr sendPrompt error: ${err}`);
       try {
         ws.send(JSON.stringify({

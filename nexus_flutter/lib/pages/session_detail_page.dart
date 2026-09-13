@@ -109,6 +109,7 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
     final session = widget.session;
     final title = session.title?.isNotEmpty == true ? session.title! : '无标题';
     final agent = session.agent ?? '';
+    final isAmbient = session.sessionId.startsWith('ambient:');
     final isRunning = chatProvider.state.sessionId == session.sessionId &&
         chatProvider.state.turnActive;
 
@@ -140,7 +141,7 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
           const SizedBox(height: AppSpacing.xl),
 
           // ── Session management actions ──
-          Row(
+          if (!isAmbient) Row(
             children: [
               if (!session.sessionId.startsWith('herdr:')) ...[
                 Expanded(

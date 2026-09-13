@@ -36,7 +36,7 @@ class ClientMessage {
   final String? outcome;
   final String? prompt;
   final String? configId;
-  final String? value;
+  final Object? value;
   final String? optionId;
   final String? methodId;
   final String? lastMessageId;
@@ -47,6 +47,8 @@ class ClientMessage {
   final String? paneId;
   final String? title;
   final int? freshAt;
+  final int? before;
+  final String? key;
 
   ClientMessage({
     required this.type,
@@ -75,6 +77,8 @@ class ClientMessage {
     this.paneId,
     this.title,
     this.freshAt,
+    this.before,
+    this.key,
   });
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -104,6 +108,8 @@ class ClientMessage {
         if (paneId != null && paneId!.isNotEmpty) 'paneId': paneId,
         if (title != null && title!.isNotEmpty) 'title': title,
         if (freshAt != null) 'freshAt': freshAt,
+        if (before != null) 'before': before,
+        if (key != null && key!.isNotEmpty) 'key': key,
       };
 }
 
@@ -115,6 +121,7 @@ class ServerMessage {
   final String? agent;
   final String? model;
   final String? title;
+  final String? status;
   final AcpUpdate? event;
   final int? exitCode;
   final List<ModelItem>? models;
@@ -148,6 +155,13 @@ class ServerMessage {
   final String? streamMode; // 'acp' | 'terminal'
   final List<dynamic>? events; // history_full response
   final int? freshAt; // creation boundary for a fresh Herdr pane
+  final bool? historyTruncated;
+  final int? historyTotal;
+  final int? historyOffset;
+  final bool? historyHasMore;
+  final bool? ok;
+  final String? error;
+  final List<Map<String, String>>? authMethods;
   AcpUpdate? get acpUpdate => event;
 
   ServerMessage({
@@ -157,6 +171,7 @@ class ServerMessage {
     this.agent,
     this.model,
     this.title,
+    this.status,
     this.event,
     this.exitCode,
     this.models,
@@ -189,6 +204,13 @@ class ServerMessage {
     this.streamMode,
     this.events,
     this.freshAt,
+    this.historyTruncated,
+    this.historyTotal,
+    this.historyOffset,
+    this.historyHasMore,
+    this.ok,
+    this.error,
+    this.authMethods,
   });
 
   factory ServerMessage.fromJson(Map<String, dynamic> json) {
@@ -322,6 +344,7 @@ class ServerMessage {
       agent: json['agent'] as String?,
       model: json['model'] as String?,
       title: json['title'] as String?,
+      status: json['status'] as String?,
       event: parseEvent(json['event'] as Map<String, dynamic>?),
       exitCode: json['exitCode'] as int?,
       models: (json['models'] as List<dynamic>?)
@@ -377,6 +400,17 @@ class ServerMessage {
       streamMode: json['streamMode'] as String?,
       events: json['events'] as List<dynamic>?,
       freshAt: json['freshAt'] as int?,
+      historyTruncated: json['historyTruncated'] as bool?,
+      historyTotal: json['historyTotal'] as int?,
+      historyOffset: json['historyOffset'] as int?,
+      historyHasMore: json['historyHasMore'] as bool?,
+      ok: json['ok'] as bool?,
+      error: json['error'] as String?,
+      authMethods: (json['authMethods'] as List<dynamic>?)
+          ?.whereType<Map>()
+          .map((m) => Map<String, String>.fromEntries(
+              m.entries.map((e) => MapEntry(e.key.toString(), e.value.toString()))))
+          .toList(),
     );
   }
 }
@@ -510,14 +544,16 @@ class ConfigOption {
   final String id;
   final String name;
   final String? description;
+  final String? category;
   final String type;
-  final String currentValue;
+  final Object currentValue;
   final List<ConfigOptionValue> options;
 
   ConfigOption({
     required this.id,
     required this.name,
     this.description,
+    this.category,
     required this.type,
     required this.currentValue,
     required this.options,
@@ -532,8 +568,9 @@ class ConfigOption {
       id: json['id'] as String? ?? '',
       name: json['name'] as String? ?? '',
       description: json['description'] as String?,
+      category: json['category'] as String?,
       type: json['type'] as String? ?? '',
-      currentValue: json['currentValue'] as String? ?? '',
+      currentValue: json['currentValue'] ?? '',
       options: opts,
     );
   }
@@ -542,6 +579,7 @@ class ConfigOption {
 class ConfigOptionValue {
   final String value;
   final String? name;
+  String get id => value;
 
   ConfigOptionValue({required this.value, this.name});
 
@@ -577,6 +615,9 @@ class AgentInfo {
   final String? binaryPath;
   final bool installed;
   final String? configPath;
+  final bool ready;
+  final String? error;
+  final AgentCapabilities capabilities;
 
   AgentInfo({
     required this.name,
@@ -586,6 +627,9 @@ class AgentInfo {
     this.binaryPath,
     required this.installed,
     this.configPath,
+    required this.ready,
+    this.error,
+    required this.capabilities,
   });
 
   factory AgentInfo.fromJson(Map<String, dynamic> json) => AgentInfo(
@@ -596,6 +640,10 @@ class AgentInfo {
         binaryPath: json['binaryPath'] as String?,
         installed: json['installed'] as bool? ?? false,
         configPath: json['configPath'] as String?,
+        ready: json['ready'] as bool? ?? false,
+        error: json['error'] as String?,
+        capabilities: AgentCapabilities.fromJson(
+            json['capabilities'] as Map<String, dynamic>? ?? const {}),
       );
 
   Map<String, dynamic> toJson() => {
@@ -606,6 +654,45 @@ class AgentInfo {
         if (binaryPath != null) 'binaryPath': binaryPath,
         'installed': installed,
         if (configPath != null) 'configPath': configPath,
+        'ready': ready,
+        if (error != null) 'error': error,
+        'capabilities': capabilities.toJson(),
+      };
+}
+
+class AgentCapabilities {
+  final bool nativeAcp;
+  final bool herdr;
+  final bool structuredHistory;
+  final bool modelSelection;
+  final bool modeSelection;
+  final bool authentication;
+
+  const AgentCapabilities({
+    this.nativeAcp = false,
+    this.herdr = false,
+    this.structuredHistory = false,
+    this.modelSelection = false,
+    this.modeSelection = false,
+    this.authentication = false,
+  });
+
+  factory AgentCapabilities.fromJson(Map<String, dynamic> json) => AgentCapabilities(
+        nativeAcp: json['nativeAcp'] as bool? ?? false,
+        herdr: json['herdr'] as bool? ?? false,
+        structuredHistory: json['structuredHistory'] as bool? ?? false,
+        modelSelection: json['modelSelection'] as bool? ?? false,
+        modeSelection: json['modeSelection'] as bool? ?? false,
+        authentication: json['authentication'] as bool? ?? false,
+      );
+
+  Map<String, dynamic> toJson() => {
+        'nativeAcp': nativeAcp,
+        'herdr': herdr,
+        'structuredHistory': structuredHistory,
+        'modelSelection': modelSelection,
+        'modeSelection': modeSelection,
+        'authentication': authentication,
       };
 }
 
@@ -617,6 +704,8 @@ class RegistryAgentInfo {
   final String? repository;
   final String? icon;
   final Map<String, dynamic> distribution;
+  final bool ready;
+  final AgentCapabilities capabilities;
 
   RegistryAgentInfo({
     required this.id,
@@ -626,6 +715,8 @@ class RegistryAgentInfo {
     this.repository,
     this.icon,
     required this.distribution,
+    required this.ready,
+    required this.capabilities,
   });
 
   factory RegistryAgentInfo.fromJson(Map<String, dynamic> json) => RegistryAgentInfo(
@@ -636,6 +727,9 @@ class RegistryAgentInfo {
         repository: json['repository'] as String?,
         icon: json['icon'] as String?,
         distribution: json['distribution'] as Map<String, dynamic>? ?? {},
+        ready: json['ready'] as bool? ?? false,
+        capabilities: AgentCapabilities.fromJson(
+            json['capabilities'] as Map<String, dynamic>? ?? const {}),
       );
 }
 

@@ -41,6 +41,7 @@ class SessionTile extends StatelessWidget {
     final fg = AppColors.foregroundCtx(context);
     final muted = AppColors.foregroundMutedCtx(context);
     final isHerdr = session.sessionId.startsWith('herdr:');
+    final isAmbient = session.source == 'ambient' || session.sessionId.startsWith('ambient:');
 
     final title = AgentUtils.cleanTitle(session.title);
     final agent = session.agent ?? '';
@@ -184,8 +185,8 @@ class SessionTile extends StatelessWidget {
                     final confirmed = await showDialog<bool>(
                       context: context,
                       builder: (ctx) => AlertDialog(
-                        title: const Text('关闭会话'),
-                        content: const Text('确认关闭此会话？'),
+                        title: Text(isAmbient ? '断开查看' : '关闭会话'),
+                        content: Text(isAmbient ? '确认断开对终端会话的查看？终端进程仍将继续运行。' : '确认关闭此会话？'),
                         actions: [
                           TextButton(
                             onPressed: () => Navigator.pop(ctx, false),
@@ -194,9 +195,9 @@ class SessionTile extends StatelessWidget {
                           TextButton(
                             onPressed: () => Navigator.pop(ctx, true),
                             style: TextButton.styleFrom(
-                              foregroundColor: Colors.red,
+                              foregroundColor: isAmbient ? fg : Colors.red,
                             ),
-                            child: const Text('关闭'),
+                            child: Text(isAmbient ? '断开' : '关闭'),
                           ),
                         ],
                       ),
@@ -209,7 +210,7 @@ class SessionTile extends StatelessWidget {
                 }
               },
               itemBuilder: (_) => [
-                if (!isHerdr)
+                if (!isHerdr && !isAmbient)
                   const PopupMenuItem(
                     value: 'rename',
                     child: Text('重命名'),
@@ -218,10 +219,11 @@ class SessionTile extends StatelessWidget {
                   value: 'pin',
                   child: Text('置顶'),
                 ),
-                const PopupMenuItem(
-                  value: 'close',
-                  child: Text('关闭会话'),
-                ),
+                if (!isAmbient)
+                  const PopupMenuItem(
+                    value: 'close',
+                    child: Text('关闭会话'),
+                  ),
               ],
             ),
           ],
