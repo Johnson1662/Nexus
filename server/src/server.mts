@@ -18,7 +18,7 @@ import { isAuthorizedHeader } from "./auth-token.mjs";
 // transport-level types, then routes everything else to the session dispatch.
 
 import { discoverAgents } from "./discovery/agents.mjs";
-import { loadRegistry, listRegistryAgents, resolveAgentCommand } from "./registry/registry.mjs";
+import { loadRegistry, listRegistryAgents } from "./registry/registry.mjs";
 import { findExecutable, getInstalledAgents, installAgent, uninstallAgent } from "./agents-store.mjs";
 import { handleStart } from "./handlers/start.mjs";
 import { handleInput } from "./handlers/input.mjs";
@@ -494,13 +494,9 @@ export function handleIncomingConnection(transport: any, hostId: string = HOST_I
       case "list_registry_agents": {
         try {
           loadRegistry();
-          const regAgents = listRegistryAgents().map((agent) => {
-            const launch = resolveAgentCommand(agent.id);
-            return {
-              ...agent,
-              ready: launch !== null && findExecutable(launch.cmd) !== null,
-            };
-          });
+          // Registry entries are static metadata only; runtime availability
+          // comes from host_capabilities.
+          const regAgents = listRegistryAgents();
           console.log(`[server] → registry_agents_list (${regAgents.length} agents)`);
           transport.send(JSON.stringify({ type: "registry_agents_list", registryAgents: regAgents }));
         } catch (e: any) {

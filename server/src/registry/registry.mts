@@ -4,15 +4,6 @@ import { fileURLToPath } from "node:url";
 
 // ── Types ─────────────────────────────────────────────────────────────
 
-export interface AgentCapabilities {
-  nativeAcp: boolean;
-  herdr: boolean;
-  structuredHistory: boolean;
-  modelSelection: boolean;
-  modeSelection: boolean;
-  authentication: boolean;
-}
-
 export interface AgentDetectionConfig {
   executables: string[];
 }
@@ -22,12 +13,20 @@ export interface AgentNativeConfig {
   command?: string;
   args?: string[];
   env?: Record<string, string>;
+  structuredHistory: boolean;
+  modelSelection: boolean;
+  modeSelection: boolean;
+  authentication: boolean;
 }
 
 export interface AgentHerdrConfig {
   enabled: boolean;
   kind?: string;
   integration?: string;
+  structuredHistory: boolean;
+  modelSelection: boolean;
+  modeSelection: boolean;
+  authentication: boolean;
 }
 
 export interface RegistryAgent {
@@ -40,7 +39,6 @@ export interface RegistryAgent {
   detection?: AgentDetectionConfig;
   native?: AgentNativeConfig;
   herdr?: AgentHerdrConfig;
-  capabilities: AgentCapabilities;
   distribution: {
     direct?: {
       cmd: string;
@@ -87,24 +85,39 @@ function validLaunch(value: unknown): value is { cmd: string; args: string[]; en
   return validCommand(launch.cmd) && validArgs(launch.args);
 }
 
-export function isValidCapabilities(capabilities: unknown): capabilities is AgentCapabilities {
-  if (!capabilities || typeof capabilities !== "object") return false;
-  const c = capabilities as Partial<AgentCapabilities>;
-  return typeof c.nativeAcp === "boolean"
-    && typeof c.herdr === "boolean"
-    && typeof c.structuredHistory === "boolean"
-    && typeof c.modelSelection === "boolean"
-    && typeof c.modeSelection === "boolean"
-    && typeof c.authentication === "boolean";
-}
-
 export function validRegistryAgent(value: unknown): value is RegistryAgent {
   if (!value || typeof value !== "object") return false;
   const agent = value as Partial<RegistryAgent>;
   return typeof agent.id === "string" && agent.id.length > 0
     && typeof agent.name === "string"
     && !!agent.distribution && typeof agent.distribution === "object"
-    && isValidCapabilities(agent.capabilities);
+    && isValidNativeConfig(agent.native)
+    && isValidHerdrConfig(agent.herdr);
+}
+
+function validBackendFeatures(value: Record<string, unknown>): boolean {
+  return typeof value.structuredHistory === "boolean"
+    && typeof value.modelSelection === "boolean"
+    && typeof value.modeSelection === "boolean"
+    && typeof value.authentication === "boolean";
+}
+
+export function isValidNativeConfig(value: unknown): value is AgentNativeConfig {
+  if (!value || typeof value !== "object") return false;
+  const config = value as Record<string, unknown>;
+  if (typeof config.enabled !== "boolean") return false;
+  if (config.enabled && !validCommand(config.command)) return false;
+  if (config.args !== undefined && !validArgs(config.args)) return false;
+  return validBackendFeatures(config);
+}
+
+export function isValidHerdrConfig(value: unknown): value is AgentHerdrConfig {
+  if (!value || typeof value !== "object") return false;
+  const config = value as Record<string, unknown>;
+  if (typeof config.enabled !== "boolean") return false;
+  if (config.kind !== undefined && !validCommand(config.kind)) return false;
+  if (config.integration !== undefined && !validCommand(config.integration)) return false;
+  return validBackendFeatures(config);
 }
 
 // ── Public API ────────────────────────────────────────────────────────
@@ -136,8 +149,12 @@ export function listRegistryAgents(): RegistryAgent[] {
   return registry!.agents;
 }
 
-export function getAgentCapabilities(agentId: string): AgentCapabilities | null {
-  return getRegistryAgent(agentId)?.capabilities ?? null;
+export function getNativeConfig(agentId: string): AgentNativeConfig | null {
+  return getRegistryAgent(agentId)?.native ?? null;
+}
+
+export function getHerdrConfig(agentId: string): AgentHerdrConfig | null {
+  return getRegistryAgent(agentId)?.herdr ?? null;
 }
 
 /**
@@ -145,7 +162,7 @@ export function getAgentCapabilities(agentId: string): AgentCapabilities | null 
  * Priority: direct → npx → binary (first matching platform).
  * Returns null if no launch method is available.
  */
-export function resolveAgentCommand(agentId: string): { cmd: string; args: string[]; env?: Record<string, string> } | null {
+export function resolveDistributionCommand(agentId: string): { cmd: string; args: string[]; env?: Record<string, string> } | null {
   const agent = getRegistryAgent(agentId);
   if (!agent) return null;
 

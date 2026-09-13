@@ -635,7 +635,8 @@ class AgentInfo {
   final String? configPath;
   final bool ready;
   final String? error;
-  final AgentCapabilities capabilities;
+  final AgentNativeCapability native;
+  final AgentHerdrCapability herdr;
 
   AgentInfo({
     required this.name,
@@ -647,7 +648,8 @@ class AgentInfo {
     this.configPath,
     required this.ready,
     this.error,
-    required this.capabilities,
+    required this.native,
+    required this.herdr,
   });
 
   factory AgentInfo.fromJson(Map<String, dynamic> json) => AgentInfo(
@@ -660,8 +662,10 @@ class AgentInfo {
         configPath: json['configPath'] as String?,
         ready: json['ready'] as bool? ?? false,
         error: json['error'] as String?,
-        capabilities: AgentCapabilities.fromJson(
-            json['capabilities'] as Map<String, dynamic>? ?? const {}),
+        native: AgentNativeCapability.fromJson(
+            json['native'] as Map<String, dynamic>? ?? const {}),
+        herdr: AgentHerdrCapability.fromJson(
+            json['herdr'] as Map<String, dynamic>? ?? const {}),
       );
 
   Map<String, dynamic> toJson() => {
@@ -674,43 +678,8 @@ class AgentInfo {
         if (configPath != null) 'configPath': configPath,
         'ready': ready,
         if (error != null) 'error': error,
-        'capabilities': capabilities.toJson(),
-      };
-}
-
-class AgentCapabilities {
-  final bool nativeAcp;
-  final bool herdr;
-  final bool structuredHistory;
-  final bool modelSelection;
-  final bool modeSelection;
-  final bool authentication;
-
-  const AgentCapabilities({
-    this.nativeAcp = false,
-    this.herdr = false,
-    this.structuredHistory = false,
-    this.modelSelection = false,
-    this.modeSelection = false,
-    this.authentication = false,
-  });
-
-  factory AgentCapabilities.fromJson(Map<String, dynamic> json) => AgentCapabilities(
-        nativeAcp: json['nativeAcp'] as bool? ?? false,
-        herdr: json['herdr'] as bool? ?? false,
-        structuredHistory: json['structuredHistory'] as bool? ?? false,
-        modelSelection: json['modelSelection'] as bool? ?? false,
-        modeSelection: json['modeSelection'] as bool? ?? false,
-        authentication: json['authentication'] as bool? ?? false,
-      );
-
-  Map<String, dynamic> toJson() => {
-        'nativeAcp': nativeAcp,
-        'herdr': herdr,
-        'structuredHistory': structuredHistory,
-        'modelSelection': modelSelection,
-        'modeSelection': modeSelection,
-        'authentication': authentication,
+        'native': native.toJson(),
+        'herdr': herdr.toJson(),
       };
 }
 
@@ -722,8 +691,6 @@ class RegistryAgentInfo {
   final String? repository;
   final String? icon;
   final Map<String, dynamic> distribution;
-  final bool ready;
-  final AgentCapabilities capabilities;
 
   RegistryAgentInfo({
     required this.id,
@@ -733,8 +700,6 @@ class RegistryAgentInfo {
     this.repository,
     this.icon,
     required this.distribution,
-    required this.ready,
-    required this.capabilities,
   });
 
   factory RegistryAgentInfo.fromJson(Map<String, dynamic> json) => RegistryAgentInfo(
@@ -745,9 +710,6 @@ class RegistryAgentInfo {
         repository: json['repository'] as String?,
         icon: json['icon'] as String?,
         distribution: json['distribution'] as Map<String, dynamic>? ?? {},
-        ready: json['ready'] as bool? ?? false,
-        capabilities: AgentCapabilities.fromJson(
-            json['capabilities'] as Map<String, dynamic>? ?? const {}),
       );
 }
 
@@ -815,13 +777,23 @@ class AgentNativeCapability {
   final bool supported;
   final bool ready;
   final String? executable;
+  final String? executableSource;
   final String? reason;
+  final bool structuredHistory;
+  final bool modelSelection;
+  final bool modeSelection;
+  final bool authentication;
 
   const AgentNativeCapability({
     required this.supported,
     required this.ready,
     this.executable,
+    this.executableSource,
     this.reason,
+    this.structuredHistory = false,
+    this.modelSelection = false,
+    this.modeSelection = false,
+    this.authentication = false,
   });
 
   factory AgentNativeCapability.fromJson(Map<String, dynamic> json) =>
@@ -829,8 +801,25 @@ class AgentNativeCapability {
         supported: json['supported'] as bool? ?? false,
         ready: json['ready'] as bool? ?? false,
         executable: json['executable'] as String?,
+        executableSource: json['executableSource'] as String?,
         reason: json['reason'] as String?,
+        structuredHistory: json['structuredHistory'] as bool? ?? false,
+        modelSelection: json['modelSelection'] as bool? ?? false,
+        modeSelection: json['modeSelection'] as bool? ?? false,
+        authentication: json['authentication'] as bool? ?? false,
       );
+
+  Map<String, dynamic> toJson() => {
+        'supported': supported,
+        'ready': ready,
+        if (executable != null) 'executable': executable,
+        if (executableSource != null) 'executableSource': executableSource,
+        if (reason != null) 'reason': reason,
+        'structuredHistory': structuredHistory,
+        'modelSelection': modelSelection,
+        'modeSelection': modeSelection,
+        'authentication': authentication,
+      };
 }
 
 class AgentHerdrCapability {
@@ -839,7 +828,12 @@ class AgentHerdrCapability {
   final String? kind;
   final String? integrationId;
   final bool integrationInstalled;
+  final String? executableSource;
   final String? reason;
+  final bool structuredHistory;
+  final bool modelSelection;
+  final bool modeSelection;
+  final bool authentication;
 
   const AgentHerdrCapability({
     required this.supported,
@@ -847,7 +841,12 @@ class AgentHerdrCapability {
     this.kind,
     this.integrationId,
     this.integrationInstalled = false,
+    this.executableSource,
     this.reason,
+    this.structuredHistory = false,
+    this.modelSelection = false,
+    this.modeSelection = false,
+    this.authentication = false,
   });
 
   factory AgentHerdrCapability.fromJson(Map<String, dynamic> json) =>
@@ -857,8 +856,27 @@ class AgentHerdrCapability {
         kind: json['kind'] as String?,
         integrationId: json['integrationId'] as String?,
         integrationInstalled: json['integrationInstalled'] as bool? ?? false,
+        executableSource: json['executableSource'] as String?,
         reason: json['reason'] as String?,
+        structuredHistory: json['structuredHistory'] as bool? ?? false,
+        modelSelection: json['modelSelection'] as bool? ?? false,
+        modeSelection: json['modeSelection'] as bool? ?? false,
+        authentication: json['authentication'] as bool? ?? false,
       );
+
+  Map<String, dynamic> toJson() => {
+        'supported': supported,
+        'ready': ready,
+        if (kind != null) 'kind': kind,
+        if (integrationId != null) 'integrationId': integrationId,
+        'integrationInstalled': integrationInstalled,
+        if (executableSource != null) 'executableSource': executableSource,
+        if (reason != null) 'reason': reason,
+        'structuredHistory': structuredHistory,
+        'modelSelection': modelSelection,
+        'modeSelection': modeSelection,
+        'authentication': authentication,
+      };
 }
 
 class AgentRuntimeCapability {
@@ -867,10 +885,6 @@ class AgentRuntimeCapability {
   final bool enabled;
   final AgentNativeCapability native;
   final AgentHerdrCapability herdr;
-  final bool structuredHistory;
-  final bool modelSelection;
-  final bool modeSelection;
-  final bool authentication;
 
   const AgentRuntimeCapability({
     required this.id,
@@ -878,10 +892,6 @@ class AgentRuntimeCapability {
     required this.enabled,
     required this.native,
     required this.herdr,
-    required this.structuredHistory,
-    required this.modelSelection,
-    required this.modeSelection,
-    required this.authentication,
   });
 
   factory AgentRuntimeCapability.fromJson(Map<String, dynamic> json) =>
@@ -893,10 +903,6 @@ class AgentRuntimeCapability {
             json['native'] as Map<String, dynamic>? ?? const {}),
         herdr: AgentHerdrCapability.fromJson(
             json['herdr'] as Map<String, dynamic>? ?? const {}),
-        structuredHistory: json['structuredHistory'] as bool? ?? false,
-        modelSelection: json['modelSelection'] as bool? ?? false,
-        modeSelection: json['modeSelection'] as bool? ?? false,
-        authentication: json['authentication'] as bool? ?? false,
       );
 }
 

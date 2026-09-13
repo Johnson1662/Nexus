@@ -1,7 +1,13 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync, unlinkSync, chmodSync } from "node:fs";
 import path from "node:path";
 import { homedir } from "node:os";
-import { getRegistryAgent, resolveAgentCommand, getAgentDisplayName, type AgentCapabilities } from "./registry/registry.mjs";
+import {
+  getRegistryAgent,
+  resolveDistributionCommand,
+  getAgentDisplayName,
+  type AgentNativeConfig,
+  type AgentHerdrConfig,
+} from "./registry/registry.mjs";
 
 // ── Types ─────────────────────────────────────────────────────────────
 
@@ -40,22 +46,34 @@ function ensureDir(): void {
 }
 
 export function findExecutable(command: string): string | null {
+  return findExecutableDetailed(command)?.path ?? null;
+}
+
+/**
+ * Like findExecutable, but reports whether the match came from PATH or from a
+ * well-known user binary directory (used to expose executable provenance).
+ */
+export function findExecutableDetailed(
+  command: string,
+): { path: string; fromKnownLocation: boolean } | null {
   const names = process.platform === "win32" && !path.extname(command)
     ? (process.env.PATHEXT ?? ".EXE;.CMD;.BAT;.COM").split(";").map((ext) => command + ext.toLowerCase())
     : [command];
   if (path.isAbsolute(command) || command.includes("/") || command.includes("\\")) {
     const resolved = path.resolve(command);
-    return existsSync(resolved) ? resolved : null;
+    return existsSync(resolved) ? { path: resolved, fromKnownLocation: false } : null;
   }
-  const searchDirs = [
-    ...(process.env.PATH ?? "").split(path.delimiter),
-    ...knownBinDirs(),
+  const searchGroups: Array<{ dirs: string[]; fromKnownLocation: boolean }> = [
+    { dirs: (process.env.PATH ?? "").split(path.delimiter), fromKnownLocation: false },
+    { dirs: knownBinDirs(), fromKnownLocation: true },
   ];
-  for (const dir of searchDirs) {
-    if (!dir) continue;
-    for (const name of names) {
-      const candidate = path.join(dir, name);
-      if (existsSync(candidate)) return candidate;
+  for (const group of searchGroups) {
+    for (const dir of group.dirs) {
+      if (!dir) continue;
+      for (const name of names) {
+        const candidate = path.join(dir, name);
+        if (existsSync(candidate)) return { path: candidate, fromKnownLocation: group.fromKnownLocation };
+      }
     }
   }
   return null;
@@ -125,8 +143,10 @@ export function findAgentExecutable(agentId: string): ResolvedExecutable | null 
   ];
   for (const candidate of candidates) {
     if (!candidate) continue;
-    const found = findExecutable(candidate);
-    if (found) return { path: found, source: "registry" };
+    const found = findExecutableDetailed(candidate);
+    if (found) {
+      return { path: found.path, source: found.fromKnownLocation ? "known_location" : "registry" };
+    }
   }
 
   return null;
@@ -228,8 +248,8 @@ function getDefaultInstallations(): InstalledAgent[] {
       source: "registry" as const,
     }))
     .filter((a) => {
-      const launch = resolveAgentCommand(a.agentId);
-      return launch !== null && findExecutable(launch.cmd) !== null;
+      const runtime = resolveAgentRuntime(a.agentId);
+      return runtime !== null && runtime.executablePath !== null;
     });
 }
 
@@ -251,7 +271,7 @@ export function installAgent(
   if (source === "registry" && !getRegistryAgent(agentId)) {
     throw new Error(`unknown registry agent: ${agentId}`);
   }
-  const command = source === "custom" ? options?.command : resolveAgentCommand(agentId)?.cmd;
+  const command = source === "custom" ? options?.command : resolveDistributionCommand(agentId)?.cmd;
   if (!command || !findExecutable(command)) {
     throw new Error(`agent command not found in PATH: ${command || agentId}`);
   }
@@ -306,72 +326,89 @@ export function setAgentEnvOverrides(agentId: string, env: Record<string, string
 
 // ── Agent Resolution ──────────────────────────────────────────────────
 
-export interface ResolvedAgentInfo {
+export interface AgentRuntime {
   agentId: string;
-  name: string;
+  displayName: string;
+  source: "registry" | "custom";
   cmd: string;
   args: string[];
   env: Record<string, string>;
-  source: "registry" | "custom";
   executablePath: string | null;
-  capabilities: AgentCapabilities;
+  executableSource: ExecutableSource | null;
+  native: AgentNativeConfig;
+  herdr: AgentHerdrConfig;
+  herdrKind: string | null;
+  herdrIntegration: string | null;
 }
 
 /**
- * Resolve an agent's launch info from installed config + registry.
- * Returns null if agent is not installed or can't be resolved.
+ * Single resolution entry point for an agent's launch info, capabilities and
+ * Herdr identity. Detection, install validation, Native launch and the agent
+ * management UI all read this result so they can never disagree.
+ * Returns null only when the agent is not installed.
  */
-export function resolveAgentInfo(agentId: string): ResolvedAgentInfo | null {
-  const agents = loadFromDisk();
-  const installedAgent = agents.find((a) => a.agentId === agentId);
+export function resolveAgentRuntime(agentId: string): AgentRuntime | null {
+  const installedAgent = loadFromDisk().find((a) => a.agentId === agentId);
   if (!installedAgent) return null;
 
   // Custom agent — use user-provided command/args
   if (installedAgent.source === "custom") {
     if (!installedAgent.customCommand) return null;
+    const found = findExecutableDetailed(installedAgent.customCommand);
     return {
       agentId,
-      name: agentId,
+      displayName: agentId,
+      source: "custom",
       cmd: installedAgent.customCommand,
       args: installedAgent.customArgs || [],
       env: installedAgent.customEnv || {},
-      source: "custom",
-      executablePath: findExecutable(installedAgent.customCommand),
-      capabilities: {
-        nativeAcp: true,
-        herdr: false,
+      executablePath: found?.path ?? null,
+      executableSource: found ? (found.fromKnownLocation ? "known_location" : "config") : null,
+      native: {
+        enabled: true,
+        command: installedAgent.customCommand,
+        args: installedAgent.customArgs || [],
         structuredHistory: false,
         modelSelection: true,
         modeSelection: true,
         authentication: true,
       },
+      herdr: {
+        enabled: false,
+        structuredHistory: false,
+        modelSelection: false,
+        modeSelection: false,
+        authentication: false,
+      },
+      herdrKind: null,
+      herdrIntegration: null,
     };
   }
 
   // Registry agent — resolve from registry
-  const name = getAgentDisplayName(agentId);
-  const resolved = resolveAgentCommand(agentId);
-  if (!resolved) return null;
+  const registryAgent = getRegistryAgent(agentId);
+  const native = registryAgent?.native ?? null;
+  const herdr = registryAgent?.herdr ?? null;
+  if (!native || !herdr) return null;
+  const resolved = resolveDistributionCommand(agentId);
+  const found = findAgentExecutable(agentId);
 
   return {
     agentId,
-    name,
-    cmd: resolved.cmd,
-    args: resolved.args,
-    env: { ...(resolved.env || {}), ...(installedAgent.customEnv || {}) },
+    displayName: getAgentDisplayName(agentId),
     source: "registry",
-    executablePath: findExecutable(resolved.cmd),
-    capabilities: getRegistryAgent(agentId)!.capabilities,
+    cmd: resolved?.cmd ?? native.command ?? "",
+    args: resolved?.args ?? native.args ?? [],
+    env: { ...(resolved?.env || {}), ...(installedAgent.customEnv || {}) },
+    executablePath: found?.path ?? null,
+    executableSource: found?.source ?? null,
+    native,
+    herdr,
+    herdrKind: herdr.kind ?? null,
+    herdrIntegration: herdr.integration ?? null,
   };
 }
 
 export function isValidAgent(agentId: string): boolean {
   return isAgentInstalled(agentId);
-}
-
-export function getAgentLaunchArgs(agentName: string): string[] {
-  // Compatibility shim for old code that calls getAgentLaunchArgs
-  const info = resolveAgentInfo(agentName);
-  if (!info) return ["acp"];
-  return info.args;
 }

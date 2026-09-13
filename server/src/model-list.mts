@@ -1,6 +1,6 @@
 import path from "node:path";
 import { homedir } from "node:os";
-import { getAgentLaunchArgs } from "./discovery/agents.mjs";
+import { resolveAgentRuntime } from "./agents-store.mjs";
 
 export interface ModelListModel {
   modelId: string;
@@ -33,7 +33,7 @@ function normalizeCwd(cwd?: string): string {
 }
 
 export function getModelCacheKey(agent: string, cwd?: string): string {
-  const args = getAgentLaunchArgs(agent).join("\u0000");
+  const args = (resolveAgentRuntime(agent)?.args ?? []).join("\u0000");
   return `${agent}:${normalizeCwd(cwd)}:${args}`;
 }
 

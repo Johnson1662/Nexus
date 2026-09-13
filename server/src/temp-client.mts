@@ -4,7 +4,7 @@ import { homedir } from "node:os";
 import { mkdirSync, existsSync, realpathSync, statSync } from "node:fs";
 import type { RequestPermissionResponse } from "@agentclientprotocol/sdk";
 import { AcpClient } from "./acp/client.mjs";
-import { resolveAgentInfo } from "./agents-store.mjs";
+import { resolveAgentRuntime } from "./agents-store.mjs";
 import { resolveWorkspacePath } from "./path-utils.mjs";
 /**
  * Creates a temporary ACP client + agent process for one-shot listing operations.
@@ -14,11 +14,11 @@ export async function createTempClient(
   agent: string,
   cwd?: string,
 ): Promise<{ client: AcpClient; destroy: () => void }> {
-  const launch = resolveAgentInfo(agent);
-  if (!launch || !launch.cmd || launch.args.some(arg => typeof arg !== "string")) {
+  const launch = resolveAgentRuntime(agent);
+  if (!launch || !launch.cmd || launch.args.some((arg: unknown) => typeof arg !== "string")) {
     throw new Error(`invalid or unavailable agent: ${agent}`);
   }
-  if (!launch.capabilities.nativeAcp) {
+  if (!launch.native.enabled) {
     throw new Error(`agent does not provide native ACP transport: ${agent}`);
   }
   if (!launch.executablePath) {

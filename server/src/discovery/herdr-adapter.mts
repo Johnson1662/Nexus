@@ -3,7 +3,7 @@ import path from "node:path";
 import { homedir } from "node:os";
 import { existsSync, readdirSync, readlinkSync, statSync, realpathSync, readFileSync } from "node:fs";
 import { execSync } from "node:child_process";
-import { getAgentCapabilities } from "../registry/registry.mjs";
+import { getHerdrConfig } from "../registry/registry.mjs";
 
 // ── Types ─────────────────────────────────────────────────────────────
 
@@ -428,7 +428,7 @@ export class HerdrAdapter {
 
     const targetCwd = match.foreground_cwd || match.cwd;
     let sessionPath: string | undefined;
-    const supportsStructuredHistory = getAgentCapabilities(match.agent)?.structuredHistory === true;
+    const supportsStructuredHistory = getHerdrConfig(match.agent)?.structuredHistory === true;
 
     // 1. Absolute highest priority: The .jsonl file actually held open by the active process in this pane!
     // This circumvents stale or outdated agent_session metadata from Herdr IPC when sessions are resumed or switched.

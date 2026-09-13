@@ -12,20 +12,20 @@
       "native": {
         "enabled": true,
         "command": "omp",
-        "args": ["acp"]
-      },
-      "herdr": {
-        "enabled": true,
-        "kind": "omp",
-        "integration": "omp"
-      },
-      "capabilities": {
-        "nativeAcp": true,
-        "herdr": true,
+        "args": ["acp"],
         "structuredHistory": true,
         "modelSelection": true,
         "modeSelection": true,
         "authentication": true
+      },
+      "herdr": {
+        "enabled": true,
+        "kind": "omp",
+        "integration": "omp",
+        "structuredHistory": true,
+        "modelSelection": false,
+        "modeSelection": false,
+        "authentication": false
       },
       "distribution": {
         "direct": {
@@ -43,16 +43,16 @@
         "executables": ["claude"]
       },
       "native": {
-        "enabled": false
+        "enabled": false,
+        "structuredHistory": false,
+        "modelSelection": false,
+        "modeSelection": false,
+        "authentication": false
       },
       "herdr": {
         "enabled": true,
         "kind": "claude",
-        "integration": "claude"
-      },
-      "capabilities": {
-        "nativeAcp": false,
-        "herdr": true,
+        "integration": "claude",
         "structuredHistory": false,
         "modelSelection": false,
         "modeSelection": false,
@@ -74,16 +74,16 @@
         "executables": ["codex"]
       },
       "native": {
-        "enabled": false
+        "enabled": false,
+        "structuredHistory": false,
+        "modelSelection": false,
+        "modeSelection": false,
+        "authentication": false
       },
       "herdr": {
         "enabled": true,
         "kind": "codex",
-        "integration": "codex"
-      },
-      "capabilities": {
-        "nativeAcp": false,
-        "herdr": true,
+        "integration": "codex",
         "structuredHistory": true,
         "modelSelection": false,
         "modeSelection": false,
@@ -107,20 +107,20 @@
       "native": {
         "enabled": true,
         "command": "opencode",
-        "args": ["acp"]
+        "args": ["acp"],
+        "structuredHistory": true,
+        "modelSelection": true,
+        "modeSelection": true,
+        "authentication": true
       },
       "herdr": {
         "enabled": true,
         "kind": "opencode",
-        "integration": "opencode"
-      },
-      "capabilities": {
-        "nativeAcp": true,
-        "herdr": true,
+        "integration": "opencode",
         "structuredHistory": false,
-        "modelSelection": true,
-        "modeSelection": true,
-        "authentication": true
+        "modelSelection": false,
+        "modeSelection": false,
+        "authentication": false
       },
       "distribution": {
         "direct": {
@@ -140,20 +140,20 @@
       "native": {
         "enabled": true,
         "command": "agent",
-        "args": ["acp"]
-      },
-      "herdr": {
-        "enabled": true,
-        "kind": "cursor",
-        "integration": "cursor"
-      },
-      "capabilities": {
-        "nativeAcp": true,
-        "herdr": true,
+        "args": ["acp"],
         "structuredHistory": true,
         "modelSelection": true,
         "modeSelection": true,
         "authentication": true
+      },
+      "herdr": {
+        "enabled": true,
+        "kind": "cursor",
+        "integration": "cursor",
+        "structuredHistory": false,
+        "modelSelection": false,
+        "modeSelection": false,
+        "authentication": false
       },
       "distribution": {
         "direct": {
@@ -171,16 +171,16 @@
         "executables": ["copilot"]
       },
       "native": {
-        "enabled": false
+        "enabled": false,
+        "structuredHistory": false,
+        "modelSelection": false,
+        "modeSelection": false,
+        "authentication": false
       },
       "herdr": {
         "enabled": true,
         "kind": "copilot",
-        "integration": "copilot"
-      },
-      "capabilities": {
-        "nativeAcp": false,
-        "herdr": true,
+        "integration": "copilot",
         "structuredHistory": false,
         "modelSelection": false,
         "modeSelection": false,
@@ -202,16 +202,16 @@
         "executables": ["devin"]
       },
       "native": {
-        "enabled": false
+        "enabled": false,
+        "structuredHistory": false,
+        "modelSelection": false,
+        "modeSelection": false,
+        "authentication": false
       },
       "herdr": {
         "enabled": true,
         "kind": "devin",
-        "integration": "devin"
-      },
-      "capabilities": {
-        "nativeAcp": false,
-        "herdr": true,
+        "integration": "devin",
         "structuredHistory": false,
         "modelSelection": false,
         "modeSelection": false,
@@ -233,16 +233,16 @@
         "executables": ["droid"]
       },
       "native": {
-        "enabled": false
+        "enabled": false,
+        "structuredHistory": false,
+        "modelSelection": false,
+        "modeSelection": false,
+        "authentication": false
       },
       "herdr": {
         "enabled": true,
         "kind": "droid",
-        "integration": "droid"
-      },
-      "capabilities": {
-        "nativeAcp": false,
-        "herdr": true,
+        "integration": "droid",
         "structuredHistory": false,
         "modelSelection": false,
         "modeSelection": false,
@@ -266,20 +266,20 @@
       "native": {
         "enabled": true,
         "command": "kimi",
-        "args": ["acp"]
+        "args": ["acp"],
+        "structuredHistory": true,
+        "modelSelection": true,
+        "modeSelection": true,
+        "authentication": true
       },
       "herdr": {
         "enabled": true,
         "kind": "kimi",
-        "integration": "kimi"
-      },
-      "capabilities": {
-        "nativeAcp": true,
-        "herdr": true,
+        "integration": "kimi",
         "structuredHistory": false,
-        "modelSelection": true,
-        "modeSelection": true,
-        "authentication": true
+        "modelSelection": false,
+        "modeSelection": false,
+        "authentication": false
       },
       "distribution": {
         "direct": {
@@ -297,16 +297,16 @@
         "executables": ["qwen"]
       },
       "native": {
-        "enabled": false
+        "enabled": false,
+        "structuredHistory": false,
+        "modelSelection": false,
+        "modeSelection": false,
+        "authentication": false
       },
       "herdr": {
         "enabled": true,
         "kind": "qwen",
-        "integration": "qwen"
-      },
-      "capabilities": {
-        "nativeAcp": false,
-        "herdr": true,
+        "integration": "qwen",
         "structuredHistory": false,
         "modelSelection": false,
         "modeSelection": false,
@@ -328,16 +328,16 @@
         "executables": ["grok"]
       },
       "native": {
-        "enabled": false
+        "enabled": false,
+        "structuredHistory": false,
+        "modelSelection": false,
+        "modeSelection": false,
+        "authentication": false
       },
       "herdr": {
         "enabled": true,
         "kind": "grok",
-        "integration": "grok"
-      },
-      "capabilities": {
-        "nativeAcp": false,
-        "herdr": true,
+        "integration": "grok",
         "structuredHistory": false,
         "modelSelection": false,
         "modeSelection": false,
@@ -359,16 +359,16 @@
         "executables": ["pi"]
       },
       "native": {
-        "enabled": false
+        "enabled": false,
+        "structuredHistory": false,
+        "modelSelection": false,
+        "modeSelection": false,
+        "authentication": false
       },
       "herdr": {
         "enabled": true,
         "kind": "pi",
-        "integration": "pi"
-      },
-      "capabilities": {
-        "nativeAcp": false,
-        "herdr": true,
+        "integration": "pi",
         "structuredHistory": false,
         "modelSelection": false,
         "modeSelection": false,
@@ -390,16 +390,16 @@
         "executables": ["kilo"]
       },
       "native": {
-        "enabled": false
+        "enabled": false,
+        "structuredHistory": false,
+        "modelSelection": false,
+        "modeSelection": false,
+        "authentication": false
       },
       "herdr": {
         "enabled": true,
         "kind": "kilo",
-        "integration": "kilo"
-      },
-      "capabilities": {
-        "nativeAcp": false,
-        "herdr": true,
+        "integration": "kilo",
         "structuredHistory": false,
         "modelSelection": false,
         "modeSelection": false,
@@ -421,16 +421,16 @@
         "executables": ["hermes"]
       },
       "native": {
-        "enabled": false
+        "enabled": false,
+        "structuredHistory": false,
+        "modelSelection": false,
+        "modeSelection": false,
+        "authentication": false
       },
       "herdr": {
         "enabled": true,
         "kind": "hermes",
-        "integration": "hermes"
-      },
-      "capabilities": {
-        "nativeAcp": false,
-        "herdr": true,
+        "integration": "hermes",
         "structuredHistory": false,
         "modelSelection": false,
         "modeSelection": false,
@@ -452,16 +452,16 @@
         "executables": ["qodercli"]
       },
       "native": {
-        "enabled": false
+        "enabled": false,
+        "structuredHistory": false,
+        "modelSelection": false,
+        "modeSelection": false,
+        "authentication": false
       },
       "herdr": {
         "enabled": true,
         "kind": "qodercli",
-        "integration": "qodercli"
-      },
-      "capabilities": {
-        "nativeAcp": false,
-        "herdr": true,
+        "integration": "qodercli",
         "structuredHistory": false,
         "modelSelection": false,
         "modeSelection": false,
@@ -483,16 +483,16 @@
         "executables": ["mastracode"]
       },
       "native": {
-        "enabled": false
+        "enabled": false,
+        "structuredHistory": false,
+        "modelSelection": false,
+        "modeSelection": false,
+        "authentication": false
       },
       "herdr": {
         "enabled": true,
         "kind": "mastracode",
-        "integration": "mastracode"
-      },
-      "capabilities": {
-        "nativeAcp": false,
-        "herdr": true,
+        "integration": "mastracode",
         "structuredHistory": false,
         "modelSelection": false,
         "modeSelection": false,
@@ -514,16 +514,16 @@
         "executables": ["agy"]
       },
       "native": {
-        "enabled": false
+        "enabled": false,
+        "structuredHistory": false,
+        "modelSelection": false,
+        "modeSelection": false,
+        "authentication": false
       },
       "herdr": {
         "enabled": true,
         "kind": "agy",
-        "integration": "antigravity-cli"
-      },
-      "capabilities": {
-        "nativeAcp": false,
-        "herdr": true,
+        "integration": "antigravity-cli",
         "structuredHistory": false,
         "modelSelection": false,
         "modeSelection": false,

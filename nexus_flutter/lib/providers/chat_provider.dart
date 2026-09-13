@@ -768,6 +768,17 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
         .toList();
   }
 
+  /// Runtime capability for a registry agent id, or null before the first
+  /// `host_capabilities` reply arrives for the current host.
+  AgentRuntimeCapability? capabilityFor(String agentId) {
+    final agents = _state.hostCapabilities?.agents;
+    if (agents == null) return null;
+    for (final agent in agents) {
+      if (agent.id == agentId) return agent;
+    }
+    return null;
+  }
+
   void createHerdrAgent({
     required String workspaceId,
     required String agentKind,
@@ -1232,6 +1243,9 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
       case 'host_capabilities':
         if (msg.hostCapabilities != null) {
           _state.hostCapabilities = msg.hostCapabilities;
+          // Agent selectors are capability-driven; refresh them the moment the
+          // authoritative capability set arrives.
+          _applyAgentList(_state.installedAgents);
           _recomputeEffectiveBackend();
           notifyListeners();
         }
@@ -2224,10 +2238,8 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   void _applyAgentList(List<AgentInfo> agents) {
     _state.installedAgents = agents;
-    _state.agentNames = agents
-        .where((a) => a.ready && a.capabilities.nativeAcp)
-        .map((a) => a.name)
-        .toList();
+    // Native selector is driven by HostCapabilities, the single runtime source.
+    _state.agentNames = enabledNativeAgents.map((a) => a.id).toList();
     if (!_state.agentNames.contains(_state.selectedAgentName)) {
       _state.selectedAgentName = _state.agentNames.contains('omp')
           ? 'omp'

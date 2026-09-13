@@ -1,5 +1,5 @@
-import { findExecutable, findAgentExecutable, isAgentInstalled } from "../agents-store.mjs";
-import { listRegistryAgents, loadRegistry } from "../registry/registry.mjs";
+import { findExecutable, findAgentExecutable, resolveAgentRuntime } from "../agents-store.mjs";
+import { listRegistryAgents, loadRegistry, getNativeConfig, getHerdrConfig } from "../registry/registry.mjs";
 import { HerdrAdapter } from "./herdr-adapter.mjs";
 
 export interface HostCapabilities {
@@ -29,6 +29,10 @@ export interface AgentRuntimeCapability {
     ready: boolean;
     executable?: string;
     executableSource?: "override" | "config" | "registry" | "known_location";
+    structuredHistory: boolean;
+    modelSelection: boolean;
+    modeSelection: boolean;
+    authentication: boolean;
     reason?: string;
   };
   herdr: {
@@ -38,12 +42,12 @@ export interface AgentRuntimeCapability {
     integrationId?: string;
     integrationInstalled?: boolean;
     executableSource?: "override" | "config" | "registry" | "known_location";
+    structuredHistory: boolean;
+    modelSelection: boolean;
+    modeSelection: boolean;
+    authentication: boolean;
     reason?: string;
   };
-  structuredHistory: boolean;
-  modelSelection: boolean;
-  modeSelection: boolean;
-  authentication: boolean;
 }
 
 let cachedCapabilities: HostCapabilities | null = null;
@@ -64,24 +68,33 @@ export async function detectHostCapabilities(forceRefresh = false): Promise<Host
   const integrations = await HerdrAdapter.getIntegrationStatus();
 
   const agents: AgentRuntimeCapability[] = regAgents.map((agent) => {
-    const resolvedExec = findAgentExecutable(agent.id);
-    const execPath = resolvedExec?.path ?? null;
-    const nativeSupported = Boolean(agent.native?.enabled);
+    const runtime = resolveAgentRuntime(agent.id);
+    // Capability is a property of the agent, not of its install state: fall
+    // back to registry metadata when this host has not installed it yet.
+    const nativeCfg = runtime?.native ?? getNativeConfig(agent.id);
+    const herdrCfg = runtime?.herdr ?? getHerdrConfig(agent.id);
+    const execPath = runtime ? runtime.executablePath : (findAgentExecutable(agent.id)?.path ?? null);
+    const execSource = runtime?.executableSource ?? findAgentExecutable(agent.id)?.source ?? undefined;
+    const nativeSupported = Boolean(nativeCfg?.enabled);
     const nativeReady = nativeSupported && execPath !== null;
-    const herdrSupported = Boolean(agent.herdr?.enabled);
-    const herdrReady = herdrAvailable && execPath !== null;
-    const integrationId = agent.herdr?.integration ?? agent.id;
-    const integrationInstalled = Boolean(integrations[integrationId]);
+    const herdrSupported = Boolean(herdrCfg?.enabled);
+    const herdrReady = herdrSupported && herdrAvailable && execPath !== null;
+    const integrationId = runtime?.herdrIntegration ?? herdrCfg?.integration ?? undefined;
+    const integrationInstalled = integrationId ? Boolean(integrations[integrationId]) : false;
 
     return {
       id: agent.id,
       name: agent.name,
-      enabled: isAgentInstalled(agent.id),
+      enabled: runtime !== null,
       native: {
         supported: nativeSupported,
         ready: nativeReady,
         executable: execPath ?? undefined,
-        executableSource: resolvedExec?.source,
+        executableSource: execSource,
+        structuredHistory: nativeCfg?.structuredHistory ?? false,
+        modelSelection: nativeCfg?.modelSelection ?? false,
+        modeSelection: nativeCfg?.modeSelection ?? false,
+        authentication: nativeCfg?.authentication ?? false,
         reason: !nativeSupported
           ? "Native ACP not enabled for this agent"
           : execPath === null
@@ -91,20 +104,22 @@ export async function detectHostCapabilities(forceRefresh = false): Promise<Host
       herdr: {
         supported: herdrSupported,
         ready: herdrReady,
-        kind: agent.herdr?.kind ?? agent.id,
+        kind: runtime?.herdrKind ?? herdrCfg?.kind ?? undefined,
         integrationId,
         integrationInstalled,
-        executableSource: resolvedExec?.source,
-        reason: !herdrAvailable
-          ? "Herdr is not running on this host"
-          : execPath === null
-            ? "Executable not found in PATH or known locations"
-            : undefined,
+        executableSource: execSource,
+        structuredHistory: herdrCfg?.structuredHistory ?? false,
+        modelSelection: herdrCfg?.modelSelection ?? false,
+        modeSelection: herdrCfg?.modeSelection ?? false,
+        authentication: herdrCfg?.authentication ?? false,
+        reason: !herdrSupported
+          ? "Herdr backend not enabled for this agent"
+          : !herdrAvailable
+            ? "Herdr is not running on this host"
+            : execPath === null
+              ? "Executable not found in PATH or known locations"
+              : undefined,
       },
-      structuredHistory: agent.capabilities.structuredHistory,
-      modelSelection: agent.capabilities.modelSelection,
-      modeSelection: agent.capabilities.modeSelection,
-      authentication: agent.capabilities.authentication,
     };
   });
 

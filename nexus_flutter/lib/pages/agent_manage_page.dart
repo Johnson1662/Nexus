@@ -36,11 +36,21 @@ class _AgentManagePageState extends State<AgentManagePage> {
       installedNames.add(agent.name.toLowerCase());
     }
 
-    final agentList = chatProvider.state.registryAgents.map((r) => {
-      'id': r.id.toLowerCase(),
-      'name': r.name.isNotEmpty ? r.name : AgentUtils.getDisplayName(r.id),
-      'desc': r.description,
-      'ready': r.ready ? 'true' : 'false',
+    final agentList = chatProvider.state.registryAgents.map((r) {
+      final caps = chatProvider.capabilityFor(r.id);
+      final nativeReady = caps?.native.ready ?? false;
+      final herdrReady = caps?.herdr.ready ?? false;
+      final executable = caps?.native.executable ?? '';
+      return {
+        'id': r.id.toLowerCase(),
+        'name': r.name.isNotEmpty ? r.name : AgentUtils.getDisplayName(r.id),
+        'desc': r.description,
+        'ready': (nativeReady || herdrReady) ? 'true' : 'false',
+        'native': nativeReady ? 'Native ✓' : 'Native ✗',
+        'herdr': herdrReady ? 'Herdr ✓' : 'Herdr ✗',
+        'executable': executable,
+        'reason': caps?.native.reason ?? caps?.herdr.reason ?? '',
+      };
     }).toList();
 
     final enabledAgents = agentList.where((a) {
@@ -187,6 +197,10 @@ class _AgentManagePageState extends State<AgentManagePage> {
     final id = agent['id']!;
     final name = agent['name']!;
     final desc = agent['desc']!;
+    final nativeLabel = agent['native']!;
+    final herdrLabel = agent['herdr']!;
+    final reason = agent['reason'] ?? '';
+    final installable = agent['ready'] == 'true';
     final fg = AppColors.foregroundCtx(context);
     final muted = AppColors.foregroundMutedCtx(context);
 
@@ -208,12 +222,14 @@ class _AgentManagePageState extends State<AgentManagePage> {
         ),
       ),
       subtitle: Text(
-        agent['ready'] == 'true' ? desc : '$desc · PC 未找到命令',
+        installable
+            ? '$desc · $nativeLabel · $herdrLabel'
+            : '$desc · ${reason.isNotEmpty ? reason : 'PC 未找到命令'}',
         style: TextStyle(
           fontSize: AppFontSize.xs,
           color: muted,
         ),
-        maxLines: 1,
+        maxLines: 2,
         overflow: TextOverflow.ellipsis,
       ),
     );

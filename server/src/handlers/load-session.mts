@@ -5,7 +5,7 @@ import { HerdrAdapter, HerdrStreamer, findSessionFileById } from "../discovery/h
 import { readSessionJsonlRecentTurn, readSessionJsonlFullHistory } from "../discovery/herdr-acp-converter.mjs";
 import { HerdrTailerRegistry } from "../discovery/herdr-session-tailer.mjs";
 import { getAmbientSession } from "../discovery/ambient-session.mjs";
-import { getAgentCapabilities } from "../registry/registry.mjs";
+import { getHerdrConfig } from "../registry/registry.mjs";
 
 // history_full 是单条 WS 消息下发全量事件：22MB 会话可膨胀到 7MB+ JSON，
 // 手机端解码卡顿且 6000+ 卡片直接撑爆 ListView。只下发尾部有限事件。
@@ -258,7 +258,7 @@ export async function handleLoadSession(
       ws.on("close", () => HerdrStreamer.unsubscribe(paneId, listener));
     };
 
-    if (getAgentCapabilities(resolvedAgent)?.structuredHistory !== true) {
+    if (getHerdrConfig(resolvedAgent)?.structuredHistory !== true) {
       await enterTerminalMode();
       return;
     }

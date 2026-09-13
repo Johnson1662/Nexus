@@ -149,13 +149,11 @@ class _WorkspaceDetailPageState extends State<WorkspaceDetailPage> {
     String workspaceId,
     String workspacePath,
   ) {
-    final availableKinds = chatProvider.state.registryAgents
-        .where((a) => a.ready && a.capabilities.herdr)
-        .map((a) => a.id)
-        .toList();
-    String selectedKind = availableKinds.contains('omp')
+    final creatableAgents = chatProvider.enabledHerdrAgents;
+    final availableIds = creatableAgents.map((a) => a.id).toList();
+    String selectedKind = availableIds.contains('omp')
         ? 'omp'
-        : (availableKinds.isNotEmpty ? availableKinds.first : '');
+        : (availableIds.isNotEmpty ? availableIds.first : '');
     final mode = chatProvider.herdrAgentCreationMode;
     final modeLabel = mode == 'new_tab' ? '新建标签页 (tab.create)' : '分屏创建 (pane.split)';
 
@@ -186,7 +184,7 @@ class _WorkspaceDetailPageState extends State<WorkspaceDetailPage> {
                   ),
                 ),
                 const SizedBox(height: AppSpacing.md),
-                if (availableKinds.isEmpty)
+                if (creatableAgents.isEmpty)
                   Text(
                     'Agent 列表加载中，请稍后重试',
                     style: TextStyle(
@@ -198,12 +196,12 @@ class _WorkspaceDetailPageState extends State<WorkspaceDetailPage> {
                   Wrap(
                     spacing: AppSpacing.sm,
                     runSpacing: AppSpacing.sm,
-                    children: availableKinds.map((kind) {
-                      final selected = selectedKind == kind;
+                    children: creatableAgents.map((agent) {
+                      final selected = selectedKind == agent.id;
                       return ChoiceChip(
-                        label: Text(kind),
+                        label: Text(agent.name.isNotEmpty ? agent.name : agent.id),
                         selected: selected,
-                        onSelected: (_) => setSheetState(() => selectedKind = kind),
+                        onSelected: (_) => setSheetState(() => selectedKind = agent.id),
                       );
                     }).toList(),
                   ),
