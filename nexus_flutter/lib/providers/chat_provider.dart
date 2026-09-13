@@ -1645,10 +1645,15 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
     if (actualHostId.isNotEmpty &&
         _state.currentDeviceId.isNotEmpty &&
         _state.currentDeviceId != actualHostId) {
+      // The authoritative hostId changed: this is a real host switch even when
+      // the caller never went through connectToUrl, so apply the same isolation.
       _resetCursor(clearPersisted: true);
       _processedMessageIds.clear();
       _state.sessionId = '';
       _state.turnActive = false;
+      _clearHostScopedState();
+      _hostGeneration++;
+      _lastConnectionHostKey = actualHostId;
     }
     _state.connected = true;
     _state.errorMessage = '';
