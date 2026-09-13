@@ -72,8 +72,10 @@ Bridge Server 当前负责以下工作：
    - 文件列表最大递归深度为 3，并忽略隐藏文件和 `node_modules`。
 
 7. **Herdr 终端分屏深度集成与双向 ACP 桥接**
+   - 控制面全部经由 Herdr CLI（`herdr-cli.mts`）：结构化命令直接解析 CLI 的 JSON 信封，快照命令按原文读取，不再由 Nexus 维护 socket / 命名管道探测。
+   - `HERDR_BIN_PATH` 可显式指定 Herdr 可执行文件；`HERDR_SESSION` 仅用于选择 `--session`，路径解析交给 Herdr 自身。
    - 自动发现并置顶活跃的 Herdr 终端分屏（`HerdrAdapter.listAgents()`）。
-   - 四级会话句柄解析（`resolveSessionFile`）：从 `/proc/<pid>/fd` 句柄精准定位真实正在运行的 `.jsonl` 文件。
+   - 四级会话句柄解析（`resolveSessionFile`）：从 `/proc/<pid>/fd` 句柄精准定位真实正在运行的 `.jsonl` 文件（仅 Linux 作为增强手段，缺失时退化 terminal 模式）。
    - JSONL 到 ACP 结构化转换（`herdr-acp-converter.mts`）：无损将 OMP 审计日志映射为原生的 `agent_thought_chunk`、`tool_call`、`tool_call_update` 和 Markdown 文本。
    - 基于 inotify 的增量文件尾随监视器（`herdr-session-tailer.mts`）：毫秒级追踪 Agent 产生的新行并增量推流，具备行缓冲与 prompt 去重机制。
    - 两阶段秒开协议：`session_loaded stage: "recent"`（首屏渲染当前最新一轮）+ `history_full`（后台静默拉取完整历史）。
