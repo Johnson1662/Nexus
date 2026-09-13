@@ -20,7 +20,6 @@ class SettingsPage extends StatefulWidget {
 class _SettingsPageState extends State<SettingsPage> {
   final _prefs = AppPreferenceService();
 
-  late String _language;
   late String _colorMode;
   late bool _thinkingExpanded;
   late bool _toolCallExpanded;
@@ -32,7 +31,6 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   void initState() {
     super.initState();
-    _language = AppPreferenceService.normalizeLanguage(_prefs.language);
     _colorMode = AppPreferenceService.normalizeColorMode(_prefs.colorMode);
     _thinkingExpanded = _prefs.thinkingExpanded;
     _toolCallExpanded = _prefs.toolCallExpanded;
@@ -640,10 +638,8 @@ class _SettingsPageState extends State<SettingsPage> {
   // ── Section 2: Display ──
 
   Widget _buildDisplaySection(BuildContext context) {
-    const validLangs = ['system', 'zh-Hans', 'en-US'];
     const validModes = ['system', 'light', 'dark'];
 
-    final safeLang = validLangs.contains(_language) ? _language : 'system';
     final safeMode = validModes.contains(_colorMode) ? _colorMode : 'system';
     final dark = Theme.of(context).brightness == Brightness.dark;
 
@@ -661,45 +657,6 @@ class _SettingsPageState extends State<SettingsPage> {
       child: Column(
         children: [
           // Language picker
-          ListTile(
-            leading: Icon(
-              Icons.language,
-              size: 20,
-              color: AppColors.foregroundCtx(context),
-            ),
-            title: Text(
-              '语言',
-              style: TextStyle(color: AppColors.foregroundCtx(context)),
-            ),
-            trailing: DropdownButton<String>(
-              value: safeLang,
-              underline: const SizedBox(),
-              style: TextStyle(
-                color: AppColors.foregroundCtx(context),
-                fontSize: AppFontSize.sm,
-              ),
-              isDense: true,
-              onChanged: (val) {
-                if (val == null) return;
-                _prefs.setLanguage(val);
-                setState(() => _language = val);
-              },
-              items: const [
-                DropdownMenuItem(
-                  value: 'system',
-                  child: Text('跟随系统'),
-                ),
-                DropdownMenuItem(
-                  value: 'zh-Hans',
-                  child: Text('简体中文'),
-                ),
-                DropdownMenuItem(
-                  value: 'en-US',
-                  child: Text('English'),
-                ),
-              ],
-            ),
-          ),
           const Divider(height: 1),
 
           // Color mode picker

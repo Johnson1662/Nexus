@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../constants/theme.dart';
+import '../models/ws_protocol.dart';
 import '../providers/chat_provider.dart';
 import '../services/device_agent_store.dart';
 import '../widgets/agent_logo.dart';
@@ -36,7 +37,14 @@ class _AgentManagePageState extends State<AgentManagePage> {
       installedNames.add(agent.name.toLowerCase());
     }
 
-    final agentList = chatProvider.state.registryAgents.map((r) {
+    // The registry is static metadata; the runtime list also contains custom
+    // agents the user installed, which must remain manageable.
+    final registryIds = chatProvider.state.registryAgents.map((r) => r.id).toSet();
+    final capabilityOnlyAgents = (chatProvider.state.hostCapabilities?.agents ?? [])
+        .where((a) => !registryIds.contains(a.id))
+        .map((a) => RegistryAgentInfo(id: a.id, name: a.name, description: '', version: '', distribution: const {}));
+
+    final agentList = [...chatProvider.state.registryAgents, ...capabilityOnlyAgents].map((r) {
       final caps = chatProvider.capabilityFor(r.id);
       final integration = chatProvider.integrationFor(caps?.herdr.integrationId);
       final integrationLabel = integration == null
@@ -56,9 +64,13 @@ class _AgentManagePageState extends State<AgentManagePage> {
         'reason': caps?.native.reason ?? caps?.herdr.reason ?? '',
         'integration': integrationLabel,
         'integrationTarget': caps?.herdr.integrationId ?? '',
+        // Offer a repair only for a state we actually know is broken; an
+        // unreadable status must not turn into "install everything".
         'needsIntegration': (caps != null &&
                 caps.herdr.supported &&
-                !caps.herdr.integrationInstalled)
+                (caps.herdr.integrationState == 'not installed' ||
+                    caps.herdr.integrationState == 'missing' ||
+                    caps.herdr.integrationState == 'outdated'))
             ? 'true'
             : 'false',
       };

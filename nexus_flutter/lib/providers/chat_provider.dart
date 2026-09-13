@@ -115,6 +115,12 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
     if (oldKey.isEmpty || newKey.isEmpty || oldKey == newKey) return;
     if (_state.currentDeviceId == oldKey) _state.currentDeviceId = newKey;
     _workspaceProvider?.migrateHostId(oldKey, newKey);
+    // Everything else keyed by the host must follow, or the user's backend
+    // preference and cached agent list reset when a probe canonicalizes the id.
+    DeviceAgentStore().moveHost(oldKey, newKey);
+    StorageService.getInstance().then((storage) {
+      storage.migrateHostScopedKeys(oldKey, newKey);
+    });
   }
 
   @override
@@ -1308,6 +1314,14 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
         _state.errorMessage = msg.error ?? 'Agent 仍在运行，未能终止';
         notifyListeners();
         break;
+      case 'interact_herdr_blocked_done':
+        // The key press is acknowledged explicitly; a failure must be visible
+        // instead of the user tapping a button that silently did nothing.
+        if (msg.ok == false) {
+          _state.errorMessage = msg.error ?? '终端按键发送失败';
+          notifyListeners();
+        }
+        break;
       case 'terminal_snapshot':
         if (!_isRequiredSessionEventForCurrentSession(msg.sessionId)) {
           break;
@@ -2219,7 +2233,9 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
             if (fullList.isNotEmpty &&
                 fullList.last.role == 'assistant' &&
                 fullList.last.type == 'thinking') {
-              fullList.last.content += '\n\n$text';
+              // The live path concatenates chunks verbatim; a forced blank
+              // line made the same content render differently in history.
+              fullList.last.content += text;
             } else {
               fullList.add(MessageData(
                 role: 'assistant',
@@ -2622,14 +2638,27 @@ class WorkspaceProvider extends ChangeNotifier {
         existing['name'] = name;
         existing['path'] = effectivePath;
         existing['workspaceId'] = wsId;
+        existing['source'] = 'herdr';
       } else {
         state.workspaces.add({
           'name': name,
           'path': effectivePath,
           'workspaceId': wsId,
+          'source': 'herdr',
         });
       }
     }
+    // The list just received is authoritative for the Herdr subset, so a
+    // workspace closed on the PC must not linger forever in the UI and be
+    // persisted again on every launch.
+    final liveIds = rawList
+        .map((raw) => (raw['workspaceId'] ?? '').toString())
+        .where((id) => id.isNotEmpty)
+        .toSet();
+    state.workspaces.removeWhere((w) =>
+        w['source'] == 'herdr' &&
+        (w['workspaceId'] ?? '').isNotEmpty &&
+        !liveIds.contains(w['workspaceId']));
     notifyListeners();
     _persistWorkspaces();
   }

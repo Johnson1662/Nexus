@@ -132,6 +132,32 @@ class StorageService {
     await _enqueueFlush();
   }
 
+  /// Move every host-keyed value from one host id to another.
+  ///
+  /// A probe can discover a host's canonical id and replace a provisional key;
+  /// without this, the backend preference and workspace list would silently
+  /// reset even though the user never changed them.
+  Future<void> migrateHostScopedKeys(String oldHostId, String newHostId) async {
+    if (oldHostId.isEmpty || newHostId.isEmpty || oldHostId == newHostId) return;
+    final oldBackendKey = keyHostBackend(oldHostId);
+    final newBackendKey = keyHostBackend(newHostId);
+    final moved = _data[oldBackendKey];
+    if (moved != null && _data[newBackendKey] == null) {
+      _data[newBackendKey] = moved;
+    }
+    _data.remove(oldBackendKey);
+
+    final oldWorkspacesKey = 'workspaces_$oldHostId';
+    final newWorkspacesKey = 'workspaces_$newHostId';
+    final workspaces = _data[oldWorkspacesKey];
+    if (workspaces != null && _data[newWorkspacesKey] == null) {
+      _data[newWorkspacesKey] = workspaces;
+    }
+    _data.remove(oldWorkspacesKey);
+
+    await _enqueueFlush();
+  }
+
   String getHostPreferredBackend(String hostId) {
     if (hostId.isEmpty) return 'native';
     final val = _data[keyHostBackend(hostId)];

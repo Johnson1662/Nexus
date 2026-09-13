@@ -199,65 +199,74 @@ Future<void> _probeAllHosts(
   HostStore hostStore, {
   ChatProvider? chatProvider,
 }) async {
-  for (final device in hostStore.devices) {
-    final hostKey = device.hostId.isNotEmpty ? device.hostId : device.name;
-    if (hostKey.isEmpty) continue;
-
-    bool foundOnline = false;
-    for (final url in device.urls) {
-      final client = io.HttpClient();
-      try {
-        // Convert ws:// → http://, wss:// → https://
-        final probeUrl = url
-            .replaceFirst('ws://', 'http://')
-            .replaceFirst('wss://', 'https://');
-        client.connectionTimeout = const Duration(seconds: 5);
-        final request = await client.getUrl(Uri.parse('$probeUrl/probe'));
-        final authToken = device.authToken;
-        if (authToken != null && authToken.isNotEmpty) {
-          request.headers.set('Authorization', 'Bearer $authToken');
-        }
-        final response = await request.close().timeout(const Duration(seconds: 5));
-        if (response.statusCode == 200) {
-          final raw = await response.transform(utf8.decoder).join();
-          final json = jsonDecode(raw) as Map<String, dynamic>;
-          if (json['ok'] == true) {
-            final hostId = json['hostId'] as String? ?? '';
-            final hostname = json['hostname'] as String? ?? '';
-            if (hostId.isNotEmpty && hostId != device.hostId) {
-              final oldKey = hostKey;
-              hostStore.devices[hostStore.devices.indexOf(device)] = DeviceEntry(
-                hostId: hostId,
-                name: hostname.isNotEmpty ? hostname : device.name,
-                urls: device.urls,
-                relayUrl: device.relayUrl,
-                relayPin: device.relayPin,
-                authToken: device.authToken,
-              );
-              hostStore.migrateHostId(oldKey, hostId);
-              chatProvider?.migrateHostKey(oldKey, hostId);
-              hostStore.markOnline(hostId, url);
-            } else {
-              hostStore.markOnline(hostKey, url);
-            }
-            foundOnline = true;
-            debugPrint('[Probe] $hostKey ONLINE via $url (hostname=$hostname)');
-            break;
-          }
-        }
-      } catch (_) {
-        // Try next URL
-      } finally {
-        client.close(force: true);
-      }
-    }
-    if (!foundOnline) {
-      hostStore.markOffline(hostKey);
-      debugPrint('[Probe] $hostKey OFFLINE');
-    }
-  }
+  // Hosts are probed concurrently: sequentially, each offline host costs up to
+  // one 5s timeout per URL before an online host further down the list is even
+  // tried, which dominated startup on a list with stale entries.
+  await Future.wait(hostStore.devices.map((device) => _probeHost(device, hostStore, chatProvider)));
   hostStore.deduplicate();
   await hostStore.saveToDisk();
+}
+
+Future<void> _probeHost(
+  DeviceEntry device,
+  HostStore hostStore,
+  ChatProvider? chatProvider,
+) async {
+  final hostKey = device.hostId.isNotEmpty ? device.hostId : device.name;
+  if (hostKey.isEmpty) return;
+
+  bool foundOnline = false;
+  for (final url in device.urls) {
+    final client = io.HttpClient();
+    try {
+      // Convert ws:// → http://, wss:// → https://
+      final probeUrl = url
+          .replaceFirst('ws://', 'http://')
+          .replaceFirst('wss://', 'https://');
+      client.connectionTimeout = const Duration(seconds: 5);
+      final request = await client.getUrl(Uri.parse('$probeUrl/probe'));
+      final authToken = device.authToken;
+      if (authToken != null && authToken.isNotEmpty) {
+        request.headers.set('Authorization', 'Bearer $authToken');
+      }
+      final response = await request.close().timeout(const Duration(seconds: 5));
+      if (response.statusCode == 200) {
+        final raw = await response.transform(utf8.decoder).join();
+        final json = jsonDecode(raw) as Map<String, dynamic>;
+        if (json['ok'] == true) {
+          final hostId = json['hostId'] as String? ?? '';
+          final hostname = json['hostname'] as String? ?? '';
+          if (hostId.isNotEmpty && hostId != device.hostId) {
+            final oldKey = hostKey;
+            hostStore.devices[hostStore.devices.indexOf(device)] = DeviceEntry(
+              hostId: hostId,
+              name: hostname.isNotEmpty ? hostname : device.name,
+              urls: device.urls,
+              relayUrl: device.relayUrl,
+              relayPin: device.relayPin,
+              authToken: device.authToken,
+            );
+            hostStore.migrateHostId(oldKey, hostId);
+            chatProvider?.migrateHostKey(oldKey, hostId);
+            hostStore.markOnline(hostId, url);
+          } else {
+            hostStore.markOnline(hostKey, url);
+          }
+          foundOnline = true;
+          debugPrint('[Probe] $hostKey ONLINE via $url (hostname=$hostname)');
+          break;
+        }
+      }
+    } catch (_) {
+      // Try next URL
+    } finally {
+      client.close(force: true);
+    }
+  }
+  if (!foundOnline) {
+    hostStore.markOffline(hostKey);
+    debugPrint('[Probe] $hostKey OFFLINE');
+  }
 }
 
 /// Catches widget build errors

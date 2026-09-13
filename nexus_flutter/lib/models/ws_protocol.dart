@@ -844,6 +844,8 @@ class AgentHerdrCapability {
   final String? kind;
   final String? integrationId;
   final bool integrationInstalled;
+  /// current | not installed | outdated | missing | unknown | unsupported
+  final String integrationState;
   final String? executableSource;
   final String? reason;
   final bool structuredHistory;
@@ -857,6 +859,7 @@ class AgentHerdrCapability {
     this.kind,
     this.integrationId,
     this.integrationInstalled = false,
+    this.integrationState = 'unknown',
     this.executableSource,
     this.reason,
     this.structuredHistory = false,
@@ -872,6 +875,7 @@ class AgentHerdrCapability {
         kind: json['kind'] as String?,
         integrationId: json['integrationId'] as String?,
         integrationInstalled: json['integrationInstalled'] as bool? ?? false,
+        integrationState: json['integrationState'] as String? ?? 'unknown',
         executableSource: json['executableSource'] as String?,
         reason: json['reason'] as String?,
         structuredHistory: json['structuredHistory'] as bool? ?? false,
@@ -886,6 +890,7 @@ class AgentHerdrCapability {
         if (kind != null) 'kind': kind,
         if (integrationId != null) 'integrationId': integrationId,
         'integrationInstalled': integrationInstalled,
+        'integrationState': integrationState,
         if (executableSource != null) 'executableSource': executableSource,
         if (reason != null) 'reason': reason,
         'structuredHistory': structuredHistory,

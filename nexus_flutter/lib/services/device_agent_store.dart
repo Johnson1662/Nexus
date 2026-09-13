@@ -22,6 +22,15 @@ class DeviceAgentStore {
     _persist();
   }
 
+  /// Keep the cached agent list when a host's key is canonicalized.
+  void moveHost(String oldHostId, String newHostId) {
+    if (oldHostId.isEmpty || newHostId.isEmpty || oldHostId == newHostId) return;
+    final cached = _cache.remove(oldHostId);
+    if (cached == null) return;
+    _cache[newHostId] ??= cached;
+    _persist();
+  }
+
   Future<void> loadFromDisk() async {
     final storage = await StorageService.getInstance();
     final raw = storage.getDeviceAgentCache() ?? '';

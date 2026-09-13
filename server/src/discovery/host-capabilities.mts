@@ -1,4 +1,4 @@
-import { findExecutable, resolveAgentRuntime } from "../agents-store.mjs";
+import { findExecutable, resolveAgentRuntime, getInstalledAgents } from "../agents-store.mjs";
 import { listRegistryAgents, loadRegistry, getNativeConfig, getHerdrConfig } from "../registry/registry.mjs";
 import { HerdrAdapter } from "./herdr-adapter.mjs";
 
@@ -42,6 +42,8 @@ export interface AgentRuntimeCapability {
     kind?: string;
     integrationId?: string;
     integrationInstalled?: boolean;
+    /** current | not installed | outdated | missing | unknown | unsupported */
+    integrationState?: string;
     executableSource?: "override" | "config" | "registry" | "known_location";
     structuredHistory: boolean;
     modelSelection: boolean;
@@ -76,7 +78,10 @@ export async function detectHostCapabilities(forceRefresh = false): Promise<Host
   const gitPath = findExecutable("git");
   const herdrProbe = await HerdrAdapter.probe();
   const herdrAvailable = herdrProbe.available;
-  const integrations = await HerdrAdapter.getIntegrationStatus();
+  const integrationReport = await HerdrAdapter.listIntegrations();
+  const integrationByTarget = new Map(
+    integrationReport.integrations.map((entry) => [entry.target, entry]),
+  );
 
   const agents: AgentRuntimeCapability[] = regAgents.map((agent) => {
     // Capability is a property of the agent, not of its install state, so the
@@ -92,7 +97,17 @@ export async function detectHostCapabilities(forceRefresh = false): Promise<Host
     const herdrSupported = Boolean(herdrCfg?.enabled);
     const herdrReady = herdrSupported && herdrAvailable && execPath !== null;
     const integrationId = runtime?.herdrIntegration ?? herdrCfg?.integration ?? undefined;
-    const integrationInstalled = integrationId ? Boolean(integrations[integrationId]) : false;
+    // Three states, never two: an unreadable status listing must not claim every
+    // integration is missing (which would offer repairs that are not needed).
+    const integrationEntry = integrationId ? integrationByTarget.get(integrationId) : undefined;
+    const integrationState: AgentRuntimeCapability["herdr"]["integrationState"] = !integrationId
+      ? "unsupported"
+      : !integrationReport.parsed
+        ? "unknown"
+        : integrationEntry?.installed
+          ? "current"
+          : (integrationEntry?.state ?? "missing");
+    const integrationInstalled = integrationState === "current";
 
     return {
       id: agent.id,
@@ -119,6 +134,7 @@ export async function detectHostCapabilities(forceRefresh = false): Promise<Host
         kind: runtime?.herdrKind ?? herdrCfg?.kind ?? undefined,
         integrationId,
         integrationInstalled,
+        integrationState,
         executableSource: execSource,
         structuredHistory: herdrCfg?.structuredHistory ?? false,
         modelSelection: herdrCfg?.modelSelection ?? false,
@@ -134,6 +150,43 @@ export async function detectHostCapabilities(forceRefresh = false): Promise<Host
       },
     };
   });
+
+  // Custom agents are installed by the user and are not in the registry. The
+  // client's agent selectors read this list exclusively, so omitting them made a
+  // successfully installed custom agent unselectable.
+  const registryIds = new Set(regAgents.map((agent) => agent.id));
+  for (const installed of getInstalledAgents()) {
+    if (installed.source !== "custom" || registryIds.has(installed.agentId)) continue;
+    const runtime = resolveAgentRuntime(installed.agentId);
+    const execPath = runtime?.executablePath ?? null;
+    agents.push({
+      id: installed.agentId,
+      name: runtime?.displayName ?? installed.agentId,
+      enabled: true,
+      native: {
+        supported: true,
+        ready: execPath !== null,
+        executable: execPath ?? undefined,
+        executableSource: runtime?.executableSource ?? undefined,
+        structuredHistory: false,
+        modelSelection: true,
+        modeSelection: true,
+        authentication: true,
+        reason: execPath === null ? "Executable not found in PATH or known locations" : undefined,
+      },
+      herdr: {
+        supported: false,
+        ready: false,
+        integrationInstalled: false,
+        integrationState: "unsupported",
+        structuredHistory: false,
+        modelSelection: false,
+        modeSelection: false,
+        authentication: false,
+        reason: "Custom agents are not part of the Herdr registry",
+      },
+    });
+  }
 
   const platform = (
     process.platform === "win32" ? "win32" : process.platform === "darwin" ? "darwin" : "linux"

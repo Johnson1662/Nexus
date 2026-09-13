@@ -61,9 +61,18 @@ async function resolveWorkspaceEntry(root: string, filePath: string, allowMissin
   return canonical;
 }
 
+/**
+ * The Git executable the capability probe resolved. A GUI-launched daemon can
+ * have an incomplete PATH, so probing by name and then running by name would let
+ * the capability report Git while every command fails.
+ */
+function gitExecutable(): string {
+  return findExecutable("git") ?? "git";
+}
+
 function git(cwd: string, args: string[], timeoutMs = 8000): Promise<string> {
   return new Promise((resolve, reject) => {
-    execFile("git", args, { cwd, timeout: timeoutMs, maxBuffer: 512 * 1024 }, (err, stdout) => {
+    execFile(gitExecutable(), args, { cwd, timeout: timeoutMs, maxBuffer: 512 * 1024 }, (err, stdout) => {
       if (err) {
         reject(toGitError(err));
         return;
@@ -116,6 +125,18 @@ function sendGitFailure(
     error: "GIT_COMMAND_FAILED",
     text: message,
   }));
+}
+
+/** True only when Git reports the path as untracked (`??`). */
+async function isUntracked(root: string, relativePath: string): Promise<boolean> {
+  try {
+    const porcelain = await git(root, ["status", "--porcelain", "-u", "--", relativePath], 5000);
+    return porcelain.split("\n").some((line) => line.startsWith("??") && line.slice(3).trim() === relativePath);
+  } catch (err) {
+    // Unknown is not "yes": never fabricate a new-file diff from a failed query.
+    console.log(`[workspace-files] untracked check failed: ${String(err)}`);
+    return false;
+  }
 }
 
 function parseGitStatus(porcelain: string): Map<string, string> {
@@ -230,8 +251,11 @@ export async function handleFileDiff(
         diff = await git(root, ["diff", "--staged", "--", relativePath], 10000);
       } catch {}
     }
-    // If still no diff and file is untracked, read content as new file
-    if (!diff) {
+    // An empty diff means "no changes" for a tracked file, but a brand new file
+    // has nothing to diff against. Only treat it as a new file when Git says the
+    // path is actually untracked; otherwise the whole file would be rendered as
+    // a diff for a file that simply matches HEAD.
+    if (!diff && await isUntracked(root, relativePath)) {
       try {
         const { readFile } = await import("node:fs/promises");
         const fileStat = await stat(canonicalPath);

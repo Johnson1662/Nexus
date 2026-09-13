@@ -419,8 +419,11 @@ export async function handleLoadSession(
         }));
       } catch { return; }
 
+      // Bounded: a fresh pane that never writes a transcript must not keep a
+      // poller alive for the whole life of the socket.
+      let freshTries = 0;
       const freshTimer = setInterval(async () => {
-        if (ws.readyState !== 1 /* OPEN */) { clearInterval(freshTimer); return; }
+        if (ws.readyState !== 1 /* OPEN */ || ++freshTries > 90) { clearInterval(freshTimer); return; }
         try {
           const r = await HerdrAdapter.resolveSessionFile(paneId);
           if (r?.sessionPath) {
@@ -461,8 +464,10 @@ export async function handleLoadSession(
         }));
       } catch { return; }
 
+      // Bounded for the same reason as the fresh-pane poller above.
+      let emptyTries = 0;
       const emptyTimer = setInterval(async () => {
-        if (ws.readyState !== 1 /* OPEN */) { clearInterval(emptyTimer); return; }
+        if (ws.readyState !== 1 /* OPEN */ || ++emptyTries > 60) { clearInterval(emptyTimer); return; }
         try {
           const r = await HerdrAdapter.resolveSessionFile(paneId);
           if (r?.sessionPath) {

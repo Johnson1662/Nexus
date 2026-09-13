@@ -113,7 +113,11 @@ export class HerdrAdapter {
    * if nothing parses we report `parsed: false` rather than claiming every
    * integration is missing.
    */
-  static async listIntegrations(): Promise<{ integrations: HerdrIntegrationInfo[]; parsed: boolean }> {
+  static async listIntegrations(): Promise<{
+    integrations: HerdrIntegrationInfo[];
+    parsed: boolean;
+    error?: string;
+  }> {
     try {
       const stdout = await HerdrCliClient.run(["integration", "status"], { timeoutMs: 8000 });
       const integrations: HerdrIntegrationInfo[] = [];
@@ -129,10 +133,12 @@ export class HerdrAdapter {
           detail: match[3].trim(),
         });
       }
-      return { integrations, parsed: integrations.length > 0 };
+      return integrations.length > 0
+        ? { integrations, parsed: true }
+        : { integrations, parsed: false, error: "HERDR_STATUS_UNPARSABLE" };
     } catch (err) {
       console.log(`[herdr-adapter] listIntegrations error: ${String(err)}`);
-      return { integrations: [], parsed: false };
+      return { integrations: [], parsed: false, error: err instanceof Error ? err.message : String(err) };
     }
   }
 

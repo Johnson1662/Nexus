@@ -22,6 +22,14 @@ const STRING_FIELDS = [
   "path",
   "hostId",
   "lastMessageId",
+  "workspaceId",
+  "creationMode",
+  "paneId",
+  "title",
+  "key",
+  "label",
+  "target",
+  "agentKind",
 ];
 
 function isRecord(value: unknown): value is JsonRecord {
@@ -34,6 +42,9 @@ function hasValidOptionalFields(message: JsonRecord): boolean {
   }
   if ("refresh" in message && typeof message.refresh !== "boolean") return false;
   if ("freshAt" in message && typeof message.freshAt !== "number") return false;
+  if ("before" in message && typeof message.before !== "number") return false;
+  if ("useHerdr" in message && typeof message.useHerdr !== "boolean") return false;
+  if ("asText" in message && typeof message.asText !== "boolean") return false;
   if (
     "args" in message &&
     (!Array.isArray(message.args) || message.args.some((arg) => typeof arg !== "string"))
