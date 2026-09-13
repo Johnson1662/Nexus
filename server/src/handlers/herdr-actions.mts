@@ -158,7 +158,16 @@ export async function handleFocusHerdrTarget(
   ws: WebSocket,
   payload: { paneId?: string; workspaceId?: string },
 ): Promise<void> {
-  if (!HerdrAdapter.isAvailable()) return;
+  if (!HerdrAdapter.isAvailable()) {
+    ws.send(
+      JSON.stringify({
+        type: "focus_herdr_target_done",
+        ok: false,
+        error: "Herdr is not running on this host",
+      }),
+    );
+    return;
+  }
   try {
     if (payload.paneId) {
       await HerdrAdapter.focusAgent(payload.paneId.replace(/^herdr:/, ""));
@@ -177,7 +186,26 @@ export async function handleInteractHerdrBlocked(
   ws: WebSocket,
   payload: { paneId: string; key: string },
 ): Promise<void> {
-  if (!HerdrAdapter.isAvailable() || !payload.paneId) return;
+  if (!HerdrAdapter.isAvailable()) {
+    ws.send(
+      JSON.stringify({
+        type: "interact_herdr_blocked_done",
+        ok: false,
+        error: "Herdr is not running on this host",
+      }),
+    );
+    return;
+  }
+  if (!payload.paneId) {
+    ws.send(
+      JSON.stringify({
+        type: "interact_herdr_blocked_done",
+        ok: false,
+        error: "Missing paneId",
+      }),
+    );
+    return;
+  }
   try {
     const pane = payload.paneId.replace(/^herdr:/, "");
     await HerdrAdapter.sendKeys(pane, [payload.key]);
