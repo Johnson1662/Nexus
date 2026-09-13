@@ -124,10 +124,4 @@ try {
   rmSync(boundaryDir, { recursive: true, force: true });
 }
 
-// 6. Test real session file
-const realSession = "/home/johnson/.omp/agent/sessions/--media-johnson-Data-Development-iGEM--/2026-09-07T07-43-56-077Z_01a07ad2-e2ad-766f-ae52-5029b02dc059.jsonl";
-const fileUpdates = await readSessionJsonlToAcpUpdates(realSession);
-console.log(`Successfully parsed real session: ${fileUpdates.length} ACP events loaded`);
-assert(fileUpdates.length > 50, "Expected at least 50 events from real session");
-
 console.log("ALL TESTS PASSED for herdr-acp-converter!");

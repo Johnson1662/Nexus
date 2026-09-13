@@ -135,6 +135,16 @@ try {
   assert(typeof parsedContent.content === "string" && parsedContent.content.length > 0, "large file content keeps top-level content");
   assert(parsedContent.truncated === true, "large file content is explicitly marked truncated");
 
+  const fileContentPayload = boundFileEventPayload({
+    type: "file_content",
+    path: "README.md",
+    fileContent: "中文🙂".repeat(180 * 1024),
+  });
+  const parsedFileContent = JSON.parse(fileContentPayload.payload);
+  assert(fileContentPayload.payloadBytes <= MAX_FILE_EVENT_BYTES, "large file fileContent stays below the file event cap");
+  assert(typeof parsedFileContent.fileContent === "string" && parsedFileContent.fileContent.length > 0, "large file keeps top-level fileContent");
+  assert(parsedFileContent.truncated === true, "large file fileContent is explicitly marked truncated");
+
   const unicode = truncateUtf8("😀中文A", 7);
   assert(unicode.retainedBytes === 7, "UTF-8 truncation uses byte length");
   assert(unicode.text === "😀中", "UTF-8 truncation does not split a code point");

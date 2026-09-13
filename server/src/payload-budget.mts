@@ -403,7 +403,7 @@ export function boundAgentEventPayload(
   );
 }
 
-function boundFilePayload(payload: JsonRecord, key: "content" | "diff"): BoundedPayload {
+function boundFilePayload(payload: JsonRecord, key: "content" | "fileContent" | "diff"): BoundedPayload {
   const originalText = typeof payload[key] === "string" ? payload[key] as string : "";
   const basePayload = { ...payload };
   delete basePayload[key];
@@ -465,6 +465,11 @@ function boundFilePayload(payload: JsonRecord, key: "content" | "diff"): Bounded
 }
 
 export function boundFileEventPayload(payload: JsonRecord): BoundedPayload {
-  const key = payload.type === "file_diff" ? "diff" : "content";
+  const key =
+    payload.type === "file_diff"
+      ? "diff"
+      : payload.type === "file_content"
+        ? (payload.fileContent !== undefined ? "fileContent" : "content")
+        : "content";
   return boundFilePayload(payload, key);
 }

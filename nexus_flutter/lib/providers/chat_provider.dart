@@ -1473,6 +1473,10 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
     // include a legacy `workspaces` field.
     if (actualHostId.isNotEmpty) {
       _workspaceProvider?.setActiveHost(actualHostId);
+
+      // Never keep another host's cwd.
+      _state.currentWorkspace =
+          _workspaceProvider?.currentWorkspace ?? '';
     }
 
     if (msg.workspaces != null) {

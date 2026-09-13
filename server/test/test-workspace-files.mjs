@@ -13,11 +13,11 @@ const sent = [];
 const ws = { send: (raw) => sent.push(JSON.parse(raw)) };
 try {
   await handleFileRead(ws, { cwd: root, path: "inside.txt" });
-  assert.equal(sent.pop().content, "safe");
+  assert.equal(sent.pop().fileContent, "safe");
 
   await handleFileRead(ws, { cwd: root, path: "../" + outside.split(/[\\/]/).pop() });
   const rejected = sent.pop();
-  assert.equal(rejected.content, "");
+  assert.equal(rejected.fileContent, "");
   assert.equal(rejected.error, "path traversal denied");
 
   const largeRoot = await mkdtemp(join(tmpdir(), "nexus-workspace-large-"));

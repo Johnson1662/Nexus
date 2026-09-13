@@ -201,7 +201,7 @@ export async function handleFileLog(
 ): Promise<void> {
   const { cwd, path: filePath } = params;
   if (!cwd || !filePath) {
-    ws.send(JSON.stringify({ type: "file_log", path: filePath || "", logEntries: [], entries: [] }));
+    ws.send(JSON.stringify({ type: "file_log", path: filePath || "", logEntries: [] }));
     return;
   }
 
@@ -221,9 +221,9 @@ export async function handleFileLog(
         const [hash, date, author, ...msgParts] = l.split("|");
         return { hash, date, author, message: msgParts.join("|") };
       });
-    ws.send(JSON.stringify({ type: "file_log", path: filePath, logEntries: entries, entries }));
+    ws.send(JSON.stringify({ type: "file_log", path: filePath, logEntries: entries }));
   } catch (err: any) {
-    ws.send(JSON.stringify({ type: "file_log", path: filePath, logEntries: [], entries: [], error: err.message }));
+    ws.send(JSON.stringify({ type: "file_log", path: filePath, logEntries: [], error: err.message }));
   }
 }
 
@@ -233,7 +233,7 @@ export async function handleFileRead(
 ): Promise<void> {
   const { cwd, path: filePath } = params;
   if (!cwd || !filePath) {
-    ws.send(JSON.stringify({ type: "file_content", path: filePath || "", fileContent: "", content: "", error: "missing cwd or path" }));
+    ws.send(JSON.stringify({ type: "file_content", path: filePath || "", fileContent: "", error: "missing cwd or path" }));
     return;
   }
 
@@ -246,8 +246,8 @@ export async function handleFileRead(
       throw new Error(`file exceeds ${MAX_FILE_BYTES} byte limit`);
     }
     const content = await fs.readFile(fullPath, "utf-8");
-    sendFileEvent(ws, { type: "file_content", path: filePath, fileContent: content, content });
+    sendFileEvent(ws, { type: "file_content", path: filePath, fileContent: content });
   } catch (err: any) {
-    ws.send(JSON.stringify({ type: "file_content", path: filePath, fileContent: "", content: "", error: err.message }));
+    ws.send(JSON.stringify({ type: "file_content", path: filePath, fileContent: "", error: err.message }));
   }
 }
