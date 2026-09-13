@@ -39,7 +39,7 @@ void main() {
 
     final tokenField = find.byWidgetPredicate(
       (widget) =>
-          widget is TextField && widget.decoration?.labelText == 'Token',
+          widget is TextField && (widget.decoration?.labelText == '认证 Token' || widget.decoration?.labelText == 'Token'),
     );
     expect(tokenField, findsOneWidget);
     expect(tester.widget<TextField>(tokenField).obscureText, isTrue);

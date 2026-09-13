@@ -607,7 +607,7 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
       agent: targetAgent,
       freshAt: freshAt,
     ));
-    if (targetAgent.isNotEmpty) {
+    if (targetAgent.isNotEmpty && !sessionId.startsWith('herdr:') && !sessionId.startsWith('ambient:')) {
       _ws.send(ClientMessage(type: 'list_models', agent: targetAgent));
     }
   }
@@ -1468,8 +1468,14 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
     _state.errorMessage = '';
     _state.currentDeviceId = actualHostId;
 
-    if (msg.workspaces != null) {
+    // server_info itself identifies the canonical host.
+    // Workspace partition must be activated even when the server does not
+    // include a legacy `workspaces` field.
+    if (actualHostId.isNotEmpty) {
       _workspaceProvider?.setActiveHost(actualHostId);
+    }
+
+    if (msg.workspaces != null) {
       _workspaceProvider?.syncFromServer(msg.workspaces!);
       final providerWorkspace = _workspaceProvider?.currentWorkspace ?? '';
       if (providerWorkspace.isNotEmpty) {
@@ -1495,8 +1501,10 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
     HostRuntimeStore().markOnline(actualHostId, currentUrl);
     hostStore.markOnline(actualHostId, currentUrl);
 
-    // Request agents, models, and all sessions
+    // Connection is ready: hydrate all global agent metadata immediately.
     _ws.send(ClientMessage(type: 'list_agents'));
+    _ws.send(ClientMessage(type: 'list_registry_agents'));
+
     requestSessionList();
     if (_useHerdrBackend) {
       requestHerdrWorkspaces();

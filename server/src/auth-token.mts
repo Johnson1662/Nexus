@@ -4,7 +4,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 const TOKEN_DIR = join(homedir(), ".nexus");
-const TOKEN_FILE = join(TOKEN_DIR, "server.token");
+export const TOKEN_FILE = join(TOKEN_DIR, "server.token");
 const INSECURE_ENV = "NEXUS_ALLOW_INSECURE";
 
 let cachedToken: string | undefined;

@@ -1146,8 +1146,9 @@ class _AddHostDialogState extends State<_AddHostDialog> {
             obscureText: true,
             keyboardType: TextInputType.visiblePassword,
             decoration: const InputDecoration(
-              hintText: '可选',
-              labelText: 'Token',
+              hintText: '在电脑运行 nexus token 获取',
+              labelText: '认证 Token',
+              helperText: 'Bridge 默认启用认证',
             ),
           ),
         ],
@@ -1222,8 +1223,9 @@ class _EditHostTokenDialogState extends State<_EditHostTokenDialog> {
         autofocus: true,
         enabled: !_saving,
         decoration: const InputDecoration(
-          labelText: 'Token',
-          hintText: '留空以清除',
+          labelText: '认证 Token',
+          hintText: '在电脑运行 nexus token 获取（留空以清除）',
+          helperText: 'Bridge 默认启用认证',
         ),
       ),
       actions: [

@@ -458,10 +458,10 @@ export function handleIncomingConnection(transport: any, hostId: string = HOST_I
             };
           });
           console.log(`[server] → registry_agents_list (${regAgents.length} agents)`);
-          transport.send(JSON.stringify({ type: "registry_agents_list", agents: regAgents }));
+          transport.send(JSON.stringify({ type: "registry_agents_list", registryAgents: regAgents }));
         } catch (e: any) {
           console.log(`[server] list_registry_agents error: ${e}`);
-          transport.send(JSON.stringify({ type: "registry_agents_list", agents: [] }));
+          transport.send(JSON.stringify({ type: "registry_agents_list", registryAgents: [] }));
         }
         break;
       }

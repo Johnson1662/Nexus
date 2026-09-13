@@ -149,7 +149,7 @@ void main() {
       expect(provider.state.connected, isTrue);
       expect(hostStore.getPhase('host-a'), 'online');
       expect(hostStore.getPhase('host-b'), 'offline');
-    }, createHttpClient: (context) => HttpClient(context: context));
+    });
   });
 
   test('dispose 首次调用不抛异常，解绑器可重复调用', () {

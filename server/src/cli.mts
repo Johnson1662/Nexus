@@ -8,15 +8,17 @@ import { homedir } from 'os';
 import { startDaemon, stopDaemon, getDaemonStatus } from './daemon/bootstrap.mjs';
 import { isDaemonRunning, readDaemonLock } from './daemon/pid-lock.mjs';
 import { rotateLogFile } from './daemon/log-governance.mjs';
+import { getAuthToken, AUTH_TOKEN_FILE } from './auth-token.mjs';
 
 function printUsage(): void {
   console.log(`Usage: nexus <command> [options]
 
 Commands:
-  start   [--port=N] [--foreground]  Start the daemon (default: background, port 12138)
-  stop                Stop the running daemon
-  restart [--port=N]  Restart the daemon
-  status              Query daemon status
+  start   [--port=N] [--foreground]  Start the daemon
+  stop                               Stop the running daemon
+  restart [--port=N]                 Restart the daemon
+  status                             Query daemon status
+  token                              Show the Bridge authentication token
 
 Options:
   --port=N       TCP port for the WebSocket server (default: 12138)
@@ -95,6 +97,14 @@ async function main(): Promise<void> {
         process.exit(0);
       }
       console.log(JSON.stringify(status, null, 2));
+      process.exit(0);
+      break;
+    }
+
+    case 'token': {
+      const token = getAuthToken();
+      console.log(token);
+      console.error(`[nexus] Token file: ${AUTH_TOKEN_FILE}`);
       process.exit(0);
       break;
     }

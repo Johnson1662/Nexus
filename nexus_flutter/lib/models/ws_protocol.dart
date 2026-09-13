@@ -359,9 +359,13 @@ class ServerMessage {
       agents: (json['agents'] as List<dynamic>?)
           ?.map((a) => AgentInfo.fromJson(a as Map<String, dynamic>))
           .toList(),
-      registryAgents: (json['registryAgents'] as List<dynamic>?)
-          ?.map((a) => RegistryAgentInfo.fromJson(a as Map<String, dynamic>))
-          .toList(),
+      registryAgents: ((json['registryAgents'] ??
+                  (json['type'] == 'registry_agents_list'
+                      ? json['agents']
+                      : null)) as List<dynamic>?)
+              ?.map((a) =>
+                  RegistryAgentInfo.fromJson(Map<String, dynamic>.from(a as Map)))
+              .toList(),
       stopReason: json['stopReason'] as String?,
       messageId: json['messageId'] as String?,
       resumed: json['resumed'] as bool?,
@@ -394,8 +398,14 @@ class ServerMessage {
 
       files: (json['files'] as List<dynamic>?)?.map((f) => f as Map<String, dynamic>).toList(),
       diff: json['diff'] as String?,
-      logEntries: (json['logEntries'] as List<dynamic>?)?.map((e) => e as Map<String, dynamic>).toList(),
-      fileContent: json['fileContent'] as String?,
+      logEntries: ((json['logEntries'] ??
+                  (json['type'] == 'file_log' ? json['entries'] : null))
+              as List<dynamic>?)
+          ?.map((e) => Map<String, dynamic>.from(e as Map))
+          .toList(),
+      fileContent: (json['fileContent'] ??
+              (json['type'] == 'file_content' ? json['content'] : null))
+          as String?,
       path: json['path'] as String?,
       streamMode: json['streamMode'] as String?,
       events: json['events'] as List<dynamic>?,
