@@ -25,11 +25,11 @@ import { handleInput } from "./handlers/input.mjs";
 import { handleCancel } from "./handlers/cancel.mjs";
 import { handleListModels } from "./handlers/list-models.mjs";
 import { handleListSessions } from "./handlers/list-sessions.mjs";
+import { handleCloseSession, markExternalSessionClosing } from "./handlers/close-session.mjs";
 import { handleSetMode } from "./handlers/set-mode.mjs";
 import { handleSwitchModel } from "./handlers/switch-model.mjs";
 import { handleLoadHistoryPage, handleLoadSession } from "./handlers/load-session.mjs";
 import { handleResumeSession } from "./handlers/resume-session.mjs";
-import { handleCloseSession } from "./handlers/close-session.mjs";
 import { handleSetConfig } from "./handlers/set-config.mjs";
 import { handlePermissionResponse } from "./handlers/permission.mjs";
 import { handleAuth } from "./handlers/auth.mjs";
@@ -458,7 +458,7 @@ export function handleIncomingConnection(transport: any, hostId: string = HOST_I
       case "get_host_capabilities": {
         detectHostCapabilities(false)
           .then((capabilities) => {
-            transport.send(JSON.stringify({ type: "host_capabilities", hostId: HOST_ID, capabilities }));
+            transport.send(JSON.stringify({ type: "host_capabilities", hostId, capabilities }));
           })
           .catch((err) => {
             console.log(`[server] get_host_capabilities error: ${err}`);
@@ -469,7 +469,7 @@ export function handleIncomingConnection(transport: any, hostId: string = HOST_I
       case "refresh_host_capabilities": {
         detectHostCapabilities(true)
           .then((capabilities) => {
-            transport.send(JSON.stringify({ type: "host_capabilities", hostId: HOST_ID, capabilities }));
+            transport.send(JSON.stringify({ type: "host_capabilities", hostId, capabilities }));
           })
           .catch((err) => {
             console.log(`[server] refresh_host_capabilities error: ${err}`);
@@ -616,6 +616,7 @@ export function handleIncomingConnection(transport: any, hostId: string = HOST_I
       case "close_session":
         console.log(`[server] handleCloseSession session="${sessionMsg.sessionId?.slice(0, 20)}"`);
         if (sessionMsg.sessionId?.startsWith("herdr:") || sessionMsg.sessionId?.startsWith("ambient:")) {
+          markExternalSessionClosing(sessionMsg.sessionId);
           sessionManager.enqueueWsOp(transport, () => handleCloseSession(transport, sessionMsg.sessionId));
           break;
         }

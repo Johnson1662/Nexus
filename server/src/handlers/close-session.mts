@@ -3,7 +3,32 @@ import { SessionOperationError, SessionOwnerError, sessionManager } from "../ses
 import { HerdrAdapter, HerdrStreamer } from "../discovery/herdr-adapter.mjs";
 import { HerdrTailerRegistry } from "../discovery/herdr-session-tailer.mjs";
 
+const externalClosingSessions = new Set<string>();
+
+export function markExternalSessionClosing(sessionId: string): void {
+  externalClosingSessions.add(sessionId);
+}
+
+export function isExternalSessionClosing(sessionId: string): boolean {
+  return externalClosingSessions.has(sessionId);
+}
+
+export function unmarkExternalSessionClosing(sessionId: string): void {
+  externalClosingSessions.delete(sessionId);
+}
+
 export async function handleCloseSession(
+  ws: WebSocket,
+  sessionId: string,
+): Promise<void> {
+  try {
+    await doCloseSession(ws, sessionId);
+  } finally {
+    unmarkExternalSessionClosing(sessionId);
+  }
+}
+
+async function doCloseSession(
   ws: WebSocket,
   sessionId: string,
 ): Promise<void> {

@@ -471,6 +471,8 @@ export class HerdrAdapter {
     }
 
     if (sessionPath) {
+      let fileStat: ReturnType<typeof statSync> | null = null;
+      try { fileStat = statSync(sessionPath); } catch {}
       const base = path.basename(sessionPath, ".jsonl");
       const parts = base.split("_");
       const sessionId = parts.length > 1 ? parts[parts.length - 1] : base;
@@ -482,18 +484,16 @@ export class HerdrAdapter {
         paneId: targetPaneId,
         title: fileTitle || match.terminal_title_stripped || match.terminal_title,
         agentStatus: match.agent_status,
+        createdAt: fileStat ? Math.round(fileStat.birthtimeMs) : undefined,
+        lastActivity: fileStat ? Math.round(fileStat.mtimeMs) : undefined,
       };
     }
 
-    let fileStat: ReturnType<typeof statSync> | null = null;
-    try { fileStat = sessionPath ? statSync(sessionPath) : null; } catch {}
     return {
       agent: match.agent,
       paneId: targetPaneId,
       title: match.terminal_title_stripped || match.terminal_title,
       agentStatus: match.agent_status,
-      createdAt: fileStat?.birthtimeMs || fileStat?.ctimeMs,
-      lastActivity: fileStat?.mtimeMs,
     };
   }
 }

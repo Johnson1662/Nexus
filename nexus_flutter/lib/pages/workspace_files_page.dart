@@ -329,13 +329,25 @@ class _WorkspaceFilesPageState extends State<WorkspaceFilesPage> {
     final children = _computeDirectChildren(state.workspaceFiles);
 
     if (children.isEmpty) {
+      final hasError = state.fileError.isNotEmpty;
       return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.folder_open_outlined, size: 48, color: muted),
+            Icon(
+              hasError ? Icons.error_outline_rounded : Icons.folder_open_outlined,
+              size: 48,
+              color: hasError ? AppColors.error : muted,
+            ),
             const SizedBox(height: AppSpacing.md),
-            Text('此文件夹为空', style: TextStyle(fontSize: AppFontSize.base, color: muted)),
+            Text(
+              hasError ? state.fileError : '此文件夹为空',
+              style: TextStyle(
+                fontSize: AppFontSize.base,
+                color: hasError ? AppColors.error : muted,
+              ),
+              textAlign: TextAlign.center,
+            ),
             if (_currentDir.isNotEmpty) ...[
               const SizedBox(height: AppSpacing.sm),
               TextButton.icon(
@@ -743,6 +755,24 @@ class _WorkspaceFilesPageState extends State<WorkspaceFilesPage> {
                     child: Text(
                       state.fileGitWarning,
                       style: TextStyle(fontSize: AppFontSize.xs, color: muted),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+          // Non-Git file error or size limit error
+          if (state.fileError.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+              child: Row(
+                children: [
+                  const Icon(Icons.error_outline_rounded, size: 16, color: AppColors.error),
+                  const SizedBox(width: AppSpacing.xs),
+                  Expanded(
+                    child: Text(
+                      state.fileError,
+                      style: const TextStyle(fontSize: AppFontSize.xs, color: AppColors.error),
                     ),
                   ),
                 ],

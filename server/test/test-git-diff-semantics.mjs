@@ -7,6 +7,7 @@ import { join } from "node:path";
 console.log("=== Testing Git diff semantics ===");
 
 const { handleFileDiff } = await import("../dist/handlers/workspace-files.mjs");
+const { parseGitStatusZ, handleListWorkspaceFiles } = await import("../dist/handlers/workspace-files.mjs");
 
 const repo = mkdtempSync(join(tmpdir(), "nexus-git-diff-"));
 const git = (args) => execFileSync("git", args, { cwd: repo, encoding: "utf8" });
@@ -42,6 +43,15 @@ try {
   writeFileSync(join(repo, "fresh.txt"), "brand new\n", "utf8");
   const untracked = await diff("fresh.txt");
   assert(untracked.diff.includes("brand new"), "an untracked file shows its content");
+
+  // 4. Renamed files are correctly attributed to both old and new paths.
+  git(["mv", "tracked.txt", "renamed.txt"]);
+  let filesList = null;
+  const wsList = { send: (raw) => { filesList = JSON.parse(raw); } };
+  await handleListWorkspaceFiles(wsList, { cwd: repo });
+  const renamedEntry = filesList?.files?.find((f) => f.name === "renamed.txt");
+  assert(renamedEntry, "renamed file appears in workspace files list");
+  assert(renamedEntry.status.includes("R"), `renamed file has status 'R' or 'RM': ${renamedEntry.status}`);
 } finally {
   rmSync(repo, { recursive: true, force: true });
 }

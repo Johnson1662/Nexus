@@ -216,8 +216,11 @@ export async function handleLoadSession(
     // Stage 2: Asynchronously load full history in background
     setTimeout(async () => {
       if (ws.readyState !== 1 /* OPEN */) return;
+      const boundary = fs.existsSync(amb.transcriptPath) ? fs.statSync(amb.transcriptPath).size : 0;
+      tailer.hold(ws);
+      tailer.setByteOffset(boundary);
       try {
-        const fullEvents = await readSessionJsonlFullHistory(amb.transcriptPath);
+        const fullEvents = await readSessionJsonlFullHistory(amb.transcriptPath, undefined, boundary);
         const limited = limitHistoryEvents(fullEvents as unknown[]);
         ws.send(JSON.stringify({
           type: "history_full",
@@ -230,6 +233,8 @@ export async function handleLoadSession(
         }));
       } catch (err) {
         console.error(`[load-session] Error loading full history for ${targetSessionId}:`, err);
+      } finally {
+        tailer.release(ws);
       }
     }, 350);
 
@@ -336,9 +341,29 @@ export async function handleLoadSession(
       } catch { return; }
 
       // Stage 1: Send only the latest conversation turn for instant opening (<5ms)
+      // Attach live tailer immediately so real-time events are captured and any
+      // pending injected prompt is registered before recent turn replay.
+      const tailer = HerdrTailerRegistry.getOrCreate(
+        r.sessionPath!,
+        targetSessionId,
+        paneId,
+      );
+      tailer.subscribe(ws);
+      if (r.agentStatus === "working") tailer.markWorking();
+      ws.on("close", () => {
+        tailer.unsubscribe(ws);
+      });
+
       try {
         const events = await readSessionJsonlRecentTurn(r.sessionPath!, minTimestampMs);
+        const lastPrompt = tailer.getLastInjectedPrompt();
         for (const ev of events) {
+          if (ev.sessionUpdate === "user_message_chunk" && lastPrompt) {
+            const userText = String((ev.content as any)?.text || "").trim();
+            if (userText === lastPrompt) {
+              continue;
+            }
+          }
           ws.send(JSON.stringify({
             type: "agent_event",
             sessionId: targetSessionId,
@@ -355,18 +380,6 @@ export async function handleLoadSession(
         console.error(`[load-session] Error replaying recent turn for ${targetSessionId}:`, err);
       }
 
-      // Attach live tailer immediately so real-time events are captured
-      const tailer = HerdrTailerRegistry.getOrCreate(
-        r.sessionPath!,
-        targetSessionId,
-        paneId,
-      );
-      tailer.subscribe(ws);
-      if (r.agentStatus === "working") tailer.markWorking();
-      ws.on("close", () => {
-        tailer.unsubscribe(ws);
-      });
-
       // Stage 2: Asynchronously load full history in background.
       //
       // history_full replaces the client's rendered history, so any live event
@@ -375,9 +388,11 @@ export async function handleLoadSession(
       // them after the snapshot, making the snapshot a real boundary.
       setTimeout(async () => {
         if (ws.readyState !== 1 /* OPEN */) return;
+        const boundary = fs.existsSync(r.sessionPath!) ? fs.statSync(r.sessionPath!).size : 0;
         tailer.hold(ws);
+        tailer.setByteOffset(boundary);
         try {
-          const fullEvents = await readSessionJsonlFullHistory(r.sessionPath!, minTimestampMs);
+          const fullEvents = await readSessionJsonlFullHistory(r.sessionPath!, minTimestampMs, boundary);
           const limited = limitHistoryEvents(fullEvents as unknown[]);
           ws.send(JSON.stringify({
             type: "history_full",

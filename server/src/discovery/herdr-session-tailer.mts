@@ -74,6 +74,10 @@ export class HerdrSessionTailer {
     this.isWorking = true;
   }
 
+  getLastInjectedPrompt(): string | null {
+    return this.lastInjectedPrompt;
+  }
+
   setByteOffset(offset: number): void {
     this.byteOffset = offset;
     this.remainderBuffer = "";
@@ -296,6 +300,22 @@ export class HerdrSessionTailer {
 
 export class HerdrTailerRegistry {
   private static tailers = new Map<string, HerdrSessionTailer>();
+  private static pendingInjectedPrompts = new Map<string, { text: string; ws?: WebSocket; timestamp: number }>();
+
+  static recordPendingPrompt(sessionId: string, text: string, ws?: WebSocket): void {
+    this.pendingInjectedPrompts.set(sessionId, { text: text.trim(), ws, timestamp: Date.now() });
+  }
+
+  static consumePendingPrompt(sessionId: string): { text: string; ws?: WebSocket } | null {
+    const pending = this.pendingInjectedPrompts.get(sessionId);
+    if (!pending) return null;
+    if (Date.now() - pending.timestamp > 30_000) {
+      this.pendingInjectedPrompts.delete(sessionId);
+      return null;
+    }
+    this.pendingInjectedPrompts.delete(sessionId);
+    return pending;
+  }
 
   static getOrCreate(
     filePath: string,
@@ -307,6 +327,10 @@ export class HerdrTailerRegistry {
     let tailer = this.tailers.get(sessionId);
     if (!tailer) {
       tailer = new HerdrSessionTailer(filePath, sessionId, paneId, initialOffset, trackHerdrStatus);
+      const pending = this.consumePendingPrompt(sessionId);
+      if (pending) {
+        tailer.setLastInjectedPrompt(pending.text, pending.ws);
+      }
       this.tailers.set(sessionId, tailer);
     }
     return tailer;

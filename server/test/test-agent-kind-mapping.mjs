@@ -6,6 +6,11 @@ import { createFakeHerdr } from "./fake-herdr.mjs";
 
 console.log("=== Testing agentId -> Herdr kind mapping ===");
 
+const previousAntigravityPath = process.env.NEXUS_AGENT_ANTIGRAVITY_CLI_PATH;
+const previousCursorPath = process.env.NEXUS_AGENT_CURSOR_PATH;
+process.env.NEXUS_AGENT_ANTIGRAVITY_CLI_PATH = process.execPath;
+process.env.NEXUS_AGENT_CURSOR_PATH = process.execPath;
+
 const storeDir = mkdtempSync(join(tmpdir(), "nexus-kind-store-"));
 const previousStoreDir = process.env.NEXUS_AGENTS_STORE_DIR;
 process.env.NEXUS_AGENTS_STORE_DIR = storeDir;
@@ -85,8 +90,28 @@ try {
     const before = starts.length;
     const sent = await run({ workspaceId: "w1", agentId: "not-a-real-agent" });
     assert.equal(sent.at(-1).ok, false, "unknown agent fails");
-    assert.equal(sent.at(-1).error, "UNKNOWN_AGENT_KIND", "unknown agent reports UNKNOWN_AGENT_KIND");
+    assert.equal(sent.at(-1).error, "UNKNOWN_AGENT", "unknown agent reports UNKNOWN_AGENT");
     assert.equal(starts.length, before, "no agent start is attempted for an unknown agent");
+  }
+
+  // 3a. Known agent but not installed fails with AGENT_DISABLED.
+  {
+    const before = starts.length;
+    const sent = await run({ workspaceId: "w1", agentId: "claude" });
+    assert.equal(sent.at(-1).ok, false, "uninstalled agent fails");
+    assert.equal(sent.at(-1).error, "AGENT_DISABLED", "uninstalled agent reports AGENT_DISABLED");
+    assert.equal(starts.length, before, "no agent start is attempted for an uninstalled agent");
+  }
+
+  // 3b. Installed agent with missing executable fails with AGENT_NOT_READY.
+  {
+    delete process.env.NEXUS_AGENT_ANTIGRAVITY_CLI_PATH;
+    const before = starts.length;
+    const sent = await run({ workspaceId: "w1", agentId: "antigravity-cli" });
+    assert.equal(sent.at(-1).ok, false, "missing executable fails");
+    assert.equal(sent.at(-1).error, "AGENT_NOT_READY", "missing executable reports AGENT_NOT_READY");
+    assert.equal(starts.length, before, "no agent start is attempted for an agent not ready");
+    process.env.NEXUS_AGENT_ANTIGRAVITY_CLI_PATH = process.execPath;
   }
 
   // 4. A workspace with no panes cannot be split; the handler falls back to a tab.
@@ -124,6 +149,10 @@ try {
   HerdrAdapter.startAgent = originalStart;
   HerdrAdapter.closePane = originalClose;
   fakeHerdr.cleanup();
+  if (previousAntigravityPath === undefined) delete process.env.NEXUS_AGENT_ANTIGRAVITY_CLI_PATH;
+  else process.env.NEXUS_AGENT_ANTIGRAVITY_CLI_PATH = previousAntigravityPath;
+  if (previousCursorPath === undefined) delete process.env.NEXUS_AGENT_CURSOR_PATH;
+  else process.env.NEXUS_AGENT_CURSOR_PATH = previousCursorPath;
   if (previousStoreDir === undefined) delete process.env.NEXUS_AGENTS_STORE_DIR;
   else process.env.NEXUS_AGENTS_STORE_DIR = previousStoreDir;
   rmSync(storeDir, { recursive: true, force: true });

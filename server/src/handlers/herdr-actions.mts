@@ -2,6 +2,7 @@ import type { WebSocket } from "ws";
 import { HerdrAdapter } from "../discovery/herdr-adapter.mjs";
 import { HerdrCliError } from "../discovery/herdr-cli.mjs";
 import { resolveAgentRuntime } from "../agents-store.mjs";
+import { invalidateHostCapabilities } from "../discovery/host-capabilities.mjs";
 
 /**
  * Herdr CLI failures map onto a stable protocol error: a missing binary is
@@ -101,17 +102,47 @@ export async function handleCreateHerdrAgent(
 ): Promise<void> {
   const { workspaceId, agentId, creationMode = "pane_split", cwd, title } = payload;
   const runtime = resolveAgentRuntime(agentId);
-  const kind = runtime?.herdrKind ?? null;
-  if (!runtime || !kind) {
+  if (!runtime) {
     ws.send(
       JSON.stringify({
         type: "create_herdr_agent_done",
         ok: false,
-        error: "UNKNOWN_AGENT_KIND",
+        error: "UNKNOWN_AGENT",
       }),
     );
     return;
   }
+  if (!runtime.installed) {
+    ws.send(
+      JSON.stringify({
+        type: "create_herdr_agent_done",
+        ok: false,
+        error: "AGENT_DISABLED",
+      }),
+    );
+    return;
+  }
+  if (!runtime.herdr?.enabled || !runtime.herdrKind) {
+    ws.send(
+      JSON.stringify({
+        type: "create_herdr_agent_done",
+        ok: false,
+        error: "HERDR_UNSUPPORTED",
+      }),
+    );
+    return;
+  }
+  if (!runtime.executablePath) {
+    ws.send(
+      JSON.stringify({
+        type: "create_herdr_agent_done",
+        ok: false,
+        error: "AGENT_NOT_READY",
+      }),
+    );
+    return;
+  }
+  const kind = runtime.herdrKind;
 
   let targetPaneId: string | null = null;
   /** Close a pane we created but could not start an agent in. */
@@ -304,6 +335,7 @@ export async function handleInstallHerdrIntegration(
 
   try {
     await HerdrAdapter.installIntegration(target);
+    invalidateHostCapabilities();
     const { integrations } = await HerdrAdapter.listIntegrations();
     ws.send(JSON.stringify({
       type: "install_herdr_integration_done",

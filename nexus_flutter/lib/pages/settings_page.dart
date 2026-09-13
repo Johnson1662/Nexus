@@ -23,7 +23,6 @@ class _SettingsPageState extends State<SettingsPage> {
   late String _colorMode;
   late bool _thinkingExpanded;
   late bool _toolCallExpanded;
-  bool _useHerdrBackend = false;
   String _herdrCreationMode = 'pane_split';
 
   final Set<String> _expandedHostIds = {};
@@ -36,10 +35,7 @@ class _SettingsPageState extends State<SettingsPage> {
     _toolCallExpanded = _prefs.toolCallExpanded;
     StorageService.getInstance().then((storage) {
       if (mounted) {
-        final currentHost =
-            context.read<ChatProvider?>()?.state.currentDeviceId ?? '';
         setState(() {
-          _useHerdrBackend = storage.getHostPreferredBackend(currentHost) == 'herdr';
           _herdrCreationMode = storage.getHerdrAgentCreationMode();
         });
       }
@@ -283,6 +279,12 @@ class _SettingsPageState extends State<SettingsPage> {
     final runtimeStore = HostRuntimeStore();
     final phase = runtimeStore.getDevicePhase(device.hostId);
     final runtimeState = runtimeStore.getStatusOrNull(device.hostId);
+    final chatProvider = context.watch<ChatProvider?>();
+    final currentDeviceId = chatProvider?.state.currentDeviceId ?? '';
+    final isConnectedToThisDevice = (chatProvider?.state.connected ?? false) &&
+        currentDeviceId.isNotEmpty &&
+        (device.hostId == currentDeviceId ||
+            (device.hostId.isEmpty && device.name == currentDeviceId));
     final isExpanded = _expandedHostIds.contains(device.hostId);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final fg = AppColors.foregroundCtx(context);
@@ -541,32 +543,34 @@ class _SettingsPageState extends State<SettingsPage> {
                       ),
                     ),
                     const SizedBox(height: AppSpacing.xs),
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton.icon(
-                        onPressed: () {
-                          context.read<ChatProvider>().listRegistryAgents();
-                          Navigator.pushNamed(context, '/agent-manage');
-                        },
-                        icon: const Icon(Icons.extension_outlined, size: 17),
-                        label: const Text(
-                          '管理 Agent / 商店',
-                          style: TextStyle(fontSize: AppFontSize.xs),
-                        ),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: AppColors.foregroundCtx(context),
-                          side: BorderSide(
-                            color: AppColors.borderCtx(context),
+                    if (isConnectedToThisDevice) ...[
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: () {
+                            context.read<ChatProvider>().listRegistryAgents();
+                            Navigator.pushNamed(context, '/agent-manage');
+                          },
+                          icon: const Icon(Icons.extension_outlined, size: 17),
+                          label: const Text(
+                            '管理 Agent / 商店',
+                            style: TextStyle(fontSize: AppFontSize.xs),
                           ),
-                          padding: const EdgeInsets.symmetric(
-                            vertical: AppSpacing.md,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(AppRadius.md),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppColors.foregroundCtx(context),
+                            side: BorderSide(
+                              color: AppColors.borderCtx(context),
+                            ),
+                            padding: const EdgeInsets.symmetric(
+                              vertical: AppSpacing.md,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(AppRadius.md),
+                            ),
                           ),
                         ),
                       ),
-                    ),
+                    ],
                   ],
                 ),
               ),
@@ -708,6 +712,8 @@ class _SettingsPageState extends State<SettingsPage> {
 
   Widget _buildPreferencesSection(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final chatProvider = context.watch<ChatProvider?>();
+    final useHerdrBackend = chatProvider?.preferredBackend == 'herdr';
 
     return Container(
       decoration: BoxDecoration(
@@ -789,13 +795,11 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
           const Divider(height: 1),
           Builder(builder: (context) {
-            final chatProvider = context.watch<ChatProvider?>();
-            final herdrUnavailable = _useHerdrBackend &&
+            final herdrUnavailable = useHerdrBackend &&
                 (chatProvider?.state.hostCapabilities?.herdr.available == false);
             return SwitchListTile(
-              value: _useHerdrBackend,
+              value: useHerdrBackend,
               onChanged: (val) async {
-                setState(() => _useHerdrBackend = val);
                 if (mounted) {
                   await context.read<ChatProvider?>()?.setUseHerdrBackend(val);
                 }
@@ -825,13 +829,13 @@ class _SettingsPageState extends State<SettingsPage> {
               secondary: Icon(
                 Icons.terminal_outlined,
                 size: 20,
-                color: _useHerdrBackend
+                color: useHerdrBackend
                     ? AppColors.foregroundCtx(context)
                     : AppColors.foregroundMutedCtx(context),
               ),
             );
           }),
-          if (_useHerdrBackend) ...[
+          if (useHerdrBackend) ...[
             const Divider(height: 1),
             Padding(
               padding: const EdgeInsets.symmetric(

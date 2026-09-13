@@ -290,9 +290,14 @@ export async function readSessionJsonlRecentTurn(
 export async function readSessionJsonlFullHistory(
   filePath: string,
   minTimestampMs?: number,
+  maxByteOffset?: number,
 ): Promise<AcpEventPayload[]> {
   const updates: AcpEventPayload[] = [];
-  const input = createReadStream(filePath, { encoding: "utf8" });
+  const streamOptions: { encoding: BufferEncoding; end?: number } = { encoding: "utf8" };
+  if (typeof maxByteOffset === "number" && maxByteOffset > 0) {
+    streamOptions.end = maxByteOffset - 1;
+  }
+  const input = createReadStream(filePath, streamOptions);
   const lines = readline.createInterface({ input, crlfDelay: Infinity });
   for await (const line of lines) {
     if (!line.trim()) continue;

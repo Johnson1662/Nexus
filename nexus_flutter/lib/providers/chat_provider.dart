@@ -236,6 +236,8 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
       _turnRequestTimer?.cancel();
       _clearHostScopedState();
       _hostGeneration++;
+      _pendingHostGeneration++;
+      _pendingHostId = '';
     }
     _lastConnectionHostKey = hostKey;
   }
@@ -296,6 +298,7 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
     _state.fileContent = null;
     _state.loadingFiles = false;
     _state.fileGitWarning = '';
+    _state.fileError = '';
   }
 
   /// A dropped socket cannot confirm a cancel, so the turn transients must not
@@ -923,6 +926,7 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
     _state.fileDiff = null;
     _state.selectedFilePath = null;
     _state.fileLogEntries = [];
+    _state.fileError = '';
     notifyListeners();
     _ws.send(ClientMessage(
       type: 'list_workspace_files',
@@ -933,6 +937,7 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
   void requestFileDiff(String filePath) {
     _state.fileDiff = null;
     _state.selectedFilePath = filePath;
+    _state.fileError = '';
     notifyListeners();
     _ws.send(ClientMessage(
       type: 'get_file_diff',
@@ -943,6 +948,7 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   void requestFileLog(String filePath) {
     _state.fileLogEntries = [];
+    _state.fileError = '';
     notifyListeners();
     _ws.send(ClientMessage(
       type: 'get_file_log',
@@ -953,6 +959,7 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   void requestFileContent(String filePath) {
     _state.fileContent = null;
+    _state.fileError = '';
     notifyListeners();
     _ws.send(ClientMessage(
       type: 'get_file_content',
@@ -1228,9 +1235,11 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
             source: previous?.source ?? (sessionId.startsWith('herdr:') ? 'herdr' : null),
             createdAt: previous?.createdAt ?? now,
             lastActivity: msg.resumed == true ? previous?.lastActivity : now,
-            status: msg.resumed == true
-                ? (previous?.status ?? 'idle')
-                : (_state.turnActive ? 'running' : 'idle'),
+            status: msg.turnActive != null
+                ? (msg.turnActive! ? 'running' : 'idle')
+                : (msg.resumed == true
+                    ? (previous?.status ?? 'idle')
+                    : (_state.turnActive ? 'running' : 'idle')),
           );
           final index = _state.sessions.indexWhere(
             (s) => s.sessionId == sessionId,
@@ -1378,6 +1387,8 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
       case 'install_herdr_integration_done':
         if (msg.ok == false) {
           _state.errorMessage = msg.error ?? 'Integration 安装失败';
+        } else {
+          refreshHostCapabilities();
         }
         requestHerdrIntegrations();
         notifyListeners();
@@ -1411,6 +1422,11 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
         if (msg.requestId != null &&
             msg.requestId!.isNotEmpty &&
             msg.requestId != _sessionListRequestId) {
+          break;
+        }
+        if (msg.error != null && msg.error!.isNotEmpty) {
+          _state.errorMessage = msg.error!;
+          notifyListeners();
           break;
         }
         if (msg.sessions != null) {
@@ -1466,7 +1482,9 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
         notifyListeners();
         break;
       case 'herdr_workspaces_list':
-        if (msg.herdrWorkspaces != null) {
+        if (msg.error != null && msg.error!.isNotEmpty) {
+          _state.errorMessage = msg.error!;
+        } else if (msg.herdrWorkspaces != null) {
           _workspaceProvider?.syncFromHerdrWorkspaces(msg.herdrWorkspaces!);
         }
         notifyListeners();
@@ -1617,24 +1635,66 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
         notifyListeners();
         break;
       case 'workspace_files':
-        if (msg.files != null) {
+        if (msg.error != null && msg.error!.isNotEmpty) {
+          _state.fileError = msg.error!;
+          _state.loadingFiles = false;
+        } else if (msg.files != null) {
+          _state.fileError = '';
           _state.workspaceFiles = msg.files!;
           _state.loadingFiles = false;
         }
         notifyListeners();
         break;
       case 'file_diff':
+        if (msg.path != null &&
+            msg.path!.isNotEmpty &&
+            _state.selectedFilePath != null &&
+            _state.selectedFilePath!.isNotEmpty &&
+            msg.path != _state.selectedFilePath) {
+          break;
+        }
+        if (msg.error != null && msg.error!.isNotEmpty) {
+          _state.fileError = msg.error!;
+        } else {
+          _state.fileError = '';
+        }
         _state.fileDiff = msg.diff;
-        _state.selectedFilePath = msg.path;
+        if (msg.path != null && msg.path!.isNotEmpty) {
+          _state.selectedFilePath = msg.path;
+        }
         _state.fileGitWarning = _gitWarningFor(msg);
         notifyListeners();
         break;
       case 'file_log':
+        if (msg.path != null &&
+            msg.path!.isNotEmpty &&
+            _state.selectedFilePath != null &&
+            _state.selectedFilePath!.isNotEmpty &&
+            msg.path != _state.selectedFilePath) {
+          break;
+        }
+        if (msg.error != null && msg.error!.isNotEmpty) {
+          _state.fileError = msg.error!;
+        } else {
+          _state.fileError = '';
+        }
         if (msg.logEntries != null) _state.fileLogEntries = msg.logEntries!;
         _state.fileGitWarning = _gitWarningFor(msg);
         notifyListeners();
         break;
       case 'file_content':
+        if (msg.path != null &&
+            msg.path!.isNotEmpty &&
+            _state.selectedFilePath != null &&
+            _state.selectedFilePath!.isNotEmpty &&
+            msg.path != _state.selectedFilePath) {
+          break;
+        }
+        if (msg.error != null && msg.error!.isNotEmpty) {
+          _state.fileError = msg.error!;
+        } else {
+          _state.fileError = '';
+        }
         _state.fileContent = msg.fileContent;
         notifyListeners();
         break;
@@ -1832,18 +1892,29 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
   /// session/workspace lists exactly once for the resulting backend.
   Future<void> _hydrateHostScopedState() async {
     final generation = _pendingHostGeneration;
+    final hostGen = _hostGeneration;
     final hostId = _pendingHostId;
     if (hostId.isEmpty) return;
 
     final storage = await StorageService.getInstance();
-    if (generation != _pendingHostGeneration) return;
+    if (generation != _pendingHostGeneration ||
+        hostGen != _hostGeneration ||
+        hostId != _pendingHostId ||
+        hostId != _state.currentDeviceId) {
+      return;
+    }
 
     _preferredBackend = storage.getHostPreferredBackend(hostId);
     // Compute without side effects, then issue exactly one list request.
     _effectiveBackend = _computeEffectiveBackend();
     _useHerdrBackend = _effectiveBackend == 'herdr';
 
-    if (generation != _pendingHostGeneration) return;
+    if (generation != _pendingHostGeneration ||
+        hostGen != _hostGeneration ||
+        hostId != _pendingHostId ||
+        hostId != _state.currentDeviceId) {
+      return;
+    }
 
     _ws.send(ClientMessage(type: 'get_host_capabilities'));
     requestSessionList();

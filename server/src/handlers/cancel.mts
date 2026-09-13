@@ -8,12 +8,9 @@ export function handleCancel(
   sessionId: string,
 ): void {
   if (sessionId.startsWith("ambient:")) {
-    sendAmbientCommand(sessionId, { type: "cancel" }).catch((err) => {
-      console.log(`[cancel] Ambient sendCancel error: ${err}`);
+    confirmAmbientCancel(ws, sessionId).catch((err) => {
+      console.log(`[cancel] Ambient confirm error: ${err}`);
     });
-    try {
-      ws.send(JSON.stringify({ type: "session_cancelled", sessionId }));
-    } catch {}
     return;
   }
 
@@ -39,6 +36,16 @@ function send(ws: WebSocket, payload: Record<string, unknown>): void {
   try {
     ws.send(JSON.stringify(payload));
   } catch { /* socket already gone */ }
+}
+
+async function confirmAmbientCancel(ws: WebSocket, sessionId: string): Promise<void> {
+  try {
+    await sendAmbientCommand(sessionId, { type: "cancel" });
+    send(ws, { type: "session_cancelled", sessionId, accepted: true });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    send(ws, { type: "cancel_failed", sessionId, error: message });
+  }
 }
 
 /**

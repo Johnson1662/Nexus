@@ -179,7 +179,10 @@ function loadFromDisk(): InstalledAgent[] {
   ensureDir();
   try {
     if (!existsSync(STORE_FILE)) {
-      // First run: auto-install default agents
+      // First run: auto-install default agents.
+      // Set sentinel installed = [] first so any nested resolveAgentRuntime call
+      // does not recursively re-enter loadFromDisk.
+      installed = [];
       const defaults = getDefaultInstallations();
       saveToDisk(defaults);
       return defaults;
@@ -190,12 +193,7 @@ function loadFromDisk(): InstalledAgent[] {
       throw new Error("invalid installed agents file shape");
     }
     const entries = (parsed as { agents: unknown[] }).agents;
-    if (entries.length === 0) {
-      // Empty file/migration: auto-install defaults
-      const defaults = getDefaultInstallations();
-      saveToDisk(defaults);
-      return defaults;
-    }
+    // An explicit empty array must be respected — do not revive defaults.
     installed = entries.filter(isValidInstalledAgent);
   } catch (err) {
     console.log(`[agents-store] failed to load installed agents: ${err}`);
@@ -431,4 +429,8 @@ export function resolveAgentRuntime(agentId: string): AgentRuntime | null {
 
 export function isValidAgent(agentId: string): boolean {
   return isAgentInstalled(agentId);
+}
+
+export function _resetInstalledForTest(): void {
+  installed = null;
 }

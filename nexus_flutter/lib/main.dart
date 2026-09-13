@@ -181,15 +181,18 @@ Future<void> _probeAndAutoConnect(
   debugPrint('[Startup] Asynchronously probing ${hostStore.devices.length} saved hosts...');
   await _probeAllHosts(hostStore, chatProvider: chatProvider);
   if (hostStore.devices.isNotEmpty) {
-    final onlineDevice = hostStore.devices.firstWhere(
-      (d) => hostStore.isOnline(d.hostId),
-      orElse: () => hostStore.devices.first,
-    );
-    final hk = onlineDevice.hostId.isNotEmpty ? onlineDevice.hostId : onlineDevice.name;
-    final urls = onlineDevice.urls;
-    if (urls.isNotEmpty) {
-      debugPrint('[Startup] Auto-connecting to ${onlineDevice.name} with ${urls.length} candidate URLs');
-      chatProvider.connectBest(urls, hostKey: hk);
+    final onlineDevice = hostStore.devices
+        .where((d) => hostStore.isOnline(d.hostId))
+        .firstOrNull;
+    if (onlineDevice != null) {
+      final hk = onlineDevice.hostId.isNotEmpty ? onlineDevice.hostId : onlineDevice.name;
+      final urls = onlineDevice.urls;
+      if (urls.isNotEmpty) {
+        debugPrint('[Startup] Auto-connecting to online host ${onlineDevice.name} with ${urls.length} candidate URLs');
+        chatProvider.connectBest(urls, hostKey: hk);
+      }
+    } else {
+      debugPrint('[Startup] All saved hosts are offline; staying disconnected');
     }
   }
 }

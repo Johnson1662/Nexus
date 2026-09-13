@@ -1,6 +1,7 @@
 import {
   mkdtempSync,
   mkdirSync,
+  existsSync,
   readFileSync,
   readdirSync,
   rmSync,
@@ -143,6 +144,44 @@ async function main() {
     assert(corruptChild.status === 0 && Array.isArray(corruptAgents) && corruptAgents.length === 0, "全非法数组返回空列表");
     assert(JSON.parse(readFileSync(corruptFile, "utf8")).agents.length === 1, "全非法数组不触发默认安装");
     rmSync(corruptDir, { recursive: true, force: true });
+
+    // 1. 干净机器首次安装：文件不存在时自动初始化并写盘，不出现递归。
+    const freshDir = mkdtempSync(join(tmpdir(), "nexus-agents-store-fresh-"));
+    const freshFile = join(freshDir, "installed-agents.json");
+    const freshChild = spawnSync(execPath, ["--input-type=module", "-e", `
+      const store = await import(${JSON.stringify(moduleUrl)});
+      const agents = store.getInstalledAgents();
+      console.log(JSON.stringify(agents));
+    `], {
+      cwd: fileURLToPath(new URL(".", import.meta.url)),
+      env: { ...process.env, NEXUS_AGENTS_STORE_DIR: freshDir },
+      encoding: "utf8",
+    });
+    assert(freshChild.status === 0, "fresh-install 顺利退出（无递归溢出）");
+    const freshDisk = existsSync(freshFile) ? JSON.parse(readFileSync(freshFile, "utf8")) : null;
+    assert(freshDisk && Array.isArray(freshDisk.agents), "fresh-install 初始化完成写盘");
+    rmSync(freshDir, { recursive: true, force: true });
+
+    // 2. 显式空 agents 数组：必须原样保留，绝不可复活默认 Agent。
+    const emptyDir = mkdtempSync(join(tmpdir(), "nexus-agents-store-empty-"));
+    const emptyFile = join(emptyDir, "installed-agents.json");
+    writeFileSync(emptyFile, JSON.stringify({ agents: [] }), "utf8");
+    const emptyChild = spawnSync(execPath, ["--input-type=module", "-e", `
+      const store = await import(${JSON.stringify(moduleUrl)});
+      const agents = store.getInstalledAgents();
+      console.log(JSON.stringify(agents));
+    `], {
+      cwd: fileURLToPath(new URL(".", import.meta.url)),
+      env: { ...process.env, NEXUS_AGENTS_STORE_DIR: emptyDir },
+      encoding: "utf8",
+    });
+    assert(emptyChild.status === 0, "explicit-empty 正常退出");
+    const emptyLine = emptyChild.stdout.trim().split(/\r?\n/).filter(Boolean).at(-1);
+    const emptyAgents = emptyLine ? JSON.parse(emptyLine) : null;
+    assert(Array.isArray(emptyAgents) && emptyAgents.length === 0, "explicit-empty 返回空列表");
+    const emptyDisk = JSON.parse(readFileSync(emptyFile, "utf8"));
+    assert(Array.isArray(emptyDisk.agents) && emptyDisk.agents.length === 0, "explicit-empty 不复活默认 Agent");
+    rmSync(emptyDir, { recursive: true, force: true });
   } finally {
     rmSync(storeDir, { recursive: true, force: true });
   }

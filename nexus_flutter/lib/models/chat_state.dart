@@ -72,6 +72,8 @@ class ChatState {
   bool loadingFiles = false;
   /// Non-empty when Git is missing or the folder is not a repository.
   String fileGitWarning = '';
+  /// Error message from the file system (e.g. file size exceeded, access denied).
+  String fileError = '';
 
   // Permissions / Usage
   UsageInfo? lastUsage;
@@ -111,5 +113,6 @@ class ChatState {
     toolCallStack = [];
     lastUsage = null;
     pendingPermissions.clear();
+    fileError = '';
   }
 }

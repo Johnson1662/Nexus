@@ -33,35 +33,49 @@ export async function handleListSessions(
   const resolvedCwd = resolveWorkspacePath(cwd);
   // 如果启用 Herdr 作为专属后端，则只返回 Herdr 分屏，彻底与 ACP 会话隔离
   if (useHerdr === true) {
-    const herdrSessions: any[] = [];
-    if (HerdrAdapter.isAvailable()) {
-      try {
-        const herdrAgents = await HerdrAdapter.listAgentsStrict();
-        for (const ha of herdrAgents) {
-          if (agent && ha.agent !== agent) continue;
-          const haCwd = ha.foreground_cwd || ha.cwd;
-          if (resolvedCwd && haCwd) {
-            if (!isWorkspacePathWithin(resolvedCwd, haCwd)) continue;
-          }
-          const resolved = await HerdrAdapter.resolveSessionFile(ha.pane_id);
-          const status = ha.agent_status === "working" ? "running" : (ha.agent_status === "blocked" ? "waiting_input" : "idle");
-          const times = getHerdrTimes(ha.pane_id, status, resolved?.createdAt, resolved?.lastActivity);
-          herdrSessions.push({
-            sessionId: `herdr:${ha.pane_id}`,
-            title: resolved?.title || ha.terminal_title_stripped || ha.terminal_title || `${ha.agent} (${ha.pane_id})`,
-            agent: resolved?.agent || ha.agent,
-            cwd: haCwd,
-            status,
-            source: "herdr",
-            lastActivity: times.lastActivity,
-            createdAt: times.createdAt,
-          });
-        }
-      } catch (err) {
-        console.log(`[list-sessions] failed to list herdr agents: ${err}`);
-      }
+    if (!HerdrAdapter.isAvailable()) {
+      ws.send(JSON.stringify({
+        type: "session_list",
+        sessions: [],
+        error: "HERDR_NOT_AVAILABLE",
+        requestId,
+      }));
+      return;
     }
-    ws.send(JSON.stringify({ type: "session_list", sessions: herdrSessions, requestId }));
+    const herdrSessions: any[] = [];
+    try {
+      const herdrAgents = await HerdrAdapter.listAgentsStrict();
+      for (const ha of herdrAgents) {
+        if (agent && ha.agent !== agent) continue;
+        const haCwd = ha.foreground_cwd || ha.cwd;
+        if (resolvedCwd && haCwd) {
+          if (!isWorkspacePathWithin(resolvedCwd, haCwd)) continue;
+        }
+        const resolved = await HerdrAdapter.resolveSessionFile(ha.pane_id);
+        const status = ha.agent_status === "working" ? "running" : (ha.agent_status === "blocked" ? "waiting_input" : "idle");
+        const times = getHerdrTimes(ha.pane_id, status, resolved?.createdAt, resolved?.lastActivity);
+        herdrSessions.push({
+          sessionId: `herdr:${ha.pane_id}`,
+          title: resolved?.title || ha.terminal_title_stripped || ha.terminal_title || `${ha.agent} (${ha.pane_id})`,
+          agent: resolved?.agent || ha.agent,
+          cwd: haCwd,
+          status,
+          source: "herdr",
+          lastActivity: times.lastActivity,
+          createdAt: times.createdAt,
+        });
+      }
+      ws.send(JSON.stringify({ type: "session_list", sessions: herdrSessions, requestId }));
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.log(`[list-sessions] failed to list herdr agents: ${message}`);
+      ws.send(JSON.stringify({
+        type: "session_list",
+        sessions: [],
+        error: message,
+        requestId,
+      }));
+    }
     return;
   }
 

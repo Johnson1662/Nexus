@@ -3,6 +3,7 @@ import { SessionOperationError, SessionOwnerError, sessionManager } from "../ses
 import { HerdrAdapter } from "../discovery/herdr-adapter.mjs";
 import { HerdrTailerRegistry } from "../discovery/herdr-session-tailer.mjs";
 import { sendAmbientCommand } from "../discovery/ambient-session.mjs";
+import { isExternalSessionClosing } from "./close-session.mjs";
 
 export function handleInput(
   ws: WebSocket,
@@ -20,6 +21,7 @@ export function handleInput(
 
   if (sessionId.startsWith("ambient:")) {
     const tailer = HerdrTailerRegistry.get(sessionId);
+    HerdrTailerRegistry.recordPendingPrompt(sessionId, text, ws);
     sendAmbientCommand(sessionId, { type: "prompt", text })
       .then(() => {
         tailer?.setLastInjectedPrompt(text, ws);
@@ -41,8 +43,20 @@ export function handleInput(
   }
 
   if (sessionId.startsWith("herdr:")) {
+    if (isExternalSessionClosing(sessionId)) {
+      try {
+        ws.send(JSON.stringify({
+          type: "error",
+          sessionId,
+          code: "SESSION_CLOSING",
+          text: "Session is closing",
+        }));
+      } catch {}
+      return;
+    }
     const paneId = sessionId.slice("herdr:".length);
     const tailer = HerdrTailerRegistry.get(sessionId);
+    HerdrTailerRegistry.recordPendingPrompt(sessionId, text, ws);
     HerdrAdapter.sendPrompt(paneId, text).then(() => {
       tailer?.setLastInjectedPrompt(text, ws);
       try { ws.send(JSON.stringify({ type: "input_ack", sessionId })); } catch { /* WS gone */ }

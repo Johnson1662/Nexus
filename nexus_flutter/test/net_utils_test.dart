@@ -17,4 +17,11 @@ void main() {
     expect(Uri.parse(url).port, 12138);
     expect(Uri.parse(url).host, 'fd7a:115c:a1e0::1');
   });
+
+  test('bracketedHost encodes scoped IPv6 zone idempotently', () {
+    expect(bracketedHost('fe80::1%wlan0'), '[fe80::1%25wlan0]');
+    expect(bracketedHost('[fe80::1%wlan0]'), '[fe80::1%25wlan0]');
+    expect(bracketedHost('fe80::1%25wlan0'), '[fe80::1%25wlan0]');
+    expect(bracketedHost('[fe80::1%25wlan0]'), '[fe80::1%25wlan0]');
+  });
 }

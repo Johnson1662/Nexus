@@ -130,8 +130,9 @@ function sendGitFailure(
 /** True only when Git reports the path as untracked (`??`). */
 async function isUntracked(root: string, relativePath: string): Promise<boolean> {
   try {
-    const porcelain = await git(root, ["status", "--porcelain", "-u", "--", relativePath], 5000);
-    return porcelain.split("\n").some((line) => line.startsWith("??") && line.slice(3).trim() === relativePath);
+    const stdout = await git(root, ["status", "--porcelain=v1", "-z", "-u"], 5000);
+    const map = parseGitStatusZ(stdout);
+    return map.get(relativePath) === "??";
   } catch (err) {
     // Unknown is not "yes": never fabricate a new-file diff from a failed query.
     console.log(`[workspace-files] untracked check failed: ${String(err)}`);
@@ -139,13 +140,26 @@ async function isUntracked(root: string, relativePath: string): Promise<boolean>
   }
 }
 
-function parseGitStatus(porcelain: string): Map<string, string> {
+export function parseGitStatusZ(stdout: string): Map<string, string> {
   const map = new Map<string, string>();
-  for (const line of porcelain.split("\n")) {
-    if (line.length < 3) continue;
-    const code = line.slice(0, 2).trim();
-    const filePath = line.slice(3).trim();
-    if (filePath) map.set(filePath, code);
+  const tokens = stdout.split("\0");
+  for (let i = 0; i < tokens.length; i++) {
+    const token = tokens[i];
+    if (!token || token.length < 3) continue;
+    const code = token.slice(0, 2).trim();
+    const p1 = token.slice(3);
+    // For renames (R) or copies (C), the next token is the new/destination path.
+    if (token[0] === "R" || token[1] === "R" || token[0] === "C" || token[1] === "C") {
+      const p2 = tokens[++i];
+      if (p2) {
+        map.set(p2, code);
+        map.set(p1, code);
+      } else {
+        map.set(p1, code);
+  }
+    } else {
+      map.set(p1, code);
+}
   }
   return map;
 }
@@ -168,8 +182,8 @@ export async function handleListWorkspaceFiles(
     // Get git status
     let statusMap: Map<string, string>;
     try {
-      const stdout = await git(root, ["status", "--porcelain", "-u"], 5000);
-      statusMap = parseGitStatus(stdout);
+      const stdout = await git(root, ["status", "--porcelain=v1", "-z", "-u"], 5000);
+      statusMap = parseGitStatusZ(stdout);
     } catch {
       statusMap = new Map();
     }
