@@ -30,6 +30,9 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
   Timer? _cursorPersistTimer;
   String _cursorSessionId = '';
   String _lastConnectionHostKey = '';
+  /// Bumped whenever the active host changes; async work tagged with an older
+  /// generation is discarded instead of overwriting the new host's state.
+  int _hostGeneration = 0;
   int _selectionGeneration = 0;
   final Map<String, int> _probePhaseGenerations = <String, int>{};
   final Set<String> _processedMessageIds = <String>{};
@@ -218,8 +221,34 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
       _startInFlight = false;
       _inputInFlight = false;
       _turnRequestTimer?.cancel();
+      _clearHostScopedState();
+      _hostGeneration++;
     }
     _lastConnectionHostKey = hostKey;
+  }
+
+  /// Drop everything that is scoped to the previous host.
+  ///
+  /// Capabilities, sessions, agent metadata, model/mode state and the active
+  /// workspace all describe a specific machine; leaving any of them behind
+  /// makes host A's data render for host B.
+  void _clearHostScopedState() {
+    _state.hostCapabilities = null;
+    _state.sessions = [];
+    _state.registryAgents = [];
+    _state.installedAgents = [];
+    _state.agentNames = [];
+    _state.selectedAgentName = '';
+    _state.models = [];
+    _state.modes = [];
+    _state.configOptions = [];
+    _state.currentWorkspace = '';
+    _state.streamingThinking = '';
+    _state.streamingText = '';
+    _state.messages = [];
+    _preferredBackend = 'native';
+    _effectiveBackend = 'native';
+    _useHerdrBackend = false;
   }
 
   String? _authTokenForHost(String hostKey, String url) {
@@ -1242,6 +1271,14 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
         break;
       case 'host_capabilities':
         if (msg.hostCapabilities != null) {
+          // Capabilities describe exactly one machine. A reply that names a
+          // different host than the one we are connected to is stale and must
+          // not repopulate the capability set.
+          final reportedHost = msg.hostId ?? '';
+          if (reportedHost.isNotEmpty &&
+              reportedHost != _state.currentDeviceId) {
+            break;
+          }
           _state.hostCapabilities = msg.hostCapabilities;
           // Agent selectors are capability-driven; refresh them the moment the
           // authoritative capability set arrives.
@@ -1572,7 +1609,11 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
           _workspaceProvider?.currentWorkspace ?? '';
 
       // Load host-scoped backend preference
+      final hostGeneration = ++_hostGeneration;
       StorageService.getInstance().then((storage) {
+        // A slow storage read for the previous host must not overwrite the
+        // preference of the host we are now connected to.
+        if (hostGeneration != _hostGeneration) return;
         _preferredBackend = storage.getHostPreferredBackend(actualHostId);
         _recomputeEffectiveBackend();
       });

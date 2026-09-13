@@ -450,7 +450,7 @@ export function handleIncomingConnection(transport: any, hostId: string = HOST_I
       case "get_host_capabilities": {
         detectHostCapabilities(false)
           .then((capabilities) => {
-            transport.send(JSON.stringify({ type: "host_capabilities", capabilities }));
+            transport.send(JSON.stringify({ type: "host_capabilities", hostId: HOST_ID, capabilities }));
           })
           .catch((err) => {
             console.log(`[server] get_host_capabilities error: ${err}`);
@@ -461,7 +461,7 @@ export function handleIncomingConnection(transport: any, hostId: string = HOST_I
       case "refresh_host_capabilities": {
         detectHostCapabilities(true)
           .then((capabilities) => {
-            transport.send(JSON.stringify({ type: "host_capabilities", capabilities }));
+            transport.send(JSON.stringify({ type: "host_capabilities", hostId: HOST_ID, capabilities }));
           })
           .catch((err) => {
             console.log(`[server] refresh_host_capabilities error: ${err}`);
