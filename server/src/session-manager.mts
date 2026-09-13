@@ -1284,7 +1284,16 @@ export class SessionManager {
           },
           options: Array.isArray(params.options) ? params.options : [],
         };
-        return (await permCallback(permReq)) as any;
+        // The ACP permission card is the UI surface; its result is translated
+        // into the answer payload Cursor expects back for the extension request.
+        const outcome = (await permCallback(permReq)) as {
+          outcome?: { outcome?: string; optionId?: string };
+        };
+        const decision = outcome?.outcome;
+        if (decision?.outcome === "selected" && decision.optionId) {
+          return { outcome: "answered", answer: { optionId: decision.optionId } };
+        }
+        return { outcome: "cancelled" };
       }
       if (method === "cursor/create_plan") {
         const sid = getSessionId();
@@ -1296,7 +1305,7 @@ export class SessionManager {
             planEntries: Array.isArray(params.entries) ? params.entries : [],
           },
         });
-        return { ok: true };
+        return { ok: true, accepted: true };
       }
       return {};
     };
