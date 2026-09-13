@@ -29,3 +29,14 @@ assert(!areWorkspacePathsEqual("/Users/me/Project", "/users/me/project", "darwin
 assert.equal(canonicalizeWorkspacePath("   ", "linux"), "", "blank input → empty canonical path");
 
 console.log("ALL PATH CANONICALIZATION TESTS PASSED!");
+
+// The session aggregator compares a requested cwd against each agent's reported
+// cwd; that comparison must follow platform case rules instead of folding case.
+{
+  const { areWorkspacePathsEqual: eq, canonicalizeWorkspacePath: canon } = await import("../dist/path-utils.mjs");
+  const requested = canon("/media/data/Project");
+  const reported = canon("/media/data/project");
+  assert(!eq(requested, reported, "linux"), "case-different cwds must not merge on linux");
+  assert(eq(requested, reported, "win32"), "case-different cwds must merge on win32");
+  assert(!eq(requested, reported, "darwin"), "case-different cwds must not merge on darwin");
+}

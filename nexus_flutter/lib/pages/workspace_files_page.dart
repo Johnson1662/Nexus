@@ -685,7 +685,10 @@ class _WorkspaceFilesPageState extends State<WorkspaceFilesPage> {
                   ),
                   const SizedBox(height: AppSpacing.sm),
                   if (state.fileLogEntries.isEmpty)
-                    Text('暂无提交历史', style: TextStyle(fontSize: AppFontSize.xs, color: muted))
+                    Text(
+                      state.fileGitWarning.isNotEmpty ? state.fileGitWarning : '暂无提交历史',
+                      style: TextStyle(fontSize: AppFontSize.xs, color: muted),
+                    )
                   else
                     ...state.fileLogEntries.take(8).map((e) => Padding(
                           padding: const EdgeInsets.symmetric(vertical: AppSpacing.xxs),
@@ -727,6 +730,24 @@ class _WorkspaceFilesPageState extends State<WorkspaceFilesPage> {
               ),
             ),
           ],
+
+          // Git unavailable is an explicit degradation, not an empty diff.
+          if (diffContent.isEmpty && state.fileGitWarning.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
+              child: Row(
+                children: [
+                  Icon(Icons.info_outline_rounded, size: 16, color: muted),
+                  const SizedBox(width: AppSpacing.xs),
+                  Expanded(
+                    child: Text(
+                      state.fileGitWarning,
+                      style: TextStyle(fontSize: AppFontSize.xs, color: muted),
+                    ),
+                  ),
+                ],
+              ),
+            ),
 
           // Full-screen Diff Container
           if (diffContent.isNotEmpty)

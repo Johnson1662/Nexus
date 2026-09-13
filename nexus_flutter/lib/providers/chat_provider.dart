@@ -1501,10 +1501,12 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
       case 'file_diff':
         _state.fileDiff = msg.diff;
         _state.selectedFilePath = msg.path;
+        _state.fileGitWarning = _gitWarningFor(msg);
         notifyListeners();
         break;
       case 'file_log':
         if (msg.logEntries != null) _state.fileLogEntries = msg.logEntries!;
+        _state.fileGitWarning = _gitWarningFor(msg);
         notifyListeners();
         break;
       case 'file_content':
@@ -1556,6 +1558,22 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
           }
         }
         break;
+    }
+  }
+
+
+  /// Map the server's Git error codes onto a message the user can act on.
+  /// File browsing keeps working without Git; only diff/log degrade.
+  String _gitWarningFor(ServerMessage msg) {
+    switch (msg.error) {
+      case 'GIT_UNAVAILABLE':
+        return '此电脑未检测到 Git';
+      case 'NOT_GIT_REPOSITORY':
+        return '该目录不是 Git 仓库';
+      case 'GIT_COMMAND_FAILED':
+        return 'Git 命令执行失败';
+      default:
+        return '';
     }
   }
 

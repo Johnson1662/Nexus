@@ -69,6 +69,8 @@ class ChatState {
   List<Map<String, dynamic>> fileLogEntries = [];
   String? fileContent;
   bool loadingFiles = false;
+  /// Non-empty when Git is missing or the folder is not a repository.
+  String fileGitWarning = '';
 
   // Permissions / Usage
   UsageInfo? lastUsage;

@@ -2,7 +2,7 @@ import type { AcpClient } from "./acp/client.mjs";
 import { createTempClient } from "./temp-client.mjs";
 import { getInstalledAgents, installAgent as storeInstallAgent, uninstallAgent as storeUninstallAgent, resolveAgentRuntime, type InstalledAgent } from "./agents-store.mjs";
 import { extractModelList, queryModelListOnce, type ModelList } from "./model-list.mjs";
-import { resolveWorkspacePath } from "./path-utils.mjs";
+import { resolveWorkspacePath, canonicalizeWorkspacePath, areWorkspacePathsEqual } from "./path-utils.mjs";
 
 const LIST_TIMEOUT = 4000;
 
@@ -56,7 +56,7 @@ class AgentRegistryService {
       });
     const allSessions: any[] = [];
     const resolvedCwd = resolveWorkspacePath(cwd);
-    const normalizedTargetCwd = resolvedCwd?.toLowerCase();
+    const targetCwd = resolvedCwd ? canonicalizeWorkspacePath(resolvedCwd) : null;
 
     await Promise.all(
       installed.map(async (agentItem) => {
@@ -69,10 +69,10 @@ class AgentRegistryService {
           );
           const sessions = (result as any).sessions || [];
           for (const s of sessions) {
-            if (normalizedTargetCwd && s.cwd) {
-              const normalizedSessionCwd = resolveWorkspacePath(s.cwd)
-                ?.toLowerCase();
-              if (normalizedSessionCwd !== normalizedTargetCwd) continue;
+            if (targetCwd && s.cwd) {
+              // Platform-aware comparison: Windows folds case, POSIX does not.
+              const sessionCwd = resolveWorkspacePath(s.cwd);
+              if (!sessionCwd || !areWorkspacePathsEqual(sessionCwd, targetCwd)) continue;
             }
             s.agent = agentItem.agentId;
             if (!s.createdAt && s.updatedAt) {
