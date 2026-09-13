@@ -317,6 +317,10 @@ export class HerdrTailerRegistry {
     return pending;
   }
 
+  static deletePendingPrompt(sessionId: string): void {
+    this.pendingInjectedPrompts.delete(sessionId);
+  }
+
   static getOrCreate(
     filePath: string,
     sessionId: string,
@@ -349,5 +353,6 @@ export class HerdrTailerRegistry {
       tailer.destroy();
     }
     this.tailers.clear();
+    this.pendingInjectedPrompts.clear();
   }
 }

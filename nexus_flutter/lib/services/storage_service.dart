@@ -225,12 +225,49 @@ class StorageService {
   List<String> loadWorkspaces(String hostId) {
     final key = 'workspaces_$hostId';
     final raw = _data[key];
-    if (raw is List) return raw.cast<String>();
+    if (raw is List) {
+      return raw.map((e) {
+        if (e is Map) return (e['path'] ?? '').toString();
+        return e.toString();
+      }).where((p) => p.isNotEmpty).toList();
+    }
+    return [];
+  }
+
+  List<Map<String, String>> loadWorkspaceEntries(String hostId) {
+    final key = 'workspaces_$hostId';
+    final raw = _data[key];
+    if (raw is List) {
+      final entries = <Map<String, String>>[];
+      for (final item in raw) {
+        if (item is Map) {
+          entries.add({
+            'name': (item['name'] ?? '').toString(),
+            'path': (item['path'] ?? '').toString(),
+            if (item['workspaceId'] != null && (item['workspaceId'] as String).isNotEmpty)
+              'workspaceId': item['workspaceId'].toString(),
+            if (item['source'] != null && (item['source'] as String).isNotEmpty)
+              'source': item['source'].toString(),
+          });
+        } else if (item is String && item.isNotEmpty) {
+          entries.add({
+            'name': item.split(RegExp(r'[/\\]')).last,
+            'path': item,
+          });
+        }
+      }
+      return entries;
+    }
     return [];
   }
 
   Future<void> saveWorkspaces(String hostId, List<String> paths) async {
     _data['workspaces_$hostId'] = paths;
+    await _enqueueFlush();
+  }
+
+  Future<void> saveWorkspaceEntries(String hostId, List<Map<String, String>> entries) async {
+    _data['workspaces_$hostId'] = entries;
     await _enqueueFlush();
   }
 

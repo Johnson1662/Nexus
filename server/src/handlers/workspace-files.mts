@@ -106,6 +106,7 @@ function sendGitFailure(
   type: "file_diff" | "file_log",
   filePath: string,
   err: unknown,
+  requestId?: string,
 ): void {
   if (err instanceof GitError) {
     ws.send(JSON.stringify({
@@ -114,6 +115,7 @@ function sendGitFailure(
       ...(type === "file_diff" ? { diff: "" } : { logEntries: [] }),
       error: err.code,
       text: err.code === "GIT_UNAVAILABLE" ? "此电脑未检测到 Git" : err.message,
+      requestId,
     }));
     return;
   }
@@ -124,6 +126,7 @@ function sendGitFailure(
     ...(type === "file_diff" ? { diff: "" } : { logEntries: [] }),
     error: "GIT_COMMAND_FAILED",
     text: message,
+    requestId,
   }));
 }
 
@@ -168,12 +171,12 @@ export function parseGitStatusZ(stdout: string): Map<string, string> {
 
 export async function handleListWorkspaceFiles(
   ws: WebSocket,
-  params: { cwd: string },
+  params: { cwd: string; requestId?: string },
 ): Promise<void> {
-  const { cwd } = params;
+  const { cwd, requestId } = params;
   if (!cwd) {
     // An empty listing would look like an empty directory; say what is wrong.
-    ws.send(JSON.stringify({ type: "workspace_files", cwd: "", files: [], error: "missing cwd" }));
+    ws.send(JSON.stringify({ type: "workspace_files", cwd: "", files: [], error: "missing cwd", requestId }));
     return;
   }
 
@@ -223,24 +226,24 @@ export async function handleListWorkspaceFiles(
     }
     await walk(root, 0);
 
-    ws.send(JSON.stringify({ type: "workspace_files", cwd: root, files, truncated }));
+    ws.send(JSON.stringify({ type: "workspace_files", cwd: root, files, truncated, requestId }));
   } catch (err: any) {
-    ws.send(JSON.stringify({ type: "workspace_files", cwd, files: [], error: err.message }));
+    ws.send(JSON.stringify({ type: "workspace_files", cwd, files: [], error: err.message, requestId }));
   }
 }
 
 export async function handleFileDiff(
   ws: WebSocket,
-  params: { cwd: string; path: string },
+  params: { cwd: string; path: string; requestId?: string },
 ): Promise<void> {
-  const { cwd, path: filePath } = params;
+  const { cwd, path: filePath, requestId } = params;
   if (!cwd || !filePath) {
-    ws.send(JSON.stringify({ type: "file_diff", path: filePath || "", diff: "", error: "missing cwd or path" }));
+    ws.send(JSON.stringify({ type: "file_diff", path: filePath || "", diff: "", error: "missing cwd or path", requestId }));
     return;
   }
 
   if (findExecutable("git") === null) {
-    sendGitFailure(ws, "file_diff", filePath, new GitError("GIT_UNAVAILABLE", "git executable not found"));
+    sendGitFailure(ws, "file_diff", filePath, new GitError("GIT_UNAVAILABLE", "git executable not found"), requestId);
     return;
   }
 
@@ -269,37 +272,41 @@ export async function handleFileDiff(
     // has nothing to diff against. Only treat it as a new file when Git says the
     // path is actually untracked; otherwise the whole file would be rendered as
     // a diff for a file that simply matches HEAD.
+    let fileError: string | undefined;
     if (!diff && await isUntracked(root, relativePath)) {
       try {
         const { readFile } = await import("node:fs/promises");
         const fileStat = await stat(canonicalPath);
-        if (!fileStat.isFile() || fileStat.size > MAX_FILE_BYTES) {
+        if (!fileStat.isFile()) {
+          throw new Error("not a regular file");
+        }
+        if (fileStat.size > MAX_FILE_BYTES) {
           throw new Error(`file exceeds ${MAX_FILE_BYTES} byte limit`);
         }
         const content = await readFile(canonicalPath, "utf-8");
         diff = content;
-        sendFileEvent(ws, { type: "file_diff", path: filePath, diff });
-        return;
-      } catch {}
+      } catch (err: any) {
+        fileError = err.message;
+      }
     }
-    sendFileEvent(ws, { type: "file_diff", path: filePath, diff });
+    sendFileEvent(ws, { type: "file_diff", path: filePath, diff, error: fileError, requestId });
   } catch (err: any) {
-    sendGitFailure(ws, "file_diff", filePath, err);
+    sendGitFailure(ws, "file_diff", filePath, err, requestId);
   }
 }
 
 export async function handleFileLog(
   ws: WebSocket,
-  params: { cwd: string; path: string },
+  params: { cwd: string; path: string; requestId?: string },
 ): Promise<void> {
-  const { cwd, path: filePath } = params;
+  const { cwd, path: filePath, requestId } = params;
   if (!cwd || !filePath) {
-    ws.send(JSON.stringify({ type: "file_log", path: filePath || "", logEntries: [] }));
+    ws.send(JSON.stringify({ type: "file_log", path: filePath || "", logEntries: [], requestId }));
     return;
   }
 
   if (findExecutable("git") === null) {
-    sendGitFailure(ws, "file_log", filePath, new GitError("GIT_UNAVAILABLE", "git executable not found"));
+    sendGitFailure(ws, "file_log", filePath, new GitError("GIT_UNAVAILABLE", "git executable not found"), requestId);
     return;
   }
 
@@ -319,19 +326,19 @@ export async function handleFileLog(
         const [hash, date, author, ...msgParts] = l.split("|");
         return { hash, date, author, message: msgParts.join("|") };
       });
-    ws.send(JSON.stringify({ type: "file_log", path: filePath, logEntries: entries }));
+    ws.send(JSON.stringify({ type: "file_log", path: filePath, logEntries: entries, requestId }));
   } catch (err: any) {
-    sendGitFailure(ws, "file_log", filePath, err);
+    sendGitFailure(ws, "file_log", filePath, err, requestId);
   }
 }
 
 export async function handleFileRead(
   ws: WebSocket,
-  params: { cwd: string; path: string },
+  params: { cwd: string; path: string; requestId?: string },
 ): Promise<void> {
-  const { cwd, path: filePath } = params;
+  const { cwd, path: filePath, requestId } = params;
   if (!cwd || !filePath) {
-    ws.send(JSON.stringify({ type: "file_content", path: filePath || "", fileContent: "", error: "missing cwd or path" }));
+    ws.send(JSON.stringify({ type: "file_content", path: filePath || "", fileContent: "", error: "missing cwd or path", requestId }));
     return;
   }
 
@@ -344,8 +351,8 @@ export async function handleFileRead(
       throw new Error(`file exceeds ${MAX_FILE_BYTES} byte limit`);
     }
     const content = await fs.readFile(fullPath, "utf-8");
-    sendFileEvent(ws, { type: "file_content", path: filePath, fileContent: content });
+    sendFileEvent(ws, { type: "file_content", path: filePath, fileContent: content, requestId });
   } catch (err: any) {
-    ws.send(JSON.stringify({ type: "file_content", path: filePath, fileContent: "", error: err.message }));
+    ws.send(JSON.stringify({ type: "file_content", path: filePath, fileContent: "", error: err.message, requestId }));
   }
 }

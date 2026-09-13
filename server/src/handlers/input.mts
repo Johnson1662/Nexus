@@ -19,17 +19,33 @@ export function handleInput(
     return;
   }
 
+  if (isExternalSessionClosing(sessionId)) {
+    try {
+      ws.send(JSON.stringify({
+        type: "error",
+        sessionId,
+        code: "SESSION_CLOSING",
+        text: "Session is closing",
+      }));
+    } catch {}
+    return;
+  }
+
   if (sessionId.startsWith("ambient:")) {
     const tailer = HerdrTailerRegistry.get(sessionId);
-    HerdrTailerRegistry.recordPendingPrompt(sessionId, text, ws);
+    if (!tailer) {
+      HerdrTailerRegistry.recordPendingPrompt(sessionId, text, ws);
+    }
     sendAmbientCommand(sessionId, { type: "prompt", text })
       .then(() => {
         tailer?.setLastInjectedPrompt(text, ws);
+        if (tailer) HerdrTailerRegistry.deletePendingPrompt(sessionId);
         try {
           ws.send(JSON.stringify({ type: "input_ack", sessionId }));
         } catch { /* WS gone */ }
       })
       .catch((err) => {
+        HerdrTailerRegistry.deletePendingPrompt(sessionId);
         console.log(`[input] Ambient sendPrompt error: ${err}`);
         try {
           ws.send(JSON.stringify({
@@ -43,24 +59,17 @@ export function handleInput(
   }
 
   if (sessionId.startsWith("herdr:")) {
-    if (isExternalSessionClosing(sessionId)) {
-      try {
-        ws.send(JSON.stringify({
-          type: "error",
-          sessionId,
-          code: "SESSION_CLOSING",
-          text: "Session is closing",
-        }));
-      } catch {}
-      return;
-    }
     const paneId = sessionId.slice("herdr:".length);
     const tailer = HerdrTailerRegistry.get(sessionId);
-    HerdrTailerRegistry.recordPendingPrompt(sessionId, text, ws);
+    if (!tailer) {
+      HerdrTailerRegistry.recordPendingPrompt(sessionId, text, ws);
+    }
     HerdrAdapter.sendPrompt(paneId, text).then(() => {
       tailer?.setLastInjectedPrompt(text, ws);
+      if (tailer) HerdrTailerRegistry.deletePendingPrompt(sessionId);
       try { ws.send(JSON.stringify({ type: "input_ack", sessionId })); } catch { /* WS gone */ }
     }).catch((err) => {
+      HerdrTailerRegistry.deletePendingPrompt(sessionId);
       console.log(`[input] Herdr sendPrompt error: ${err}`);
       try {
         ws.send(JSON.stringify({

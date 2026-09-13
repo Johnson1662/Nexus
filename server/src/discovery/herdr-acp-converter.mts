@@ -292,6 +292,9 @@ export async function readSessionJsonlFullHistory(
   minTimestampMs?: number,
   maxByteOffset?: number,
 ): Promise<AcpEventPayload[]> {
+  if (typeof maxByteOffset === "number" && maxByteOffset <= 0) {
+    return [];
+  }
   const updates: AcpEventPayload[] = [];
   const streamOptions: { encoding: BufferEncoding; end?: number } = { encoding: "utf8" };
   if (typeof maxByteOffset === "number" && maxByteOffset > 0) {

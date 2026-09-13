@@ -216,9 +216,8 @@ export async function handleLoadSession(
     // Stage 2: Asynchronously load full history in background
     setTimeout(async () => {
       if (ws.readyState !== 1 /* OPEN */) return;
-      const boundary = fs.existsSync(amb.transcriptPath) ? fs.statSync(amb.transcriptPath).size : 0;
+      const boundary = tailer.getByteOffset();
       tailer.hold(ws);
-      tailer.setByteOffset(boundary);
       try {
         const fullEvents = await readSessionJsonlFullHistory(amb.transcriptPath, undefined, boundary);
         const limited = limitHistoryEvents(fullEvents as unknown[]);
@@ -388,9 +387,8 @@ export async function handleLoadSession(
       // them after the snapshot, making the snapshot a real boundary.
       setTimeout(async () => {
         if (ws.readyState !== 1 /* OPEN */) return;
-        const boundary = fs.existsSync(r.sessionPath!) ? fs.statSync(r.sessionPath!).size : 0;
+        const boundary = tailer.getByteOffset();
         tailer.hold(ws);
-        tailer.setByteOffset(boundary);
         try {
           const fullEvents = await readSessionJsonlFullHistory(r.sessionPath!, minTimestampMs, boundary);
           const limited = limitHistoryEvents(fullEvents as unknown[]);

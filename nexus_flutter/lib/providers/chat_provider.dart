@@ -36,6 +36,8 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
   /// Monotonic id of the newest session-list request, echoed by the server.
   int _sessionListRequestSeq = 0;
   String _sessionListRequestId = '';
+  int _fileRequestSeq = 0;
+  String _currentFileRequestId = '';
   int _pendingHostGeneration = 0;
   String _pendingHostId = '';
   int _selectionGeneration = 0;
@@ -927,10 +929,12 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
     _state.selectedFilePath = null;
     _state.fileLogEntries = [];
     _state.fileError = '';
+    _currentFileRequestId = 'file_${++_fileRequestSeq}';
     notifyListeners();
     _ws.send(ClientMessage(
       type: 'list_workspace_files',
       cwd: _state.currentWorkspace,
+      requestId: _currentFileRequestId,
     ));
   }
 
@@ -938,33 +942,39 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
     _state.fileDiff = null;
     _state.selectedFilePath = filePath;
     _state.fileError = '';
+    _currentFileRequestId = 'file_${++_fileRequestSeq}';
     notifyListeners();
     _ws.send(ClientMessage(
       type: 'get_file_diff',
       cwd: _state.currentWorkspace,
       text: filePath,
+      requestId: _currentFileRequestId,
     ));
   }
 
   void requestFileLog(String filePath) {
     _state.fileLogEntries = [];
     _state.fileError = '';
+    _currentFileRequestId = 'file_${++_fileRequestSeq}';
     notifyListeners();
     _ws.send(ClientMessage(
       type: 'get_file_log',
       cwd: _state.currentWorkspace,
       text: filePath,
+      requestId: _currentFileRequestId,
     ));
   }
 
   void requestFileContent(String filePath) {
     _state.fileContent = null;
     _state.fileError = '';
+    _currentFileRequestId = 'file_${++_fileRequestSeq}';
     notifyListeners();
     _ws.send(ClientMessage(
       type: 'get_file_content',
       cwd: _state.currentWorkspace,
       text: filePath,
+      requestId: _currentFileRequestId,
     ));
   }
 
@@ -1486,6 +1496,7 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
           _state.errorMessage = msg.error!;
         } else if (msg.herdrWorkspaces != null) {
           _workspaceProvider?.syncFromHerdrWorkspaces(msg.herdrWorkspaces!);
+          _state.currentWorkspace = _workspaceProvider?.currentWorkspace ?? '';
         }
         notifyListeners();
         break;
@@ -1635,6 +1646,11 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
         notifyListeners();
         break;
       case 'workspace_files':
+        if (msg.requestId != null &&
+            msg.requestId!.isNotEmpty &&
+            msg.requestId != _currentFileRequestId) {
+          break;
+        }
         if (msg.error != null && msg.error!.isNotEmpty) {
           _state.fileError = msg.error!;
           _state.loadingFiles = false;
@@ -1646,10 +1662,16 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
         notifyListeners();
         break;
       case 'file_diff':
+        if (msg.requestId != null &&
+            msg.requestId!.isNotEmpty &&
+            msg.requestId != _currentFileRequestId) {
+          break;
+        }
+        if (_state.selectedFilePath == null) {
+          break;
+        }
         if (msg.path != null &&
             msg.path!.isNotEmpty &&
-            _state.selectedFilePath != null &&
-            _state.selectedFilePath!.isNotEmpty &&
             msg.path != _state.selectedFilePath) {
           break;
         }
@@ -1666,10 +1688,16 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
         notifyListeners();
         break;
       case 'file_log':
+        if (msg.requestId != null &&
+            msg.requestId!.isNotEmpty &&
+            msg.requestId != _currentFileRequestId) {
+          break;
+        }
+        if (_state.selectedFilePath == null) {
+          break;
+        }
         if (msg.path != null &&
             msg.path!.isNotEmpty &&
-            _state.selectedFilePath != null &&
-            _state.selectedFilePath!.isNotEmpty &&
             msg.path != _state.selectedFilePath) {
           break;
         }
@@ -1683,10 +1711,16 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
         notifyListeners();
         break;
       case 'file_content':
+        if (msg.requestId != null &&
+            msg.requestId!.isNotEmpty &&
+            msg.requestId != _currentFileRequestId) {
+          break;
+        }
+        if (_state.selectedFilePath == null) {
+          break;
+        }
         if (msg.path != null &&
             msg.path!.isNotEmpty &&
-            _state.selectedFilePath != null &&
-            _state.selectedFilePath!.isNotEmpty &&
             msg.path != _state.selectedFilePath) {
           break;
         }
@@ -2639,10 +2673,8 @@ class WorkspaceProvider extends ChangeNotifier {
       final oldWorkspaces = storage.getObject(oldWorkspacesKey);
       final oldIndex = storage.getObject(oldIndexKey);
       if (oldWorkspaces != null) {
-        final paths = oldWorkspaces is List
-            ? oldWorkspaces.whereType<String>().toList()
-            : storage.loadWorkspaces(oldId);
-        await storage.saveWorkspaces(newId, paths);
+        final entries = storage.loadWorkspaceEntries(oldId);
+        await storage.saveWorkspaceEntries(newId, entries);
       }
       if (oldIndex != null) {
         final index =
@@ -2730,6 +2762,11 @@ class WorkspaceProvider extends ChangeNotifier {
         w['source'] == 'herdr' &&
         (w['workspaceId'] ?? '').isNotEmpty &&
         !liveIds.contains(w['workspaceId']));
+    if (state.workspaces.isEmpty) {
+      state.selectedIndex = 0;
+    } else if (state.selectedIndex >= state.workspaces.length) {
+      state.selectedIndex = state.workspaces.length - 1;
+    }
     notifyListeners();
     _persistWorkspaces();
   }
@@ -2738,13 +2775,10 @@ class WorkspaceProvider extends ChangeNotifier {
     final hostId = _activeHostId;
     final state = _byHost[hostId];
     if (state == null) return;
-    final paths = state.workspaces
-        .map((w) => w['path'] ?? '')
-        .where((p) => p.isNotEmpty)
-        .toList();
+    final entries = state.workspaces;
     final index = state.selectedIndex;
     final storage = await StorageService.getInstance();
-    await storage.saveWorkspaces(hostId, paths);
+    await storage.saveWorkspaceEntries(hostId, entries);
     await storage.saveWorkspaceIndex(hostId, index);
   }
 
@@ -2752,39 +2786,16 @@ class WorkspaceProvider extends ChangeNotifier {
     final storage = await StorageService.getInstance();
     if (hostId != _activeHostId) return;
 
-    final hasPartition = storage.getObject('workspaces_$hostId') != null ||
-        storage.getObject('workspace_index_$hostId') != null;
-    var paths = storage.loadWorkspaces(hostId);
-    var index = storage.loadWorkspaceIndex(hostId);
-    if (!hasPartition) {
-      final legacy = storage.getString('workspaces');
-      if (legacy != null) {
-        paths = legacy.split('\n').where((path) => path.isNotEmpty).toList();
-        index = 0;
-        await storage.saveWorkspaces(hostId, paths);
-        await storage.saveWorkspaceIndex(hostId, index);
-        await storage.remove('workspaces');
-      }
-    }
+    final entries = storage.loadWorkspaceEntries(hostId);
+    final index = storage.loadWorkspaceIndex(hostId);
     if (hostId != _activeHostId) return;
 
     final state = _stateFor(hostId);
-    final existingPaths = state.workspaces
-        .map((workspace) => workspace['path'] ?? '')
-        .where((path) => path.isNotEmpty)
-        .toSet();
-    for (final path in paths) {
-      if (existingPaths.add(path)) {
-        state.workspaces.add({
-          'name': path.split(RegExp(r'[/\\]')).last,
-          'path': path,
-        });
-      }
-    }
+    state.workspaces = entries;
     if (state.workspaces.isEmpty) {
       state.selectedIndex = 0;
-    } else if (state.selectedIndex == 0 && index > 0) {
-      state.selectedIndex = index < state.workspaces.length ? index : 0;
+    } else if (index >= 0 && index < state.workspaces.length) {
+      state.selectedIndex = index;
     } else if (state.selectedIndex >= state.workspaces.length) {
       state.selectedIndex = 0;
     }

@@ -673,19 +673,19 @@ export function handleIncomingConnection(transport: any, hostId: string = HOST_I
 
       case "list_workspace_files":
         console.log(`[server] list_workspace_files cwd="${sessionMsg.cwd || ""}"`);
-        sessionManager.enqueueWsOp(transport, () => handleListWorkspaceFiles(transport, { cwd: sessionMsg.cwd || "" }));
+        sessionManager.enqueueWsOp(transport, () => handleListWorkspaceFiles(transport, { cwd: sessionMsg.cwd || "", requestId: sessionMsg.requestId }));
         break;
 
       case "get_file_diff":
-        sessionManager.enqueueWsOp(transport, () => handleFileDiff(transport, { cwd: sessionMsg.cwd || "", path: sessionMsg.text || sessionMsg.path || "" }));
+        sessionManager.enqueueWsOp(transport, () => handleFileDiff(transport, { cwd: sessionMsg.cwd || "", path: sessionMsg.text || sessionMsg.path || "", requestId: sessionMsg.requestId }));
         break;
 
       case "get_file_log":
-        sessionManager.enqueueWsOp(transport, () => handleFileLog(transport, { cwd: sessionMsg.cwd || "", path: sessionMsg.text || sessionMsg.path || "" }));
+        sessionManager.enqueueWsOp(transport, () => handleFileLog(transport, { cwd: sessionMsg.cwd || "", path: sessionMsg.text || sessionMsg.path || "", requestId: sessionMsg.requestId }));
         break;
 
       case "get_file_content":
-        sessionManager.enqueueWsOp(transport, () => handleFileRead(transport, { cwd: sessionMsg.cwd || "", path: sessionMsg.text || sessionMsg.path || "" }));
+        sessionManager.enqueueWsOp(transport, () => handleFileRead(transport, { cwd: sessionMsg.cwd || "", path: sessionMsg.text || sessionMsg.path || "", requestId: sessionMsg.requestId }));
         break;
 
       case "sync_request": {
