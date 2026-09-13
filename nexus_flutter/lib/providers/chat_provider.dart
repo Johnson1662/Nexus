@@ -36,8 +36,14 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
   /// Monotonic id of the newest session-list request, echoed by the server.
   int _sessionListRequestSeq = 0;
   String _sessionListRequestId = '';
-  int _fileRequestSeq = 0;
-  String _currentFileRequestId = '';
+  int _workspaceFilesSeq = 0;
+  String _workspaceFilesRequestId = '';
+  int _fileDiffSeq = 0;
+  String _fileDiffRequestId = '';
+  int _fileLogSeq = 0;
+  String _fileLogRequestId = '';
+  int _fileContentSeq = 0;
+  String _fileContentRequestId = '';
   int _pendingHostGeneration = 0;
   String _pendingHostId = '';
   int _selectionGeneration = 0;
@@ -929,12 +935,12 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
     _state.selectedFilePath = null;
     _state.fileLogEntries = [];
     _state.fileError = '';
-    _currentFileRequestId = 'file_${++_fileRequestSeq}';
+    _workspaceFilesRequestId = 'files_${++_workspaceFilesSeq}';
     notifyListeners();
     _ws.send(ClientMessage(
       type: 'list_workspace_files',
       cwd: _state.currentWorkspace,
-      requestId: _currentFileRequestId,
+      requestId: _workspaceFilesRequestId,
     ));
   }
 
@@ -942,39 +948,39 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
     _state.fileDiff = null;
     _state.selectedFilePath = filePath;
     _state.fileError = '';
-    _currentFileRequestId = 'file_${++_fileRequestSeq}';
+    _fileDiffRequestId = 'diff_${++_fileDiffSeq}';
     notifyListeners();
     _ws.send(ClientMessage(
       type: 'get_file_diff',
       cwd: _state.currentWorkspace,
       text: filePath,
-      requestId: _currentFileRequestId,
+      requestId: _fileDiffRequestId,
     ));
   }
 
   void requestFileLog(String filePath) {
     _state.fileLogEntries = [];
     _state.fileError = '';
-    _currentFileRequestId = 'file_${++_fileRequestSeq}';
+    _fileLogRequestId = 'log_${++_fileLogSeq}';
     notifyListeners();
     _ws.send(ClientMessage(
       type: 'get_file_log',
       cwd: _state.currentWorkspace,
       text: filePath,
-      requestId: _currentFileRequestId,
+      requestId: _fileLogRequestId,
     ));
   }
 
   void requestFileContent(String filePath) {
     _state.fileContent = null;
     _state.fileError = '';
-    _currentFileRequestId = 'file_${++_fileRequestSeq}';
+    _fileContentRequestId = 'content_${++_fileContentSeq}';
     notifyListeners();
     _ws.send(ClientMessage(
       type: 'get_file_content',
       cwd: _state.currentWorkspace,
       text: filePath,
-      requestId: _currentFileRequestId,
+      requestId: _fileContentRequestId,
     ));
   }
 
@@ -1648,7 +1654,7 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
       case 'workspace_files':
         if (msg.requestId != null &&
             msg.requestId!.isNotEmpty &&
-            msg.requestId != _currentFileRequestId) {
+            msg.requestId != _workspaceFilesRequestId) {
           break;
         }
         if (msg.error != null && msg.error!.isNotEmpty) {
@@ -1664,7 +1670,7 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
       case 'file_diff':
         if (msg.requestId != null &&
             msg.requestId!.isNotEmpty &&
-            msg.requestId != _currentFileRequestId) {
+            msg.requestId != _fileDiffRequestId) {
           break;
         }
         if (_state.selectedFilePath == null) {
@@ -1690,7 +1696,7 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
       case 'file_log':
         if (msg.requestId != null &&
             msg.requestId!.isNotEmpty &&
-            msg.requestId != _currentFileRequestId) {
+            msg.requestId != _fileLogRequestId) {
           break;
         }
         if (_state.selectedFilePath == null) {
@@ -1713,7 +1719,7 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
       case 'file_content':
         if (msg.requestId != null &&
             msg.requestId!.isNotEmpty &&
-            msg.requestId != _currentFileRequestId) {
+            msg.requestId != _fileContentRequestId) {
           break;
         }
         if (_state.selectedFilePath == null) {
