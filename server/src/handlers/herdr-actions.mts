@@ -31,6 +31,56 @@ export async function handleListHerdrWorkspaces(ws: WebSocket): Promise<void> {
   }
 }
 
+export async function handleCreateHerdrWorkspace(
+  ws: WebSocket,
+  payload: { label?: string; cwd?: string },
+): Promise<void> {
+  if (!HerdrAdapter.isAvailable()) {
+    ws.send(
+      JSON.stringify({
+        type: "create_herdr_workspace_done",
+        ok: false,
+        error: "Herdr is not running on this host",
+      }),
+    );
+    return;
+  }
+
+  try {
+    const workspaceId = await HerdrAdapter.createWorkspace(payload.label, payload.cwd);
+    if (!workspaceId) {
+      ws.send(
+        JSON.stringify({
+          type: "create_herdr_workspace_done",
+          ok: false,
+          error: "Failed to create Herdr workspace",
+        }),
+      );
+      return;
+    }
+
+    ws.send(
+      JSON.stringify({
+        type: "create_herdr_workspace_done",
+        ok: true,
+        workspaceId,
+        label: payload.label || workspaceId,
+        cwd: payload.cwd || "",
+      }),
+    );
+    // Broadcast refreshed workspaces list
+    handleListHerdrWorkspaces(ws).catch(() => {});
+  } catch (err: any) {
+    ws.send(
+      JSON.stringify({
+        type: "create_herdr_workspace_done",
+        ok: false,
+        error: err.message || String(err),
+      }),
+    );
+  }
+}
+
 export interface CreateHerdrAgentPayload {
   workspaceId: string;
   agentKind: string;

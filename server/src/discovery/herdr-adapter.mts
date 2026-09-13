@@ -50,16 +50,94 @@ interface HerdrRpcResponse<T = unknown> {
 
 let requestCounter = 0;
 
+export type HerdrEndpoint =
+  | { kind: "unix"; path: string }
+  | { kind: "pipe"; path: string };
+
+export function resolveHerdrEndpoint(): HerdrEndpoint {
+  const envPath = process.env.HERDR_SOCKET_PATH?.trim();
+  if (envPath) {
+    if (envPath.startsWith("\\\\.\\pipe\\") || envPath.startsWith("\\\\?\\pipe\\")) {
+      return { kind: "pipe", path: envPath };
+    }
+    return { kind: "unix", path: envPath };
+  }
+
+  const session = process.env.HERDR_SESSION?.trim();
+  if (process.platform === "win32") {
+    const pipeName = session ? `herdr-${session}` : "herdr";
+    return { kind: "pipe", path: `\\\\.\\pipe\\${pipeName}` };
+  }
+
+  if (session) {
+    return { kind: "unix", path: path.join(homedir(), ".config", "herdr", `${session}.sock`) };
+  }
+  return { kind: "unix", path: path.join(homedir(), ".config", "herdr", "herdr.sock") };
+}
+
 export function getHerdrSocketPath(): string {
-  return process.env.HERDR_SOCKET_PATH ?? path.join(homedir(), ".config", "herdr", "herdr.sock");
+  return resolveHerdrEndpoint().path;
+}
+
+export interface HerdrProbeResult {
+  available: boolean;
+  version?: string;
+  endpointKind: "unix" | "pipe";
+  reason?: string;
+  checkedAt: number;
+}
+
+let lastProbeResult: HerdrProbeResult | null = null;
+let lastProbeEndpointPath = "";
+const PROBE_CACHE_TTL_MS = 4000;
+
+function cachedProbeFor(endpointPath: string): HerdrProbeResult | null {
+  if (!lastProbeResult) return null;
+  if (lastProbeEndpointPath !== endpointPath) return null;
+  if (Date.now() - lastProbeResult.checkedAt >= PROBE_CACHE_TTL_MS) return null;
+  return lastProbeResult;
+}
+
+export async function probeHerdr(force = false): Promise<HerdrProbeResult> {
+  const now = Date.now();
+  const endpoint = resolveHerdrEndpoint();
+  const cached = cachedProbeFor(endpoint.path);
+  if (!force && cached) return cached;
+
+  try {
+    await sendHerdrRequest("agent.list", {}, 1200);
+    lastProbeResult = {
+      available: true,
+      endpointKind: endpoint.kind,
+      checkedAt: now,
+    };
+  } catch (err: any) {
+    lastProbeResult = {
+      available: false,
+      endpointKind: endpoint.kind,
+      reason: err?.message || String(err),
+      checkedAt: now,
+    };
+  }
+  lastProbeEndpointPath = endpoint.path;
+  return lastProbeResult;
 }
 
 export function isHerdrAvailable(): boolean {
-  try {
-    return existsSync(getHerdrSocketPath());
-  } catch {
-    return false;
+  const endpoint = resolveHerdrEndpoint();
+  const cached = cachedProbeFor(endpoint.path);
+  if (cached) return cached.available;
+
+  if (endpoint.kind === "unix") {
+    try {
+      return existsSync(endpoint.path);
+    } catch {
+      return false;
+    }
   }
+  // Named pipes have no filesystem presence; a negative result is authoritative
+  // until the caller runs an explicit probe (which is done on connect).
+  return lastProbeEndpointPath === endpoint.path ? (lastProbeResult?.available ?? false) : false;
 }
 
 export async function sendHerdrRequest<T = unknown>(
@@ -67,11 +145,11 @@ export async function sendHerdrRequest<T = unknown>(
   params: Record<string, unknown> = {},
   timeoutMs = 2000,
 ): Promise<T> {
-  const socketPath = getHerdrSocketPath();
-  if (!existsSync(socketPath)) {
+  const endpoint = resolveHerdrEndpoint();
+  const socketPath = endpoint.path;
+  if (endpoint.kind === "unix" && !existsSync(socketPath)) {
     throw new Error(`Herdr socket not found at ${socketPath}`);
   }
-
   const id = `nexus_req_${++requestCounter}_${Date.now()}`;
   const payload = JSON.stringify({ id, method, params }) + "\n";
 
@@ -137,6 +215,27 @@ export async function sendHerdrRequest<T = unknown>(
 export class HerdrAdapter {
   static isAvailable(): boolean {
     return isHerdrAvailable();
+  }
+
+  static async probe(force = false): Promise<HerdrProbeResult> {
+    return probeHerdr(force);
+  }
+
+  static async getIntegrationStatus(): Promise<Record<string, boolean>> {
+    const result: Record<string, boolean> = {};
+    if (!this.isAvailable()) return result;
+    try {
+      const stdout = execSync("herdr integration status", { encoding: "utf8", timeout: 3000 });
+      for (const line of stdout.split("\n")) {
+        const parts = line.split(":");
+        if (parts.length >= 2) {
+          const name = parts[0].trim();
+          const status = parts.slice(1).join(":").trim();
+          result[name] = status.startsWith("current");
+        }
+      }
+    } catch {}
+    return result;
   }
 
   static async listWorkspaces(): Promise<HerdrWorkspaceInfo[]> {
@@ -582,6 +681,9 @@ export function computeTerminalDelta(oldText: string, newText: string): string {
 }
 
 function findActiveSessionFileForCwd(targetCwd: string, exclude?: Set<string>): string | null {
+  if (process.platform !== "linux" || !existsSync("/proc")) {
+    return null;
+  }
   try {
     const pids = execSync('pgrep -f "bun .*/omp"', { encoding: "utf8" }).trim().split("\n").filter(Boolean);
     const resolvedTarget = realpathSync(targetCwd);
@@ -619,6 +721,9 @@ function isStructuredSessionPath(agent: string, candidate: string): boolean {
 }
 
 function findActiveSessionFileForPane(targetPaneId: string, agent: string): string | null {
+  if (process.platform !== "linux" || !existsSync("/proc")) {
+    return null;
+  }
   try {
     const pids = readdirSync("/proc").filter((p) => /^\d+$/.test(p));
     for (const pid of pids) {
@@ -663,14 +768,14 @@ export class HerdrEventBus {
   }
 
   private static connect(): void {
-    const sockPath = getHerdrSocketPath();
-    if (!existsSync(sockPath)) {
+    const endpoint = resolveHerdrEndpoint();
+    if (endpoint.kind === "unix" && !existsSync(endpoint.path)) {
       this.scheduleReconnect();
       return;
     }
 
     try {
-      const sock = net.createConnection(sockPath);
+      const sock = net.createConnection(endpoint.path);
       this.client = sock;
       sock.unref();
 

@@ -8,6 +8,7 @@ import '../services/app_preference_service.dart';
 import '../models/device_entry.dart';
 import '../models/host_runtime_state.dart';
 import '../services/storage_service.dart';
+import '../utils/net_utils.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -37,8 +38,10 @@ class _SettingsPageState extends State<SettingsPage> {
     _toolCallExpanded = _prefs.toolCallExpanded;
     StorageService.getInstance().then((storage) {
       if (mounted) {
+        final currentHost =
+            context.read<ChatProvider?>()?.state.currentDeviceId ?? '';
         setState(() {
-          _useHerdrBackend = storage.getUseHerdrBackend();
+          _useHerdrBackend = storage.getHostPreferredBackend(currentHost) == 'herdr';
           _herdrCreationMode = storage.getHerdrAgentCreationMode();
         });
       }
@@ -85,7 +88,7 @@ class _SettingsPageState extends State<SettingsPage> {
           final device = DeviceEntry(
             hostId: 'host_${ip}_${DateTime.now().millisecondsSinceEpoch}',
             name: ip,
-            urls: ['ws://$ip:$port'],
+            urls: ['ws://${bracketedHost(ip)}:$port'],
             authToken: token.isEmpty ? null : token,
           );
           hostStore.addOrUpdateDevice(device);
@@ -828,40 +831,49 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
           ),
           const Divider(height: 1),
-          SwitchListTile(
-            value: _useHerdrBackend,
-            onChanged: (val) async {
-              setState(() => _useHerdrBackend = val);
-              if (mounted) {
-                await context.read<ChatProvider>().setUseHerdrBackend(val);
-              }
-            },
-            title: Text(
-              '使用 Herdr 作为后端',
-              style: TextStyle(
-                color: AppColors.foregroundCtx(context),
-                fontSize: AppFontSize.base,
+          Builder(builder: (context) {
+            final chatProvider = context.watch<ChatProvider?>();
+            final herdrUnavailable = _useHerdrBackend &&
+                (chatProvider?.state.hostCapabilities?.herdr.available == false);
+            return SwitchListTile(
+              value: _useHerdrBackend,
+              onChanged: (val) async {
+                setState(() => _useHerdrBackend = val);
+                if (mounted) {
+                  await context.read<ChatProvider?>()?.setUseHerdrBackend(val);
+                }
+              },
+              title: Text(
+                '使用 Herdr 作为后端',
+                style: TextStyle(
+                  color: AppColors.foregroundCtx(context),
+                  fontSize: AppFontSize.base,
+                ),
               ),
-            ),
-            subtitle: Text(
-              '开启后仅检测和展示 Herdr 终端会话与工作区',
-              style: TextStyle(
-                fontSize: AppFontSize.xs,
-                color: AppColors.foregroundMutedCtx(context),
+              subtitle: Text(
+                herdrUnavailable
+                    ? '此电脑未检测到 Herdr，当前已自动降级为 Native ACP'
+                    : '开启后仅检测和展示 Herdr 终端会话与工作区',
+                style: TextStyle(
+                  fontSize: AppFontSize.xs,
+                  color: herdrUnavailable
+                      ? Colors.amber
+                      : AppColors.foregroundMutedCtx(context),
+                ),
               ),
-            ),
-            activeColor: AppColors.foregroundCtx(context),
-            activeTrackColor: isDark ? Colors.white38 : Colors.black26,
-            inactiveThumbColor: isDark ? const Color(0xFF636366) : const Color(0xFFAEAEB2),
-            inactiveTrackColor: isDark ? const Color(0xFF2C2C2E) : const Color(0xFFE5E5EA),
-            secondary: Icon(
-              Icons.terminal_outlined,
-              size: 20,
-              color: _useHerdrBackend
-                  ? AppColors.foregroundCtx(context)
-                  : AppColors.foregroundMutedCtx(context),
-            ),
-          ),
+              activeThumbColor: AppColors.foregroundCtx(context),
+              activeTrackColor: isDark ? Colors.white38 : Colors.black26,
+              inactiveThumbColor: isDark ? const Color(0xFF636366) : const Color(0xFFAEAEB2),
+              inactiveTrackColor: isDark ? const Color(0xFF2C2C2E) : const Color(0xFFE5E5EA),
+              secondary: Icon(
+                Icons.terminal_outlined,
+                size: 20,
+                color: _useHerdrBackend
+                    ? AppColors.foregroundCtx(context)
+                    : AppColors.foregroundMutedCtx(context),
+              ),
+            );
+          }),
           if (_useHerdrBackend) ...[
             const Divider(height: 1),
             Padding(

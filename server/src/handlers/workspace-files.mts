@@ -4,6 +4,7 @@ import { lstatSync } from "node:fs";
 import { join, relative, basename, dirname, resolve, isAbsolute } from "node:path";
 import type { WebSocket } from "ws";
 import { boundFileEventPayload } from "../payload-budget.mjs";
+import { findExecutable } from "../agents-store.mjs";
 
 export interface WorkspaceFile {
   path: string;
@@ -63,10 +64,58 @@ async function resolveWorkspaceEntry(root: string, filePath: string, allowMissin
 function git(cwd: string, args: string[], timeoutMs = 8000): Promise<string> {
   return new Promise((resolve, reject) => {
     execFile("git", args, { cwd, timeout: timeoutMs, maxBuffer: 512 * 1024 }, (err, stdout) => {
-      if (err) { reject(err); return; }
+      if (err) {
+        reject(toGitError(err));
+        return;
+      }
       resolve(stdout);
     });
   });
+}
+
+/** Git failures carry a stable code so the client can degrade explicitly. */
+class GitError extends Error {
+  constructor(public readonly code: string, message: string) {
+    super(message);
+  }
+}
+
+function toGitError(err: unknown): GitError {
+  const e = err as { code?: string; stderr?: string; message?: string };
+  const detail = `${e.stderr ?? ""} ${e.message ?? ""}`;
+  if (e.code === "ENOENT") {
+    return new GitError("GIT_UNAVAILABLE", "git executable not found");
+  }
+  if (/not a git repository/i.test(detail)) {
+    return new GitError("NOT_GIT_REPOSITORY", "Not a git repository");
+  }
+  return new GitError("GIT_COMMAND_FAILED", detail.trim() || "git command failed");
+}
+
+function sendGitFailure(
+  ws: WebSocket,
+  type: "file_diff" | "file_log",
+  filePath: string,
+  err: unknown,
+): void {
+  if (err instanceof GitError) {
+    ws.send(JSON.stringify({
+      type,
+      path: filePath,
+      ...(type === "file_diff" ? { diff: "" } : { logEntries: [] }),
+      error: err.code,
+      text: err.code === "GIT_UNAVAILABLE" ? "此电脑未检测到 Git" : err.message,
+    }));
+    return;
+  }
+  const message = err instanceof Error ? err.message : String(err);
+  ws.send(JSON.stringify({
+    type,
+    path: filePath,
+    ...(type === "file_diff" ? { diff: "" } : { logEntries: [] }),
+    error: "GIT_COMMAND_FAILED",
+    text: message,
+  }));
 }
 
 function parseGitStatus(porcelain: string): Map<string, string> {
@@ -154,6 +203,11 @@ export async function handleFileDiff(
     return;
   }
 
+  if (findExecutable("git") === null) {
+    sendGitFailure(ws, "file_diff", filePath, new GitError("GIT_UNAVAILABLE", "git executable not found"));
+    return;
+  }
+
   try {
     const root = await resolveWorkspaceRoot(cwd);
     const canonicalPath = await resolveWorkspaceEntry(root, filePath, true);
@@ -191,7 +245,7 @@ export async function handleFileDiff(
     }
     sendFileEvent(ws, { type: "file_diff", path: filePath, diff });
   } catch (err: any) {
-    ws.send(JSON.stringify({ type: "file_diff", path: filePath, diff: "", error: err.message }));
+    sendGitFailure(ws, "file_diff", filePath, err);
   }
 }
 
@@ -202,6 +256,11 @@ export async function handleFileLog(
   const { cwd, path: filePath } = params;
   if (!cwd || !filePath) {
     ws.send(JSON.stringify({ type: "file_log", path: filePath || "", logEntries: [] }));
+    return;
+  }
+
+  if (findExecutable("git") === null) {
+    sendGitFailure(ws, "file_log", filePath, new GitError("GIT_UNAVAILABLE", "git executable not found"));
     return;
   }
 
@@ -223,7 +282,7 @@ export async function handleFileLog(
       });
     ws.send(JSON.stringify({ type: "file_log", path: filePath, logEntries: entries }));
   } catch (err: any) {
-    ws.send(JSON.stringify({ type: "file_log", path: filePath, logEntries: [], error: err.message }));
+    sendGitFailure(ws, "file_log", filePath, err);
   }
 }
 

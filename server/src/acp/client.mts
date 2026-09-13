@@ -67,6 +67,8 @@ export interface AcpClientCallbacks {
   onReleaseTerminal?: (
     params: ReleaseTerminalRequest,
   ) => Promise<ReleaseTerminalResponse | void>;
+  onExtMethod?: (method: string, params: Record<string, unknown>) => Promise<Record<string, unknown>>;
+  onExtNotification?: (method: string, params: Record<string, unknown>) => Promise<void>;
 }
 
 function toMcpServers(configs: McpServerConfig[]): McpServer[] {
@@ -155,6 +157,20 @@ export class AcpClient {
             return callbacks.onReleaseTerminal!(params);
           }
         : undefined,
+      extMethod: (method: string, params: Record<string, unknown>) => {
+        console.log(`[acp] agent→bridge: extMethod method="${method}"`);
+        if (callbacks.onExtMethod) {
+          return callbacks.onExtMethod(method, params);
+        }
+        return Promise.resolve({});
+      },
+      extNotification: (method: string, params: Record<string, unknown>) => {
+        console.log(`[acp] agent→bridge: extNotification method="${method}"`);
+        if (callbacks.onExtNotification) {
+          return callbacks.onExtNotification(method, params);
+        }
+        return Promise.resolve();
+      },
     };
 
     this.conn = new ClientSideConnection(() => client, stream);

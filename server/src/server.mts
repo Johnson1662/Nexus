@@ -39,12 +39,16 @@ import { handleListWorkspaceFiles, handleFileDiff, handleFileLog, handleFileRead
 import { SessionOperationError, SessionOwnerError, sessionManager } from "./session-manager.mjs";
 import { setTitle as setSessionTitle } from "./session-titles.mjs";
 import { parseClientMessage, type JsonRecord } from "./protocol-validation.mjs";
-import { handleListHerdrWorkspaces, handleCreateHerdrAgent, handleFocusHerdrTarget, handleInteractHerdrBlocked } from "./handlers/herdr-actions.mjs";
+import { handleListHerdrWorkspaces, handleCreateHerdrWorkspace, handleCreateHerdrAgent, handleFocusHerdrTarget, handleInteractHerdrBlocked } from "./handlers/herdr-actions.mjs";
 import { HerdrEventBus } from "./discovery/herdr-adapter.mjs";
 import { watchAmbientSessions, listAmbientSessions } from "./discovery/ambient-session.mjs";
+import { detectHostCapabilities } from "./discovery/host-capabilities.mjs";
 
 const PORT = parseInt(process.env.PORT || "", 10) || 12138;
 const HOST_ID = getOrCreateHostId();
+
+// Exported for tests: interface classification is pure given os.networkInterfaces().
+export { collectHostIps as collectHostIpsForTest };
 
 // ── createBridgeServer — 供 daemon/bootstrap.ts 调用 ──────────
 // 创建一个独立的 HTTP+WSS 服务器，返回控制接口.
@@ -253,20 +257,34 @@ function startSessionWatcher(wss: WebSocketServer): () => void {
 
 function collectHostIps(hostId: string): string[] {
   const nets = os.networkInterfaces();
-  const ips: string[] = [];
+  const lanV4: string[] = [];
+  const globalV6: string[] = [];
+  const ulaV6: string[] = [];
+  const otherV4: string[] = [];
+
   for (const name of Object.keys(nets)) {
-    // Skip virtual Ethernet (Hyper-V, Docker, WSL)
-    if (name.startsWith('vEthernet') || name.startsWith('VirtualBox') ||
-        name.startsWith('VMware') || name.startsWith('Bluetooth') ||
-        name.includes('Loopback') || name.includes('lo')) {
-      continue;
-    }
-    for (const net of nets[name]!) {
-      if (!net.internal && net.family === 'IPv4') {
-        ips.push(net.address);
+    for (const net of nets[name] ?? []) {
+      if (net.internal) continue;
+      const addr = net.address;
+      if (net.family === 'IPv4') {
+        if (/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(addr)) {
+          lanV4.push(addr);
+        } else if (!addr.startsWith('169.254.')) {
+          otherV4.push(addr);
+        }
+      } else if (net.family === 'IPv6') {
+        const bare = addr.split('%')[0];
+        if (bare.startsWith('fe80') || bare === '::1') continue;
+        if (/^f[cd]/i.test(bare)) {
+          ulaV6.push(bare);
+        } else {
+          globalV6.push(bare);
+        }
       }
     }
   }
+
+  const ips = [...lanV4, ...globalV6, ...ulaV6, ...otherV4];
   ips.push(`HOST:${hostId}`);
   return ips;
 }
@@ -422,6 +440,10 @@ export function handleIncomingConnection(transport: any, hostId: string = HOST_I
         sessionManager.enqueueWsOp(transport, () => handleListHerdrWorkspaces(transport));
         break;
 
+      case "create_herdr_workspace":
+        sessionManager.enqueueWsOp(transport, () => handleCreateHerdrWorkspace(transport, sessionMsg as any));
+        break;
+
       case "create_herdr_agent":
         sessionManager.enqueueWsOp(transport, () => handleCreateHerdrAgent(transport, sessionMsg as any));
         break;
@@ -433,6 +455,28 @@ export function handleIncomingConnection(transport: any, hostId: string = HOST_I
       case "interact_herdr_blocked":
         sessionManager.enqueueWsOp(transport, () => handleInteractHerdrBlocked(transport, sessionMsg as any));
         break;
+
+      case "get_host_capabilities": {
+        detectHostCapabilities(false)
+          .then((capabilities) => {
+            transport.send(JSON.stringify({ type: "host_capabilities", capabilities }));
+          })
+          .catch((err) => {
+            console.log(`[server] get_host_capabilities error: ${err}`);
+          });
+        break;
+      }
+
+      case "refresh_host_capabilities": {
+        detectHostCapabilities(true)
+          .then((capabilities) => {
+            transport.send(JSON.stringify({ type: "host_capabilities", capabilities }));
+          })
+          .catch((err) => {
+            console.log(`[server] refresh_host_capabilities error: ${err}`);
+          });
+        break;
+      }
 
       case "list_agents": {
         let agents: any[];

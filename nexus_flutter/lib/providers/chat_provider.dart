@@ -120,7 +120,8 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
   // ── Connection ──
   Future<void> initFromDisk() async {
     final storage = await StorageService.getInstance();
-    _useHerdrBackend = storage.getUseHerdrBackend();
+    _preferredBackend = storage.getHostPreferredBackend(_state.currentDeviceId);
+    _recomputeEffectiveBackend();
     _herdrAgentCreationMode = storage.getHerdrAgentCreationMode();
     final persisted = storage.getLastMessageIdSync();
     final cursor = SessionMessageCursor.parse(persisted);
@@ -297,13 +298,7 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
         _clearTurnRequest();
         _ws.send(ClientMessage(type: 'cancel', sessionId: _state.sessionId));
         _cancelTimer?.cancel();
-        _cancelTimer = Timer(const Duration(seconds: 10), () {
-          _cancelTimer = null;
-          _state.cancelling = false;
-          _state.turnActive = false;
-          _setCurrentSessionStatus('idle');
-          notifyListeners();
-        });
+        _cancelTimer = null;
         notifyListeners();
       }
       return;
@@ -383,6 +378,10 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
   Future<void> answerAsk(String answerText) async {
     final text = answerText.trim();
     if (text.isEmpty || _state.sessionId.isEmpty || !_ws.isConnected) return;
+    if (_state.sessionId.startsWith('herdr:')) {
+      interactHerdrBlocked(text);
+      return;
+    }
     final sid = _state.sessionId;
     _state.cancelling = true;
     _clearTurnRequest();
@@ -667,10 +666,40 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   bool _useHerdrBackend = false;
   bool get useHerdrBackend => _useHerdrBackend;
+  String _preferredBackend = 'native';
+  String _effectiveBackend = 'native';
+  String get preferredBackend => _preferredBackend;
+  String get effectiveBackend => _effectiveBackend;
+
+  void _recomputeEffectiveBackend() {
+    final prevEffective = _effectiveBackend;
+    if (_preferredBackend == 'herdr') {
+      // Degrade only on a *known* negative; an unknown host keeps the preference
+      // so a Herdr pane is never silently replaced by a Native ACP session.
+      final caps = _state.hostCapabilities;
+      _effectiveBackend = (caps == null || caps.herdr.available) ? 'herdr' : 'native';
+    } else {
+      _effectiveBackend = 'native';
+    }
+    _useHerdrBackend = _effectiveBackend == 'herdr';
+    if (prevEffective != _effectiveBackend) {
+      requestSessionList(useHerdr: _useHerdrBackend);
+      if (_useHerdrBackend) {
+        requestHerdrWorkspaces();
+      }
+    }
+    notifyListeners();
+  }
 
   Future<void> setUseHerdrBackend(bool value) async {
-    if (_useHerdrBackend == value) return;
-    _useHerdrBackend = value;
+    _preferredBackend = value ? 'herdr' : 'native';
+    final storage = await StorageService.getInstance();
+    if (_state.currentDeviceId.isNotEmpty) {
+      await storage.setHostPreferredBackend(_state.currentDeviceId, _preferredBackend);
+    } else {
+    await storage.setUseHerdrBackend(value);
+    }
+    _recomputeEffectiveBackend();
     _loadingSessionId = '';
     _clearTurnRequest();
     _clearCancelling();
@@ -678,10 +707,8 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
     _processedMessageIds.clear();
     _state.resetForNewChat();
     _state.sessions = [];
-    final storage = await StorageService.getInstance();
-    await storage.setUseHerdrBackend(value);
-    requestSessionList(useHerdr: value);
-    if (value) {
+    requestSessionList(useHerdr: _useHerdrBackend);
+    if (_useHerdrBackend) {
       requestHerdrWorkspaces();
     }
     notifyListeners();
@@ -717,6 +744,28 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   void requestHerdrWorkspaces() {
     _ws.send(ClientMessage(type: 'list_herdr_workspaces'));
+  }
+
+  void createHerdrWorkspace({required String label, String? cwd}) {
+    _ws.send(ClientMessage(
+      type: 'create_herdr_workspace',
+      label: label,
+      cwd: cwd,
+    ));
+  }
+
+  List<AgentRuntimeCapability> get enabledHerdrAgents {
+    final agents = _state.hostCapabilities?.agents ?? [];
+    return agents
+        .where((a) => a.enabled && a.herdr.supported && a.herdr.ready)
+        .toList();
+  }
+
+  List<AgentRuntimeCapability> get enabledNativeAgents {
+    final agents = _state.hostCapabilities?.agents ?? [];
+    return agents
+        .where((a) => a.enabled && a.native.supported && a.native.ready)
+        .toList();
   }
 
   void createHerdrAgent({
@@ -821,6 +870,10 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
   void requestAgents() => _ws.send(ClientMessage(type: 'list_agents'));
   void listRegistryAgents() =>
       _ws.send(ClientMessage(type: 'list_registry_agents'));
+  void loadRegistryAgents() =>
+      _ws.send(ClientMessage(type: 'list_registry_agents'));
+  void refreshHostCapabilities() =>
+      _ws.send(ClientMessage(type: 'refresh_host_capabilities'));
   void installAgent(String agentId) =>
       _ws.send(ClientMessage(type: 'install_agent', agentId: agentId));
   void uninstallAgent(String agentId) =>
@@ -912,6 +965,9 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   // ── Server message routing ──
+  @visibleForTesting
+  void handleMessageForTest(ServerMessage msg) => _handleServerMessage(msg);
+
   void _handleServerMessage(ServerMessage msg) {
     if (_isCursorScopedMessageType(msg.type) &&
         !_isRequiredSessionEventForCurrentSession(msg.sessionId)) {
@@ -1116,14 +1172,22 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
         _handleHistoryFull(msg);
         break;
       case 'session_cancelled':
-        // Cancel ACK only: 服务端已受理取消请求，不代表回合结束。
-        // 不清 cancelling、不取消 10s 兜底 timer；由 turn_ended /
-        // 当前会话 error / session_closed / 10s 兜底结束取消状态
-        // （防止 ACP 永不发 turn_ended 时输入框永久锁死）。
         if (msg.sessionId != null &&
             !_isEventForCurrentSession(msg.sessionId)) {
           break;
         }
+        _state.cancelling = true;
+        notifyListeners();
+        break;
+      case 'cancel_failed':
+        if (msg.sessionId != null &&
+            !_isEventForCurrentSession(msg.sessionId)) {
+          break;
+        }
+        _state.cancelling = false;
+        _state.turnActive = true;
+        _state.errorMessage = msg.error ?? 'Agent 仍在运行，未能终止';
+        notifyListeners();
         break;
       case 'turn_ended':
         if (!_isRequiredSessionEventForCurrentSession(msg.sessionId)) {
@@ -1164,6 +1228,13 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
         }
         if (msg.modes != null) _state.modes = msg.modes!;
         notifyListeners();
+        break;
+      case 'host_capabilities':
+        if (msg.hostCapabilities != null) {
+          _state.hostCapabilities = msg.hostCapabilities;
+          _recomputeEffectiveBackend();
+          notifyListeners();
+        }
         break;
       case 'session_list':
         if (msg.sessions != null) {
@@ -1236,6 +1307,14 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
           _state.errorMessage = msg.text!;
         }
         notifyListeners();
+        break;
+      case 'create_herdr_workspace_done':
+        if (msg.ok == true) {
+          requestHerdrWorkspaces();
+        } else {
+          _state.errorMessage = msg.error ?? 'HERDR_WORKSPACE_CREATE_FAILED';
+          notifyListeners();
+        }
         break;
       case 'install_agent_done':
       case 'uninstall_agent_done':
@@ -1477,6 +1556,12 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
       // Never keep another host's cwd.
       _state.currentWorkspace =
           _workspaceProvider?.currentWorkspace ?? '';
+
+      // Load host-scoped backend preference
+      StorageService.getInstance().then((storage) {
+        _preferredBackend = storage.getHostPreferredBackend(actualHostId);
+        _recomputeEffectiveBackend();
+      });
     }
 
     if (msg.workspaces != null) {
@@ -1506,6 +1591,7 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
     hostStore.markOnline(actualHostId, currentUrl);
 
     // Connection is ready: hydrate all global agent metadata immediately.
+    _ws.send(ClientMessage(type: 'get_host_capabilities'));
     _ws.send(ClientMessage(type: 'list_agents'));
     _ws.send(ClientMessage(type: 'list_registry_agents'));
 
@@ -2089,6 +2175,7 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
       case 'agent_event':
       case 'session_context_replaced':
       case 'session_cancelled':
+      case 'cancel_failed':
       case 'turn_ended':
       case 'permission_request':
       case 'session_ended':

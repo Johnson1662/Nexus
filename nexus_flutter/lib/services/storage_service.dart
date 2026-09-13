@@ -9,6 +9,7 @@ class StorageService {
   static const String _fileName = '.nexus_store.json';
   static const String keyUseHerdrBackend = 'pref_use_herdr_backend';
   static const String keyHerdrAgentCreationMode = 'pref_herdr_agent_creation_mode';
+  static String keyHostBackend(String hostId) => 'backend_$hostId';
 
   static Future<StorageService>? _instanceFuture;
   Map<String, dynamic> _data = {};
@@ -128,6 +129,21 @@ class StorageService {
 
   Future<void> setUseHerdrBackend(bool value) async {
     _data[keyUseHerdrBackend] = value;
+    await _enqueueFlush();
+  }
+
+  String getHostPreferredBackend(String hostId) {
+    if (hostId.isEmpty) return 'native';
+    final val = _data[keyHostBackend(hostId)];
+    if (val is String && (val == 'herdr' || val == 'native')) return val;
+    return 'native';
+  }
+
+  Future<void> setHostPreferredBackend(String hostId, String backend) async {
+    if (hostId.isNotEmpty) {
+      _data[keyHostBackend(hostId)] = backend;
+    }
+    _data[keyUseHerdrBackend] = backend == 'herdr';
     await _enqueueFlush();
   }
 

@@ -45,8 +45,10 @@ class WSClient {
   static const int _reconnectMaxMs = 30000;
   DateTime _lastMsgReceived = DateTime.now();
   Timer? _readyTimer;
+  @visibleForTesting
+  bool connectedForTest = false;
 
-  bool get isConnected => _channel != null && _ready;
+  bool get isConnected => connectedForTest || (_channel != null && _ready);
   String get currentUrl => _currentUrl;
   String get currentHostKey => _currentHostKey;
   int get reconnectAttempt => _reconnectAttempt;
@@ -117,6 +119,7 @@ class WSClient {
   }
 
   void send(ClientMessage msg) {
+    onSendForTest?.call(msg);
     if (_channel == null) return;
     try {
       _channel!.sink.add(jsonEncode(msg.toJson()));
@@ -385,6 +388,8 @@ class WSClient {
 
   @visibleForTesting
   void debugDispatch(ServerMessage msg) => _routeMessage(msg);
+  @visibleForTesting
+  void Function(ClientMessage)? onSendForTest;
 
   // ── Callbacks ──
   ListenerDisposer onMessage(MessageCallback cb) {

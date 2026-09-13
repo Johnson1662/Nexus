@@ -54,6 +54,7 @@ class ChatState {
 
   // Advanced
   List<RegistryAgentInfo> registryAgents = [];
+  HostCapabilities? hostCapabilities;
   List<AvailableCommand> availableCommands = [];
   List<PlanEntry> planEntries = [];
   List<PendingToolCall> toolCallStack = [];

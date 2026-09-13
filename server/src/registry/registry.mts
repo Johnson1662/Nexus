@@ -13,6 +13,23 @@ export interface AgentCapabilities {
   authentication: boolean;
 }
 
+export interface AgentDetectionConfig {
+  executables: string[];
+}
+
+export interface AgentNativeConfig {
+  enabled: boolean;
+  command?: string;
+  args?: string[];
+  env?: Record<string, string>;
+}
+
+export interface AgentHerdrConfig {
+  enabled: boolean;
+  kind?: string;
+  integration?: string;
+}
+
 export interface RegistryAgent {
   id: string;
   name: string;
@@ -20,6 +37,9 @@ export interface RegistryAgent {
   version: string;
   repository?: string;
   icon?: string;
+  detection?: AgentDetectionConfig;
+  native?: AgentNativeConfig;
+  herdr?: AgentHerdrConfig;
   capabilities: AgentCapabilities;
   distribution: {
     direct?: {

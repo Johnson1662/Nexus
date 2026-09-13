@@ -49,6 +49,7 @@ class ClientMessage {
   final int? freshAt;
   final int? before;
   final String? key;
+  final String? label;
 
   ClientMessage({
     required this.type,
@@ -79,6 +80,7 @@ class ClientMessage {
     this.freshAt,
     this.before,
     this.key,
+    this.label,
   });
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -110,6 +112,7 @@ class ClientMessage {
         if (freshAt != null) 'freshAt': freshAt,
         if (before != null) 'before': before,
         if (key != null && key!.isNotEmpty) 'key': key,
+        if (label != null && label!.isNotEmpty) 'label': label,
       };
 }
 
@@ -162,6 +165,7 @@ class ServerMessage {
   final bool? ok;
   final String? error;
   final List<Map<String, String>>? authMethods;
+  final HostCapabilities? hostCapabilities;
   AcpUpdate? get acpUpdate => event;
 
   ServerMessage({
@@ -211,6 +215,7 @@ class ServerMessage {
     this.ok,
     this.error,
     this.authMethods,
+    this.hostCapabilities,
   });
 
   factory ServerMessage.fromJson(Map<String, dynamic> json) {
@@ -421,6 +426,9 @@ class ServerMessage {
           .map((m) => Map<String, String>.fromEntries(
               m.entries.map((e) => MapEntry(e.key.toString(), e.value.toString()))))
           .toList(),
+      hostCapabilities: json['capabilities'] != null && json['type'] == 'host_capabilities'
+          ? HostCapabilities.fromJson(json['capabilities'] as Map<String, dynamic>)
+          : null,
     );
   }
 }
@@ -758,6 +766,168 @@ class PermissionOption {
         optionId: json['optionId'] as String? ?? '',
         name: json['name'] as String? ?? '',
         kind: json['kind'] as String? ?? '',
+      );
+}
+
+class GitCapability {
+  final bool available;
+  final String? executable;
+  final String? reason;
+
+  const GitCapability({
+    required this.available,
+    this.executable,
+    this.reason,
+  });
+
+  factory GitCapability.fromJson(Map<String, dynamic> json) => GitCapability(
+        available: json['available'] as bool? ?? false,
+        executable: json['executable'] as String?,
+        reason: json['reason'] as String?,
+      );
+}
+
+class HerdrCapability {
+  final bool available;
+  final String? version;
+  final String? session;
+  final String endpointKind; // 'unix' | 'pipe'
+  final String? reason;
+
+  const HerdrCapability({
+    required this.available,
+    this.version,
+    this.session,
+    this.endpointKind = 'unix',
+    this.reason,
+  });
+
+  factory HerdrCapability.fromJson(Map<String, dynamic> json) => HerdrCapability(
+        available: json['available'] as bool? ?? false,
+        version: json['version'] as String?,
+        session: json['session'] as String?,
+        endpointKind: json['endpointKind'] as String? ?? 'unix',
+        reason: json['reason'] as String?,
+      );
+}
+
+class AgentNativeCapability {
+  final bool supported;
+  final bool ready;
+  final String? executable;
+  final String? reason;
+
+  const AgentNativeCapability({
+    required this.supported,
+    required this.ready,
+    this.executable,
+    this.reason,
+  });
+
+  factory AgentNativeCapability.fromJson(Map<String, dynamic> json) =>
+      AgentNativeCapability(
+        supported: json['supported'] as bool? ?? false,
+        ready: json['ready'] as bool? ?? false,
+        executable: json['executable'] as String?,
+        reason: json['reason'] as String?,
+      );
+}
+
+class AgentHerdrCapability {
+  final bool supported;
+  final bool ready;
+  final String? kind;
+  final String? integrationId;
+  final bool integrationInstalled;
+  final String? reason;
+
+  const AgentHerdrCapability({
+    required this.supported,
+    required this.ready,
+    this.kind,
+    this.integrationId,
+    this.integrationInstalled = false,
+    this.reason,
+  });
+
+  factory AgentHerdrCapability.fromJson(Map<String, dynamic> json) =>
+      AgentHerdrCapability(
+        supported: json['supported'] as bool? ?? false,
+        ready: json['ready'] as bool? ?? false,
+        kind: json['kind'] as String?,
+        integrationId: json['integrationId'] as String?,
+        integrationInstalled: json['integrationInstalled'] as bool? ?? false,
+        reason: json['reason'] as String?,
+      );
+}
+
+class AgentRuntimeCapability {
+  final String id;
+  final String name;
+  final bool enabled;
+  final AgentNativeCapability native;
+  final AgentHerdrCapability herdr;
+  final bool structuredHistory;
+  final bool modelSelection;
+  final bool modeSelection;
+  final bool authentication;
+
+  const AgentRuntimeCapability({
+    required this.id,
+    required this.name,
+    required this.enabled,
+    required this.native,
+    required this.herdr,
+    required this.structuredHistory,
+    required this.modelSelection,
+    required this.modeSelection,
+    required this.authentication,
+  });
+
+  factory AgentRuntimeCapability.fromJson(Map<String, dynamic> json) =>
+      AgentRuntimeCapability(
+        id: json['id'] as String? ?? '',
+        name: json['name'] as String? ?? '',
+        enabled: json['enabled'] as bool? ?? true,
+        native: AgentNativeCapability.fromJson(
+            json['native'] as Map<String, dynamic>? ?? const {}),
+        herdr: AgentHerdrCapability.fromJson(
+            json['herdr'] as Map<String, dynamic>? ?? const {}),
+        structuredHistory: json['structuredHistory'] as bool? ?? false,
+        modelSelection: json['modelSelection'] as bool? ?? false,
+        modeSelection: json['modeSelection'] as bool? ?? false,
+        authentication: json['authentication'] as bool? ?? false,
+      );
+}
+
+class HostCapabilities {
+  final String platform; // 'linux' | 'darwin' | 'win32'
+  final String arch;
+  final GitCapability git;
+  final HerdrCapability herdr;
+  final List<AgentRuntimeCapability> agents;
+
+  const HostCapabilities({
+    required this.platform,
+    required this.arch,
+    required this.git,
+    required this.herdr,
+    required this.agents,
+  });
+
+  factory HostCapabilities.fromJson(Map<String, dynamic> json) =>
+      HostCapabilities(
+        platform: json['platform'] as String? ?? 'linux',
+        arch: json['arch'] as String? ?? '',
+        git: GitCapability.fromJson(
+            json['git'] as Map<String, dynamic>? ?? const {}),
+        herdr: HerdrCapability.fromJson(
+            json['herdr'] as Map<String, dynamic>? ?? const {}),
+        agents: (json['agents'] as List<dynamic>?)
+                ?.map((a) =>
+                    AgentRuntimeCapability.fromJson(a as Map<String, dynamic>))
+                .toList() ??
+            const [],
       );
 }
 

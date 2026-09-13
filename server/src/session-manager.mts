@@ -443,6 +443,7 @@ export class SessionManager {
         } catch { /* WS disconnected — event buffered */ }
       },
       onPermissionRequest: this.buildPermissionRequestCallback(wsRef, () => sessionId, isCurrentClient),
+      onExtMethod: this.buildExtMethodCallback(() => sessionId, this.buildPermissionRequestCallback(wsRef, () => sessionId, isCurrentClient)),
       ...createAcpCallbacks({
         getSessionId: () => sessionId,
         cwd: resolvedCwd,
@@ -1266,6 +1267,41 @@ export class SessionManager {
     sess.pendingPermissions.clear();
   }
 
+  /** Dispatch ACP extension requests (Cursor and future Agent extensions). */
+  private buildExtMethodCallback(
+    getSessionId: () => string,
+    permCallback: (req: any) => Promise<any>,
+  ) {
+    return async (method: string, params: Record<string, unknown>) => {
+      console.log(`[session-manager] handling extMethod: ${method}`);
+      if (method === "cursor/ask_question") {
+        const permReq = {
+          sessionId: getSessionId(),
+          toolCall: {
+            toolCallId: `cursor_ask_${Date.now()}`,
+            toolName: "ask",
+            rawInput: JSON.stringify(params),
+          },
+          options: Array.isArray(params.options) ? params.options : [],
+        };
+        return (await permCallback(permReq)) as any;
+      }
+      if (method === "cursor/create_plan") {
+        const sid = getSessionId();
+        this.broadcastToSubscribers(sid, {
+          type: "agent_event",
+          sessionId: sid,
+          event: {
+            sessionUpdate: "plan",
+            planEntries: Array.isArray(params.entries) ? params.entries : [],
+          },
+        });
+        return { ok: true };
+      }
+      return {};
+    };
+  }
+
   private isCurrentTurn(sess: SessionState, turnGeneration: number): boolean {
     return sess.turnActive && sess.turnGeneration === turnGeneration;
   }
@@ -1654,6 +1690,7 @@ export class SessionManager {
         } catch { /* WS gone */ }
       },
       onPermissionRequest: this.buildPermissionRequestCallback(wsRef, () => sessionId, isCurrentClient),
+      onExtMethod: this.buildExtMethodCallback(() => sessionId, this.buildPermissionRequestCallback(wsRef, () => sessionId, isCurrentClient)),
       ...createAcpCallbacks({
         getSessionId: () => sessionId,
         cwd,

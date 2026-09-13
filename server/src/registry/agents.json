@@ -6,13 +6,31 @@
       "name": "Oh My Pi (OMP)",
       "description": "High-performance coding agent harness",
       "version": "latest",
-      "capabilities": { "nativeAcp": true, "herdr": true, "structuredHistory": true, "modelSelection": true, "modeSelection": true, "authentication": true },
+      "detection": {
+        "executables": ["omp"]
+      },
+      "native": {
+        "enabled": true,
+        "command": "omp",
+        "args": ["acp"]
+      },
+      "herdr": {
+        "enabled": true,
+        "kind": "omp",
+        "integration": "omp"
+      },
+      "capabilities": {
+        "nativeAcp": true,
+        "herdr": true,
+        "structuredHistory": true,
+        "modelSelection": true,
+        "modeSelection": true,
+        "authentication": true
+      },
       "distribution": {
         "direct": {
           "cmd": "omp",
-          "args": [
-            "acp"
-          ]
+          "args": ["acp"]
         }
       }
     },
@@ -21,7 +39,25 @@
       "name": "Claude Code",
       "description": "Anthropic Claude Code CLI",
       "version": "latest",
-      "capabilities": { "nativeAcp": false, "herdr": true, "structuredHistory": false, "modelSelection": false, "modeSelection": false, "authentication": false },
+      "detection": {
+        "executables": ["claude"]
+      },
+      "native": {
+        "enabled": false
+      },
+      "herdr": {
+        "enabled": true,
+        "kind": "claude",
+        "integration": "claude"
+      },
+      "capabilities": {
+        "nativeAcp": false,
+        "herdr": true,
+        "structuredHistory": false,
+        "modelSelection": false,
+        "modeSelection": false,
+        "authentication": false
+      },
       "distribution": {
         "direct": {
           "cmd": "claude",
@@ -34,7 +70,25 @@
       "name": "Codex",
       "description": "OpenAI Codex CLI / ACP Agent",
       "version": "latest",
-      "capabilities": { "nativeAcp": false, "herdr": true, "structuredHistory": true, "modelSelection": false, "modeSelection": false, "authentication": false },
+      "detection": {
+        "executables": ["codex"]
+      },
+      "native": {
+        "enabled": false
+      },
+      "herdr": {
+        "enabled": true,
+        "kind": "codex",
+        "integration": "codex"
+      },
+      "capabilities": {
+        "nativeAcp": false,
+        "herdr": true,
+        "structuredHistory": true,
+        "modelSelection": false,
+        "modeSelection": false,
+        "authentication": false
+      },
       "distribution": {
         "direct": {
           "cmd": "codex",
@@ -47,28 +101,64 @@
       "name": "OpenCode",
       "description": "ACP-compatible coding agent",
       "version": "latest",
-      "capabilities": { "nativeAcp": true, "herdr": true, "structuredHistory": false, "modelSelection": true, "modeSelection": true, "authentication": true },
+      "detection": {
+        "executables": ["opencode"]
+      },
+      "native": {
+        "enabled": true,
+        "command": "opencode",
+        "args": ["acp"]
+      },
+      "herdr": {
+        "enabled": true,
+        "kind": "opencode",
+        "integration": "opencode"
+      },
+      "capabilities": {
+        "nativeAcp": true,
+        "herdr": true,
+        "structuredHistory": false,
+        "modelSelection": true,
+        "modeSelection": true,
+        "authentication": true
+      },
       "distribution": {
         "direct": {
           "cmd": "opencode",
-          "args": [
-            "acp"
-          ]
+          "args": ["acp"]
         }
       }
     },
     {
       "id": "cursor",
       "name": "Cursor Agent",
-      "description": "Cursor CLI Agent",
+      "description": "Cursor CLI Agent / Native ACP",
       "version": "latest",
-      "capabilities": { "nativeAcp": false, "herdr": true, "structuredHistory": false, "modelSelection": false, "modeSelection": false, "authentication": false },
+      "detection": {
+        "executables": ["agent", "cursor-agent"]
+      },
+      "native": {
+        "enabled": true,
+        "command": "agent",
+        "args": ["acp"]
+      },
+      "herdr": {
+        "enabled": true,
+        "kind": "cursor",
+        "integration": "cursor"
+      },
+      "capabilities": {
+        "nativeAcp": true,
+        "herdr": true,
+        "structuredHistory": true,
+        "modelSelection": true,
+        "modeSelection": true,
+        "authentication": true
+      },
       "distribution": {
         "direct": {
-          "cmd": "cursor",
-          "args": [
-            "agent"
-          ]
+          "cmd": "agent",
+          "args": ["acp"]
         }
       }
     },
@@ -77,7 +167,25 @@
       "name": "GitHub Copilot",
       "description": "GitHub Copilot CLI Agent",
       "version": "latest",
-      "capabilities": { "nativeAcp": false, "herdr": true, "structuredHistory": false, "modelSelection": false, "modeSelection": false, "authentication": false },
+      "detection": {
+        "executables": ["copilot"]
+      },
+      "native": {
+        "enabled": false
+      },
+      "herdr": {
+        "enabled": true,
+        "kind": "copilot",
+        "integration": "copilot"
+      },
+      "capabilities": {
+        "nativeAcp": false,
+        "herdr": true,
+        "structuredHistory": false,
+        "modelSelection": false,
+        "modeSelection": false,
+        "authentication": false
+      },
       "distribution": {
         "direct": {
           "cmd": "copilot",
@@ -90,7 +198,25 @@
       "name": "Devin",
       "description": "Cognition Devin CLI",
       "version": "latest",
-      "capabilities": { "nativeAcp": false, "herdr": true, "structuredHistory": false, "modelSelection": false, "modeSelection": false, "authentication": false },
+      "detection": {
+        "executables": ["devin"]
+      },
+      "native": {
+        "enabled": false
+      },
+      "herdr": {
+        "enabled": true,
+        "kind": "devin",
+        "integration": "devin"
+      },
+      "capabilities": {
+        "nativeAcp": false,
+        "herdr": true,
+        "structuredHistory": false,
+        "modelSelection": false,
+        "modeSelection": false,
+        "authentication": false
+      },
       "distribution": {
         "direct": {
           "cmd": "devin",
@@ -103,7 +229,25 @@
       "name": "Factory Droid",
       "description": "Factory Droid Coding Agent CLI",
       "version": "latest",
-      "capabilities": { "nativeAcp": false, "herdr": true, "structuredHistory": false, "modelSelection": false, "modeSelection": false, "authentication": false },
+      "detection": {
+        "executables": ["droid"]
+      },
+      "native": {
+        "enabled": false
+      },
+      "herdr": {
+        "enabled": true,
+        "kind": "droid",
+        "integration": "droid"
+      },
+      "capabilities": {
+        "nativeAcp": false,
+        "herdr": true,
+        "structuredHistory": false,
+        "modelSelection": false,
+        "modeSelection": false,
+        "authentication": false
+      },
       "distribution": {
         "direct": {
           "cmd": "droid",
@@ -116,13 +260,31 @@
       "name": "Kimi Code",
       "description": "Moonshot Kimi Code CLI",
       "version": "latest",
-      "capabilities": { "nativeAcp": true, "herdr": true, "structuredHistory": false, "modelSelection": true, "modeSelection": true, "authentication": true },
+      "detection": {
+        "executables": ["kimi"]
+      },
+      "native": {
+        "enabled": true,
+        "command": "kimi",
+        "args": ["acp"]
+      },
+      "herdr": {
+        "enabled": true,
+        "kind": "kimi",
+        "integration": "kimi"
+      },
+      "capabilities": {
+        "nativeAcp": true,
+        "herdr": true,
+        "structuredHistory": false,
+        "modelSelection": true,
+        "modeSelection": true,
+        "authentication": true
+      },
       "distribution": {
         "direct": {
           "cmd": "kimi",
-          "args": [
-            "acp"
-          ]
+          "args": ["acp"]
         }
       }
     },
@@ -131,7 +293,25 @@
       "name": "Qwen Code",
       "description": "Alibaba Qwen Code CLI",
       "version": "latest",
-      "capabilities": { "nativeAcp": false, "herdr": true, "structuredHistory": false, "modelSelection": false, "modeSelection": false, "authentication": false },
+      "detection": {
+        "executables": ["qwen"]
+      },
+      "native": {
+        "enabled": false
+      },
+      "herdr": {
+        "enabled": true,
+        "kind": "qwen",
+        "integration": "qwen"
+      },
+      "capabilities": {
+        "nativeAcp": false,
+        "herdr": true,
+        "structuredHistory": false,
+        "modelSelection": false,
+        "modeSelection": false,
+        "authentication": false
+      },
       "distribution": {
         "direct": {
           "cmd": "qwen",
@@ -144,7 +324,25 @@
       "name": "Grok Code",
       "description": "xAI Grok CLI",
       "version": "latest",
-      "capabilities": { "nativeAcp": false, "herdr": true, "structuredHistory": false, "modelSelection": false, "modeSelection": false, "authentication": false },
+      "detection": {
+        "executables": ["grok"]
+      },
+      "native": {
+        "enabled": false
+      },
+      "herdr": {
+        "enabled": true,
+        "kind": "grok",
+        "integration": "grok"
+      },
+      "capabilities": {
+        "nativeAcp": false,
+        "herdr": true,
+        "structuredHistory": false,
+        "modelSelection": false,
+        "modeSelection": false,
+        "authentication": false
+      },
       "distribution": {
         "direct": {
           "cmd": "grok",
@@ -155,9 +353,27 @@
     {
       "id": "pi",
       "name": "Pi",
-      "description": "Inflection Pi CLI",
+      "description": "Pi Coding Agent CLI",
       "version": "latest",
-      "capabilities": { "nativeAcp": false, "herdr": true, "structuredHistory": false, "modelSelection": false, "modeSelection": false, "authentication": false },
+      "detection": {
+        "executables": ["pi"]
+      },
+      "native": {
+        "enabled": false
+      },
+      "herdr": {
+        "enabled": true,
+        "kind": "pi",
+        "integration": "pi"
+      },
+      "capabilities": {
+        "nativeAcp": false,
+        "herdr": true,
+        "structuredHistory": false,
+        "modelSelection": false,
+        "modeSelection": false,
+        "authentication": false
+      },
       "distribution": {
         "direct": {
           "cmd": "pi",
@@ -170,7 +386,25 @@
       "name": "Kilo Code",
       "description": "Kilo Code Agent CLI",
       "version": "latest",
-      "capabilities": { "nativeAcp": false, "herdr": true, "structuredHistory": false, "modelSelection": false, "modeSelection": false, "authentication": false },
+      "detection": {
+        "executables": ["kilo"]
+      },
+      "native": {
+        "enabled": false
+      },
+      "herdr": {
+        "enabled": true,
+        "kind": "kilo",
+        "integration": "kilo"
+      },
+      "capabilities": {
+        "nativeAcp": false,
+        "herdr": true,
+        "structuredHistory": false,
+        "modelSelection": false,
+        "modeSelection": false,
+        "authentication": false
+      },
       "distribution": {
         "direct": {
           "cmd": "kilo",
@@ -183,7 +417,25 @@
       "name": "Hermes Agent",
       "description": "Nous Research Hermes Agent",
       "version": "latest",
-      "capabilities": { "nativeAcp": false, "herdr": true, "structuredHistory": false, "modelSelection": false, "modeSelection": false, "authentication": false },
+      "detection": {
+        "executables": ["hermes"]
+      },
+      "native": {
+        "enabled": false
+      },
+      "herdr": {
+        "enabled": true,
+        "kind": "hermes",
+        "integration": "hermes"
+      },
+      "capabilities": {
+        "nativeAcp": false,
+        "herdr": true,
+        "structuredHistory": false,
+        "modelSelection": false,
+        "modeSelection": false,
+        "authentication": false
+      },
       "distribution": {
         "direct": {
           "cmd": "hermes",
@@ -196,7 +448,25 @@
       "name": "Qoder CLI",
       "description": "Qoder Coding Agent CLI",
       "version": "latest",
-      "capabilities": { "nativeAcp": false, "herdr": true, "structuredHistory": false, "modelSelection": false, "modeSelection": false, "authentication": false },
+      "detection": {
+        "executables": ["qodercli"]
+      },
+      "native": {
+        "enabled": false
+      },
+      "herdr": {
+        "enabled": true,
+        "kind": "qodercli",
+        "integration": "qodercli"
+      },
+      "capabilities": {
+        "nativeAcp": false,
+        "herdr": true,
+        "structuredHistory": false,
+        "modelSelection": false,
+        "modeSelection": false,
+        "authentication": false
+      },
       "distribution": {
         "direct": {
           "cmd": "qodercli",
@@ -209,7 +479,25 @@
       "name": "Mastra Code",
       "description": "Mastra AI Coding Agent CLI",
       "version": "latest",
-      "capabilities": { "nativeAcp": false, "herdr": true, "structuredHistory": false, "modelSelection": false, "modeSelection": false, "authentication": false },
+      "detection": {
+        "executables": ["mastracode"]
+      },
+      "native": {
+        "enabled": false
+      },
+      "herdr": {
+        "enabled": true,
+        "kind": "mastracode",
+        "integration": "mastracode"
+      },
+      "capabilities": {
+        "nativeAcp": false,
+        "herdr": true,
+        "structuredHistory": false,
+        "modelSelection": false,
+        "modeSelection": false,
+        "authentication": false
+      },
       "distribution": {
         "direct": {
           "cmd": "mastracode",
@@ -222,10 +510,28 @@
       "name": "Antigravity CLI",
       "description": "Google Antigravity Agent CLI",
       "version": "latest",
-      "capabilities": { "nativeAcp": false, "herdr": true, "structuredHistory": false, "modelSelection": false, "modeSelection": false, "authentication": false },
+      "detection": {
+        "executables": ["agy"]
+      },
+      "native": {
+        "enabled": false
+      },
+      "herdr": {
+        "enabled": true,
+        "kind": "agy",
+        "integration": "antigravity-cli"
+      },
+      "capabilities": {
+        "nativeAcp": false,
+        "herdr": true,
+        "structuredHistory": false,
+        "modelSelection": false,
+        "modeSelection": false,
+        "authentication": false
+      },
       "distribution": {
         "direct": {
-          "cmd": "antigravity-cli",
+          "cmd": "agy",
           "args": []
         }
       }

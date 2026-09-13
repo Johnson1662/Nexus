@@ -47,13 +47,88 @@ export function findExecutable(command: string): string | null {
     const resolved = path.resolve(command);
     return existsSync(resolved) ? resolved : null;
   }
-  for (const dir of (process.env.PATH ?? "").split(path.delimiter)) {
+  const searchDirs = [
+    ...(process.env.PATH ?? "").split(path.delimiter),
+    ...knownBinDirs(),
+  ];
+  for (const dir of searchDirs) {
     if (!dir) continue;
     for (const name of names) {
       const candidate = path.join(dir, name);
       if (existsSync(candidate)) return candidate;
     }
   }
+  return null;
+}
+
+/**
+ * Binary directories that exist regardless of how Nexus was launched.
+ * Guards against a daemon started from a GUI/limited PATH.
+ */
+function knownBinDirs(): string[] {
+  const home = homedir();
+  if (process.platform === "win32") {
+    return [
+      process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, "Programs") : "",
+      process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, "Microsoft", "WindowsApps") : "",
+      path.join(home, ".cargo", "bin"),
+      process.env.APPDATA ? path.join(process.env.APPDATA, "npm") : "",
+      path.join(home, ".bun", "bin"),
+    ];
+  }
+  return [
+    path.join(home, ".local", "bin"),
+    path.join(home, "bin"),
+    "/usr/local/bin",
+    "/opt/homebrew/bin",
+    path.join(home, ".cargo", "bin"),
+    path.join(home, ".bun", "bin"),
+  ];
+}
+
+export type ExecutableSource = "override" | "config" | "registry" | "known_location";
+
+export interface ResolvedExecutable {
+  path: string;
+  source: ExecutableSource;
+}
+
+/**
+ * Resolve the CLI executable for a registry agent.
+ * Order: env override → user config → registry detection/native → PATH + known dirs.
+ * Returns null when nothing is found (caller decides how to degrade).
+ */
+export function findAgentExecutable(agentId: string): ResolvedExecutable | null {
+  const registryAgent = getRegistryAgent(agentId);
+
+  // 1. Explicit environment override: NEXUS_AGENT_<ID>_PATH
+  const envKey = `NEXUS_AGENT_${agentId.toUpperCase().replace(/[^A-Z0-9]/g, "_")}_PATH`;
+  const envOverride = process.env[envKey]?.trim();
+  if (envOverride) {
+    const found = findExecutable(envOverride);
+    if (found) return { path: found, source: "override" };
+  }
+
+  // 2. Persisted per-user override
+  const installedAgent = loadFromDisk().find((a) => a.agentId === agentId);
+  const customCommand = installedAgent?.customCommand?.trim();
+  if (customCommand) {
+    const found = findExecutable(customCommand);
+    if (found) return { path: found, source: "config" };
+  }
+
+  // 3. Registry candidates (detection aliases, then native command, then distribution)
+  const candidates = [
+    ...(registryAgent?.detection?.executables ?? []),
+    ...(registryAgent?.native?.command ? [registryAgent.native.command] : []),
+    ...(registryAgent?.distribution?.direct?.cmd ? [registryAgent.distribution.direct.cmd] : []),
+  ];
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    const found = findExecutable(candidate);
+    if (found) return { path: found, source: "registry" };
+  }
+
   return null;
 }
 

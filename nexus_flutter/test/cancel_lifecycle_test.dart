@@ -1,73 +1,72 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-
-import '../lib/models/ws_protocol.dart';
-import '../lib/providers/chat_provider.dart';
-import '../lib/services/ws_client.dart';
+import 'package:nexus_flutter/models/ws_protocol.dart';
+import 'package:nexus_flutter/providers/chat_provider.dart';
+import 'package:nexus_flutter/services/ws_client.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  setUp(() {
-    SharedPreferences.setMockInitialValues({});
-  });
+  test('Cancel lifecycle handles session_cancelled, turn_ended and cancel_failed', () async {
+    final ws = WSClient();
+    final provider = ChatProvider(ws);
 
-  testWidgets(
-      'session_cancelled is ACK-only: 10s fallback timer still unlocks when turn_ended never arrives',
-      (tester) async {
-    final provider = ChatProvider(WSClient());
-    provider.state.sessionId = 's1';
+    provider.state.sessionId = 'test-session-1';
     provider.state.turnActive = true;
 
+    // 1. Send cancel
     provider.sendMessage('__cancel__');
-    expect(provider.state.cancelling, isTrue);
+    expect(provider.state.cancelling, true);
+    expect(provider.state.turnActive, true); // Still active until acknowledged / completed
 
-    // Server ACK 取消请求（当前协议：立即回 session_cancelled），但 ACP 永不发 turn_ended。
-    provider.receiveServerMessage(
-      ServerMessage.fromJson({'type': 'session_cancelled', 'sessionId': 's1'}),
-    );
-    expect(provider.state.cancelling, isTrue,
-        reason: 'ACK 不清取消状态，避免刚发 cancel 就被解锁');
-    expect(provider.state.turnActive, isTrue,
-        reason: 'turnActive 保持到真正结束');
+    // 2. Server ACK session_cancelled
+    provider.handleMessageForTest(ServerMessage(
+      type: 'session_cancelled',
+      sessionId: 'test-session-1',
+      ok: true,
+    ));
+    expect(provider.state.cancelling, true);
+    expect(provider.state.turnActive, true);
 
-    // 10s 兜底 timer 触发，强制解锁。
-    await tester.pump(const Duration(seconds: 10));
-    expect(provider.state.cancelling, isFalse);
-    expect(provider.state.turnActive, isFalse);
+    // 3. Server sends turn_ended
+    provider.handleMessageForTest(ServerMessage(
+      type: 'turn_ended',
+      sessionId: 'test-session-1',
+    ));
+    expect(provider.state.cancelling, false);
+    expect(provider.state.turnActive, false); // Genuinely unlocked!
 
-    provider.dispose();
+    // 4. Test cancel_failed
+    provider.state.turnActive = true;
+    provider.sendMessage('__cancel__');
+    expect(provider.state.cancelling, true);
+
+    provider.handleMessageForTest(ServerMessage(
+      type: 'cancel_failed',
+      sessionId: 'test-session-1',
+      error: 'Agent did not stop after cancel signal',
+    ));
+    expect(provider.state.cancelling, false);
+    expect(provider.state.turnActive, true); // Keeps blocked!
+    expect(provider.state.errorMessage, 'Agent did not stop after cancel signal');
   });
 
-  testWidgets('turn_ended(cancelled) unlocks immediately and cancels fallback timer',
-      (tester) async {
-    final provider = ChatProvider(WSClient());
-    provider.state.sessionId = 's1';
+  test('answerAsk routes directly to interact_herdr_blocked in Herdr mode', () async {
+    final ws = WSClient();
+    ws.connectedForTest = true;
+    final provider = ChatProvider(ws);
+
+    provider.state.sessionId = 'herdr:w1:p2';
     provider.state.turnActive = true;
 
-    provider.sendMessage('__cancel__');
-    expect(provider.state.cancelling, isTrue);
+    ClientMessage? sent;
+    ws.onSendForTest = (msg) {
+      sent = msg;
+    };
 
-    provider.receiveServerMessage(ServerMessage.fromJson({
-      'type': 'session_cancelled',
-      'sessionId': 's1',
-    }));
-    expect(provider.state.cancelling, isTrue);
-    expect(provider.state.turnActive, isTrue);
-
-    // ACP prompt 真正结束 → turn_ended(cancelled)：立即解锁。
-    provider.receiveServerMessage(ServerMessage.fromJson({
-      'type': 'agent_event',
-      'sessionId': 's1',
-      'event': {'sessionUpdate': 'turn_ended', 'stopReason': 'cancelled'},
-    }));
-    expect(provider.state.cancelling, isFalse);
-    expect(provider.state.turnActive, isFalse);
-
-    // 兜底 timer 已取消：继续等待不再解锁已有状态（已解锁，无副作用断言）。
-    await tester.pump(const Duration(seconds: 10));
-    expect(provider.state.cancelling, isFalse);
-
-    provider.dispose();
+    await provider.answerAsk('1');
+    expect(sent, isNotNull);
+    expect(sent!.type, 'interact_herdr_blocked');
+    expect(sent!.paneId, 'herdr:w1:p2');
+    expect(sent!.key, '1');
   });
 }

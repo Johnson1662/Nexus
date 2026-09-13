@@ -90,7 +90,12 @@ class _WorkspaceListPageState extends State<WorkspaceListPage> {
               final path = pathController.text.trim();
               if (path.isNotEmpty) {
                 final name = path.split(RegExp(r'[/\\]')).last;
-                context.read<WorkspaceProvider>().addWorkspace(name, path);
+                final chatProvider = context.read<ChatProvider>();
+                if (chatProvider.useHerdrBackend) {
+                  chatProvider.createHerdrWorkspace(label: name, cwd: path);
+                } else {
+                  context.read<WorkspaceProvider>().addWorkspace(name, path);
+                }
                 Navigator.pop(dialogCtx);
               }
             },

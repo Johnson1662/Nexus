@@ -2,6 +2,44 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { mkdirSync, chmodSync } from "node:fs";
 
+/**
+ * Canonical form of a workspace path: absolute, forward-slashed, no trailing
+ * separator (except root), drive letter upper-cased on Windows.
+ */
+export function canonicalizeWorkspacePath(
+  targetPath: string,
+  platform: string = process.platform,
+): string {
+  if (!targetPath || !targetPath.trim()) return "";
+  const expanded = targetPath.trim().replace(/^~(?=$|[\\/])/, homedir());
+  const impl = platform === "win32" ? path.win32 : path.posix;
+  let resolved = impl.resolve(expanded).replace(/\\/g, "/");
+  if (platform === "win32" && /^[a-zA-Z]:/.test(resolved)) {
+    resolved = resolved[0].toUpperCase() + resolved.slice(1);
+  }
+  if (resolved.length > 1 && resolved.endsWith("/")) {
+    resolved = resolved.slice(0, -1);
+  }
+  return resolved;
+}
+
+/**
+ * Compare two workspace paths under the target platform's case rules.
+ * Windows is case-insensitive; POSIX (including macOS) stays case-sensitive.
+ */
+export function areWorkspacePathsEqual(
+  a: string,
+  b: string,
+  platform: string = process.platform,
+): boolean {
+  const normA = canonicalizeWorkspacePath(a, platform);
+  const normB = canonicalizeWorkspacePath(b, platform);
+  if (platform === "win32") {
+    return normA.toLowerCase() === normB.toLowerCase();
+  }
+  return normA === normB;
+}
+
 export function resolveWorkspacePath(cwd?: string): string | undefined {
   if (!cwd || !cwd.trim()) return undefined;
   const expanded = cwd.trim().replace(/^~(?=$|[\\/])/, homedir());
