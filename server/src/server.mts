@@ -40,7 +40,6 @@ import { SessionOperationError, SessionOwnerError, sessionManager } from "./sess
 import { setTitle as setSessionTitle } from "./session-titles.mjs";
 import { parseClientMessage, type JsonRecord } from "./protocol-validation.mjs";
 import { handleListHerdrWorkspaces, handleCreateHerdrWorkspace, handleCreateHerdrAgent, handleFocusHerdrTarget, handleInteractHerdrBlocked } from "./handlers/herdr-actions.mjs";
-import { HerdrEventBus } from "./discovery/herdr-adapter.mjs";
 import { watchAmbientSessions, listAmbientSessions } from "./discovery/ambient-session.mjs";
 import { detectHostCapabilities } from "./discovery/host-capabilities.mjs";
 
@@ -105,13 +104,6 @@ export function createBridgeServer(config: BridgeConfig): BridgeApp {
     console.log(`[server] listening on ws://0.0.0.0:${port} and IPv6 if available`);
   });
 
-  HerdrEventBus.start();
-  // NOTE(review): no status listener attached here. herdr: sessions are never
-  // registered in sessionManager, so a getSession-based fan-out would be dead
-  // code; turn_ended for Herdr panes already flows via HerdrStreamer and the
-  // session tailer. Attach real listeners (e.g. blocked-state push) when the
-  // mobile UI consumes them.
-
   // WebSocket keep-alive: ping all connected clients every 15s
   const pingInterval = setInterval(() => {
     wss.clients.forEach((sock: WebSocket) => {
@@ -144,7 +136,6 @@ export function createBridgeServer(config: BridgeConfig): BridgeApp {
     stop: async () => {
       clearInterval(pingInterval);
       stopSessionWatcher();
-      HerdrEventBus.stop();
       // Kill all agent subprocesses before closing
       for (const [, sess] of sessionManager.getAllSessions()) {
         try { sessionManager.killSessionProcess(sess); } catch {}
@@ -761,8 +752,6 @@ if (isMainModule) {
   httpServer.listen(PORT, () => {
     console.log(`[server] listening on ws://0.0.0.0:${PORT} and IPv6 if available`);
   });
-  HerdrEventBus.start();
-
   // WebSocket keep-alive: ping all connected clients every 15s
   const pingInterval = setInterval(() => {
     wss.clients.forEach((sock: WebSocket) => {

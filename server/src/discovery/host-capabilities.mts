@@ -14,7 +14,8 @@ export interface HostCapabilities {
     available: boolean;
     version?: string;
     session?: string;
-    endpointKind?: "unix" | "pipe";
+    transport?: "cli";
+    binary?: string;
     reason?: string;
   };
   agents: AgentRuntimeCapability[];
@@ -137,8 +138,8 @@ export async function detectHostCapabilities(forceRefresh = false): Promise<Host
     },
     herdr: {
       available: herdrAvailable,
-      version: herdrProbe.version,
-      endpointKind: herdrProbe.endpointKind,
+      transport: "cli",
+      binary: herdrProbe.binary,
       reason: herdrProbe.reason,
     },
     agents,

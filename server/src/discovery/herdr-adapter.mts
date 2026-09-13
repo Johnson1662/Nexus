@@ -1,9 +1,9 @@
-import net from "node:net";
 import path from "node:path";
 import { homedir } from "node:os";
 import { existsSync, readdirSync, readlinkSync, statSync, realpathSync, readFileSync } from "node:fs";
 import { execSync } from "node:child_process";
 import { getHerdrConfig } from "../registry/registry.mjs";
+import { HerdrCliClient, HerdrCliError, resolveHerdrBinary } from "./herdr-cli.mjs";
 
 // ── Types ─────────────────────────────────────────────────────────────
 
@@ -37,211 +37,71 @@ export interface HerdrWorkspaceInfo {
   agent_status?: string;
 }
 
-interface HerdrRpcResponse<T = unknown> {
-  id?: string;
-  result?: T;
-  error?: {
-    code: string;
-    message: string;
-  };
-}
+// ── Herdr Adapter API ─────────────────────────────────
 
-// ── Low-level Socket Client ───────────────────────────────────────────
-
-let requestCounter = 0;
-
-export type HerdrEndpoint =
-  | { kind: "unix"; path: string }
-  | { kind: "pipe"; path: string };
-
-export function resolveHerdrEndpoint(): HerdrEndpoint {
-  const envPath = process.env.HERDR_SOCKET_PATH?.trim();
-  if (envPath) {
-    if (envPath.startsWith("\\\\.\\pipe\\") || envPath.startsWith("\\\\?\\pipe\\")) {
-      return { kind: "pipe", path: envPath };
-    }
-    return { kind: "unix", path: envPath };
-  }
-
-  const session = process.env.HERDR_SESSION?.trim();
-  if (process.platform === "win32") {
-    const pipeName = session ? `herdr-${session}` : "herdr";
-    return { kind: "pipe", path: `\\\\.\\pipe\\${pipeName}` };
-  }
-
-  if (session) {
-    return { kind: "unix", path: path.join(homedir(), ".config", "herdr", `${session}.sock`) };
-  }
-  return { kind: "unix", path: path.join(homedir(), ".config", "herdr", "herdr.sock") };
-}
-
-export function getHerdrSocketPath(): string {
-  return resolveHerdrEndpoint().path;
+/** True when a Herdr CLI failure carries the given Herdr error code. */
+export function isHerdrCode(err: unknown, code: string): boolean {
+  return err instanceof HerdrCliError && err.herdrCode === code;
 }
 
 export interface HerdrProbeResult {
   available: boolean;
-  version?: string;
-  endpointKind: "unix" | "pipe";
+  binary?: string;
   reason?: string;
   checkedAt: number;
 }
 
 let lastProbeResult: HerdrProbeResult | null = null;
-let lastProbeEndpointPath = "";
-const PROBE_CACHE_TTL_MS = 4000;
-
-function cachedProbeFor(endpointPath: string): HerdrProbeResult | null {
-  if (!lastProbeResult) return null;
-  if (lastProbeEndpointPath !== endpointPath) return null;
-  if (Date.now() - lastProbeResult.checkedAt >= PROBE_CACHE_TTL_MS) return null;
-  return lastProbeResult;
-}
-
-export async function probeHerdr(force = false): Promise<HerdrProbeResult> {
-  const now = Date.now();
-  const endpoint = resolveHerdrEndpoint();
-  const cached = cachedProbeFor(endpoint.path);
-  if (!force && cached) return cached;
-
-  try {
-    await sendHerdrRequest("agent.list", {}, 1200);
-    lastProbeResult = {
-      available: true,
-      endpointKind: endpoint.kind,
-      checkedAt: now,
-    };
-  } catch (err: any) {
-    lastProbeResult = {
-      available: false,
-      endpointKind: endpoint.kind,
-      reason: err?.message || String(err),
-      checkedAt: now,
-    };
-  }
-  lastProbeEndpointPath = endpoint.path;
-  return lastProbeResult;
-}
-
-export function isHerdrAvailable(): boolean {
-  const endpoint = resolveHerdrEndpoint();
-  const cached = cachedProbeFor(endpoint.path);
-  if (cached) return cached.available;
-
-  if (endpoint.kind === "unix") {
-    try {
-      return existsSync(endpoint.path);
-    } catch {
-      return false;
-    }
-  }
-  // Named pipes have no filesystem presence; a negative result is authoritative
-  // until the caller runs an explicit probe (which is done on connect).
-  return lastProbeEndpointPath === endpoint.path ? (lastProbeResult?.available ?? false) : false;
-}
-
-export async function sendHerdrRequest<T = unknown>(
-  method: string,
-  params: Record<string, unknown> = {},
-  timeoutMs = 2000,
-): Promise<T> {
-  const endpoint = resolveHerdrEndpoint();
-  const socketPath = endpoint.path;
-  if (endpoint.kind === "unix" && !existsSync(socketPath)) {
-    throw new Error(`Herdr socket not found at ${socketPath}`);
-  }
-  const id = `nexus_req_${++requestCounter}_${Date.now()}`;
-  const payload = JSON.stringify({ id, method, params }) + "\n";
-
-  return new Promise<T>((resolve, reject) => {
-    let settled = false;
-    const client = net.createConnection(socketPath);
-    let buffer = "";
-
-    const timer = setTimeout(() => {
-      if (!settled) {
-        settled = true;
-        client.destroy();
-        reject(new Error(`Herdr RPC timeout (${timeoutMs}ms) for ${method}`));
-      }
-    }, timeoutMs);
-
-    client.on("connect", () => {
-      client.write(payload);
-    });
-
-    client.on("data", (chunk) => {
-      buffer += chunk.toString("utf-8");
-      if (buffer.includes("\n")) {
-        const line = buffer.slice(0, buffer.indexOf("\n")).trim();
-        if (!settled) {
-          settled = true;
-          clearTimeout(timer);
-          client.end();
-          try {
-            const resp = JSON.parse(line) as HerdrRpcResponse<T>;
-            if (resp.error) {
-              reject(new Error(`Herdr RPC error [${resp.error.code}]: ${resp.error.message}`));
-            } else {
-              resolve(resp.result as T);
-            }
-          } catch (err) {
-            reject(new Error(`Failed to parse Herdr response: ${String(err)}`));
-          }
-        }
-      }
-    });
-
-    client.on("error", (err) => {
-      if (!settled) {
-        settled = true;
-        clearTimeout(timer);
-        reject(err);
-      }
-    });
-
-    client.on("close", () => {
-      if (!settled) {
-        settled = true;
-        clearTimeout(timer);
-        reject(new Error("Connection closed before response received"));
-      }
-    });
-  });
-}
-
-// ── Herdr Adapter API ─────────────────────────────────────────────────
+const PROBE_CACHE_TTL_MS = 3000;
 
 export class HerdrAdapter {
+  /** Cheap pre-flight for messaging only; never gates a business call. */
   static isAvailable(): boolean {
-    return isHerdrAvailable();
+    return resolveHerdrBinary() !== null;
   }
 
   static async probe(force = false): Promise<HerdrProbeResult> {
-    return probeHerdr(force);
+  const now = Date.now();
+    if (!force && lastProbeResult && now - lastProbeResult.checkedAt < PROBE_CACHE_TTL_MS) {
+  return lastProbeResult;
+    }
+    const binary = resolveHerdrBinary();
+    if (!binary) {
+      lastProbeResult = { available: false, reason: "Herdr executable not found", checkedAt: now };
+  return lastProbeResult;
+    }
+    try {
+      await HerdrCliClient.runJson(["agent", "list"]);
+      lastProbeResult = { available: true, binary, checkedAt: now };
+          } catch (err) {
+    lastProbeResult = {
+      available: false,
+        binary,
+        reason: err instanceof Error ? err.message : String(err),
+      checkedAt: now,
+    };
+    }
+    return lastProbeResult;
   }
 
+  /** Integration install state keyed by Herdr target (integrations are optional). */
   static async getIntegrationStatus(): Promise<Record<string, boolean>> {
     const result: Record<string, boolean> = {};
-    if (!this.isAvailable()) return result;
     try {
-      const stdout = execSync("herdr integration status", { encoding: "utf8", timeout: 3000 });
+      const stdout = await HerdrCliClient.run(["integration", "status"], { timeoutMs: 8000 });
       for (const line of stdout.split("\n")) {
-        const parts = line.split(":");
-        if (parts.length >= 2) {
-          const name = parts[0].trim();
-          const status = parts.slice(1).join(":").trim();
-          result[name] = status.startsWith("current");
-        }
+        const match = /^(\S+):\s+(current|not installed|outdated)\s*\((.*)\)\s*$/.exec(line.trim());
+        if (match) result[match[1]] = match[2] === "current";
       }
-    } catch {}
+    } catch (err) {
+      console.log(`[herdr-adapter] getIntegrationStatus error: ${String(err)}`);
+    }
     return result;
   }
 
   static async listWorkspaces(): Promise<HerdrWorkspaceInfo[]> {
-    if (!this.isAvailable()) return [];
     try {
-      const res = await sendHerdrRequest<{ workspaces: HerdrWorkspaceInfo[] }>("workspace.list", {});
+      const res = await HerdrCliClient.runJson<{ workspaces?: HerdrWorkspaceInfo[] }>(["workspace", "list"]);
       return res?.workspaces ?? [];
     } catch (err) {
       console.log(`[herdr-adapter] listWorkspaces error: ${String(err)}`);
@@ -250,23 +110,17 @@ export class HerdrAdapter {
   }
 
   static async createWorkspace(label?: string, cwd?: string): Promise<string | null> {
-    if (!this.isAvailable()) return null;
-    try {
-      const res = await sendHerdrRequest<{ workspace?: { workspace_id: string } }>("workspace.create", {
-        label,
-        cwd,
-        focus: false,
-      });
-      return res?.workspace?.workspace_id ?? null;
-    } catch (err) {
-      console.log(`[herdr-adapter] createWorkspace error: ${String(err)}`);
-      return null;
-    }
+    const args = ["workspace", "create", "--no-focus"];
+    if (label) args.push("--label", label);
+    if (cwd) args.push("--cwd", cwd);
+    const res = await HerdrCliClient.runJson<{ workspace?: { workspace_id: string } }>(args, {
+      timeoutMs: 15000,
+    });
+    return res?.workspace?.workspace_id ?? null;
   }
 
   static async focusWorkspace(workspaceId: string): Promise<void> {
-    if (!this.isAvailable()) return;
-    await sendHerdrRequest("workspace.focus", { workspace_id: workspaceId });
+    await HerdrCliClient.run(["workspace", "focus", workspaceId]);
   }
 
   static async splitPane(options: {
@@ -275,13 +129,13 @@ export class HerdrAdapter {
     direction?: "right" | "down";
     cwd?: string;
   }): Promise<string | null> {
-    if (!this.isAvailable()) return null;
-    const res = await sendHerdrRequest<{ pane?: { pane_id: string } }>("pane.split", {
-      direction: options.direction ?? "right",
-      workspace_id: options.workspace_id,
-      target_pane_id: options.target_pane_id,
-      cwd: options.cwd,
-      focus: false,
+    const target = options.target_pane_id ?? options.workspace_id;
+    const args = ["pane", "split"];
+    if (target) args.push("--pane", target);
+    args.push("--direction", options.direction ?? "right");
+    if (options.cwd) args.push("--cwd", options.cwd);
+    const res = await HerdrCliClient.runJson<{ pane?: { pane_id: string } }>(args, {
+      timeoutMs: 15000,
     });
     return res?.pane?.pane_id ?? null;
   }
@@ -291,15 +145,11 @@ export class HerdrAdapter {
     label?: string;
     cwd?: string;
   }): Promise<string | null> {
-    if (!this.isAvailable()) return null;
-    const res = await sendHerdrRequest<{
-      tab?: { tab_id: string };
-      root_pane?: { pane_id: string };
-    }>("tab.create", {
-      workspace_id: options.workspace_id,
-      label: options.label,
-      cwd: options.cwd,
-      focus: false,
+    const args = ["tab", "create", "--workspace", options.workspace_id, "--no-focus"];
+    if (options.label) args.push("--label", options.label);
+    if (options.cwd) args.push("--cwd", options.cwd);
+    const res = await HerdrCliClient.runJson<{ root_pane?: { pane_id: string } }>(args, {
+      timeoutMs: 15000,
     });
     return res?.root_pane?.pane_id ?? null;
   }
@@ -312,26 +162,27 @@ export class HerdrAdapter {
     retries?: number;
     retryDelayMs?: number;
   }): Promise<boolean> {
-    if (!this.isAvailable()) return false;
     // A freshly split pane needs a moment before its shell reaches an
     // interactive prompt; retry only on agent_pane_busy, fail fast otherwise.
     // Herdr agent startup defaults to a 30s timeout; stay above it so a slow
     // start is not misreported as failure (which would leak the new pane).
     const tries = options.retries ?? 12;
     const delayMs = options.retryDelayMs ?? 800;
+    const args = [
+      "agent", "start", options.name,
+      "--kind", options.kind,
+      "--pane", options.pane_id,
+      "--timeout", "30000",
+    ];
+    if (options.args && options.args.length > 0) args.push("--", ...options.args);
     let lastErr: unknown = null;
     for (let attempt = 0; attempt <= tries; attempt++) {
       try {
-        await sendHerdrRequest("agent.start", {
-          pane_id: options.pane_id,
-          kind: options.kind,
-          name: options.name,
-          args: options.args ?? [],
-        }, 35000);
+        await HerdrCliClient.runJson(args, { timeoutMs: 35000 });
         return true;
       } catch (err) {
         lastErr = err;
-        if (!String(err).includes("agent_pane_busy") || attempt === tries) throw err;
+        if (!isHerdrCode(err, "agent_pane_busy") || attempt === tries) throw err;
         await new Promise((r) => setTimeout(r, delayMs));
       }
     }
@@ -339,26 +190,16 @@ export class HerdrAdapter {
   }
 
   static async closePane(paneId: string): Promise<void> {
-    await sendHerdrRequest("pane.close", { pane_id: paneId });
+    await HerdrCliClient.run(["pane", "close", paneId]);
   }
 
   static async focusAgent(target: string): Promise<void> {
-    if (!this.isAvailable()) return;
-    await sendHerdrRequest("agent.focus", {
-      target: target.replace(/^herdr:/, ""),
-    });
-  }
-
-  static async getProcessInfo(paneId: string): Promise<any> {
-    if (!this.isAvailable()) return null;
-    const res = await sendHerdrRequest<{ process_info?: any }>("pane.process_info", { pane: paneId });
-    return res?.process_info ?? null;
+    await HerdrCliClient.run(["agent", "focus", target.replace(/^herdr:/, "")]);
   }
 
   static async listAgents(): Promise<HerdrAgentInfo[]> {
-    if (!this.isAvailable()) return [];
     try {
-      const res = await sendHerdrRequest<{ agents: HerdrAgentInfo[] }>("agent.list", {});
+      const res = await HerdrCliClient.runJson<{ agents?: HerdrAgentInfo[] }>(["agent", "list"]);
       return res?.agents ?? [];
     } catch (err) {
       console.log(`[herdr-adapter] listAgents error: ${String(err)}`);
@@ -371,14 +212,41 @@ export class HerdrAdapter {
     lines = 100,
     format: "text" | "ansi" = "text",
   ): Promise<string> {
-    if (!this.isAvailable()) return "";
-    const res = await sendHerdrRequest<{ read?: { text?: string } }>("agent.read", {
-      target,
-      source: "recent",
-      lines,
-      format,
+    return HerdrCliClient.run([
+      "agent", "read", target,
+      "--lines", String(lines),
+      "--format", format,
+    ], { timeoutMs: 8000 });
+  }
+
+  /** Strict status read; throws HerdrCliError on transport failure. */
+  static async getAgent(target: string): Promise<HerdrAgentInfo> {
+    const res = await HerdrCliClient.runJson<{ agent?: HerdrAgentInfo }>([
+      "agent", "get", target.replace(/^herdr:/, ""),
+    ]);
+    if (!res?.agent) {
+      throw new HerdrCliError("HERDR_BAD_JSON", `Herdr returned no agent for ${target}`, "agent_not_found");
+    }
+    return res.agent;
+  }
+
+  /**
+   * Block until the agent reaches one of `until`, returning the observed
+   * status. Throws on timeout or transport failure; the caller decides whether
+   * that is a cancellation failure.
+   */
+  static async waitForStatus(
+    target: string,
+    until: Array<HerdrAgentInfo["agent_status"]> = ["idle", "done"],
+    timeoutMs = 8000,
+  ): Promise<HerdrAgentInfo["agent_status"]> {
+    const args = ["agent", "wait", target.replace(/^herdr:/, "")];
+    for (const status of until) args.push("--until", status);
+    args.push("--timeout", String(timeoutMs));
+    const res = await HerdrCliClient.runJson<{ agent?: HerdrAgentInfo }>(args, {
+      timeoutMs: timeoutMs + 3000,
     });
-    return res?.read?.text ?? "";
+    return res?.agent?.agent_status ?? "unknown";
   }
 
   static async sendPrompt(target: string, text: string): Promise<void> {
@@ -388,16 +256,17 @@ export class HerdrAdapter {
       try {
         const agent = (await this.listAgents()).find((item) => item.pane_id === paneId);
         if (!agent || agent.agent_status === "unknown") {
-          throw new Error("Herdr RPC error [agent_not_ready]: agent for pane " + paneId + " is not ready");
+          throw new HerdrCliError(
+            "HERDR_EXIT",
+            `Herdr CLI error [agent_not_ready]: agent for pane ${paneId} is not ready`,
+            "agent_not_ready",
+          );
         }
-        await sendHerdrRequest("agent.prompt", {
-          target: paneId,
-          text,
-        });
+        await HerdrCliClient.run(["agent", "prompt", paneId, text]);
         return;
       } catch (err) {
         lastError = err;
-        if (!String(err).includes("[agent_not_ready]") || attempt === 9) throw err;
+        if (!isHerdrCode(err, "agent_not_ready") || attempt === 9) throw err;
         await new Promise((resolve) => setTimeout(resolve, 500));
       }
     }
@@ -405,10 +274,7 @@ export class HerdrAdapter {
   }
 
   static async sendKeys(target: string, keys: string[]): Promise<void> {
-    await sendHerdrRequest("agent.send_keys", {
-      target: target.replace(/^herdr:/, ""),
-      keys,
-    });
+    await HerdrCliClient.run(["agent", "send-keys", target.replace(/^herdr:/, ""), ...keys]);
   }
 
   static async resolveSessionFile(paneId: string): Promise<{
@@ -747,107 +613,6 @@ function findActiveSessionFileForPane(targetPaneId: string, agent: string): stri
     }
   } catch {}
   return null;
-}
-
-export type HerdrEventListener = (event: { type?: string; event?: string; [key: string]: any }) => void;
-
-export class HerdrEventBus {
-  private static client: net.Socket | null = null;
-  private static listeners = new Set<HerdrEventListener>();
-  private static reconnectTimer: NodeJS.Timeout | null = null;
-  private static buffer = "";
-
-  static start(): void {
-    if (this.client) return;
-    this.connect();
-  }
-
-  static addListener(listener: HerdrEventListener): () => void {
-    this.listeners.add(listener);
-    return () => this.listeners.delete(listener);
-  }
-
-  private static connect(): void {
-    const endpoint = resolveHerdrEndpoint();
-    if (endpoint.kind === "unix" && !existsSync(endpoint.path)) {
-      this.scheduleReconnect();
-      return;
-    }
-
-    try {
-      const sock = net.createConnection(endpoint.path);
-      this.client = sock;
-      sock.unref();
-
-      sock.on("connect", () => {
-        const subReq = {
-          jsonrpc: "2.0",
-          id: `sub_${Date.now()}`,
-          method: "events.subscribe",
-          params: {
-            subscriptions: [
-              { type: "pane.agent_status_changed" },
-              { type: "pane.agent_detected" },
-              { type: "workspace.created" },
-              { type: "workspace.updated" },
-              { type: "workspace.closed" },
-              { type: "pane.created" },
-              { type: "pane.closed" },
-            ],
-          },
-        };
-        sock.write(JSON.stringify(subReq) + "\n");
-      });
-
-      sock.on("data", (chunk) => {
-        this.buffer += chunk.toString("utf8");
-        const lines = this.buffer.split("\n");
-        this.buffer = lines.pop() ?? "";
-        for (const line of lines) {
-          if (!line.trim()) continue;
-          try {
-            const parsed = JSON.parse(line);
-            if (parsed.result?.type === "subscription_started") continue;
-            const ev = parsed.event ? parsed : (parsed.params || parsed);
-            for (const l of this.listeners) {
-              try { l(ev); } catch (err) { console.error("[herdr-event-bus] listener error:", err); }
-            }
-          } catch {}
-        }
-      });
-
-      sock.on("error", () => {
-        sock.destroy();
-      });
-
-      sock.on("close", () => {
-        this.client = null;
-        this.scheduleReconnect();
-      });
-    } catch {
-      this.scheduleReconnect();
-    }
-  }
-
-  private static scheduleReconnect(): void {
-    if (this.reconnectTimer) return;
-    this.reconnectTimer = setTimeout(() => {
-      this.reconnectTimer?.unref();
-      this.reconnectTimer = null;
-      this.connect();
-    }, 3000);
-  }
-
-  static stop(): void {
-    if (this.reconnectTimer) {
-      clearTimeout(this.reconnectTimer);
-      this.reconnectTimer = null;
-    }
-    if (this.client) {
-      this.client.destroy();
-      this.client = null;
-    }
-  }
 }
 
 function findSessionDir(cwd: string): string | null {

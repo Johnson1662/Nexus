@@ -753,14 +753,16 @@ class HerdrCapability {
   final bool available;
   final String? version;
   final String? session;
-  final String endpointKind; // 'unix' | 'pipe'
+  final String transport; // always 'cli'
+  final String? binary;
   final String? reason;
 
   const HerdrCapability({
     required this.available,
     this.version,
     this.session,
-    this.endpointKind = 'unix',
+    this.transport = 'cli',
+    this.binary,
     this.reason,
   });
 
@@ -768,7 +770,8 @@ class HerdrCapability {
         available: json['available'] as bool? ?? false,
         version: json['version'] as String?,
         session: json['session'] as String?,
-        endpointKind: json['endpointKind'] as String? ?? 'unix',
+        transport: json['transport'] as String? ?? 'cli',
+        binary: json['binary'] as String?,
         reason: json['reason'] as String?,
       );
 }

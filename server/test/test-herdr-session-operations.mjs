@@ -1,48 +1,27 @@
 import assert from "node:assert/strict";
 import { once } from "node:events";
-import { createServer } from "node:net";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import WebSocket from "ws";
+import { createFakeHerdr } from "./fake-herdr.mjs";
 
 const tmpDir = mkdtempSync(join(tmpdir(), "nexus-herdr-ops-"));
-const socketPath = join(tmpDir, "herdr.sock");
 const sessionFile = join(tmpDir, "session-id.jsonl");
 writeFileSync(sessionFile, "");
-process.env.HERDR_SOCKET_PATH = socketPath;
 process.env.NEXUS_AUTH_TOKEN = "herdr-ops-token";
 
-let closedPane = "";
-let agentStatus = "working";
-const herdrServer = createServer((socket) => {
-  let pending = "";
-  socket.on("data", (chunk) => {
-    pending += chunk.toString();
-    const lines = pending.split("\n");
-    pending = lines.pop() ?? "";
-    for (const line of lines) {
-      if (!line.trim()) continue;
-      const request = JSON.parse(line);
-      let result = {};
-      if (request.method === "agent.list") {
-        result = {
-          agents: [{
-            pane_id: "sync-pane",
-            agent: "omp",
-            agent_status: agentStatus,
-            cwd: tmpDir,
-            agent_session: { kind: "path", value: sessionFile },
-          }],
-        };
-      } else if (request.method === "pane.close") {
-        closedPane = request.params?.pane_id ?? "";
-      }
-      socket.write(JSON.stringify({ id: request.id, result }) + "\n");
-    }
-  });
+const fakeHerdr = createFakeHerdr();
+fakeHerdr.setState({
+  status: "working",
+  agents: [{
+    pane_id: "sync-pane",
+    agent: "omp",
+    agent_status: "working",
+    cwd: tmpDir,
+    agent_session: { kind: "path", value: sessionFile },
+  }],
 });
-await new Promise((resolve) => herdrServer.listen(socketPath, resolve));
 
 const { createBridgeServer } = await import("../dist/server.mjs");
 const { HerdrAdapter } = await import("../dist/discovery/herdr-adapter.mjs");
@@ -87,19 +66,21 @@ try {
   assert(!cancelMessages.some((message) => message.type === "turn_ended"), "cancel acknowledgement must not end the Herdr turn");
   HerdrAdapter.sendKeys = originalSendKeys;
 
-  agentStatus = "idle";
+  fakeHerdr.setState({ status: "idle" });
   await waitFor(() => messages.some((message) =>
     message.type === "turn_ended" && message.sessionId === "herdr:sync-pane"));
 
   ws.send(JSON.stringify({ type: "close_session", sessionId: "herdr:sync-pane" }));
   await waitFor(() => messages.some((message) =>
     message.type === "session_closed" && message.sessionId === "herdr:sync-pane"));
-  assert.equal(closedPane, "sync-pane", "closing a Herdr session must close its pane");
+  await waitFor(() =>
+    fakeHerdr.calls().some((c) => c[0] === "pane" && c[1] === "close" && c.includes("sync-pane")));
+  assert(true, "closing a Herdr session must close its pane");
 } finally {
   ws.close();
   await app.stop();
   HerdrTailerRegistry.cleanupAll();
-  await new Promise((resolve) => herdrServer.close(resolve));
+  fakeHerdr.cleanup();
   rmSync(tmpDir, { recursive: true, force: true });
 }
 
