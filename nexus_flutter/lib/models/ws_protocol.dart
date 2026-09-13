@@ -49,6 +49,7 @@ class ClientMessage {
   final int? before;
   final String? key;
   final String? label;
+  final bool? asText;
 
   ClientMessage({
     required this.type,
@@ -79,6 +80,7 @@ class ClientMessage {
     this.before,
     this.key,
     this.label,
+    this.asText,
   });
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -110,6 +112,7 @@ class ClientMessage {
         if (before != null) 'before': before,
         if (key != null && key!.isNotEmpty) 'key': key,
         if (label != null && label!.isNotEmpty) 'label': label,
+        if (asText != null) 'asText': asText,
       };
 }
 

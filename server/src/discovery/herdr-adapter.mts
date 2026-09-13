@@ -246,7 +246,17 @@ export class HerdrAdapter {
     const res = await HerdrCliClient.runJson<{ agent?: HerdrAgentInfo }>(args, {
       timeoutMs: timeoutMs + 3000,
     });
-    return res?.agent?.agent_status ?? "unknown";
+    const status = res?.agent?.agent_status ?? "unknown";
+    // `--until` guarantees a match or an error; a status outside the requested
+    // set means we cannot claim the turn ended.
+    if (!until.includes(status)) {
+      throw new HerdrCliError(
+        "HERDR_EXIT",
+        `Herdr reported "${status}" while waiting for ${until.join("/")}`,
+        "unexpected_status",
+      );
+    }
+    return status;
   }
 
   static async sendPrompt(target: string, text: string): Promise<void> {
@@ -275,6 +285,11 @@ export class HerdrAdapter {
 
   static async sendKeys(target: string, keys: string[]): Promise<void> {
     await HerdrCliClient.run(["agent", "send-keys", target.replace(/^herdr:/, ""), ...keys]);
+  }
+
+  /** Type literal text into a pane (not interpreted as key names). */
+  static async sendText(paneId: string, text: string): Promise<void> {
+    await HerdrCliClient.run(["pane", "send-text", paneId.replace(/^herdr:/, ""), text]);
   }
 
   static async resolveSessionFile(paneId: string): Promise<{

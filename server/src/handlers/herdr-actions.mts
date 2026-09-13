@@ -227,7 +227,7 @@ export async function handleFocusHerdrTarget(
 
 export async function handleInteractHerdrBlocked(
   ws: WebSocket,
-  payload: { paneId: string; key: string },
+  payload: { paneId: string; key: string; asText?: boolean },
 ): Promise<void> {
   if (!payload.paneId) {
     ws.send(
@@ -241,7 +241,14 @@ export async function handleInteractHerdrBlocked(
   }
   try {
     const pane = payload.paneId.replace(/^herdr:/, "");
-    await HerdrAdapter.sendKeys(pane, [payload.key]);
+    if (payload.asText) {
+      // Free-form answer: type it literally, then submit, instead of hoping the
+      // text happens to name a key.
+      await HerdrAdapter.sendText(pane, payload.key);
+      await HerdrAdapter.sendKeys(pane, ["enter"]);
+    } else {
+      await HerdrAdapter.sendKeys(pane, [payload.key]);
+    }
     ws.send(JSON.stringify({ type: "interact_herdr_blocked_done", ok: true }));
   } catch (err: any) {
     console.error(`[herdr-actions] interact_herdr_blocked error: ${err.message}`);

@@ -60,10 +60,18 @@ try {
   HerdrAdapter.sendKeys = () => new Promise((resolve) => { releaseSendKeys = resolve; });
   const cancelMessages = [];
   handleCancel({ send: (raw) => cancelMessages.push(JSON.parse(raw)) }, "herdr:sync-pane");
-  assert.deepEqual(cancelMessages.map((message) => message.type), ["session_cancelled"]);
+
+  // The acknowledgement is sent only after the cancel signal was delivered, so
+  // it must not appear while sendKeys is still pending.
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.deepEqual(cancelMessages, [], "cancel acknowledgement must wait for signal delivery");
+
   releaseSendKeys();
-  await Promise.resolve();
-  assert(!cancelMessages.some((message) => message.type === "turn_ended"), "cancel acknowledgement must not end the Herdr turn");
+  await waitFor(() => cancelMessages.some((message) => message.type === "session_cancelled"));
+  assert(
+    !cancelMessages.some((message) => message.type === "turn_ended"),
+    "cancel acknowledgement must not end the Herdr turn",
+  );
   HerdrAdapter.sendKeys = originalSendKeys;
 
   fakeHerdr.setState({ status: "idle" });

@@ -408,7 +408,9 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
     final text = answerText.trim();
     if (text.isEmpty || _state.sessionId.isEmpty || !_ws.isConnected) return;
     if (_state.sessionId.startsWith('herdr:')) {
-      interactHerdrBlocked(text);
+      // A Herdr pane blocked on a prompt takes the answer as terminal input,
+      // never as a cancel-then-prompt round trip.
+      interactHerdrBlocked(text, asText: true);
       return;
     }
     final sid = _state.sessionId;
@@ -926,12 +928,13 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
         name: name));
   }
 
-  void interactHerdrBlocked(String key) {
+  void interactHerdrBlocked(String key, {bool asText = false}) {
     if (!_state.sessionId.startsWith('herdr:')) return;
     _ws.send(ClientMessage(
       type: 'interact_herdr_blocked',
       paneId: _state.sessionId,
       key: key,
+      asText: asText ? true : null,
     ));
   }
 
