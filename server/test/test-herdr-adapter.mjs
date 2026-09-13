@@ -25,8 +25,9 @@ const argv = process.argv.slice(2);
 const out = (obj) => process.stdout.write(JSON.stringify(obj) + "\\n");
 
 if (argv[0] === "agent" && argv[1] === "list") {
+  // Status is overridable so prompt admission can be exercised both ways.
   out({ id: "cli:agent:list", result: { type: "agent_list", agents: [
-    { pane_id: "mock_p1", agent: "omp", agent_status: "working", cwd: "/test",
+    { pane_id: "mock_p1", agent: "omp", agent_status: process.env.FAKE_HERDR_STATUS || "working", cwd: "/test",
       foreground_cwd: "/test", terminal_title_stripped: "mock", workspace_id: "w1" },
   ] } });
 } else if (argv[0] === "agent" && argv[1] === "read") {
@@ -108,9 +109,16 @@ async function main() {
     assert(integrations.pi === false, "getIntegrationStatus() marks missing integrations uninstalled");
     assert(integrations.cursor === false, "getIntegrationStatus() treats outdated as not installed");
 
-    // Prompt targeting.
+    // Prompt admission: an idle agent accepts, a working one is refused so a
+    // second prompt cannot reach an agent that is still mid-turn.
+    process.env.FAKE_HERDR_STATUS = "idle";
     await HerdrAdapter.sendPrompt("mock_p1", "hello");
-    assert(true, "sendPrompt() succeeds against a ready agent");
+    assert(true, "sendPrompt() succeeds against an idle agent");
+
+    process.env.FAKE_HERDR_STATUS = "working";
+    const busyErr = await HerdrAdapter.sendPrompt("mock_p1", "again").then(() => null, (e) => e);
+    assert(busyErr && busyErr.herdrCode === "agent_busy", "sendPrompt() refuses a working agent");
+    delete process.env.FAKE_HERDR_STATUS;
 
     // HerdrStreamer deltas over the CLI reader.
     const received = [];

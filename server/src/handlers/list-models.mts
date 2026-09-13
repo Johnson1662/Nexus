@@ -22,7 +22,9 @@ export async function handleListModels(
   }
 
   try {
-    const cwd = sess?.cwd || process.cwd();
+    // Never fall back to the bridge's own process cwd: it depends on how the
+    // daemon was launched and would list models for an unrelated directory.
+    const cwd = sess?.cwd ?? undefined;
     const existingClient =
       sess?.client?.connected && sess.agent === targetAgent
         ? sess.client

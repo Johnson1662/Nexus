@@ -252,25 +252,28 @@ export async function handleLoadSession(
           resumed: true,
           source: "herdr",
           streamMode: "terminal",
+          turnActive: resolved?.agentStatus === "working",
         }));
         if (initialText) {
+          // A snapshot is the whole terminal, not a delta: it replaces the
+          // rendered terminal content instead of appending to it, so a reconnect
+          // cannot duplicate what the client already shows.
           ws.send(JSON.stringify({
-            type: "agent_event",
+            type: "terminal_snapshot",
             sessionId: targetSessionId,
-            event: {
-              sessionUpdate: "agent_message_chunk",
-              content: { type: "text", text: initialText },
-            },
+            text: initialText,
           }));
         }
       } catch { return; }
 
-      HerdrStreamer.seedContent(paneId, initialText);
+      // Baseline and subscription are one atomic step: otherwise the output
+      // written between the snapshot and the first poll is silently dropped.
+
       const listener = (msg: unknown) => {
         try { ws.send(JSON.stringify(msg)); }
         catch { HerdrStreamer.unsubscribe(paneId, listener); }
       };
-      HerdrStreamer.subscribe(paneId, listener);
+      HerdrStreamer.subscribe(paneId, listener, initialText);
       ws.on("close", () => HerdrStreamer.unsubscribe(paneId, listener));
     };
 
@@ -295,6 +298,7 @@ export async function handleLoadSession(
           resumed: true,
           source: "herdr",
           streamMode: "acp",
+          turnActive: r.agentStatus === "working",
         }));
       } catch { return; }
 

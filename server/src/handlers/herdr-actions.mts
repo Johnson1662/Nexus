@@ -18,10 +18,17 @@ export async function handleListHerdrWorkspaces(ws: WebSocket): Promise<void> {
   try {
     const rawList = await HerdrAdapter.listWorkspacesStrict();
     const agents = await HerdrAdapter.listAgents();
-    const workspaces = rawList.map((w) => {
-      // Find matching panes/agents for this workspace to get real CWD
+    // A workspace with no agent has no agent-reported cwd, so the pane is the
+    // authority. Never invent a path: an empty cwd must stay empty so the client
+    // cannot pass a workspace name back to Herdr as a directory.
+    const workspaces = await Promise.all(rawList.map(async (w) => {
       const matchedAgent = agents.find((a) => a.workspace_id === w.workspace_id);
-      const cwd = matchedAgent?.foreground_cwd || matchedAgent?.cwd || "";
+      let cwd = matchedAgent?.foreground_cwd || matchedAgent?.cwd || "";
+      if (!cwd) {
+        const panes = await HerdrAdapter.listPanes(w.workspace_id).catch(() => []);
+        const pane = panes.find((p) => p.focused) ?? panes[0];
+        cwd = pane?.foreground_cwd || pane?.cwd || "";
+      }
       return {
         workspaceId: w.workspace_id,
         name: w.label || w.workspace_id,
@@ -31,7 +38,7 @@ export async function handleListHerdrWorkspaces(ws: WebSocket): Promise<void> {
         agentStatus: w.agent_status ?? "idle",
         focused: Boolean(w.focused),
       };
-    });
+    }));
     ws.send(JSON.stringify({ type: "herdr_workspaces_list", workspaces }));
   } catch (err: any) {
     console.error(`[herdr-actions] failed to list workspaces: ${err.message}`);

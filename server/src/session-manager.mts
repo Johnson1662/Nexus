@@ -9,7 +9,7 @@ import { AcpClient, type AcpClientCallbacks } from "./acp/client.mjs";
 import type { AuthMethod, RequestPermissionRequest, RequestPermissionResponse } from "@agentclientprotocol/sdk";
 import type { SessionState } from "./acp/types.mjs";
 import { resolveAgentRuntime } from "./agents-store.mjs";
-import { resolveWorkspacePath } from "./path-utils.mjs";
+import { resolveWorkspacePath, resolveExplicitCwd } from "./path-utils.mjs";
 import { createAcpCallbacks } from "./acp-callbacks.mjs";
 import { getLastModel, setLastModel } from "./prefs.mjs";
 import { recordToolCallIds } from "./tool-call-map.mjs";
@@ -366,10 +366,8 @@ export class SessionManager {
     const launch = resolveAgentLaunch(agent);
     const ANYWHERE_DIR = join(homedir(), ".nexus");
     mkdirSync(ANYWHERE_DIR, { recursive: true });
-    const requestedCwd = resolveWorkspacePath(cwd);
-    const resolvedCwd = requestedCwd && existsSync(requestedCwd) && statSync(requestedCwd).isDirectory()
-      ? realpathSync(requestedCwd)
-      : ANYWHERE_DIR;
+    // Missing cwd → the default data dir; explicit-but-invalid cwd → error.
+    const resolvedCwd = resolveExplicitCwd(cwd, ANYWHERE_DIR);
     const proc = spawn(launch.cmd, launch.args, {
       cwd: resolvedCwd,
       env: { ...process.env, ...launch.env, FORCE_COLOR: "0", NO_COLOR: "1" },

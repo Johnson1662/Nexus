@@ -1145,9 +1145,13 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
           _state.streamingText = '';
           _finishRunningTools();
         }
-        // Resume: server sends session_started with resumed: true.
-        // Keep turnActive false so the next message continues via 'input'.
-        if (msg.resumed == true) {
+        // Resume: the server states whether the agent is mid-turn. Without this
+        // the client unlocked the input while a Herdr agent was still working,
+        // and the terminal status only caught up seconds later.
+        if (msg.turnActive != null) {
+          _state.turnActive = msg.turnActive!;
+          _setCurrentSessionStatus(msg.turnActive! ? 'running' : 'idle');
+        } else if (msg.resumed == true) {
           _state.turnActive = false;
         }
         if (sessionId.isNotEmpty) {
@@ -1247,6 +1251,13 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
         _state.cancelling = false;
         _state.turnActive = true;
         _state.errorMessage = msg.error ?? 'Agent 仍在运行，未能终止';
+        notifyListeners();
+        break;
+      case 'terminal_snapshot':
+        if (!_isRequiredSessionEventForCurrentSession(msg.sessionId)) {
+          break;
+        }
+        _applyTerminalSnapshot(msg.sessionId, msg.text ?? '');
         notifyListeners();
         break;
       case 'turn_ended':
@@ -1613,6 +1624,27 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
       default:
         return '';
     }
+  }
+
+
+  /// A terminal snapshot is the whole screen, so it replaces the rendered
+  /// terminal content. Appending it (as a delta) duplicated the screen on every
+  /// reconnect.
+  void _applyTerminalSnapshot(String? sessionId, String text) {
+    _state.messages = text.trim().isEmpty
+        ? []
+        : [
+            MessageData(
+              role: 'assistant',
+              content: text,
+              id: 'terminal-snapshot-${DateTime.now().microsecondsSinceEpoch}',
+            ),
+          ];
+    _state.streamingThinking = '';
+    _state.streamingText = '';
+    _state.accumulatorType = '';
+    _state.toolCallStack.clear();
+    _markLatestUserStatus('sent');
   }
 
   void _handleSyncOverflow(String sessionId) {
@@ -2303,6 +2335,7 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
       case 'history_full':
       case 'history_page':
       case 'session_status':
+      case 'terminal_snapshot':
         return true;
       default:
         return false;
@@ -2495,9 +2528,13 @@ class WorkspaceProvider extends ChangeNotifier {
       final name = (raw['name'] ?? raw['workspaceId'] ?? '').toString();
       final wsPath = (raw['path'] ?? '').toString();
       final wsId = (raw['workspaceId'] ?? '').toString();
-      final effectivePath = wsPath.isNotEmpty ? wsPath : name;
+      // Never substitute the workspace name for its path: an unknown directory
+      // must stay unknown so it is not handed back to Herdr as a cwd.
+      final effectivePath = wsPath;
       final existing = state.workspaces.firstWhere(
-        (w) => (wsId.isNotEmpty && w['workspaceId'] == wsId) || w['path'] == effectivePath,
+        (w) => wsId.isNotEmpty
+            ? w['workspaceId'] == wsId
+            : (effectivePath.isNotEmpty && w['path'] == effectivePath),
         orElse: () => <String, String>{},
       );
       if (existing.isNotEmpty) {

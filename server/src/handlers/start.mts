@@ -1,6 +1,7 @@
 import type { WebSocket } from "ws";
 import { AuthenticationRequiredError, sessionManager } from "../session-manager.mjs";
 import { setTitle } from "../session-titles.mjs";
+import { WorkspaceError } from "../path-utils.mjs";
 
 interface StartParams {
   agent?: string;
@@ -33,7 +34,8 @@ export async function handleStart(
       return;
     }
     const message = err instanceof Error ? err.message : String(err);
-    try { ws.send(JSON.stringify({ type: "start_failed", code: "AGENT_START_FAILED", text: message })); } catch {}
+    const code = err instanceof WorkspaceError ? err.code : "AGENT_START_FAILED";
+    try { ws.send(JSON.stringify({ type: "start_failed", code, text: message })); } catch {}
     return;
   }
 

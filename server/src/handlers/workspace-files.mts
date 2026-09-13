@@ -137,7 +137,8 @@ export async function handleListWorkspaceFiles(
 ): Promise<void> {
   const { cwd } = params;
   if (!cwd) {
-    ws.send(JSON.stringify({ type: "workspace_files", cwd: "", files: [] }));
+    // An empty listing would look like an empty directory; say what is wrong.
+    ws.send(JSON.stringify({ type: "workspace_files", cwd: "", files: [], error: "missing cwd" }));
     return;
   }
 

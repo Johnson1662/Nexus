@@ -413,7 +413,7 @@ export function handleIncomingConnection(transport: any, hostId: string = HOST_I
 
     switch (sessionMsg.type) {
       case "start":
-        console.log(`[server] handleStart agent="${sessionMsg.agent || "omp"}" cwd="${sessionMsg.cwd || process.cwd()}"`);
+        console.log(`[server] handleStart agent="${sessionMsg.agent || "omp"}" cwd="${sessionMsg.cwd || ""}"`);
         // handleStart 到达 getOrCreate 的首个 await 前会同步设置 pendingCreates；WS 消息有序，下一条 Start 必然看到准入锁。
         if (sessionManager.hasPendingCreate(transport)) {
           // 拒绝重复 Start：已有创建任务进行中，不占准入锁也不发 start_ack
@@ -666,19 +666,19 @@ export function handleIncomingConnection(transport: any, hostId: string = HOST_I
 
       case "list_workspace_files":
         console.log(`[server] list_workspace_files cwd="${sessionMsg.cwd || ""}"`);
-        sessionManager.enqueueWsOp(transport, () => handleListWorkspaceFiles(transport, { cwd: sessionMsg.cwd || process.cwd() }));
+        sessionManager.enqueueWsOp(transport, () => handleListWorkspaceFiles(transport, { cwd: sessionMsg.cwd || "" }));
         break;
 
       case "get_file_diff":
-        sessionManager.enqueueWsOp(transport, () => handleFileDiff(transport, { cwd: sessionMsg.cwd || process.cwd(), path: sessionMsg.text || sessionMsg.path || "" }));
+        sessionManager.enqueueWsOp(transport, () => handleFileDiff(transport, { cwd: sessionMsg.cwd || "", path: sessionMsg.text || sessionMsg.path || "" }));
         break;
 
       case "get_file_log":
-        sessionManager.enqueueWsOp(transport, () => handleFileLog(transport, { cwd: sessionMsg.cwd || process.cwd(), path: sessionMsg.text || sessionMsg.path || "" }));
+        sessionManager.enqueueWsOp(transport, () => handleFileLog(transport, { cwd: sessionMsg.cwd || "", path: sessionMsg.text || sessionMsg.path || "" }));
         break;
 
       case "get_file_content":
-        sessionManager.enqueueWsOp(transport, () => handleFileRead(transport, { cwd: sessionMsg.cwd || process.cwd(), path: sessionMsg.text || sessionMsg.path || "" }));
+        sessionManager.enqueueWsOp(transport, () => handleFileRead(transport, { cwd: sessionMsg.cwd || "", path: sessionMsg.text || sessionMsg.path || "" }));
         break;
 
       case "sync_request": {

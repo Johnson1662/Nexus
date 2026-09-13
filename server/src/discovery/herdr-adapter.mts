@@ -2,7 +2,7 @@ import path from "node:path";
 import { homedir } from "node:os";
 import { existsSync, readdirSync, readlinkSync, statSync, realpathSync, readFileSync } from "node:fs";
 import { execSync } from "node:child_process";
-import { getHerdrConfig } from "../registry/registry.mjs";
+import { getHerdrConfig, getAgentIdForHerdrKind } from "../registry/registry.mjs";
 import { HerdrCliClient, HerdrCliError, resolveHerdrBinary } from "./herdr-cli.mjs";
 
 // ── Types ─────────────────────────────────────────────────────────────
@@ -267,12 +267,22 @@ export class HerdrAdapter {
   }
 
   /**
+   * Normalize a Herdr agent record onto Nexus identity: Herdr reports the kind
+   * it launched (`agy`), while the rest of Nexus keys off the canonical agent id
+   * (`antigravity-cli`).
+   */
+  private static normalizeAgent(agent: HerdrAgentInfo): HerdrAgentInfo {
+    const canonical = getAgentIdForHerdrKind(agent.agent);
+    return canonical ? { ...agent, agent: canonical } : agent;
+  }
+
+  /**
    * Strict agent listing: a CLI failure propagates so "Herdr is down" is never
    * rendered as "there are no agents".
    */
   static async listAgentsStrict(): Promise<HerdrAgentInfo[]> {
     const res = await HerdrCliClient.runJson<{ agents?: HerdrAgentInfo[] }>(["agent", "list"]);
-    return res?.agents ?? [];
+    return (res?.agents ?? []).map((agent) => this.normalizeAgent(agent));
   }
 
   /** Lenient variant for background pollers, where an empty result is harmless. */
@@ -319,7 +329,7 @@ export class HerdrAdapter {
     if (!res?.agent) {
       throw new HerdrCliError("HERDR_BAD_JSON", `Herdr returned no agent for ${target}`, "agent_not_found");
     }
-    return res.agent;
+    return this.normalizeAgent(res.agent);
   }
 
   /**
@@ -363,6 +373,17 @@ export class HerdrAdapter {
             "HERDR_EXIT",
             `Herdr CLI error [agent_not_ready]: agent for pane ${paneId} is not ready`,
             "agent_not_ready",
+          );
+        }
+        // Only an idle or finished agent may take a new prompt. A working agent
+        // would otherwise receive two prompts at once during the ~5s window
+        // before the client re-samples terminal status; a blocked agent waits on
+        // a key press and is served by the blocked-interaction endpoint.
+        if (agent.agent_status === "working" || agent.agent_status === "blocked") {
+          throw new HerdrCliError(
+            "HERDR_EXIT",
+            `Herdr agent is ${agent.agent_status}; wait for it to finish before sending another prompt`,
+            "agent_busy",
           );
         }
         await HerdrCliClient.run(["agent", "prompt", paneId, text]);
@@ -494,12 +515,19 @@ export class HerdrStreamer {
   /**
    * Subscribe a client callback to live updates of a Herdr pane.
    */
-  static subscribe(paneId: string, listener: (msg: unknown) => void): void {
+  static subscribe(
+    paneId: string,
+    listener: (msg: unknown) => void,
+    initialContent?: string,
+  ): void {
     let sess = activeStreams.get(paneId);
     if (!sess) {
       sess = {
         paneId,
-        lastContent: "",
+        // The caller's snapshot is the baseline, captured in the same step that
+        // starts polling. Seeding afterwards would lose output written between
+        // the snapshot and the first poll.
+        lastContent: initialContent ?? "",
         lastStatus: "unknown",
         subscribers: new Set(),
         timer: null,
@@ -525,16 +553,6 @@ export class HerdrStreamer {
       }
       activeStreams.delete(paneId);
       console.log(`[herdr-streamer] stopped watching pane ${paneId} (no subscribers)`);
-    }
-  }
-
-  /**
-   * Seed the initial content of a session so first poll only computes new deltas.
-   */
-  static seedContent(paneId: string, initialContent: string): void {
-    const sess = activeStreams.get(paneId);
-    if (sess) {
-      sess.lastContent = initialContent;
     }
   }
 

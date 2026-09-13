@@ -5,7 +5,7 @@ import { mkdirSync, existsSync, realpathSync, statSync } from "node:fs";
 import type { RequestPermissionResponse } from "@agentclientprotocol/sdk";
 import { AcpClient } from "./acp/client.mjs";
 import { resolveAgentRuntime } from "./agents-store.mjs";
-import { resolveWorkspacePath } from "./path-utils.mjs";
+import { resolveExplicitCwd } from "./path-utils.mjs";
 /**
  * Creates a temporary ACP client + agent process for one-shot listing operations.
  * Call destroy() to clean up (kills process and closes connection).
@@ -29,10 +29,9 @@ export async function createTempClient(
   }
   const ANYWHERE_DIR = join(homedir(), ".nexus");
   mkdirSync(ANYWHERE_DIR, { recursive: true, mode: 0o700 });
-  const requestedCwd = resolveWorkspacePath(cwd);
-  const resolvedCwd = requestedCwd && existsSync(requestedCwd) && statSync(requestedCwd).isDirectory()
-    ? realpathSync(requestedCwd)
-    : ANYWHERE_DIR;
+  // Same fail-closed rule as a real session: an explicit invalid cwd is an
+  // error, never a silent switch to another directory.
+  const resolvedCwd = resolveExplicitCwd(cwd, ANYWHERE_DIR);
   const proc = spawn(launch.cmd, launch.args, {
     cwd: resolvedCwd,
     env: { ...process.env, ...launch.env, FORCE_COLOR: "0", NO_COLOR: "1" },

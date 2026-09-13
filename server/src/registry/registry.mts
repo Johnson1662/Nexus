@@ -158,6 +158,22 @@ export function getHerdrConfig(agentId: string): AgentHerdrConfig | null {
 }
 
 /**
+ * Map a Herdr agent kind back to the canonical Nexus agent id.
+ *
+ * Herdr reports the kind it launched (antigravity is `agy`), so the raw value
+ * must never become a Nexus identity: capability lookups, filters and display
+ * all key off the canonical id. Unknown kinds are returned unchanged.
+ */
+export function getAgentIdForHerdrKind(kind: string): string | null {
+  if (!kind) return null;
+  if (!registry) loadRegistry();
+  for (const agent of registry!.agents) {
+    if (agent.herdr?.kind === kind) return agent.id;
+  }
+  return null;
+}
+
+/**
  * Resolve the launch command for an agent from its distribution config.
  * Priority: direct → npx → binary (first matching platform).
  * Returns null if no launch method is available.

@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 import path from "node:path";
-import { mkdirSync, chmodSync } from "node:fs";
+import { mkdirSync, chmodSync, existsSync, realpathSync, statSync } from "node:fs";
 
 /**
  * Canonical form of a workspace path: absolute, forward-slashed, no trailing
@@ -44,6 +44,40 @@ export function resolveWorkspacePath(cwd?: string): string | undefined {
   if (!cwd || !cwd.trim()) return undefined;
   const expanded = cwd.trim().replace(/^~(?=$|[\\/])/, homedir());
   return path.resolve(expanded);
+}
+
+export type WorkspaceErrorCode = "INVALID_WORKSPACE";
+
+export class WorkspaceError extends Error {
+  constructor(public readonly code: WorkspaceErrorCode, message: string) {
+    super(message);
+    this.name = "WorkspaceError";
+  }
+}
+
+/**
+ * Resolve a caller-supplied workspace directory.
+ *
+ * A missing cwd is a legitimate "use the default", but an explicitly supplied
+ * cwd that does not exist is an error: silently running the agent in a different
+ * directory makes it operate on the wrong files. Fail closed instead.
+ */
+export function resolveExplicitCwd(cwd: string | undefined, defaultDir: string): string {
+  const requested = resolveWorkspacePath(cwd);
+  if (!requested) {
+    mkdirSync(defaultDir, { recursive: true });
+    return defaultDir;
+  }
+  let stat;
+  try {
+    stat = statSync(requested);
+  } catch {
+    throw new WorkspaceError("INVALID_WORKSPACE", `workspace does not exist: ${requested}`);
+  }
+  if (!stat.isDirectory()) {
+    throw new WorkspaceError("INVALID_WORKSPACE", `workspace is not a directory: ${requested}`);
+  }
+  return realpathSync(requested);
 }
 
 export function getNexusDataDir(): string {
