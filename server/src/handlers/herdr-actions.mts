@@ -1,12 +1,20 @@
 import type { WebSocket } from "ws";
 import { HerdrAdapter } from "../discovery/herdr-adapter.mjs";
+import { HerdrCliError } from "../discovery/herdr-cli.mjs";
+import { resolveAgentRuntime } from "../agents-store.mjs";
+
+/**
+ * Herdr CLI failures map onto a stable protocol error: a missing binary is
+ * reported as "not installed" (the actionable case for the user) and every
+ * other failure carries the CLI's own message. No business call is gated on a
+ * synchronous availability probe.
+ */
+function herdrErrorCode(err: unknown): string {
+  if (err instanceof HerdrCliError && err.code === "HERDR_BIN_NOT_FOUND") return "HERDR_NOT_INSTALLED";
+  return err instanceof Error ? err.message : String(err);
+}
 
 export async function handleListHerdrWorkspaces(ws: WebSocket): Promise<void> {
-  if (!HerdrAdapter.isAvailable()) {
-    ws.send(JSON.stringify({ type: "herdr_workspaces_list", workspaces: [] }));
-    return;
-  }
-
   try {
     const rawList = await HerdrAdapter.listWorkspaces();
     const agents = await HerdrAdapter.listAgents();
@@ -27,7 +35,7 @@ export async function handleListHerdrWorkspaces(ws: WebSocket): Promise<void> {
     ws.send(JSON.stringify({ type: "herdr_workspaces_list", workspaces }));
   } catch (err: any) {
     console.error(`[herdr-actions] failed to list workspaces: ${err.message}`);
-    ws.send(JSON.stringify({ type: "herdr_workspaces_list", workspaces: [] }));
+    ws.send(JSON.stringify({ type: "herdr_workspaces_list", workspaces: [], error: herdrErrorCode(err) }));
   }
 }
 
@@ -35,17 +43,6 @@ export async function handleCreateHerdrWorkspace(
   ws: WebSocket,
   payload: { label?: string; cwd?: string },
 ): Promise<void> {
-  if (!HerdrAdapter.isAvailable()) {
-    ws.send(
-      JSON.stringify({
-        type: "create_herdr_workspace_done",
-        ok: false,
-        error: "Herdr is not running on this host",
-      }),
-    );
-    return;
-  }
-
   try {
     const workspaceId = await HerdrAdapter.createWorkspace(payload.label, payload.cwd);
     if (!workspaceId) {
@@ -75,7 +72,7 @@ export async function handleCreateHerdrWorkspace(
       JSON.stringify({
         type: "create_herdr_workspace_done",
         ok: false,
-        error: err.message || String(err),
+        error: herdrErrorCode(err),
       }),
     );
   }
@@ -83,7 +80,8 @@ export async function handleCreateHerdrWorkspace(
 
 export interface CreateHerdrAgentPayload {
   workspaceId: string;
-  agentKind: string;
+  /** Nexus agent id. The Herdr kind is resolved server-side from the registry. */
+  agentId: string;
   creationMode?: "pane_split" | "new_tab";
   name?: string;
   cwd?: string;
@@ -94,26 +92,32 @@ export async function handleCreateHerdrAgent(
   ws: WebSocket,
   payload: CreateHerdrAgentPayload,
 ): Promise<void> {
-  if (!HerdrAdapter.isAvailable()) {
+  const { workspaceId, agentId, creationMode = "pane_split", cwd, title } = payload;
+  const runtime = resolveAgentRuntime(agentId);
+  const kind = runtime?.herdrKind ?? null;
+  if (!runtime || !kind) {
     ws.send(
       JSON.stringify({
         type: "create_herdr_agent_done",
         ok: false,
-        error: "Herdr is not running on this host",
-        text: "Herdr is not running on this host",
+        error: "UNKNOWN_AGENT_KIND",
       }),
     );
     return;
   }
 
-  const { workspaceId, agentKind, creationMode = "pane_split", cwd, title } = payload;
   let targetPaneId: string | null = null;
+  /** Close a pane we created but could not start an agent in. */
+  const releasePane = async (): Promise<void> => {
+    if (!targetPaneId) return;
+    try { await HerdrAdapter.closePane(targetPaneId); } catch {}
+  };
 
   try {
     if (creationMode === "new_tab") {
       targetPaneId = await HerdrAdapter.createTab({
         workspace_id: workspaceId,
-        label: title || agentKind,
+        label: title || runtime.displayName,
         cwd,
       });
       if (!targetPaneId) {
@@ -134,7 +138,7 @@ export async function handleCreateHerdrAgent(
         console.log(`[herdr-actions] pane.split failed, falling back to tab.create`);
         targetPaneId = await HerdrAdapter.createTab({
           workspace_id: workspaceId,
-          label: title || agentKind,
+          label: title || runtime.displayName,
           cwd,
         });
       }
@@ -154,22 +158,23 @@ export async function handleCreateHerdrAgent(
 
     const agentName =
       payload.name ||
-      `${agentKind.toLowerCase().replace(/[^a-z0-9_-]/g, "")}_${Date.now().toString(36).slice(-5)}`;
+      `${kind.replace(/[^a-z0-9_-]/g, "")}_${Date.now().toString(36).slice(-5)}`;
     const freshAt = Date.now();
 
+    // startAgent returns true or throws; treat a falsy return as failure too so
+    // the pane is never leaked.
     const started = await HerdrAdapter.startAgent({
       pane_id: targetPaneId,
-      kind: agentKind,
+      kind,
       name: agentName,
     });
-
     if (!started) {
+      await releasePane();
       ws.send(
         JSON.stringify({
           type: "create_herdr_agent_done",
           ok: false,
-          error: `Failed to start agent "${agentKind}" in pane ${targetPaneId}`,
-          text: `Failed to start agent "${agentKind}" in pane ${targetPaneId}`,
+          error: `Failed to start agent "${kind}" in pane ${targetPaneId}`,
         }),
       );
       return;
@@ -182,23 +187,21 @@ export async function handleCreateHerdrAgent(
         sessionId: `herdr:${targetPaneId}`,
         paneId: targetPaneId,
         workspaceId,
-        agent: agentKind,
+        agent: agentId,
+        kind,
         freshAt,
-        title: title || `${agentKind} (${targetPaneId})`,
+        title: title || `${runtime.displayName} (${targetPaneId})`,
       }),
     );
   } catch (err: any) {
     console.error(`[herdr-actions] create_herdr_agent error: ${err.message}`);
     // Best-effort: don't leave an empty split/tab behind after a failed start.
-    if (targetPaneId) {
-      try { await HerdrAdapter.closePane(targetPaneId); } catch {}
-    }
+    await releasePane();
     ws.send(
       JSON.stringify({
         type: "create_herdr_agent_done",
         ok: false,
-        error: err.message,
-        text: err.message,
+        error: herdrErrorCode(err),
       }),
     );
   }
@@ -208,16 +211,6 @@ export async function handleFocusHerdrTarget(
   ws: WebSocket,
   payload: { paneId?: string; workspaceId?: string },
 ): Promise<void> {
-  if (!HerdrAdapter.isAvailable()) {
-    ws.send(
-      JSON.stringify({
-        type: "focus_herdr_target_done",
-        ok: false,
-        error: "Herdr is not running on this host",
-      }),
-    );
-    return;
-  }
   try {
     if (payload.paneId) {
       await HerdrAdapter.focusAgent(payload.paneId.replace(/^herdr:/, ""));
@@ -228,7 +221,7 @@ export async function handleFocusHerdrTarget(
     ws.send(JSON.stringify({ type: "focus_herdr_target_done", ok: true }));
   } catch (err: any) {
     console.error(`[herdr-actions] focus_herdr_target error: ${err.message}`);
-    ws.send(JSON.stringify({ type: "focus_herdr_target_done", ok: false, error: err.message }));
+    ws.send(JSON.stringify({ type: "focus_herdr_target_done", ok: false, error: herdrErrorCode(err) }));
   }
 }
 
@@ -236,16 +229,6 @@ export async function handleInteractHerdrBlocked(
   ws: WebSocket,
   payload: { paneId: string; key: string },
 ): Promise<void> {
-  if (!HerdrAdapter.isAvailable()) {
-    ws.send(
-      JSON.stringify({
-        type: "interact_herdr_blocked_done",
-        ok: false,
-        error: "Herdr is not running on this host",
-      }),
-    );
-    return;
-  }
   if (!payload.paneId) {
     ws.send(
       JSON.stringify({
@@ -262,6 +245,6 @@ export async function handleInteractHerdrBlocked(
     ws.send(JSON.stringify({ type: "interact_herdr_blocked_done", ok: true }));
   } catch (err: any) {
     console.error(`[herdr-actions] interact_herdr_blocked error: ${err.message}`);
-    ws.send(JSON.stringify({ type: "interact_herdr_blocked_done", ok: false, error: err.message }));
+    ws.send(JSON.stringify({ type: "interact_herdr_blocked_done", ok: false, error: herdrErrorCode(err) }));
   }
 }

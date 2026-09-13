@@ -42,7 +42,6 @@ class ClientMessage {
   final String? lastMessageId;
   final bool? useHerdr;
   final String? workspaceId;
-  final String? agentKind;
   final String? creationMode;
   final String? paneId;
   final String? title;
@@ -73,7 +72,6 @@ class ClientMessage {
     this.lastMessageId,
     this.useHerdr,
     this.workspaceId,
-    this.agentKind,
     this.creationMode,
     this.paneId,
     this.title,
@@ -86,7 +84,6 @@ class ClientMessage {
   Map<String, dynamic> toJson() => <String, dynamic>{
         'type': type,
         if (agent != null && agent!.isNotEmpty) 'agent': agent,
-        if (agentId != null && agentId!.isNotEmpty) 'agentId': agentId,
         if (command != null) 'command': command,
         if (args != null) 'args': args,
         if (name != null) 'name': name,
@@ -105,7 +102,7 @@ class ClientMessage {
         if (lastMessageId != null) 'lastMessageId': lastMessageId,
         if (useHerdr != null) 'useHerdr': useHerdr,
         if (workspaceId != null && workspaceId!.isNotEmpty) 'workspaceId': workspaceId,
-        if (agentKind != null && agentKind!.isNotEmpty) 'agentKind': agentKind,
+        if (agentId != null && agentId!.isNotEmpty) 'agentId': agentId,
         if (creationMode != null && creationMode!.isNotEmpty) 'creationMode': creationMode,
         if (paneId != null && paneId!.isNotEmpty) 'paneId': paneId,
         if (title != null && title!.isNotEmpty) 'title': title,

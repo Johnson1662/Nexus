@@ -120,7 +120,7 @@ void main() {
       MessageData(role: 'assistant', content: '旧会话'),
     ];
 
-    provider.createHerdrAgent(workspaceId: 'workspace-1', agentKind: 'omp');
+    provider.createHerdrAgent(workspaceId: 'workspace-1', agentId: 'omp');
 
     expect(provider.state.sessionId, isEmpty);
     expect(provider.state.messages, isEmpty);

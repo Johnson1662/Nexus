@@ -781,7 +781,7 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   void createHerdrAgent({
     required String workspaceId,
-    required String agentKind,
+    required String agentId,
     String? creationMode,
     String? cwd,
     String? title,
@@ -793,7 +793,7 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
     _ws.send(ClientMessage(
       type: 'create_herdr_agent',
       workspaceId: workspaceId,
-      agentKind: agentKind,
+      agentId: agentId,
       creationMode: creationMode ?? _herdrAgentCreationMode,
       cwd: cwd,
       title: title,

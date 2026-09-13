@@ -151,7 +151,7 @@ class _WorkspaceDetailPageState extends State<WorkspaceDetailPage> {
   ) {
     final creatableAgents = chatProvider.enabledHerdrAgents;
     final availableIds = creatableAgents.map((a) => a.id).toList();
-    String selectedKind = availableIds.contains('omp')
+    String selectedId = availableIds.contains('omp')
         ? 'omp'
         : (availableIds.isNotEmpty ? availableIds.first : '');
     final mode = chatProvider.herdrAgentCreationMode;
@@ -197,11 +197,11 @@ class _WorkspaceDetailPageState extends State<WorkspaceDetailPage> {
                     spacing: AppSpacing.sm,
                     runSpacing: AppSpacing.sm,
                     children: creatableAgents.map((agent) {
-                      final selected = selectedKind == agent.id;
+                      final selected = selectedId == agent.id;
                       return ChoiceChip(
                         label: Text(agent.name.isNotEmpty ? agent.name : agent.id),
                         selected: selected,
-                        onSelected: (_) => setSheetState(() => selectedKind = agent.id),
+                        onSelected: (_) => setSheetState(() => selectedId = agent.id),
                       );
                     }).toList(),
                   ),
@@ -209,13 +209,13 @@ class _WorkspaceDetailPageState extends State<WorkspaceDetailPage> {
                 SizedBox(
                   width: double.infinity,
                   child: FilledButton(
-                    onPressed: selectedKind.isEmpty
+                    onPressed: selectedId.isEmpty
                         ? null
                         : () {
                             Navigator.pop(sheetContext);
                             chatProvider.createHerdrAgent(
                               workspaceId: workspaceId,
-                              agentKind: selectedKind,
+                              agentId: selectedId,
                               cwd: workspacePath.isNotEmpty ? workspacePath : null,
                             );
                             Navigator.pushNamed(context, '/chat');
