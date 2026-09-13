@@ -255,3 +255,54 @@ export async function handleInteractHerdrBlocked(
     ws.send(JSON.stringify({ type: "interact_herdr_blocked_done", ok: false, error: herdrErrorCode(err) }));
   }
 }
+
+export async function handleListHerdrIntegrations(ws: WebSocket): Promise<void> {
+  try {
+    const { integrations, parsed } = await HerdrAdapter.listIntegrations();
+    const payload: Record<string, unknown> = { type: "herdr_integrations_list", integrations };
+    if (!parsed) payload.error = "HERDR_STATUS_UNPARSABLE";
+    ws.send(JSON.stringify(payload));
+  } catch (err: any) {
+    console.error(`[herdr-actions] list integrations error: ${err.message}`);
+    ws.send(JSON.stringify({
+      type: "herdr_integrations_list",
+      integrations: [],
+      error: herdrErrorCode(err),
+    }));
+  }
+}
+
+export async function handleInstallHerdrIntegration(
+  ws: WebSocket,
+  payload: { target?: string },
+): Promise<void> {
+  const target = payload.target?.trim();
+  if (!target) {
+    ws.send(JSON.stringify({
+      type: "install_herdr_integration_done",
+      target: "",
+      ok: false,
+      error: "Missing target",
+    }));
+    return;
+  }
+
+  try {
+    await HerdrAdapter.installIntegration(target);
+    const { integrations } = await HerdrAdapter.listIntegrations();
+    ws.send(JSON.stringify({
+      type: "install_herdr_integration_done",
+      target,
+      ok: true,
+      integration: integrations.find((entry) => entry.target === target) ?? null,
+    }));
+  } catch (err: any) {
+    console.error(`[herdr-actions] install integration error: ${err.message}`);
+    ws.send(JSON.stringify({
+      type: "install_herdr_integration_done",
+      target,
+      ok: false,
+      error: herdrErrorCode(err),
+    }));
+  }
+}

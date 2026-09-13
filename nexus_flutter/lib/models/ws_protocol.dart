@@ -166,6 +166,8 @@ class ServerMessage {
   final String? error;
   final List<Map<String, String>>? authMethods;
   final HostCapabilities? hostCapabilities;
+  final List<Map<String, dynamic>>? herdrIntegrations;
+  final Map<String, dynamic>? integration;
   AcpUpdate? get acpUpdate => event;
 
   ServerMessage({
@@ -216,6 +218,8 @@ class ServerMessage {
     this.error,
     this.authMethods,
     this.hostCapabilities,
+    this.herdrIntegrations,
+    this.integration,
   });
 
   factory ServerMessage.fromJson(Map<String, dynamic> json) {
@@ -428,6 +432,12 @@ class ServerMessage {
           .toList(),
       hostCapabilities: json['capabilities'] != null && json['type'] == 'host_capabilities'
           ? HostCapabilities.fromJson(json['capabilities'] as Map<String, dynamic>)
+          : null,
+      herdrIntegrations: (json['integrations'] as List<dynamic>?)
+          ?.map((e) => Map<String, dynamic>.from(e as Map))
+          .toList(),
+      integration: json['integration'] is Map
+          ? Map<String, dynamic>.from(json['integration'] as Map)
           : null,
     );
   }

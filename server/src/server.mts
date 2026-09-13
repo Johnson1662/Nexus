@@ -39,7 +39,7 @@ import { handleListWorkspaceFiles, handleFileDiff, handleFileLog, handleFileRead
 import { SessionOperationError, SessionOwnerError, sessionManager } from "./session-manager.mjs";
 import { setTitle as setSessionTitle } from "./session-titles.mjs";
 import { parseClientMessage, type JsonRecord } from "./protocol-validation.mjs";
-import { handleListHerdrWorkspaces, handleCreateHerdrWorkspace, handleCreateHerdrAgent, handleFocusHerdrTarget, handleInteractHerdrBlocked } from "./handlers/herdr-actions.mjs";
+import { handleListHerdrWorkspaces, handleCreateHerdrWorkspace, handleCreateHerdrAgent, handleFocusHerdrTarget, handleInteractHerdrBlocked, handleListHerdrIntegrations, handleInstallHerdrIntegration } from "./handlers/herdr-actions.mjs";
 import { watchAmbientSessions, listAmbientSessions } from "./discovery/ambient-session.mjs";
 import { detectHostCapabilities } from "./discovery/host-capabilities.mjs";
 
@@ -445,6 +445,14 @@ export function handleIncomingConnection(transport: any, hostId: string = HOST_I
 
       case "interact_herdr_blocked":
         sessionManager.enqueueWsOp(transport, () => handleInteractHerdrBlocked(transport, sessionMsg as any));
+        break;
+
+      case "list_herdr_integrations":
+        sessionManager.enqueueWsOp(transport, () => handleListHerdrIntegrations(transport));
+        break;
+
+      case "install_herdr_integration":
+        sessionManager.enqueueWsOp(transport, () => handleInstallHerdrIntegration(transport, sessionMsg as any));
         break;
 
       case "get_host_capabilities": {

@@ -777,6 +777,23 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
     _ws.send(ClientMessage(type: 'list_herdr_workspaces'));
   }
 
+  void requestHerdrIntegrations() {
+    _ws.send(ClientMessage(type: 'list_herdr_integrations'));
+  }
+
+  void installHerdrIntegration(String target) {
+    _ws.send(ClientMessage(type: 'install_herdr_integration', label: target));
+  }
+
+  /// Integration install state for a Herdr target, from the last list reply.
+  Map<String, dynamic>? integrationFor(String? target) {
+    if (target == null || target.isEmpty) return null;
+    for (final entry in _state.herdrIntegrations) {
+      if (entry['target'] == target) return entry;
+    }
+    return null;
+  }
+
   void createHerdrWorkspace({required String label, String? cwd}) {
     _ws.send(ClientMessage(
       type: 'create_herdr_workspace',
@@ -1272,6 +1289,19 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
         if (msg.modes != null) _state.modes = msg.modes!;
         notifyListeners();
         break;
+      case 'herdr_integrations_list':
+        _state.herdrIntegrations =
+            msg.herdrIntegrations ?? const <Map<String, dynamic>>[];
+        if (msg.error != null) _state.errorMessage = msg.error!;
+        notifyListeners();
+        break;
+      case 'install_herdr_integration_done':
+        if (msg.ok == false) {
+          _state.errorMessage = msg.error ?? 'Integration 安装失败';
+        }
+        requestHerdrIntegrations();
+        notifyListeners();
+        break;
       case 'host_capabilities':
         if (msg.hostCapabilities != null) {
           // Capabilities describe exactly one machine. A reply that names a
@@ -1287,6 +1317,11 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
           // authoritative capability set arrives.
           _applyAgentList(_state.installedAgents);
           _recomputeEffectiveBackend();
+          if (msg.hostCapabilities!.herdr.available) {
+            requestHerdrIntegrations();
+          } else {
+            _state.herdrIntegrations = [];
+          }
           notifyListeners();
         }
         break;

@@ -55,6 +55,7 @@ class ChatState {
   // Advanced
   List<RegistryAgentInfo> registryAgents = [];
   HostCapabilities? hostCapabilities;
+  List<Map<String, dynamic>> herdrIntegrations = [];
   List<AvailableCommand> availableCommands = [];
   List<PlanEntry> planEntries = [];
   List<PendingToolCall> toolCallStack = [];

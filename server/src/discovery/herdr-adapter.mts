@@ -26,6 +26,16 @@ export interface HerdrAgentInfo {
   };
 }
 
+export interface HerdrIntegrationInfo {
+  target: string;
+  label: string;
+  /** Verbatim Herdr state: current | not installed | outdated. */
+  state: string;
+  installed: boolean;
+  available: boolean;
+  detail: string;
+}
+
 export interface HerdrWorkspaceInfo {
   workspace_id: string;
   number?: number;
@@ -84,19 +94,45 @@ export class HerdrAdapter {
     return lastProbeResult;
   }
 
-  /** Integration install state keyed by Herdr target (integrations are optional). */
-  static async getIntegrationStatus(): Promise<Record<string, boolean>> {
-    const result: Record<string, boolean> = {};
+  /**
+   * Integration state per Herdr target.
+   *
+   * `herdr integration status` has no JSON mode, so the text lines are parsed;
+   * if nothing parses we report `parsed: false` rather than claiming every
+   * integration is missing.
+   */
+  static async listIntegrations(): Promise<{ integrations: HerdrIntegrationInfo[]; parsed: boolean }> {
     try {
       const stdout = await HerdrCliClient.run(["integration", "status"], { timeoutMs: 8000 });
+      const integrations: HerdrIntegrationInfo[] = [];
       for (const line of stdout.split("\n")) {
         const match = /^(\S+):\s+(current|not installed|outdated)\s*\((.*)\)\s*$/.exec(line.trim());
-        if (match) result[match[1]] = match[2] === "current";
+        if (!match) continue;
+        integrations.push({
+          target: match[1],
+          label: match[1],
+          state: match[2],
+          installed: match[2] === "current",
+          available: true,
+          detail: match[3].trim(),
+        });
       }
+      return { integrations, parsed: integrations.length > 0 };
     } catch (err) {
-      console.log(`[herdr-adapter] getIntegrationStatus error: ${String(err)}`);
+      console.log(`[herdr-adapter] listIntegrations error: ${String(err)}`);
+      return { integrations: [], parsed: false };
     }
-    return result;
+  }
+
+  /** Integration install state keyed by Herdr target (integrations are optional). */
+  static async getIntegrationStatus(): Promise<Record<string, boolean>> {
+    const { integrations } = await this.listIntegrations();
+    return Object.fromEntries(integrations.map((entry) => [entry.target, entry.installed]));
+  }
+
+  /** Install (or repair) a Herdr integration for the given target. */
+  static async installIntegration(target: string): Promise<void> {
+    await HerdrCliClient.run(["integration", "install", target], { timeoutMs: 60000 });
   }
 
   static async listWorkspaces(): Promise<HerdrWorkspaceInfo[]> {

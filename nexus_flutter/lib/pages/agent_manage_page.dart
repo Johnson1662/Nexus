@@ -38,6 +38,10 @@ class _AgentManagePageState extends State<AgentManagePage> {
 
     final agentList = chatProvider.state.registryAgents.map((r) {
       final caps = chatProvider.capabilityFor(r.id);
+      final integration = chatProvider.integrationFor(caps?.herdr.integrationId);
+      final integrationLabel = integration == null
+          ? (caps?.herdr.supported == true ? 'Integration 未知' : '')
+          : 'Integration ${integration['state']}';
       final nativeReady = caps?.native.ready ?? false;
       final herdrReady = caps?.herdr.ready ?? false;
       final executable = caps?.native.executable ?? '';
@@ -50,6 +54,13 @@ class _AgentManagePageState extends State<AgentManagePage> {
         'herdr': herdrReady ? 'Herdr ✓' : 'Herdr ✗',
         'executable': executable,
         'reason': caps?.native.reason ?? caps?.herdr.reason ?? '',
+        'integration': integrationLabel,
+        'integrationTarget': caps?.herdr.integrationId ?? '',
+        'needsIntegration': (caps != null &&
+                caps.herdr.supported &&
+                !caps.herdr.integrationInstalled)
+            ? 'true'
+            : 'false',
       };
     }).toList();
 
@@ -200,6 +211,9 @@ class _AgentManagePageState extends State<AgentManagePage> {
     final nativeLabel = agent['native']!;
     final herdrLabel = agent['herdr']!;
     final reason = agent['reason'] ?? '';
+    final integrationLabel = agent['integration'] ?? '';
+    final integrationTarget = agent['integrationTarget'] ?? '';
+    final needsIntegration = agent['needsIntegration'] == 'true';
     final installable = agent['ready'] == 'true';
     final fg = AppColors.foregroundCtx(context);
     final muted = AppColors.foregroundMutedCtx(context);
@@ -221,16 +235,50 @@ class _AgentManagePageState extends State<AgentManagePage> {
           fontWeight: FontWeight.w500,
         ),
       ),
-      subtitle: Text(
-        installable
-            ? '$desc · $nativeLabel · $herdrLabel'
-            : '$desc · ${reason.isNotEmpty ? reason : 'PC 未找到命令'}',
-        style: TextStyle(
-          fontSize: AppFontSize.xs,
-          color: muted,
-        ),
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            installable
+                ? '$desc · $nativeLabel · $herdrLabel'
+                : '$desc · ${reason.isNotEmpty ? reason : 'PC 未找到命令'}',
+            style: TextStyle(
+              fontSize: AppFontSize.xs,
+              color: muted,
+            ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          if (integrationLabel.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(
+                integrationLabel,
+                style: TextStyle(
+                  fontSize: AppFontSize.xxs,
+                  color: muted,
+                ),
+              ),
+            ),
+          // A missing integration degrades to terminal mode; it never removes
+          // the agent, so this is an offer to repair, not a blocker.
+          if (needsIntegration && integrationTarget.isNotEmpty)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton(
+                onPressed: () =>
+                    context.read<ChatProvider>().installHerdrIntegration(
+                          integrationTarget,
+                        ),
+                style: TextButton.styleFrom(
+                  padding: EdgeInsets.zero,
+                  minimumSize: const Size(0, 28),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: const Text('安装集成', style: TextStyle(fontSize: AppFontSize.xs)),
+              ),
+            ),
+        ],
       ),
     );
   }
