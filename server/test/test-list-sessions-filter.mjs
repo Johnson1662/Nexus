@@ -18,19 +18,25 @@ console.log("Testing handleListSessions Herdr filtering...");
 
 const originalIsAvailable = HerdrAdapter.isAvailable;
 const originalListAgents = HerdrAdapter.listAgents;
+const originalListAgentsStrict = HerdrAdapter.listAgentsStrict;
 const originalResolveSessionFile = HerdrAdapter.resolveSessionFile;
+
+const mockAgents = [
+  {
+    pane_id: "test_pane_1",
+    agent: "omp",
+    cwd: "/test",
+    agent_status: "idle",
+    terminal_title: "Mock Terminal",
+  },
+];
 
 try {
   HerdrAdapter.isAvailable = () => true;
-  HerdrAdapter.listAgents = async () => [
-    {
-      pane_id: "test_pane_1",
-      agent: "omp",
-      cwd: "/test",
-      agent_status: "idle",
-      terminal_title: "Mock Terminal",
-    },
-  ];
+  // The listing path uses the strict variant (a dead CLI must not look like an
+  // empty session list), so the fixture has to cover both.
+  HerdrAdapter.listAgents = async () => mockAgents;
+  HerdrAdapter.listAgentsStrict = async () => mockAgents;
   HerdrAdapter.resolveSessionFile = async () => ({
     sessionId: "mock_herdr_uuid_1234",
     agent: "omp",
@@ -93,6 +99,7 @@ try {
 } finally {
   HerdrAdapter.isAvailable = originalIsAvailable;
   HerdrAdapter.listAgents = originalListAgents;
+  HerdrAdapter.listAgentsStrict = originalListAgentsStrict;
   HerdrAdapter.resolveSessionFile = originalResolveSessionFile;
 }
 

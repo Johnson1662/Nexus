@@ -46,6 +46,27 @@ export function resolveWorkspacePath(cwd?: string): string | undefined {
   return path.resolve(expanded);
 }
 
+/**
+ * True when `candidate` is `parent` itself or lives inside it, using the target
+ * platform's separator and case rules. Hand-rolled comparisons missed Windows
+ * case folding and mixed separators, so sessions in the wrong directory could
+ * pass a filter (or a correct one could be dropped).
+ */
+export function isWorkspacePathWithin(
+  parent: string,
+  candidate: string,
+  platform: string = process.platform,
+): boolean {
+  const normalizedParent = canonicalizeWorkspacePath(parent, platform);
+  const normalizedCandidate = canonicalizeWorkspacePath(candidate, platform);
+  if (!normalizedParent || !normalizedCandidate) return false;
+  const fold = (value: string) => (platform === "win32" ? value.toLowerCase() : value);
+  const root = fold(normalizedParent);
+  const target = fold(normalizedCandidate);
+  if (root === target) return true;
+  return target.startsWith(root.endsWith("/") ? root : `${root}/`);
+}
+
 export type WorkspaceErrorCode = "INVALID_WORKSPACE";
 
 export class WorkspaceError extends Error {

@@ -1154,8 +1154,13 @@ export class SessionManager {
   }
 
   /** ── enqueueWsOp ────────────────────────────────────────────
-   *  Serialize WebSocket operations so they execute one at a time
-   *  per connection. Errors are caught and logged.
+   *  Serialize WebSocket operations so they execute one at a time per
+   *  connection.
+   *
+   *  A user-triggered operation must always produce a reply: a handler that
+   *  throws without answering leaves the client waiting forever (a permanent
+   *  spinner on history pagination, for instance). The failure is therefore
+   *  reported to the requesting socket instead of only being logged.
    */
   public enqueueWsOp(ws: import("ws").WebSocket, fn: () => Promise<void>): void {
     const prev = this.wsOpQueues.get(ws) || Promise.resolve();
@@ -1164,6 +1169,13 @@ export class SessionManager {
         await fn();
       } catch (err: any) {
         console.log(`[server] queued op error: ${err.message}`);
+        try {
+          ws.send(JSON.stringify({
+            type: "error",
+            code: err?.code ?? "OP_FAILED",
+            text: err?.message ?? String(err),
+          }));
+        } catch { /* socket already gone */ }
       }
     });
     this.wsOpQueues.set(ws, next);

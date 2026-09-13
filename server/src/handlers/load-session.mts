@@ -90,7 +90,11 @@ export async function handleLoadHistoryPage(
   params: { sessionId?: string; before?: number },
 ): Promise<void> {
   const sessionId = params.sessionId || "";
-  if (!sessionId) return;
+  if (!sessionId) {
+    try { ws.send(JSON.stringify({ type: "error", sessionId: "", code: "MISSING_SESSION", text: "load_history_page requires a sessionId" })); } catch {}
+    return;
+  }
+  try {
   let source = historySources.get(sessionId);
   if (!source && sessionId.startsWith("ambient:")) {
     const ambient = getAmbientSession(sessionId);
@@ -120,6 +124,18 @@ export async function handleLoadHistoryPage(
       historyHasMore: page.hasMore,
     }));
   } catch {}
+  } catch (err) {
+    // Paging is user-triggered: always answer so the client can stop waiting.
+    console.error(`[load-session] history_page failed for ${sessionId}: ${err}`);
+    try {
+      ws.send(JSON.stringify({
+        type: "error",
+        sessionId,
+        code: "HISTORY_FAILED",
+        text: err instanceof Error ? err.message : String(err),
+      }));
+    } catch { /* socket gone */ }
+  }
 }
 
 export async function handleLoadSession(
@@ -242,7 +258,24 @@ export async function handleLoadSession(
     const resolvedAgent = resolved?.agent || agent;
 
     const enterTerminalMode = async () => {
-      const initialText = await HerdrAdapter.readTerminal(paneId, 100, "text");
+      // readTerminal talks to the Herdr CLI and throws when it is unavailable.
+      // That must produce a reply: otherwise the session never starts and the
+      // client waits for a session_started that will never arrive.
+      let initialText = "";
+      try {
+        initialText = await HerdrAdapter.readTerminal(paneId, 100, "text");
+      } catch (err) {
+        console.error(`[load-session] terminal read failed for ${targetSessionId}: ${err}`);
+        try {
+          ws.send(JSON.stringify({
+            type: "error",
+            sessionId: targetSessionId,
+            code: "HERDR_CLI_FAILED",
+            text: err instanceof Error ? err.message : String(err),
+          }));
+        } catch { /* socket gone */ }
+        return;
+      }
       try {
         ws.send(JSON.stringify({
           type: "session_started",
@@ -334,9 +367,15 @@ export async function handleLoadSession(
         tailer.unsubscribe(ws);
       });
 
-      // Stage 2: Asynchronously load full history in background
+      // Stage 2: Asynchronously load full history in background.
+      //
+      // history_full replaces the client's rendered history, so any live event
+      // that arrives while the snapshot is being read would be wiped by it.
+      // Hold this socket's live events for the duration of the read and replay
+      // them after the snapshot, making the snapshot a real boundary.
       setTimeout(async () => {
         if (ws.readyState !== 1 /* OPEN */) return;
+        tailer.hold(ws);
         try {
           const fullEvents = await readSessionJsonlFullHistory(r.sessionPath!, minTimestampMs);
           const limited = limitHistoryEvents(fullEvents as unknown[]);
@@ -351,6 +390,8 @@ export async function handleLoadSession(
           }));
         } catch (err) {
           console.error(`[load-session] Error loading full history for ${targetSessionId}:`, err);
+        } finally {
+          tailer.release(ws);
         }
       }, 350);
 

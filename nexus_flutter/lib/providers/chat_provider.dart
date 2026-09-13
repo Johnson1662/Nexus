@@ -33,6 +33,11 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
   /// Bumped whenever the active host changes; async work tagged with an older
   /// generation is discarded instead of overwriting the new host's state.
   int _hostGeneration = 0;
+  /// Monotonic id of the newest session-list request, echoed by the server.
+  int _sessionListRequestSeq = 0;
+  String _sessionListRequestId = '';
+  int _pendingHostGeneration = 0;
+  String _pendingHostId = '';
   int _selectionGeneration = 0;
   final Map<String, int> _probePhaseGenerations = <String, int>{};
   final Set<String> _processedMessageIds = <String>{};
@@ -55,6 +60,8 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
       } else {
         _syncInFlight = false;
         _syncRequestSessionId = '';
+        // The socket that would have confirmed the cancel is gone.
+        _clearTurnTransients();
       }
       notifyListeners();
     }));
@@ -233,7 +240,13 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
   /// workspace all describe a specific machine; leaving any of them behind
   /// makes host A's data render for host B.
   void _clearHostScopedState() {
+    // Connection / capabilities
     _state.hostCapabilities = null;
+    _state.herdrIntegrations = [];
+    _preferredBackend = 'native';
+    _effectiveBackend = 'native';
+    _useHerdrBackend = false;
+    // Sessions and agent metadata
     _state.sessions = [];
     _state.registryAgents = [];
     _state.installedAgents = [];
@@ -242,13 +255,55 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
     _state.models = [];
     _state.modes = [];
     _state.configOptions = [];
-    _state.currentWorkspace = '';
+    _state.availableCommands = [];
+    // Active session content
+    _state.sessionId = '';
+    _state.sessionTitle = '';
+    _state.sessionCurrentModelId = '';
+    _state.messages = [];
+    _state.planEntries = [];
+    _state.toolCallStack.clear();
+    _state.accumulatorType = '';
     _state.streamingThinking = '';
     _state.streamingText = '';
-    _state.messages = [];
-    _preferredBackend = 'native';
-    _effectiveBackend = 'native';
-    _useHerdrBackend = false;
+    _state.contextReplacedNotice = '';
+    _state.lastUsage = null;
+    _state.pendingPermissions.clear();
+    // Turn / cancel transients belong to the previous socket
+    _clearTurnRequest();
+    _clearCancelling();
+    _state.turnActive = false;
+    _state.terminalBlocked = false;
+    // History pagination
+    _state.historyOffset = 0;
+    _state.historyTotal = 0;
+    _state.historyHasMore = false;
+    _state.loadingOlderHistory = false;
+    _state.loadingSession = false;
+    // Workspace
+    _state.currentWorkspace = '';
+    // File browser
+    _state.workspaceFiles = [];
+    _state.selectedFilePath = null;
+    _state.fileDiff = null;
+    _state.fileLogEntries = [];
+    _state.fileContent = null;
+    _state.loadingFiles = false;
+    _state.fileGitWarning = '';
+  }
+
+  /// A dropped socket cannot confirm a cancel, so the turn transients must not
+  /// survive it: otherwise a reconnect leaves the input permanently reporting
+  /// "cancelling".
+  void _clearTurnTransients() {
+    _clearTurnRequest();
+    _clearCancelling();
+    _state.turnActive = false;
+    _state.streamingThinking = '';
+    _state.streamingText = '';
+    _state.accumulatorType = '';
+    _state.toolCallStack.clear();
+    _state.terminalBlocked = false;
   }
 
   String? _authTokenForHost(String hostKey, String url) {
@@ -654,20 +709,11 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
   }
 
+  /// Closing is confirmed by the server for both backends: the entry is removed
+  /// when session_closed arrives. Removing it here optimistically left the UI
+  /// lying whenever the close actually failed.
   void closeSession(String sessionId) {
     _ws.send(ClientMessage(type: 'close_session', sessionId: sessionId));
-    if (sessionId.startsWith('herdr:')) return;
-    _state.sessions.removeWhere((s) => s.sessionId == sessionId);
-    if (_state.sessionId == sessionId) {
-      _clearTurnRequest();
-      _resetCursor(clearPersisted: true);
-      _processedMessageIds.clear();
-      _state.sessionId = '';
-      _state.sessionTitle = '';
-      _state.contextReplacedNotice = '';
-      _state.turnActive = false;
-    }
-    notifyListeners();
   }
 
   void renameSession(String sessionId, String newTitle) {
@@ -702,16 +748,19 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
   String get preferredBackend => _preferredBackend;
   String get effectiveBackend => _effectiveBackend;
 
+  /// Resolve the effective backend from the preference and the known
+  /// capabilities, without side effects.
+  String _computeEffectiveBackend() {
+    if (_preferredBackend != 'herdr') return 'native';
+    // Degrade only on a *known* negative; an unknown host keeps the preference
+    // so a Herdr pane is never silently replaced by a Native ACP session.
+    final caps = _state.hostCapabilities;
+    return (caps == null || caps.herdr.available) ? 'herdr' : 'native';
+  }
+
   void _recomputeEffectiveBackend() {
     final prevEffective = _effectiveBackend;
-    if (_preferredBackend == 'herdr') {
-      // Degrade only on a *known* negative; an unknown host keeps the preference
-      // so a Herdr pane is never silently replaced by a Native ACP session.
-      final caps = _state.hostCapabilities;
-      _effectiveBackend = (caps == null || caps.herdr.available) ? 'herdr' : 'native';
-    } else {
-      _effectiveBackend = 'native';
-    }
+    _effectiveBackend = _computeEffectiveBackend();
     _useHerdrBackend = _effectiveBackend == 'herdr';
     if (prevEffective != _effectiveBackend) {
       requestSessionList(useHerdr: _useHerdrBackend);
@@ -745,12 +794,18 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
   }
 
-  void requestSessionList({bool? useHerdr}) => _ws.send(
-        ClientMessage(
+  /// Session lists are backend-dependent, so every request is tagged: a slow
+  /// reply that no longer matches the newest request is discarded instead of
+  /// overwriting the list for the backend we actually switched to.
+  void requestSessionList({bool? useHerdr}) {
+    final requestId = 'sessions:${++_sessionListRequestSeq}';
+    _sessionListRequestId = requestId;
+    _ws.send(ClientMessage(
       type: 'list_sessions',
-          useHerdr: useHerdr ?? _useHerdrBackend,
-        ),
-      );
+      useHerdr: useHerdr ?? _useHerdrBackend,
+      requestId: requestId,
+    ));
+  }
 
   void requestOlderHistory() {
     if (_state.sessionId.isEmpty || !_state.historyHasMore || _state.loadingOlderHistory) return;
@@ -1337,6 +1392,13 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
         }
         break;
       case 'session_list':
+        // Drop a reply for a superseded request (e.g. the Native list arriving
+        // after we already switched this host to Herdr).
+        if (msg.requestId != null &&
+            msg.requestId!.isNotEmpty &&
+            msg.requestId != _sessionListRequestId) {
+          break;
+        }
         if (msg.sessions != null) {
           final sessions = [...msg.sessions!];
           final active = _state.sessions
@@ -1704,15 +1766,11 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
       _state.currentWorkspace =
           _workspaceProvider?.currentWorkspace ?? '';
 
-      // Load host-scoped backend preference
-      final hostGeneration = ++_hostGeneration;
-      StorageService.getInstance().then((storage) {
-        // A slow storage read for the previous host must not overwrite the
-        // preference of the host we are now connected to.
-        if (hostGeneration != _hostGeneration) return;
-        _preferredBackend = storage.getHostPreferredBackend(actualHostId);
-        _recomputeEffectiveBackend();
-      });
+      // Load host-scoped backend preference and keep the generation so a slow
+      // read for the previous host cannot overwrite the new host's choice.
+      _hostGeneration++;
+      _pendingHostGeneration = _hostGeneration;
+      _pendingHostId = actualHostId;
     }
 
     if (msg.workspaces != null) {
@@ -1741,19 +1799,42 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
     HostRuntimeStore().markOnline(actualHostId, currentUrl);
     hostStore.markOnline(actualHostId, currentUrl);
 
-    // Connection is ready: hydrate all global agent metadata immediately.
-    _ws.send(ClientMessage(type: 'get_host_capabilities'));
+    // Backend-independent metadata can be requested immediately.
     _ws.send(ClientMessage(type: 'list_agents'));
     _ws.send(ClientMessage(type: 'list_registry_agents'));
 
-    requestSessionList();
-    if (_useHerdrBackend) {
-      requestHerdrWorkspaces();
-    }
     // server_info is the authenticated connection-ready boundary; replay any
     // events missed while this socket was down before accepting new input.
     syncRequest();
     _onServerInfo();
+
+    // Hydration order matters: preference → capabilities → exactly one
+    // backend-dependent session/workspace load. Requesting sessions before the
+    // preference is known raced a Native list against the Herdr list.
+    _hydrateHostScopedState();
+  }
+
+  /// Resolve the host's backend preference, then load capabilities and the
+  /// session/workspace lists exactly once for the resulting backend.
+  Future<void> _hydrateHostScopedState() async {
+    final generation = _pendingHostGeneration;
+    final hostId = _pendingHostId;
+    if (hostId.isEmpty) return;
+
+    final storage = await StorageService.getInstance();
+    if (generation != _pendingHostGeneration) return;
+
+    _preferredBackend = storage.getHostPreferredBackend(hostId);
+    // Compute without side effects, then issue exactly one list request.
+    _effectiveBackend = _computeEffectiveBackend();
+    _useHerdrBackend = _effectiveBackend == 'herdr';
+
+    if (generation != _pendingHostGeneration) return;
+
+    _ws.send(ClientMessage(type: 'get_host_capabilities'));
+    requestSessionList();
+    if (_useHerdrBackend) requestHerdrWorkspaces();
+    notifyListeners();
   }
 
   String _truncateUtf8(String value, int maxBytes) {

@@ -576,7 +576,13 @@ export function handleIncomingConnection(transport: any, hostId: string = HOST_I
 
       case "list_sessions":
         console.log(`[server] handleListSessions cwd="${sessionMsg.cwd || ""}" agent="${sessionMsg.agent || ""}" useHerdr="${sessionMsg.useHerdr ?? ""}"`);
-        sessionManager.enqueueWsOp(transport, () => handleListSessions(transport, sessionMsg.cwd, sessionMsg.agent, sessionMsg.useHerdr as boolean | undefined));
+        sessionManager.enqueueWsOp(transport, () => handleListSessions(
+          transport,
+          sessionMsg.cwd,
+          sessionMsg.agent,
+          sessionMsg.useHerdr as boolean | undefined,
+          sessionMsg.requestId as string | undefined,
+        ));
         break;
 
       case "set_mode":

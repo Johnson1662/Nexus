@@ -18,6 +18,13 @@ export class HerdrSessionTailer {
   private watcher: fs.FSWatcher | null = null;
   private pollInterval: NodeJS.Timeout | null = null;
   private subscribers = new Set<WebSocket>();
+  /**
+   * Sockets whose live events are queued while a history snapshot is in flight.
+   * The snapshot replaces the client's rendered history, so any event delivered
+   * before the snapshot is taken is already inside it; an event that arrives
+   * during the read must be replayed after the snapshot or it is lost.
+   */
+  private holding = new Map<WebSocket, Record<string, unknown>[]>();
   private isWorking = false;
   private lastInjectedPrompt: string | null = null;
   private lastInjectedWs: WebSocket | null = null;
@@ -80,7 +87,28 @@ export class HerdrSessionTailer {
     this.subscribers.add(ws);
   }
 
+  /** Queue this socket's live events until release() (used around a snapshot). */
+  hold(ws: WebSocket): void {
+    if (!this.holding.has(ws)) this.holding.set(ws, []);
+  }
+
+  /** Deliver everything queued while held, then resume direct delivery. */
+  release(ws: WebSocket): void {
+    const queued = this.holding.get(ws);
+    this.holding.delete(ws);
+    if (!queued?.length) return;
+    if (ws.readyState !== 1 /* OPEN */) return;
+    for (const message of queued) {
+      try {
+        ws.send(JSON.stringify(message));
+      } catch {
+        // ignore closed socket error
+      }
+    }
+  }
+
   unsubscribe(ws: WebSocket): void {
+    this.holding.delete(ws);
     this.subscribers.delete(ws);
     if (this.subscribers.size === 0) {
       this.destroy();
@@ -226,12 +254,16 @@ export class HerdrSessionTailer {
   }
 
   private broadcast(message: Record<string, unknown>, skipWs?: WebSocket): void {
-    const payload = JSON.stringify(message);
     for (const ws of this.subscribers) {
       if (skipWs && ws === skipWs) continue;
+      const queue = this.holding.get(ws);
+      if (queue) {
+        queue.push(message);
+        continue;
+      }
       if (ws.readyState === 1 /* OPEN */) {
         try {
-          ws.send(payload);
+          ws.send(JSON.stringify(message));
         } catch {
           // ignore closed socket error
         }

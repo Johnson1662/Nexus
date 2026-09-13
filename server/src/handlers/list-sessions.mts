@@ -4,7 +4,7 @@ import { isValidAgent } from "../discovery/agents.mjs";
 import { scanLocalSessionStatuses, mergeSessionStatus } from "../discovery/session-watcher.mjs";
 import { agentRegistry } from "../agent-registry-service.mjs";
 import { applyTitles } from "../session-titles.mjs";
-import { resolveWorkspacePath } from "../path-utils.mjs";
+import { resolveWorkspacePath, isWorkspacePathWithin } from "../path-utils.mjs";
 import { HerdrAdapter } from "../discovery/herdr-adapter.mjs";
 import { listAmbientSessions } from "../discovery/ambient-session.mjs";
 import path from "node:path";
@@ -28,6 +28,7 @@ export async function handleListSessions(
   cwd?: string,
   agent?: string,
   useHerdr?: boolean,
+  requestId?: string,
 ): Promise<void> {
   const resolvedCwd = resolveWorkspacePath(cwd);
   // 如果启用 Herdr 作为专属后端，则只返回 Herdr 分屏，彻底与 ACP 会话隔离
@@ -35,14 +36,12 @@ export async function handleListSessions(
     const herdrSessions: any[] = [];
     if (HerdrAdapter.isAvailable()) {
       try {
-        const herdrAgents = await HerdrAdapter.listAgents();
+        const herdrAgents = await HerdrAdapter.listAgentsStrict();
         for (const ha of herdrAgents) {
           if (agent && ha.agent !== agent) continue;
           const haCwd = ha.foreground_cwd || ha.cwd;
           if (resolvedCwd && haCwd) {
-            const normHa = haCwd.replace(/[\/\\]+$/, "");
-            const normTarget = resolvedCwd.replace(/[\/\\]+$/, "");
-            if (normHa !== normTarget && !normHa.startsWith(normTarget + "/")) continue;
+            if (!isWorkspacePathWithin(resolvedCwd, haCwd)) continue;
           }
           const resolved = await HerdrAdapter.resolveSessionFile(ha.pane_id);
           const status = ha.agent_status === "working" ? "running" : (ha.agent_status === "blocked" ? "waiting_input" : "idle");
@@ -62,7 +61,7 @@ export async function handleListSessions(
         console.log(`[list-sessions] failed to list herdr agents: ${err}`);
       }
     }
-    ws.send(JSON.stringify({ type: "session_list", sessions: herdrSessions }));
+    ws.send(JSON.stringify({ type: "session_list", sessions: herdrSessions, requestId }));
     return;
   }
 
@@ -90,7 +89,7 @@ export async function handleListSessions(
           agent,
         }));
       } catch {
-        ws.send(JSON.stringify({ type: "session_list", sessions: [] }));
+        ws.send(JSON.stringify({ type: "session_list", sessions: [], requestId }));
         return;
       } finally {
         clearTimeout(timeout);
@@ -129,14 +128,12 @@ export async function handleListSessions(
   // Merge live Herdr panes into session list and place at top
   if (useHerdr !== false && HerdrAdapter.isAvailable()) {
     try {
-      const herdrAgents = await HerdrAdapter.listAgents();
+      const herdrAgents = await HerdrAdapter.listAgentsStrict();
       for (const ha of herdrAgents) {
         if (agent && ha.agent !== agent) continue;
         const haCwd = ha.foreground_cwd || ha.cwd;
         if (resolvedCwd && haCwd) {
-          const normHa = haCwd.replace(/[\/\\]+$/, "");
-          const normTarget = resolvedCwd.replace(/[\/\\]+$/, "");
-          if (normHa !== normTarget && !normHa.startsWith(normTarget + "/")) continue;
+          if (!isWorkspacePathWithin(resolvedCwd, haCwd)) continue;
         }
 
         const resolved = await HerdrAdapter.resolveSessionFile(ha.pane_id);
@@ -178,7 +175,7 @@ export async function handleListSessions(
   // When useHerdr === false, strictly filter out any sessions currently active in Herdr panes
   if (useHerdr === false && HerdrAdapter.isAvailable()) {
     try {
-      const herdrAgents = await HerdrAdapter.listAgents();
+      const herdrAgents = await HerdrAdapter.listAgentsStrict();
       const herdrSessionIds = new Set<string>();
       for (const ha of herdrAgents) {
         const resolved = await HerdrAdapter.resolveSessionFile(ha.pane_id);
@@ -202,9 +199,7 @@ export async function handleListSessions(
       for (const amb of ambientList) {
         if (agent && amb.agent !== agent) continue;
         if (resolvedCwd && amb.cwd) {
-          const normAmb = amb.cwd.replace(/[\/\\]+$/, "");
-          const normTarget = resolvedCwd.replace(/[\/\\]+$/, "");
-          if (normAmb !== normTarget && !normAmb.startsWith(normTarget + "/")) continue;
+          if (!isWorkspacePathWithin(resolvedCwd, amb.cwd)) continue;
         }
         const existingIdx = sessions.findIndex(
           (s) => s.sessionId === amb.realSessionId || s.sessionId === amb.sessionId,
@@ -228,5 +223,5 @@ export async function handleListSessions(
     }
   }
 
-  ws.send(JSON.stringify({ type: "session_list", sessions }));
+  ws.send(JSON.stringify({ type: "session_list", sessions, requestId }));
 }
