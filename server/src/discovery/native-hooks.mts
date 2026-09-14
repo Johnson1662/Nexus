@@ -33,6 +33,17 @@ function createJsonHookConfigHandler(options: {
   getConfigPath: (home: string) => string;
   matcher: string;
 }): NonNullable<NativeHookDefinition["configHandler"]> {
+  function isNexusHook(hookObj: any, hookScriptPath: string): boolean {
+    if (!hookObj || typeof hookObj !== "object") return false;
+    if (hookObj.nexus === true) return true;
+    if (typeof hookObj.command === "string") {
+      const canonical = path.normalize(hookScriptPath);
+      const cmd = path.normalize(hookObj.command);
+      if (cmd.includes(canonical)) return true;
+    }
+    return false;
+  }
+
   return {
     getConfigPath: options.getConfigPath,
     isConfigured: (content: string, hookScriptPath: string) => {
@@ -44,7 +55,7 @@ function createJsonHookConfigHandler(options: {
         if (!Array.isArray(sessionHooks)) return false;
         return sessionHooks.some((group: any) =>
           Array.isArray(group?.hooks) &&
-          group.hooks.some((h: any) => typeof h?.command === "string" && h.command.includes("nexus-ambient"))
+          group.hooks.some((h: any) => isNexusHook(h, hookScriptPath))
         );
       } catch {
         return false;
@@ -68,31 +79,30 @@ function createJsonHookConfigHandler(options: {
           root.hooks[event] = [];
         }
         const action = event === "Stop" ? "stop" : "session";
-        const command = `${hookScriptPath} ${action}`;
+        const command = `node "${hookScriptPath}" ${action}`;
+        const nexusHookEntry = {
+          type: "command",
+          command,
+          timeout: 30,
+          nexus: true,
+        };
+
         const existingGroup = root.hooks[event].find((g: any) =>
           Array.isArray(g?.hooks) &&
-          g.hooks.some((h: any) => typeof h?.command === "string" && h.command.includes("nexus-ambient"))
+          g.hooks.some((h: any) => isNexusHook(h, hookScriptPath))
         );
 
         if (existingGroup) {
-          existingGroup.hooks = [
-            {
-              type: "command",
-              command,
-              timeout: 30,
-            },
-          ];
-          existingGroup.matcher = options.matcher;
+          const hookIdx = existingGroup.hooks.findIndex((h: any) => isNexusHook(h, hookScriptPath));
+          if (hookIdx >= 0) {
+            existingGroup.hooks[hookIdx] = nexusHookEntry;
+          } else {
+            existingGroup.hooks.push(nexusHookEntry);
+          }
         } else {
           root.hooks[event].push({
             matcher: options.matcher,
-            hooks: [
-              {
-                type: "command",
-                command,
-                timeout: 30,
-              },
-            ],
+            hooks: [nexusHookEntry],
           });
         }
       }
@@ -117,9 +127,7 @@ function createJsonHookConfigHandler(options: {
         root.hooks[event] = root.hooks[event]
           .map((g: any) => {
             if (!Array.isArray(g?.hooks)) return g;
-            const remaining = g.hooks.filter(
-              (h: any) => !(typeof h?.command === "string" && h.command.includes("nexus-ambient"))
-            );
+            const remaining = g.hooks.filter((h: any) => !isNexusHook(h, hookScriptPath));
             return { ...g, hooks: remaining };
           })
           .filter((g: any) => Array.isArray(g.hooks) && g.hooks.length > 0);
@@ -158,9 +166,9 @@ const NATIVE_HOOK_REGISTRY: Record<string, NativeHookDefinition> = {
     name: "Claude Code 终端监控 Hook",
     description: "用于监听和同步终端中运行的 Claude Code 命令行会话",
     targetDir: (home: string) => path.join(home, ".claude", "hooks"),
-    targetFileName: "nexus-ambient.sh",
-    sourceAssetName: "nexus-ambient-claude.sh",
-    version: 1,
+    targetFileName: "nexus-ambient.mjs",
+    sourceAssetName: "nexus-ambient-claude.mjs",
+    version: 2,
     versionMarker: /NEXUS_AMBIENT_INTEGRATION_VERSION=(\d+)/,
     isExecutable: true,
     configHandler: createJsonHookConfigHandler({
@@ -173,9 +181,9 @@ const NATIVE_HOOK_REGISTRY: Record<string, NativeHookDefinition> = {
     name: "Codex 终端监控 Hook",
     description: "用于监听和同步终端中运行的 Codex CLI 命令行会话",
     targetDir: (home: string) => path.join(home, ".codex", "hooks"),
-    targetFileName: "nexus-ambient.sh",
-    sourceAssetName: "nexus-ambient-codex.sh",
-    version: 1,
+    targetFileName: "nexus-ambient.mjs",
+    sourceAssetName: "nexus-ambient-codex.mjs",
+    version: 2,
     versionMarker: /NEXUS_AMBIENT_INTEGRATION_VERSION=(\d+)/,
     isExecutable: true,
     configHandler: createJsonHookConfigHandler({

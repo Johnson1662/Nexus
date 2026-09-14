@@ -42,6 +42,7 @@ export interface AgentRuntimeCapability {
     hookDescription?: string;
     adapterRequired: boolean;
     adapterInstalled: boolean;
+    adapterSource?: "managed" | "external" | "none";
     adapterPackage?: string;
     adapterBinary?: string;
   };
@@ -150,6 +151,7 @@ export async function detectHostCapabilities(forceRefresh = false): Promise<Host
         hookDescription: hookStatus.description,
         adapterRequired,
         adapterInstalled,
+        adapterSource: adapterStatus.source,
         adapterPackage: adapterStatus.package,
         adapterBinary: adapterStatus.binary,
         reason: nativeReason,
@@ -202,6 +204,7 @@ export async function detectHostCapabilities(forceRefresh = false): Promise<Host
         hookInstalled: false,
         adapterRequired: false,
         adapterInstalled: true,
+        adapterSource: "none",
         reason: execPath === null ? "Executable not found in PATH" : undefined,
       },
       herdr: {

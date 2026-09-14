@@ -348,6 +348,7 @@ void main() {
             executable: '/usr/local/bin/claude',
             adapterRequired: true,
             adapterInstalled: true,
+            adapterSource: 'managed',
             adapterPackage: '@agentclientprotocol/claude-agent-acp',
             adapterBinary: 'claude-agent-acp',
             hookSupported: true,
@@ -371,7 +372,7 @@ void main() {
     );
 
     // Shows ACP adapter ready
-    expect(find.textContaining('ACP 适配器: 已就绪 (claude-agent-acp)'), findsOneWidget);
+    expect(find.textContaining('ACP 适配器: 已就绪 (Nexus 管理)'), findsOneWidget);
     final uninstallAdapterBtn = find.text('卸载适配器');
     expect(uninstallAdapterBtn, findsOneWidget);
 

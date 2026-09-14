@@ -56,6 +56,7 @@ class _AgentManagePageState extends State<AgentManagePage> {
       final nativeHookDesc = caps?.native.hookDescription ?? '';
       final adapterRequired = caps?.native.adapterRequired ?? false;
       final adapterInstalled = caps?.native.adapterInstalled ?? true;
+      final adapterSource = caps?.native.adapterSource ?? 'none';
       final adapterPackage = caps?.native.adapterPackage ?? '';
       final adapterBinary = caps?.native.adapterBinary ?? '';
 
@@ -90,6 +91,7 @@ class _AgentManagePageState extends State<AgentManagePage> {
         'nativeHookDesc': nativeHookDesc,
         'adapterRequired': adapterRequired ? 'true' : 'false',
         'adapterInstalled': adapterInstalled ? 'true' : 'false',
+        'adapterSource': adapterSource,
         'adapterPackage': adapterPackage,
         'adapterBinary': adapterBinary,
         'nativeSupported': (caps?.native.supported ?? false) ? 'true' : 'false',
@@ -251,8 +253,8 @@ class _AgentManagePageState extends State<AgentManagePage> {
     final nativeSupported = agent['nativeSupported'] == 'true';
     final adapterRequired = agent['adapterRequired'] == 'true';
     final adapterInstalled = agent['adapterInstalled'] == 'true';
+    final adapterSource = agent['adapterSource'] ?? 'none';
     final adapterPackage = agent['adapterPackage'] ?? '';
-    final adapterBinary = agent['adapterBinary'] ?? '';
 
     final herdrIntegrationLabel = agent['herdrIntegration'] ?? '';
     final herdrIntegrationTarget = agent['herdrIntegrationTarget'] ?? '';
@@ -333,7 +335,9 @@ class _AgentManagePageState extends State<AgentManagePage> {
                   Expanded(
                     child: Text(
                     adapterInstalled
-                        ? 'ACP 适配器: 已就绪${adapterBinary.isNotEmpty ? ' ($adapterBinary)' : ''}'
+                          ? (adapterSource == 'managed'
+                              ? 'ACP 适配器: 已就绪 (Nexus 管理)'
+                              : 'ACP 适配器: 已就绪 (系统全局)')
                         : 'ACP 适配器: 未安装${adapterPackage.isNotEmpty ? ' ($adapterPackage)' : ''}',
                     style: TextStyle(
                       fontSize: AppFontSize.xxs,
@@ -345,7 +349,7 @@ class _AgentManagePageState extends State<AgentManagePage> {
             ),
                   ),
                   const SizedBox(width: AppSpacing.sm),
-                  if (adapterInstalled)
+                  if (adapterInstalled && adapterSource == 'managed')
                     TextButton(
                       onPressed: () =>
                           context.read<ChatProvider>().uninstallAcpAdapter(id),
@@ -353,12 +357,12 @@ class _AgentManagePageState extends State<AgentManagePage> {
                         padding: EdgeInsets.zero,
                         minimumSize: const Size(0, 24),
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
+                  ),
                       child: const Text('卸载适配器',
                           style: TextStyle(
                               fontSize: AppFontSize.xxs, color: Colors.redAccent)),
                     )
-                  else
+                  else if (!adapterInstalled)
                     TextButton(
                       onPressed: () =>
                           context.read<ChatProvider>().installAcpAdapter(id),

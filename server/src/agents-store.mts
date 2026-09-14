@@ -420,9 +420,17 @@ export function resolveAgentRuntime(agentId: string): AgentRuntime | null {
 
   let nativeCmdPath: string | null = null;
   if (native.command) {
-    const foundNative = findExecutableDetailed(native.command);
-    if (foundNative) {
-      nativeCmdPath = foundNative.path;
+    const directAdapterPath = path.join(
+      getNexusAdaptersBinDir(),
+      process.platform === "win32" ? `${native.command}.cmd` : native.command,
+    );
+    if (existsSync(directAdapterPath)) {
+      nativeCmdPath = directAdapterPath;
+    } else {
+      const foundNative = findExecutableDetailed(native.command);
+      if (foundNative) {
+        nativeCmdPath = foundNative.path;
+      }
     }
   }
 

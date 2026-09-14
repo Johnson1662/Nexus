@@ -124,6 +124,34 @@ try {
   assert(!existsSync(codexInstall.path), "codex hook script deleted");
   assert(!existsSync(codexHooksPath), "empty hooks.json file cleaned up");
 
+  // 11. Preservation of other hooks in the same matcher group
+  const multiHookSettingsPath = join(testHome, ".claude", "settings.json");
+  mkdirSync(join(testHome, ".claude"), { recursive: true });
+  writeFileSync(multiHookSettingsPath, JSON.stringify({
+    hooks: {
+      SessionStart: [
+        {
+          matcher: ".*",
+          hooks: [
+            { type: "command", command: "my-custom-logger session", timeout: 10 },
+          ],
+        },
+      ],
+    },
+  }, null, 2), "utf8");
+
+  await installNativeHook("claude", testHome);
+  const multiSettingsAfter = JSON.parse(readFileSync(multiHookSettingsPath, "utf8"));
+  const sessionHooks = multiSettingsAfter.hooks.SessionStart.flatMap((g) => g.hooks);
+  assert(sessionHooks.some((h) => h.command === "my-custom-logger session"), "user custom hook preserved in group");
+  assert(sessionHooks.some((h) => h.nexus === true), "nexus hook injected");
+
+  await uninstallNativeHook("claude", testHome);
+  const multiSettingsCleaned = JSON.parse(readFileSync(multiHookSettingsPath, "utf8"));
+  const cleanedHooks = multiSettingsCleaned.hooks.SessionStart.flatMap((g) => g.hooks);
+  assert(cleanedHooks.some((h) => h.command === "my-custom-logger session"), "user custom hook still preserved after uninstall");
+  assert(!cleanedHooks.some((h) => h.nexus === true), "nexus hook cleanly removed");
+
   console.log("ALL NATIVE HOOK TESTS PASSED!");
 } finally {
   rmSync(testHome, { recursive: true, force: true });

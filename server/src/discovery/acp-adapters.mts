@@ -10,8 +10,11 @@ export interface AcpAdapterInfo {
   binary?: string;
 }
 
+export type AcpAdapterSource = "managed" | "external" | "none";
+
 export interface AcpAdapterStatus extends AcpAdapterInfo {
   installed: boolean;
+  source: AcpAdapterSource;
   path?: string;
 }
 
@@ -19,6 +22,15 @@ export interface InstallAcpAdapterOptions {
   adaptersDir?: string;
   packageManager?: string;
   timeoutMs?: number;
+}
+
+export function checkNodeCompatibility(): { ok: boolean; version: string; minRequired: number } {
+  const major = parseInt(process.versions.node.split(".")[0], 10);
+  return {
+    ok: major >= 22,
+    version: process.version,
+    minRequired: 22,
+  };
 }
 
 export function getAcpAdapterInfo(agentId: string): AcpAdapterInfo {
@@ -36,7 +48,7 @@ export function getAcpAdapterInfo(agentId: string): AcpAdapterInfo {
 export function checkAcpAdapterStatus(agentId: string, customAdaptersDir?: string): AcpAdapterStatus {
   const info = getAcpAdapterInfo(agentId);
   if (!info.required) {
-    return { required: false, installed: true };
+    return { required: false, installed: true, source: "none" };
   }
 
   const binary = info.binary!;
@@ -52,6 +64,7 @@ export function checkAcpAdapterStatus(agentId: string, customAdaptersDir?: strin
     return {
       required: true,
       installed: true,
+      source: "managed",
       package: info.package,
       binary,
       path: directBinPath,
@@ -63,6 +76,7 @@ export function checkAcpAdapterStatus(agentId: string, customAdaptersDir?: strin
     return {
       required: true,
       installed: true,
+      source: "external",
       package: info.package,
       binary,
       path: execPath,
@@ -72,6 +86,7 @@ export function checkAcpAdapterStatus(agentId: string, customAdaptersDir?: strin
   return {
     required: true,
     installed: false,
+    source: "none",
     package: info.package,
     binary,
   };
@@ -113,6 +128,14 @@ export async function installAcpAdapter(
   agentId: string,
   options: InstallAcpAdapterOptions = {},
 ): Promise<{ ok: boolean; path?: string; error?: string }> {
+  const nodeCheck = checkNodeCompatibility();
+  if (!nodeCheck.ok) {
+    return {
+      ok: false,
+      error: `当前 Node.js 版本 (${nodeCheck.version}) 低于 ACP 适配器所需的最低版本 (>= v${nodeCheck.minRequired}.0.0)，请先升级 Node.js`,
+    };
+  }
+
   const info = getAcpAdapterInfo(agentId);
   if (!info.required || !info.package) {
     return { ok: true };
@@ -187,6 +210,24 @@ export async function uninstallAcpAdapter(
   }
 
   const adaptersDir = options.adaptersDir ?? getNexusAdaptersDir();
+  const directBinPath = path.join(
+    adaptersDir,
+    "node_modules",
+    ".bin",
+    process.platform === "win32" ? `${info.binary}.cmd` : info.binary!,
+  );
+
+  if (!existsSync(directBinPath)) {
+    const execPath = findExecutable(info.binary!);
+    if (execPath) {
+      return {
+        ok: false,
+        error: `适配器 '${info.binary}' 位于系统全局目录 (${execPath})，非 Nexus 管理目录，请在终端手动卸载全局 npm 包`,
+      };
+    }
+    return { ok: true };
+  }
+
   if (!existsSync(adaptersDir)) {
     return { ok: true };
   }
