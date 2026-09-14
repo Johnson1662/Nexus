@@ -11,6 +11,11 @@ console.log("=== Testing ambient-sync-e2e ===");
 const testDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "nexus-ambient-e2e-"));
 process.env.NEXUS_DATA_DIR = testDataDir;
 process.env.NEXUS_AUTH_TOKEN = "ambient-e2e-token";
+const testStoreDir = fs.mkdtempSync(path.join(os.tmpdir(), "nexus-agents-store-ambient-e2e-"));
+process.env.NEXUS_AGENTS_STORE_DIR = testStoreDir;
+fs.writeFileSync(path.join(testStoreDir, "installed-agents.json"), JSON.stringify({
+  agents: [{ agentId: "omp", installedAt: Date.now(), source: "registry" }],
+}), "utf8");
 
 const sessionId = "ambient-test-uuid-999";
 const transcriptPath = path.join(testDataDir, `${sessionId}.jsonl`);
@@ -209,8 +214,12 @@ mockOmpServer.close();
 try {
   fs.rmSync(testDataDir, { recursive: true, force: true });
 } catch {}
+try {
+  fs.rmSync(testStoreDir, { recursive: true, force: true });
+} catch {}
 delete process.env.NEXUS_DATA_DIR;
 delete process.env.NEXUS_AUTH_TOKEN;
+delete process.env.NEXUS_AGENTS_STORE_DIR;
 
 console.log("ALL TESTS PASSED for ambient-sync-e2e!");
 process.exit(0);

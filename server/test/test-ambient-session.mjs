@@ -8,6 +8,11 @@ console.log("=== Testing ambient-session ===");
 
 const testDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "nexus-ambient-test-"));
 process.env.NEXUS_DATA_DIR = testDataDir;
+const testStoreDir = fs.mkdtempSync(path.join(os.tmpdir(), "nexus-agents-store-ambient-"));
+process.env.NEXUS_AGENTS_STORE_DIR = testStoreDir;
+fs.writeFileSync(path.join(testStoreDir, "installed-agents.json"), JSON.stringify({
+  agents: [{ agentId: "omp", installedAt: Date.now(), source: "registry" }],
+}), "utf8");
 
 const {
   listAmbientSessions,
@@ -162,11 +167,21 @@ assert.ok(watchTriggerCount >= 1, "Watcher should trigger on claim update");
 
 stopWatch();
 
+// Test that disabling OMP hides ambient sessions
+const { uninstallAgent } = await import("../dist/agents-store.mjs");
+uninstallAgent("omp");
+assert.equal(listAmbientSessions().length, 0, "disabling omp must hide ambient sessions");
+assert.equal(getAmbientSession("ambient:omp:session-valid-001"), null, "getAmbientSession returns null when omp is disabled");
+
 // Teardown
 mockServer.close();
 try {
   fs.rmSync(testDataDir, { recursive: true, force: true });
 } catch {}
+try {
+  fs.rmSync(testStoreDir, { recursive: true, force: true });
+} catch {}
 delete process.env.NEXUS_DATA_DIR;
+delete process.env.NEXUS_AGENTS_STORE_DIR;
 
 console.log("ALL TESTS PASSED for ambient-session!");
