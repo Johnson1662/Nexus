@@ -21,11 +21,12 @@ export interface AmbientSessionInfo {
   sessionId: string; // "ambient:<agent>:<uuid>"
   realSessionId: string; // "<uuid>"
   agent: string;
-  pid: number;
+  pid?: number;
   cwd: string;
-  transcriptPath: string;
+  transcriptPath?: string;
   status: "running" | "idle" | "waiting_input";
   updatedAt: number;
+  lifecycle: "hook" | "heartbeat";
   control?: {
     host: "127.0.0.1";
     port: number;
@@ -37,9 +38,9 @@ interface RawAmbientClaim {
   version: number;
   agent: string;
   sessionId: string;
-  pid: number;
+  pid?: number;
   cwd: string;
-  transcriptPath: string;
+  transcriptPath?: string;
   status: "working" | "running" | "idle" | "blocked" | "waiting_input";
   lifecycle?: "hook" | "heartbeat";
   updatedAt?: number;
@@ -83,6 +84,10 @@ function parseAndValidateClaim(filePath: string, now: number = Date.now()): Ambi
 
     const agent = typeof data.agent === "string" && data.agent.trim() ? data.agent.trim().toLowerCase() : "";
     const updatedAt = typeof data.updatedAt === "number" ? data.updatedAt : (typeof data.lastSeen === "number" ? data.lastSeen : 0);
+    const lifecycle: "hook" | "heartbeat" =
+      data.lifecycle === "hook" || data.lifecycle === "heartbeat"
+        ? data.lifecycle
+        : (data.control ? "heartbeat" : "hook");
 
     if (
       data.version !== 1 ||
@@ -90,27 +95,35 @@ function parseAndValidateClaim(filePath: string, now: number = Date.now()): Ambi
       (!getRegistryAgent(agent) && !isAgentInstalled(agent)) ||
       typeof data.sessionId !== "string" ||
       !data.sessionId ||
-      typeof data.pid !== "number" ||
-      data.pid <= 0 ||
       typeof data.cwd !== "string" ||
-      typeof data.transcriptPath !== "string" ||
-      !path.isAbsolute(data.transcriptPath) ||
-      !existsSync(data.transcriptPath) ||
       updatedAt <= 0
     ) {
       try { unlinkSync(filePath); } catch {}
       return null;
     }
 
-    const isHookLifecycle = data.lifecycle === "hook" || !data.control;
-    if (!isHookLifecycle && now - updatedAt > STALE_TIMEOUT_MS) {
-      try { unlinkSync(filePath); } catch {}
-      return null;
+    // Validate transcriptPath only if provided
+    let transcriptPath: string | undefined = undefined;
+    if (typeof data.transcriptPath === "string" && data.transcriptPath.trim()) {
+      transcriptPath = data.transcriptPath;
     }
 
-    if (!isProcessAlive(data.pid)) {
-      try { unlinkSync(filePath); } catch {}
-      return null;
+    if (lifecycle === "heartbeat") {
+      // OMP and heartbeat-driven sessions:
+      // Require valid positive PID, process must be alive, must update within 15s.
+      if (
+        typeof data.pid !== "number" ||
+        data.pid <= 0 ||
+        now - updatedAt > STALE_TIMEOUT_MS ||
+        !isProcessAlive(data.pid)
+      ) {
+        try { unlinkSync(filePath); } catch {}
+        return null;
+      }
+    } else {
+      // Hook lifecycle (Claude Code, Codex):
+      // Managed explicitly by SessionStart -> Stop -> SessionEnd events.
+      // Does NOT enforce PID liveness or 15s TTL.
     }
 
     let control: AmbientSessionInfo["control"] = undefined;
@@ -137,9 +150,10 @@ function parseAndValidateClaim(filePath: string, now: number = Date.now()): Ambi
       agent,
       pid: data.pid,
       cwd: data.cwd,
-      transcriptPath: data.transcriptPath,
+      transcriptPath,
       status: normalizeStatus(data.status),
       updatedAt,
+      lifecycle,
       control,
     };
   } catch {

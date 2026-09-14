@@ -277,18 +277,14 @@ export function installAgent(
   source: "registry" | "custom" = "registry",
   options?: { command?: string; args?: string[]; env?: Record<string, string> },
 ): boolean {
-  if (source === "registry" && !getRegistryAgent(agentId)) {
-    throw new Error(`unknown registry agent: ${agentId}`);
-  }
   if (source === "custom") {
     const command = options?.command;
     if (!command || !findExecutable(command)) {
       throw new Error(`agent command not found in PATH: ${command || agentId}`);
     }
   } else {
-    const runtime = resolveAgentRuntime(agentId);
-    if (!runtime?.executablePath) {
-      throw new Error(`agent command not found in PATH: ${runtime?.cmd || agentId}`);
+    if (!getRegistryAgent(agentId)) {
+      throw new Error(`unknown registry agent: ${agentId}`);
     }
   }
   const agents = loadFromDisk().map((agent) => ({ ...agent }));

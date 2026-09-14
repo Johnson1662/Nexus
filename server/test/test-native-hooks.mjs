@@ -178,6 +178,26 @@ try {
   assert.equal(readFileSync(malformedSettingsPath, "utf8"), malformedContent, "config file preserved byte-for-byte on uninstall error");
   assert(existsSync(malformedSettingsPath), "file must NOT be deleted");
 
+  // 13. Invariant 4: Codex Hook state is "configured", Claude Hook state is "active"
+  const claudeCleanInstall = await installNativeHook("claude", testHome);
+  // Fix malformed config to valid
+  writeFileSync(malformedSettingsPath, JSON.stringify({ hooks: {} }, null, 2), "utf8");
+  const claudeValidInstall = await installNativeHook("claude", testHome);
+  assert.equal(claudeValidInstall.ok, true);
+  const claudeState = checkNativeHookStatus("claude", testHome);
+  assert.equal(claudeState.state, "active", "Claude hook state is active");
+
+  const codexStateHome = mkdtempSync(join(tmpdir(), "nexus-codex-state-"));
+  try {
+    const codexInstall = await installNativeHook("codex", codexStateHome);
+    assert.equal(codexInstall.ok, true);
+    const codexStatus = checkNativeHookStatus("codex", codexStateHome);
+    assert.equal(codexStatus.state, "configured", "Codex hook state is configured (requires trust in Codex)");
+    assert(codexStatus.description.includes("信任后生效"), "Codex hook description mentions trust");
+  } finally {
+    rmSync(codexStateHome, { recursive: true, force: true });
+  }
+
   console.log("ALL NATIVE HOOK TESTS PASSED!");
 } finally {
   rmSync(testHome, { recursive: true, force: true });

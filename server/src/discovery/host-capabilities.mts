@@ -39,6 +39,7 @@ export interface AgentRuntimeCapability {
     reason?: string;
     hookSupported: boolean;
     hookInstalled: boolean;
+    hookState?: "not_installed" | "configured" | "active";
     hookDescription?: string;
     adapterRequired: boolean;
     adapterInstalled: boolean;
@@ -157,6 +158,7 @@ export async function detectHostCapabilities(forceRefresh = false): Promise<Host
         authentication: nativeCfg?.authentication ?? false,
         hookSupported: hookStatus.supported,
         hookInstalled: hookStatus.installed,
+        hookState: hookStatus.state,
         hookDescription: hookStatus.description,
         adapterRequired,
         adapterInstalled,
@@ -212,6 +214,7 @@ export async function detectHostCapabilities(forceRefresh = false): Promise<Host
         authentication: true,
         hookSupported: false,
         hookInstalled: false,
+        hookState: "not_installed",
         adapterRequired: false,
         adapterInstalled: true,
         adapterSource: "none",

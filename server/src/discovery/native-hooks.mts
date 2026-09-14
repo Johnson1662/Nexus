@@ -250,6 +250,7 @@ export async function withHookMutex<T>(key: string, fn: () => Promise<T>): Promi
 export interface NativeHookStatus {
   supported: boolean;
   installed: boolean;
+  state: "not_installed" | "configured" | "active";
   path?: string;
   version?: number;
   description?: string;
@@ -258,7 +259,7 @@ export interface NativeHookStatus {
 export function checkNativeHookStatus(agentId: string, customHome?: string): NativeHookStatus {
   const def = getNativeHookDefinition(agentId);
   if (!def) {
-    return { supported: false, installed: false };
+    return { supported: false, installed: false, state: "not_installed" };
   }
 
   const home = getEffectiveHome(customHome);
@@ -269,6 +270,7 @@ export function checkNativeHookStatus(agentId: string, customHome?: string): Nat
     return {
       supported: true,
       installed: false,
+      state: "not_installed",
       path: targetPath,
       description: def.description,
     };
@@ -282,6 +284,7 @@ export function checkNativeHookStatus(agentId: string, customHome?: string): Nat
       return {
         supported: true,
         installed: false,
+        state: "not_installed",
         path: targetPath,
         description: "存在未被 Nexus 接管的自定义扩展文件",
       };
@@ -296,6 +299,7 @@ export function checkNativeHookStatus(agentId: string, customHome?: string): Nat
         return {
           supported: true,
           installed: false,
+          state: "not_installed",
           path: targetPath,
           description: def.description,
         };
@@ -306,6 +310,7 @@ export function checkNativeHookStatus(agentId: string, customHome?: string): Nat
           return {
             supported: true,
             installed: false,
+            state: "not_installed",
             path: targetPath,
             description: def.description,
           };
@@ -314,23 +319,32 @@ export function checkNativeHookStatus(agentId: string, customHome?: string): Nat
         return {
           supported: true,
           installed: false,
+          state: "not_installed",
           path: targetPath,
           description: def.description,
         };
       }
     }
 
+    // For Codex, hooks require explicit trust in Codex before becoming active
+    const state: NativeHookStatus["state"] = agentId.toLowerCase() === "codex" ? "configured" : "active";
+    const description = agentId.toLowerCase() === "codex"
+      ? "Hook 已配置 (需要在 Codex 中信任后生效)"
+      : def.description;
+
     return {
       supported: true,
       installed: true,
+      state,
       version,
       path: targetPath,
-      description: def.description,
+      description,
     };
   } catch {
     return {
       supported: true,
       installed: false,
+      state: "not_installed",
       path: targetPath,
       description: def.description,
     };
@@ -404,9 +418,6 @@ export async function installNativeHook(
 
     try {
       renameSync(tmpPath, targetPath);
-      if (hasBackup) {
-        try { unlinkSync(backupPath); } catch {}
-      }
     } catch (renameErr) {
       if (hasBackup) {
         try { renameSync(backupPath, targetPath); } catch {}
@@ -431,6 +442,11 @@ export async function installNativeHook(
         }
         throw configErr;
       }
+    }
+
+    // Both script and config succeeded; safely delete backup
+    if (hasBackup) {
+      try { unlinkSync(backupPath); } catch {}
     }
 
     console.log(`[native-hooks] installed ${agentId} hook (v${def.version}) to ${targetPath}`);
@@ -482,14 +498,26 @@ export async function uninstallNativeHook(
       };
     }
 
-    if (def.configHandler && configPath && existsSync(configPath)) {
-      if (cleanedConfigContent === null) {
-        unlinkSync(configPath);
-      } else {
-        safeWriteFileAtomic(configPath, cleanedConfigContent);
+    const backupPath = path.join(
+      targetDir,
+      `.${def.targetFileName}.bak.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2, 8)}.tmp`,
+    );
+    renameSync(targetPath, backupPath);
+
+    try {
+      if (def.configHandler && configPath && existsSync(configPath)) {
+        if (cleanedConfigContent === null) {
+          unlinkSync(configPath);
+        } else {
+          safeWriteFileAtomic(configPath, cleanedConfigContent);
+        }
       }
+      try { unlinkSync(backupPath); } catch {}
+    } catch (configErr) {
+      try { renameSync(backupPath, targetPath); } catch {}
+      throw configErr;
     }
-    unlinkSync(targetPath);
+
     console.log(`[native-hooks] uninstalled ${agentId} hook from ${targetPath}`);
     return { ok: true };
   } catch (err: unknown) {
@@ -505,6 +533,7 @@ export function listNativeHooks(customHome?: string): Array<{
   name: string;
   supported: boolean;
   installed: boolean;
+  state: "not_installed" | "configured" | "active";
   path?: string;
   version?: number;
   description?: string;
@@ -516,6 +545,7 @@ export function listNativeHooks(customHome?: string): Array<{
       name: def.name,
       supported: status.supported,
       installed: status.installed,
+      state: status.state,
       path: status.path,
       version: status.version,
       description: status.description,

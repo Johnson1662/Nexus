@@ -53,6 +53,7 @@ class _AgentManagePageState extends State<AgentManagePage> {
       final executable = caps?.native.executable ?? '';
       final nativeHookSupported = caps?.native.hookSupported ?? false;
       final nativeHookInstalled = caps?.native.hookInstalled ?? false;
+      final nativeHookState = caps?.native.hookState ?? 'not_installed';
       final nativeHookDesc = caps?.native.hookDescription ?? '';
       final adapterRequired = caps?.native.adapterRequired ?? false;
       final adapterInstalled = caps?.native.adapterInstalled ?? true;
@@ -88,6 +89,7 @@ class _AgentManagePageState extends State<AgentManagePage> {
             : 'false',
         'nativeHookSupported': nativeHookSupported ? 'true' : 'false',
         'nativeHookInstalled': nativeHookInstalled ? 'true' : 'false',
+        'nativeHookState': nativeHookState,
         'nativeHookDesc': nativeHookDesc,
         'adapterRequired': adapterRequired ? 'true' : 'false',
         'adapterInstalled': adapterInstalled ? 'true' : 'false',
@@ -249,6 +251,7 @@ class _AgentManagePageState extends State<AgentManagePage> {
     final executable = agent['executable'] ?? '';
     final nativeHookSupported = agent['nativeHookSupported'] == 'true';
     final nativeHookInstalled = agent['nativeHookInstalled'] == 'true';
+    final nativeHookState = agent['nativeHookState'] ?? 'not_installed';
     final nativeHookDesc = agent['nativeHookDesc'] ?? '';
     final nativeSupported = agent['nativeSupported'] == 'true';
     final adapterRequired = agent['adapterRequired'] == 'true';
@@ -386,12 +389,16 @@ class _AgentManagePageState extends State<AgentManagePage> {
                   Expanded(
                     child: Text(
                     nativeHookInstalled
-                        ? 'Hook: 已安装${nativeHookDesc.isNotEmpty ? ' ($nativeHookDesc)' : ''}'
+                          ? (nativeHookState == 'configured'
+                              ? 'Hook: 已配置 (需在 Codex 信任后生效)'
+                              : 'Hook: 已生效${nativeHookDesc.isNotEmpty ? ' ($nativeHookDesc)' : ''}')
                         : 'Hook: 未安装${nativeHookDesc.isNotEmpty ? ' ($nativeHookDesc)' : ''}',
         style: TextStyle(
                       fontSize: AppFontSize.xxs,
                       color: nativeHookInstalled
-                          ? const Color(0xFF2DA44E)
+                            ? (nativeHookState == 'configured'
+                                ? Colors.orangeAccent
+                                : const Color(0xFF2DA44E))
                           : muted,
                     ),
                       overflow: TextOverflow.ellipsis,

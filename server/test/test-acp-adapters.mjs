@@ -98,6 +98,12 @@ try {
   assert(directJs !== null, "resolved direct JS entry");
   assert(directJs.endsWith("index.js"), "points to index.js");
 
+  // 9. Invariant 3: Codex adapter-only can be enabled via installAgent
+  const { installAgent, uninstallAgent } = await import("../dist/agents-store.mjs");
+  const installCodexRes = installAgent("codex");
+  assert.equal(installCodexRes, true, "codex can be enabled in store without codex CLI in PATH");
+  uninstallAgent("codex");
+
   console.log("ALL ACP ADAPTER TESTS PASSED!");
 } finally {
   rmSync(testAdaptersDir, { recursive: true, force: true });

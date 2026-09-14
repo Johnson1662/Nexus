@@ -185,19 +185,20 @@ const claudeClaim = {
   version: 1,
   agent: "claude",
   sessionId: "session-claude-001",
-  pid: process.pid,
+  pid: 999999999, // dead PID: invariant 1: hook lifecycle does NOT check process PID
   cwd: testDataDir,
-  transcriptPath,
+  // transcriptPath omitted: invariant: optional transcriptPath supported
   status: "idle",
-  updatedAt: Date.now(),
+  updatedAt: Date.now() - 60000, // 60s ago (>15s): invariant 1: hook lifecycle does NOT expire after 15s
 };
 fs.writeFileSync(path.join(sessionsDir, "session-claude-001.json"), JSON.stringify(claudeClaim));
 
 const listWithClaude = listAmbientSessions();
 const foundClaude = listWithClaude.find((s) => s.agent === "claude");
-assert.ok(foundClaude, "Claude ambient claim without control is discovered");
+assert.ok(foundClaude, "Claude ambient claim with dead PID and >15s age is discovered");
 assert.equal(foundClaude.sessionId, "ambient:claude:session-claude-001");
 assert.equal(foundClaude.control, undefined, "control is undefined for observation-only session");
+assert.equal(foundClaude.transcriptPath, undefined, "transcriptPath is optional");
 
 await assert.rejects(
   async () => {

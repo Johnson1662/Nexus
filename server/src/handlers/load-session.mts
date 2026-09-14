@@ -98,7 +98,7 @@ export async function handleLoadHistoryPage(
   let source = historySources.get(sessionId);
   if (!source && sessionId.startsWith("ambient:")) {
     const ambient = getAmbientSession(sessionId);
-    if (ambient) source = { path: ambient.transcriptPath };
+    if (ambient?.transcriptPath) source = { path: ambient.transcriptPath };
   } else if (!source && sessionId.startsWith("herdr:")) {
     const resolved = await HerdrAdapter.resolveSessionFile(sessionId);
     if (resolved?.sessionPath) source = { path: resolved.sessionPath };
@@ -107,7 +107,14 @@ export async function handleLoadHistoryPage(
     if (path) source = { path };
   }
   if (!source) {
-    try { ws.send(JSON.stringify({ type: "error", sessionId, text: "history source unavailable" })); } catch {}
+    try {
+      ws.send(JSON.stringify({
+        type: "error",
+        sessionId,
+        code: "HISTORY_UNAVAILABLE",
+        text: "该终端会话暂无历史转储文件 (history source unavailable)",
+      }));
+    } catch {}
     return;
   }
 
@@ -165,6 +172,25 @@ export async function handleLoadSession(
       return;
     }
 
+    if (!amb.transcriptPath || !fs.existsSync(amb.transcriptPath)) {
+      try {
+        ws.send(JSON.stringify({
+          type: "session_started",
+          sessionId: targetSessionId,
+          agent: amb.agent,
+          model: model || "default",
+          resumed: true,
+          source: "ambient",
+          streamMode: "acp",
+        }));
+        ws.send(JSON.stringify({
+          type: "turn_ended",
+          sessionId: targetSessionId,
+        }));
+      } catch { return; }
+      return;
+    }
+
     const realModel = extractModelFromSessionFile(amb.transcriptPath) || model;
     historySources.set(targetSessionId, { path: amb.transcriptPath });
     try {
@@ -219,7 +245,7 @@ export async function handleLoadSession(
       const boundary = tailer.getByteOffset();
       tailer.hold(ws);
       try {
-        const fullEvents = await readSessionJsonlFullHistory(amb.transcriptPath, undefined, boundary);
+        const fullEvents = await readSessionJsonlFullHistory(amb.transcriptPath!, undefined, boundary);
         const limited = limitHistoryEvents(fullEvents as unknown[]);
         ws.send(JSON.stringify({
           type: "history_full",

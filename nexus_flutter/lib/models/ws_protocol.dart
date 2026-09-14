@@ -804,6 +804,7 @@ class AgentNativeCapability {
   final bool authentication;
   final bool hookSupported;
   final bool hookInstalled;
+  final String? hookState;
   final String? hookDescription;
   final bool adapterRequired;
   final bool adapterInstalled;
@@ -824,6 +825,7 @@ class AgentNativeCapability {
     this.authentication = false,
     this.hookSupported = false,
     this.hookInstalled = false,
+    this.hookState,
     this.hookDescription,
     this.adapterRequired = false,
     this.adapterInstalled = true,
@@ -846,6 +848,7 @@ class AgentNativeCapability {
         authentication: json['authentication'] as bool? ?? false,
         hookSupported: json['hookSupported'] as bool? ?? false,
         hookInstalled: json['hookInstalled'] as bool? ?? false,
+        hookState: json['hookState'] as String?,
         hookDescription: json['hookDescription'] as String?,
         adapterRequired: json['adapterRequired'] as bool? ?? false,
         adapterInstalled: json['adapterInstalled'] as bool? ?? true,
@@ -867,6 +870,7 @@ class AgentNativeCapability {
         'authentication': authentication,
         'hookSupported': hookSupported,
         'hookInstalled': hookInstalled,
+        if (hookState != null) 'hookState': hookState,
         if (hookDescription != null) 'hookDescription': hookDescription,
         'adapterRequired': adapterRequired,
         'adapterInstalled': adapterInstalled,
