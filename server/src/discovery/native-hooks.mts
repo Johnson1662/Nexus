@@ -160,11 +160,27 @@ export async function installNativeHook(
     );
     writeFileSync(tmpPath, sourceContent, { encoding: "utf8", mode: 0o644 });
 
+    const backupPath = path.join(
+      targetDir,
+      `.${def.targetFileName}.bak.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2, 8)}.tmp`,
+    );
+    let hasBackup = false;
+    if (existsSync(targetPath)) {
+      renameSync(targetPath, backupPath);
+      hasBackup = true;
+    }
+
     try {
       renameSync(tmpPath, targetPath);
-    } catch {
-      writeFileSync(targetPath, sourceContent, { encoding: "utf8", mode: 0o644 });
+      if (hasBackup) {
+        try { unlinkSync(backupPath); } catch {}
+      }
+    } catch (renameErr) {
+      if (hasBackup) {
+        try { renameSync(backupPath, targetPath); } catch {}
+      }
       try { unlinkSync(tmpPath); } catch {}
+      throw renameErr;
     }
 
     console.log(`[native-hooks] installed ${agentId} hook (v${def.version}) to ${targetPath}`);

@@ -179,4 +179,60 @@ void main() {
     // Should NOT show native hook labels in Herdr mode
     expect(find.text('安装 Hook'), findsNothing);
   });
+
+  testWidgets('Herdr-only agent with detected executable in Native mode renders CLI detected and Herdr-only warning without contradiction', (tester) async {
+    final ws = WSClient();
+    final provider = ChatProvider(ws);
+
+    provider.state.registryAgents = [
+      RegistryAgentInfo.fromJson({
+        'id': 'claude',
+        'name': 'Claude Code',
+        'description': 'Claude Code agent',
+      }),
+    ];
+
+    provider.state.hostCapabilities = HostCapabilities(
+      platform: 'linux',
+      arch: 'x64',
+      git: const GitCapability(available: true),
+      herdr: const HerdrCapability(available: false, transport: 'cli'),
+      agents: [
+        const AgentRuntimeCapability(
+          id: 'claude',
+          name: 'Claude Code',
+          enabled: false,
+          native: AgentNativeCapability(
+            supported: false,
+            ready: false,
+            executable: '/usr/local/bin/claude',
+            hookSupported: false,
+            hookInstalled: false,
+          ),
+          herdr: AgentHerdrCapability(
+            supported: true,
+            ready: false,
+            integrationId: 'claude',
+          ),
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ChangeNotifierProvider<ChatProvider>.value(
+          value: provider,
+          child: const AgentManagePage(),
+        ),
+      ),
+    );
+
+    // In Native mode:
+    // Should clearly show that the CLI was detected
+    expect(find.textContaining('已检测到 CLI (/usr/local/bin/claude)'), findsOneWidget);
+    // Should NOT say PC 未安装 CLI
+    expect(find.textContaining('PC 未安装 CLI'), findsNothing);
+    // Should indicate it runs only under Herdr
+    expect(find.text('仅支持在 Herdr 模式下运行'), findsOneWidget);
+  });
 }

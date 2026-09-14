@@ -42,7 +42,7 @@ import { parseClientMessage, type JsonRecord } from "./protocol-validation.mjs";
 import { handleListHerdrWorkspaces, handleCreateHerdrWorkspace, handleCreateHerdrAgent, handleFocusHerdrTarget, handleInteractHerdrBlocked, handleListHerdrIntegrations, handleInstallHerdrIntegration } from "./handlers/herdr-actions.mjs";
 import { watchAmbientSessions, listAmbientSessions } from "./discovery/ambient-session.mjs";
 import { detectHostCapabilities, invalidateHostCapabilities } from "./discovery/host-capabilities.mjs";
-import { listNativeHooks, installNativeHook, uninstallNativeHook } from "./discovery/native-hooks.mjs";
+import { installNativeHook, uninstallNativeHook } from "./discovery/native-hooks.mjs";
 
 const PORT = parseInt(process.env.PORT || "", 10) || 12138;
 const HOST_ID = getOrCreateHostId();
@@ -455,12 +455,6 @@ export function handleIncomingConnection(transport: any, hostId: string = HOST_I
       case "install_herdr_integration":
         sessionManager.enqueueWsOp(transport, () => handleInstallHerdrIntegration(transport, sessionMsg as any));
         break;
-
-      case "list_native_hooks": {
-        const hooks = listNativeHooks();
-        transport.send(JSON.stringify({ type: "native_hooks_list", hooks }));
-        break;
-      }
 
       case "install_native_hook": {
         const agentId = String(sessionMsg.agentId || "");

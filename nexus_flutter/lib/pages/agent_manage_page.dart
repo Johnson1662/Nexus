@@ -247,6 +247,7 @@ class _AgentManagePageState extends State<AgentManagePage> {
     final herdrIntegrationTarget = agent['herdrIntegrationTarget'] ?? '';
     final needsHerdrIntegration = agent['needsHerdrIntegration'] == 'true';
     final isReady = agent['ready'] == 'true';
+    final cliInstalled = executable.isNotEmpty;
     final fg = AppColors.foregroundCtx(context);
     final muted = AppColors.foregroundMutedCtx(context);
 
@@ -307,7 +308,7 @@ class _AgentManagePageState extends State<AgentManagePage> {
           ] else ...[
             // ── Native Mode: Explicit Agent CLI status ──
           Text(
-              nativeReady
+              cliInstalled
                   ? '$desc · 已检测到 CLI ($executable)'
                   : '$desc · PC 未安装 CLI (${agent['nativeReason']?.isNotEmpty == true ? agent['nativeReason']! : '未在 PATH 找到命令'})',
               style: TextStyle(fontSize: AppFontSize.xs, color: muted),
@@ -344,7 +345,7 @@ class _AgentManagePageState extends State<AgentManagePage> {
         style: TextStyle(
                               fontSize: AppFontSize.xxs, color: Colors.redAccent)),
                     )
-                  else if (nativeReady)
+                  else if (cliInstalled)
                     TextButton(
                       onPressed: () =>
                           context.read<ChatProvider>().installNativeHook(id),

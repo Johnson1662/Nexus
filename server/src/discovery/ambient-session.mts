@@ -14,6 +14,7 @@ import {
   type FSWatcher,
 } from "node:fs";
 import { getAmbientRuntimeDir } from "../path-utils.mjs";
+import { resolveAgentRuntime } from "../agents-store.mjs";
 
 export interface AmbientSessionInfo {
   sessionId: string; // "ambient:omp:<uuid>"
@@ -135,6 +136,9 @@ function parseAndValidateClaim(filePath: string, now: number = Date.now()): Ambi
 }
 
 export function listAmbientSessions(): AmbientSessionInfo[] {
+  const ompRuntime = resolveAgentRuntime("omp");
+  if (!ompRuntime?.installed) return [];
+
   const dir = getSessionsDir();
   if (!existsSync(dir)) return [];
   const entries = readdirSync(dir).filter((f) => f.endsWith(".json") && !f.startsWith("."));
@@ -155,6 +159,9 @@ export function listAmbientSessions(): AmbientSessionInfo[] {
 
 export function getAmbientSession(targetId: string): AmbientSessionInfo | null {
   if (!targetId) return null;
+  const ompRuntime = resolveAgentRuntime("omp");
+  if (!ompRuntime?.installed) return null;
+
   const realId = targetId.startsWith("ambient:omp:")
     ? targetId.slice("ambient:omp:".length)
     : targetId.startsWith("ambient:")

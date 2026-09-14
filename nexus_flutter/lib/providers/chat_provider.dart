@@ -857,10 +857,6 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
     _ws.send(ClientMessage(type: 'install_herdr_integration', target: target));
   }
 
-  void requestNativeHooks() {
-    _ws.send(ClientMessage(type: 'list_native_hooks'));
-  }
-
   void installNativeHook(String agentId) {
     _ws.send(ClientMessage(type: 'install_native_hook', agentId: agentId));
   }

@@ -171,7 +171,6 @@ class ServerMessage {
   final HostCapabilities? hostCapabilities;
   final List<Map<String, dynamic>>? herdrIntegrations;
   final Map<String, dynamic>? integration;
-  final List<Map<String, dynamic>>? nativeHooks;
   AcpUpdate? get acpUpdate => event;
 
   ServerMessage({
@@ -224,7 +223,6 @@ class ServerMessage {
     this.hostCapabilities,
     this.herdrIntegrations,
     this.integration,
-    this.nativeHooks,
   });
 
   factory ServerMessage.fromJson(Map<String, dynamic> json) {
@@ -444,9 +442,6 @@ class ServerMessage {
       integration: json['integration'] is Map
           ? Map<String, dynamic>.from(json['integration'] as Map)
           : null,
-      nativeHooks: (json['hooks'] as List<dynamic>?)
-          ?.map((e) => Map<String, dynamic>.from(e as Map))
-          .toList(),
     );
   }
 }
