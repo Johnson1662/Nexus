@@ -67,6 +67,7 @@ function handlePayload() {
     cwd,
     transcriptPath,
     status,
+    lifecycle: "hook",
     updatedAt: Date.now(),
   };
 

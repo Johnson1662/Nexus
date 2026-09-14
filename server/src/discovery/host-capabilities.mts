@@ -2,7 +2,7 @@ import { findExecutable, resolveAgentRuntime, getInstalledAgents } from "../agen
 import { listRegistryAgents, loadRegistry, getNativeConfig, getHerdrConfig } from "../registry/registry.mjs";
 import { HerdrAdapter } from "./herdr-adapter.mjs";
 import { checkNativeHookStatus } from "./native-hooks.mjs";
-import { checkAcpAdapterStatus } from "./acp-adapters.mjs";
+import { checkAcpAdapterStatus, resolveNativeAcpLaunch, checkNodeCompatibility } from "./acp-adapters.mjs";
 
 export interface HostCapabilities {
   platform: "linux" | "darwin" | "win32";
@@ -43,6 +43,7 @@ export interface AgentRuntimeCapability {
     adapterRequired: boolean;
     adapterInstalled: boolean;
     adapterSource?: "managed" | "external" | "none";
+    nodeCompatible: boolean;
     adapterPackage?: string;
     adapterBinary?: string;
   };
@@ -106,15 +107,23 @@ export async function detectHostCapabilities(forceRefresh = false): Promise<Host
     const adapterStatus = checkAcpAdapterStatus(agent.id);
     const adapterRequired = adapterStatus.required;
     const adapterInstalled = adapterStatus.installed;
-    const nativeReady = nativeSupported && execPath !== null && (!adapterRequired || adapterInstalled);
+    const launch = resolveNativeAcpLaunch(agent.id);
+    const nativeReady = launch.ok;
 
     let nativeReason: string | undefined;
     if (!nativeSupported) {
       nativeReason = "Native ACP not enabled for this agent";
-    } else if (execPath === null) {
-      nativeReason = "Executable not found in PATH or known locations";
-    } else if (adapterRequired && !adapterInstalled) {
-      nativeReason = `未安装 ACP 适配器 (${adapterStatus.package})`;
+    } else if (!launch.ok) {
+      if (launch.code === "ADAPTER_MISSING") {
+        nativeReason = `未安装 ACP 适配器 (${adapterStatus.package})`;
+      } else if (launch.code === "NODE_INCOMPATIBLE") {
+        const nodeCheck = checkNodeCompatibility(agent.id);
+        nativeReason = `Node.js 版本不兼容 (当前: ${nodeCheck.version}, 需要: >= v${nodeCheck.minRequired}.0.0)`;
+      } else if (launch.code === "CLI_MISSING") {
+        nativeReason = "未在 PATH 中找到 Agent CLI 命令";
+      } else {
+        nativeReason = launch.error;
+      }
     }
 
     const herdrSupported = Boolean(herdrCfg?.enabled);
@@ -152,6 +161,7 @@ export async function detectHostCapabilities(forceRefresh = false): Promise<Host
         adapterRequired,
         adapterInstalled,
         adapterSource: adapterStatus.source,
+        nodeCompatible: adapterStatus.nodeCompatible,
         adapterPackage: adapterStatus.package,
         adapterBinary: adapterStatus.binary,
         reason: nativeReason,
@@ -205,6 +215,7 @@ export async function detectHostCapabilities(forceRefresh = false): Promise<Host
         adapterRequired: false,
         adapterInstalled: true,
         adapterSource: "none",
+        nodeCompatible: true,
         reason: execPath === null ? "Executable not found in PATH" : undefined,
       },
       herdr: {

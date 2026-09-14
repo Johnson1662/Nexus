@@ -93,6 +93,7 @@ try {
   assert.equal(claudeSettingsAfter.userKey, "keepMe", "user settings preserved");
   assert(claudeSettingsAfter.hooks?.SessionStart?.length > 0, "SessionStart hook added");
   assert(claudeSettingsAfter.hooks?.Stop?.length > 0, "Stop hook added");
+  assert(claudeSettingsAfter.hooks?.SessionEnd?.length > 0, "SessionEnd hook added");
 
   const claudeAfterInstall = checkNativeHookStatus("claude", testHome);
   assert.equal(claudeAfterInstall.installed, true, "claude hook detected as installed");
@@ -115,6 +116,10 @@ try {
 
   const codexHooksPath = join(testHome, ".codex", "hooks.json");
   assert(existsSync(codexHooksPath), "hooks.json created");
+  const codexHooksAfter = JSON.parse(readFileSync(codexHooksPath, "utf8"));
+  assert(codexHooksAfter.hooks?.SessionStart?.length > 0, "Codex SessionStart hook added");
+  assert(codexHooksAfter.hooks?.Stop?.length > 0, "Codex Stop hook added");
+  assert(codexHooksAfter.hooks?.SessionEnd?.length > 0, "Codex SessionEnd hook added");
 
   const codexAfterInstall = checkNativeHookStatus("codex", testHome);
   assert.equal(codexAfterInstall.installed, true, "codex hook detected as installed");

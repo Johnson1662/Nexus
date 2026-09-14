@@ -41,6 +41,7 @@ interface RawAmbientClaim {
   cwd: string;
   transcriptPath: string;
   status: "working" | "running" | "idle" | "blocked" | "waiting_input";
+  lifecycle?: "hook" | "heartbeat";
   updatedAt?: number;
   lastSeen?: number;
   control?: {
@@ -101,7 +102,8 @@ function parseAndValidateClaim(filePath: string, now: number = Date.now()): Ambi
       return null;
     }
 
-    if (now - updatedAt > STALE_TIMEOUT_MS) {
+    const isHookLifecycle = data.lifecycle === "hook" || !data.control;
+    if (!isHookLifecycle && now - updatedAt > STALE_TIMEOUT_MS) {
       try { unlinkSync(filePath); } catch {}
       return null;
     }

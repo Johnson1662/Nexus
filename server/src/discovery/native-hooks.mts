@@ -51,12 +51,16 @@ function createJsonHookConfigHandler(options: {
         const parsed = JSON.parse(content);
         const hooks = parsed?.hooks;
         if (!hooks || typeof hooks !== "object") return false;
-        const sessionHooks = hooks.SessionStart;
-        if (!Array.isArray(sessionHooks)) return false;
-        return sessionHooks.some((group: any) =>
-          Array.isArray(group?.hooks) &&
-          group.hooks.some((h: any) => isNexusHook(h, hookScriptPath))
-        );
+        for (const event of ["SessionStart", "Stop", "SessionEnd"]) {
+          const eventHooks = hooks[event];
+          if (!Array.isArray(eventHooks)) return false;
+          const hasNexus = eventHooks.some((group: any) =>
+            Array.isArray(group?.hooks) &&
+            group.hooks.some((h: any) => isNexusHook(h, hookScriptPath))
+          );
+          if (!hasNexus) return false;
+        }
+        return true;
       } catch {
         return false;
       }
@@ -74,12 +78,12 @@ function createJsonHookConfigHandler(options: {
         root.hooks = {};
       }
 
-      for (const event of ["SessionStart", "Stop"] as const) {
+      for (const event of ["SessionStart", "Stop", "SessionEnd"] as const) {
         if (!Array.isArray(root.hooks[event])) {
           root.hooks[event] = [];
         }
-        const action = event === "Stop" ? "stop" : "session";
-        const command = `node "${hookScriptPath}" ${action}`;
+        const action = event === "Stop" ? "stop" : (event === "SessionEnd" ? "exit" : "session");
+        const command = `"${process.execPath}" "${hookScriptPath}" ${action}`;
         const nexusHookEntry = {
           type: "command",
           command,
@@ -122,7 +126,7 @@ function createJsonHookConfigHandler(options: {
         return existingContent;
       }
 
-      for (const event of ["SessionStart", "Stop"] as const) {
+      for (const event of ["SessionStart", "Stop", "SessionEnd"] as const) {
         if (!Array.isArray(root.hooks[event])) continue;
         root.hooks[event] = root.hooks[event]
           .map((g: any) => {
@@ -418,7 +422,15 @@ export async function installNativeHook(
     }
 
     if (def.configHandler && configPath && updatedConfigContent !== null) {
-      safeWriteFileAtomic(configPath, updatedConfigContent);
+      try {
+        safeWriteFileAtomic(configPath, updatedConfigContent);
+      } catch (configErr) {
+        try { unlinkSync(targetPath); } catch {}
+        if (hasBackup) {
+          try { renameSync(backupPath, targetPath); } catch {}
+        }
+        throw configErr;
+      }
     }
 
     console.log(`[native-hooks] installed ${agentId} hook (v${def.version}) to ${targetPath}`);
@@ -470,7 +482,6 @@ export async function uninstallNativeHook(
       };
     }
 
-    unlinkSync(targetPath);
     if (def.configHandler && configPath && existsSync(configPath)) {
       if (cleanedConfigContent === null) {
         unlinkSync(configPath);
@@ -478,6 +489,7 @@ export async function uninstallNativeHook(
         safeWriteFileAtomic(configPath, cleanedConfigContent);
       }
     }
+    unlinkSync(targetPath);
     console.log(`[native-hooks] uninstalled ${agentId} hook from ${targetPath}`);
     return { ok: true };
   } catch (err: unknown) {

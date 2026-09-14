@@ -16,6 +16,7 @@ export interface AgentNativeConfig {
   adapterPackage?: string;
   adapterBinary?: string;
   minNodeMajor?: number;
+  requiresBaseCli?: boolean;
   structuredHistory: boolean;
   modelSelection: boolean;
   modeSelection: boolean;
@@ -114,6 +115,7 @@ export function isValidNativeConfig(value: unknown): value is AgentNativeConfig 
   if (config.adapterPackage !== undefined && typeof config.adapterPackage !== "string") return false;
   if (config.adapterBinary !== undefined && typeof config.adapterBinary !== "string") return false;
   if (config.minNodeMajor !== undefined && typeof config.minNodeMajor !== "number") return false;
+  if (config.requiresBaseCli !== undefined && typeof config.requiresBaseCli !== "boolean") return false;
   return validBackendFeatures(config);
 }
 

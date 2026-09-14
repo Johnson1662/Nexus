@@ -808,6 +808,7 @@ class AgentNativeCapability {
   final bool adapterRequired;
   final bool adapterInstalled;
   final String? adapterSource;
+  final bool nodeCompatible;
   final String? adapterPackage;
   final String? adapterBinary;
 
@@ -827,6 +828,7 @@ class AgentNativeCapability {
     this.adapterRequired = false,
     this.adapterInstalled = true,
     this.adapterSource,
+    this.nodeCompatible = true,
     this.adapterPackage,
     this.adapterBinary,
   });
@@ -848,6 +850,7 @@ class AgentNativeCapability {
         adapterRequired: json['adapterRequired'] as bool? ?? false,
         adapterInstalled: json['adapterInstalled'] as bool? ?? true,
         adapterSource: json['adapterSource'] as String?,
+        nodeCompatible: json['nodeCompatible'] as bool? ?? true,
         adapterPackage: json['adapterPackage'] as String?,
         adapterBinary: json['adapterBinary'] as String?,
       );
@@ -868,6 +871,7 @@ class AgentNativeCapability {
         'adapterRequired': adapterRequired,
         'adapterInstalled': adapterInstalled,
         if (adapterSource != null) 'adapterSource': adapterSource,
+        'nodeCompatible': nodeCompatible,
         if (adapterPackage != null) 'adapterPackage': adapterPackage,
         if (adapterBinary != null) 'adapterBinary': adapterBinary,
       };

@@ -155,7 +155,8 @@ export async function installAcpAdapter(
   agentId: string,
   options: InstallAcpAdapterOptions = {},
 ): Promise<{ ok: boolean; path?: string; error?: string }> {
-  return withAdapterMutex(agentId, async () => {
+  const adaptersDir = path.resolve(options.adaptersDir ?? getNexusAdaptersDir());
+  return withAdapterMutex(adaptersDir, async () => {
   const info = getAcpAdapterInfo(agentId);
   if (!info.required || !info.package) {
     return { ok: true };
@@ -169,7 +170,6 @@ export async function installAcpAdapter(
     };
   }
 
-  const adaptersDir = options.adaptersDir ?? getNexusAdaptersDir();
   ensureAdaptersPackageJson(adaptersDir);
 
   const pm = detectPackageManager(options.packageManager);
@@ -233,13 +233,13 @@ export async function uninstallAcpAdapter(
   agentId: string,
   options: InstallAcpAdapterOptions = {},
 ): Promise<{ ok: boolean; error?: string }> {
-  return withAdapterMutex(agentId, async () => {
+  const adaptersDir = path.resolve(options.adaptersDir ?? getNexusAdaptersDir());
+  return withAdapterMutex(adaptersDir, async () => {
   const info = getAcpAdapterInfo(agentId);
   if (!info.required || !info.package) {
     return { ok: true };
   }
 
-  const adaptersDir = options.adaptersDir ?? getNexusAdaptersDir();
   const directBinPath = path.join(
     adaptersDir,
     "node_modules",
@@ -403,6 +403,17 @@ export function resolveNativeAcpLaunch(agentId: string): NativeAcpLaunchResult {
         error: `当前 Node.js 版本 (${nodeCheck.version}) 低于 ${adapterStatus.package} 所需的最低版本 (>= v${nodeCheck.minRequired}.0.0)`,
         code: "NODE_INCOMPATIBLE",
       };
+    }
+
+    if (native.requiresBaseCli) {
+      const baseCli = findAgentExecutable(agentId);
+      if (!baseCli) {
+        return {
+          ok: false,
+          error: `Agent '${agentId}' requires base CLI to be installed on host`,
+          code: "CLI_MISSING",
+        };
+      }
     }
 
     let cmd = adapterStatus.path;
