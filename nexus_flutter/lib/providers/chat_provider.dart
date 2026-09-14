@@ -857,6 +857,18 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
     _ws.send(ClientMessage(type: 'install_herdr_integration', target: target));
   }
 
+  void requestNativeHooks() {
+    _ws.send(ClientMessage(type: 'list_native_hooks'));
+  }
+
+  void installNativeHook(String agentId) {
+    _ws.send(ClientMessage(type: 'install_native_hook', agentId: agentId));
+  }
+
+  void uninstallNativeHook(String agentId) {
+    _ws.send(ClientMessage(type: 'uninstall_native_hook', agentId: agentId));
+  }
+
   /// Integration install state for a Herdr target, from the last list reply.
   Map<String, dynamic>? integrationFor(String? target) {
     if (target == null || target.isEmpty) return null;
@@ -1407,6 +1419,22 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
           refreshHostCapabilities();
         }
         requestHerdrIntegrations();
+        notifyListeners();
+        break;
+      case 'install_native_hook_done':
+        if (msg.ok == false) {
+          _state.errorMessage = msg.error ?? 'Hook 安装失败';
+        } else {
+          refreshHostCapabilities();
+        }
+        notifyListeners();
+        break;
+      case 'uninstall_native_hook_done':
+        if (msg.ok == false) {
+          _state.errorMessage = msg.error ?? 'Hook 卸载失败';
+        } else {
+          refreshHostCapabilities();
+        }
         notifyListeners();
         break;
       case 'host_capabilities':

@@ -23,7 +23,7 @@ import { createDaemonShutdownController } from "./shutdown.mjs";
 import { startControlServer } from "./control-server.mjs";
 import { sessionManager } from "../session-manager.mjs";
 import type { DaemonLockPayload } from "./pid-lock.mjs";
-import { ensureOmpAmbientIntegration } from "../discovery/ambient-session.mjs";
+import { updateInstalledHooksIfPresent } from "../discovery/native-hooks.mjs";
 import { installLogSanitizer, rotateLogFile } from "./log-governance.mjs";
 
 // ── Paths ─────────────────────────────────────────────────────────
@@ -54,7 +54,7 @@ export interface DaemonStatus {
 
 export async function startDaemon(config: DaemonStartConfig): Promise<void> {
   ensureDataDir();
-  ensureOmpAmbientIntegration();
+  updateInstalledHooksIfPresent();
 
   const shutdown = createDaemonShutdownController();
 

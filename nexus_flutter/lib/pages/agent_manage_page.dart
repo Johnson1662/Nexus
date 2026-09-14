@@ -44,35 +44,47 @@ class _AgentManagePageState extends State<AgentManagePage> {
         .where((a) => !registryIds.contains(a.id))
         .map((a) => RegistryAgentInfo(id: a.id, name: a.name, description: '', version: '', distribution: const {}));
 
+    final useHerdr = chatProvider.preferredBackend == 'herdr';
+
     final agentList = [...chatProvider.state.registryAgents, ...capabilityOnlyAgents].map((r) {
       final caps = chatProvider.capabilityFor(r.id);
-      final integration = chatProvider.integrationFor(caps?.herdr.integrationId);
-      final integrationLabel = integration == null
-          ? (caps?.herdr.supported == true ? 'Integration 未知' : '')
-          : 'Integration ${integration['state']}';
       final nativeReady = caps?.native.ready ?? false;
       final herdrReady = caps?.herdr.ready ?? false;
       final executable = caps?.native.executable ?? '';
+      final nativeHookSupported = caps?.native.hookSupported ?? false;
+      final nativeHookInstalled = caps?.native.hookInstalled ?? false;
+      final nativeHookDesc = caps?.native.hookDescription ?? '';
+
+      final integration = chatProvider.integrationFor(caps?.herdr.integrationId);
+      final herdrIntegrationLabel = integration == null
+          ? (caps?.herdr.supported == true ? 'Herdr 集成未检测' : '')
+          : 'Herdr 集成: ${integration['state']}';
+
       return {
         'id': r.id.toLowerCase(),
         'name': r.name.isNotEmpty ? r.name : AgentUtils.getDisplayName(r.id),
         'desc': r.description,
-        'ready': (nativeReady || herdrReady) ? 'true' : 'false',
-        'native': nativeReady ? 'Native ✓' : 'Native ✗',
-        'herdr': herdrReady ? 'Herdr ✓' : 'Herdr ✗',
+        'ready': useHerdr
+            ? (herdrReady ? 'true' : 'false')
+            : (nativeReady ? 'true' : 'false'),
+        'nativeReady': nativeReady ? 'true' : 'false',
+        'herdrReady': herdrReady ? 'true' : 'false',
         'executable': executable,
-        'reason': caps?.native.reason ?? caps?.herdr.reason ?? '',
-        'integration': integrationLabel,
-        'integrationTarget': caps?.herdr.integrationId ?? '',
-        // Offer a repair only for a state we actually know is broken; an
-        // unreadable status must not turn into "install everything".
-        'needsIntegration': (caps != null &&
+        'nativeReason': caps?.native.reason ?? '',
+        'herdrReason': caps?.herdr.reason ?? '',
+        'herdrIntegration': herdrIntegrationLabel,
+        'herdrIntegrationTarget': caps?.herdr.integrationId ?? '',
+        'needsHerdrIntegration': (caps != null &&
                 caps.herdr.supported &&
                 (caps.herdr.integrationState == 'not installed' ||
                     caps.herdr.integrationState == 'missing' ||
                     caps.herdr.integrationState == 'outdated'))
             ? 'true'
             : 'false',
+        'nativeHookSupported': nativeHookSupported ? 'true' : 'false',
+        'nativeHookInstalled': nativeHookInstalled ? 'true' : 'false',
+        'nativeHookDesc': nativeHookDesc,
+        'nativeSupported': (caps?.native.supported ?? false) ? 'true' : 'false',
       };
     }).toList();
 
@@ -122,6 +134,7 @@ class _AgentManagePageState extends State<AgentManagePage> {
                       context,
                       agent: agent,
                       isInstalled: true,
+                      useHerdr: useHerdr,
                       onChanged: (val) => chatProvider.uninstallAgent(id),
                     ),
                     if (index < enabledAgents.length - 1) const Divider(height: 1),
@@ -147,6 +160,7 @@ class _AgentManagePageState extends State<AgentManagePage> {
                     context,
                     agent: agent,
                     isInstalled: false,
+                    useHerdr: useHerdr,
                     onChanged: agent['ready'] == 'true'
                         ? (val) => chatProvider.installAgent(id)
                         : null,
@@ -215,18 +229,24 @@ class _AgentManagePageState extends State<AgentManagePage> {
     BuildContext context, {
     required Map<String, String> agent,
     required bool isInstalled,
+    required bool useHerdr,
     required ValueChanged<bool>? onChanged,
   }) {
     final id = agent['id']!;
     final name = agent['name']!;
     final desc = agent['desc']!;
-    final nativeLabel = agent['native']!;
-    final herdrLabel = agent['herdr']!;
-    final reason = agent['reason'] ?? '';
-    final integrationLabel = agent['integration'] ?? '';
-    final integrationTarget = agent['integrationTarget'] ?? '';
-    final needsIntegration = agent['needsIntegration'] == 'true';
-    final installable = agent['ready'] == 'true';
+    final nativeReady = agent['nativeReady'] == 'true';
+    final herdrReady = agent['herdrReady'] == 'true';
+    final executable = agent['executable'] ?? '';
+    final nativeHookSupported = agent['nativeHookSupported'] == 'true';
+    final nativeHookInstalled = agent['nativeHookInstalled'] == 'true';
+    final nativeHookDesc = agent['nativeHookDesc'] ?? '';
+    final nativeSupported = agent['nativeSupported'] == 'true';
+
+    final herdrIntegrationLabel = agent['herdrIntegration'] ?? '';
+    final herdrIntegrationTarget = agent['herdrIntegrationTarget'] ?? '';
+    final needsHerdrIntegration = agent['needsHerdrIntegration'] == 'true';
+    final isReady = agent['ready'] == 'true';
     final fg = AppColors.foregroundCtx(context);
     final muted = AppColors.foregroundMutedCtx(context);
 
@@ -250,46 +270,111 @@ class _AgentManagePageState extends State<AgentManagePage> {
       subtitle: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // ── CLI / Binary detection line ──
+          if (useHerdr) ...[
           Text(
-            installable
-                ? '$desc · $nativeLabel · $herdrLabel'
-                : '$desc · ${reason.isNotEmpty ? reason : 'PC 未找到命令'}',
-            style: TextStyle(
-              fontSize: AppFontSize.xs,
-              color: muted,
-            ),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-          if (integrationLabel.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 2),
-              child: Text(
-                integrationLabel,
-                style: TextStyle(
-                  fontSize: AppFontSize.xxs,
-                  color: muted,
+              herdrReady
+                  ? '$desc · Herdr 就绪${executable.isNotEmpty ? ' ($executable)' : ''}'
+                  : '$desc · ${agent['herdrReason']?.isNotEmpty == true ? agent['herdrReason']! : 'PC 未找到命令'}',
+              style: TextStyle(fontSize: AppFontSize.xs, color: muted),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+      ),
+            if (herdrIntegrationLabel.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Text(
+                  herdrIntegrationLabel,
+                  style: TextStyle(fontSize: AppFontSize.xxs, color: muted),
+        ),
+      ),
+            if (needsHerdrIntegration && herdrIntegrationTarget.isNotEmpty)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton(
+                  onPressed: () => context
+                      .read<ChatProvider>()
+                      .installHerdrIntegration(herdrIntegrationTarget),
+                  style: TextButton.styleFrom(
+                    padding: EdgeInsets.zero,
+                    minimumSize: const Size(0, 28),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  child: const Text('安装 Herdr 集成',
+                      style: TextStyle(fontSize: AppFontSize.xs)),
                 ),
               ),
+          ] else ...[
+            // ── Native Mode: Explicit Agent CLI status ──
+          Text(
+              nativeReady
+                  ? '$desc · 已检测到 CLI ($executable)'
+                  : '$desc · PC 未安装 CLI (${agent['nativeReason']?.isNotEmpty == true ? agent['nativeReason']! : '未在 PATH 找到命令'})',
+              style: TextStyle(fontSize: AppFontSize.xs, color: muted),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
             ),
-          // A missing integration degrades to terminal mode; it never removes
-          // the agent, so this is an offer to repair, not a blocker.
-          if (needsIntegration && integrationTarget.isNotEmpty)
-            Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton(
-                onPressed: () =>
-                    context.read<ChatProvider>().installHerdrIntegration(
-                          integrationTarget,
-                        ),
-                style: TextButton.styleFrom(
-                  padding: EdgeInsets.zero,
-                  minimumSize: const Size(0, 28),
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-                child: const Text('安装集成', style: TextStyle(fontSize: AppFontSize.xs)),
+            const SizedBox(height: 2),
+            // ── Native Mode: Hook choice or protocol info ──
+            if (nativeHookSupported) ...[
+              Row(
+        children: [
+          Text(
+                    nativeHookInstalled
+                        ? 'Hook: 已安装${nativeHookDesc.isNotEmpty ? ' ($nativeHookDesc)' : ''}'
+                        : 'Hook: 未安装${nativeHookDesc.isNotEmpty ? ' ($nativeHookDesc)' : ''}',
+        style: TextStyle(
+                      fontSize: AppFontSize.xxs,
+                      color: nativeHookInstalled
+                          ? const Color(0xFF2DA44E)
+                          : muted,
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  if (nativeHookInstalled)
+                    TextButton(
+                      onPressed: () =>
+                          context.read<ChatProvider>().uninstallNativeHook(id),
+                      style: TextButton.styleFrom(
+                        padding: EdgeInsets.zero,
+                        minimumSize: const Size(0, 24),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      child: const Text('卸载 Hook',
+        style: TextStyle(
+                              fontSize: AppFontSize.xxs, color: Colors.redAccent)),
+                    )
+                  else if (nativeReady)
+                    TextButton(
+                      onPressed: () =>
+                          context.read<ChatProvider>().installNativeHook(id),
+                      style: TextButton.styleFrom(
+                        padding: EdgeInsets.zero,
+                        minimumSize: const Size(0, 24),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      child: const Text('安装 Hook',
+                          style: TextStyle(fontSize: AppFontSize.xxs)),
+                    )
+                  else
+          Text(
+                      '(需先在 PC 安装 CLI)',
+                      style: TextStyle(fontSize: AppFontSize.xxs, color: muted),
+                    ),
+                ],
               ),
-            ),
+            ] else if (nativeSupported) ...[
+          Text(
+                '通信方式: 原生 ACP 协议 (无需 Hook)',
+                style: TextStyle(fontSize: AppFontSize.xxs, color: muted),
+              ),
+            ] else ...[
+          Text(
+                '仅支持在 Herdr 模式下运行',
+                style: TextStyle(fontSize: AppFontSize.xxs, color: muted),
+              ),
+            ],
+          ],
         ],
       ),
     );

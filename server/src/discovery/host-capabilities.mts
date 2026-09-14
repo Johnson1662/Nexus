@@ -1,6 +1,7 @@
 import { findExecutable, resolveAgentRuntime, getInstalledAgents } from "../agents-store.mjs";
 import { listRegistryAgents, loadRegistry, getNativeConfig, getHerdrConfig } from "../registry/registry.mjs";
 import { HerdrAdapter } from "./herdr-adapter.mjs";
+import { checkNativeHookStatus } from "./native-hooks.mjs";
 
 export interface HostCapabilities {
   platform: "linux" | "darwin" | "win32";
@@ -35,6 +36,9 @@ export interface AgentRuntimeCapability {
     modeSelection: boolean;
     authentication: boolean;
     reason?: string;
+    hookSupported: boolean;
+    hookInstalled: boolean;
+    hookDescription?: string;
   };
   herdr: {
     supported: boolean;
@@ -97,6 +101,7 @@ export async function detectHostCapabilities(forceRefresh = false): Promise<Host
     const herdrSupported = Boolean(herdrCfg?.enabled);
     const herdrReady = herdrSupported && herdrAvailable && execPath !== null;
     const integrationId = runtime?.herdrIntegration ?? herdrCfg?.integration ?? undefined;
+    const hookStatus = checkNativeHookStatus(agent.id);
     // Three states, never two: an unreadable status listing must not claim every
     // integration is missing (which would offer repairs that are not needed).
     const integrationEntry = integrationId ? integrationByTarget.get(integrationId) : undefined;
@@ -122,6 +127,9 @@ export async function detectHostCapabilities(forceRefresh = false): Promise<Host
         modelSelection: nativeCfg?.modelSelection ?? false,
         modeSelection: nativeCfg?.modeSelection ?? false,
         authentication: nativeCfg?.authentication ?? false,
+        hookSupported: hookStatus.supported,
+        hookInstalled: hookStatus.installed,
+        hookDescription: hookStatus.description,
         reason: !nativeSupported
           ? "Native ACP not enabled for this agent"
           : execPath === null
@@ -172,6 +180,8 @@ export async function detectHostCapabilities(forceRefresh = false): Promise<Host
         modelSelection: true,
         modeSelection: true,
         authentication: true,
+        hookSupported: false,
+        hookInstalled: false,
         reason: execPath === null ? "Executable not found in PATH or known locations" : undefined,
       },
       herdr: {

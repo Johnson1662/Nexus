@@ -171,6 +171,7 @@ class ServerMessage {
   final HostCapabilities? hostCapabilities;
   final List<Map<String, dynamic>>? herdrIntegrations;
   final Map<String, dynamic>? integration;
+  final List<Map<String, dynamic>>? nativeHooks;
   AcpUpdate? get acpUpdate => event;
 
   ServerMessage({
@@ -223,6 +224,7 @@ class ServerMessage {
     this.hostCapabilities,
     this.herdrIntegrations,
     this.integration,
+    this.nativeHooks,
   });
 
   factory ServerMessage.fromJson(Map<String, dynamic> json) {
@@ -442,6 +444,9 @@ class ServerMessage {
       integration: json['integration'] is Map
           ? Map<String, dynamic>.from(json['integration'] as Map)
           : null,
+      nativeHooks: (json['hooks'] as List<dynamic>?)
+          ?.map((e) => Map<String, dynamic>.from(e as Map))
+          .toList(),
     );
   }
 }
@@ -799,6 +804,9 @@ class AgentNativeCapability {
   final bool modelSelection;
   final bool modeSelection;
   final bool authentication;
+  final bool hookSupported;
+  final bool hookInstalled;
+  final String? hookDescription;
 
   const AgentNativeCapability({
     required this.supported,
@@ -810,6 +818,9 @@ class AgentNativeCapability {
     this.modelSelection = false,
     this.modeSelection = false,
     this.authentication = false,
+    this.hookSupported = false,
+    this.hookInstalled = false,
+    this.hookDescription,
   });
 
   factory AgentNativeCapability.fromJson(Map<String, dynamic> json) =>
@@ -823,6 +834,9 @@ class AgentNativeCapability {
         modelSelection: json['modelSelection'] as bool? ?? false,
         modeSelection: json['modeSelection'] as bool? ?? false,
         authentication: json['authentication'] as bool? ?? false,
+        hookSupported: json['hookSupported'] as bool? ?? false,
+        hookInstalled: json['hookInstalled'] as bool? ?? false,
+        hookDescription: json['hookDescription'] as String?,
       );
 
   Map<String, dynamic> toJson() => {
@@ -835,6 +849,9 @@ class AgentNativeCapability {
         'modelSelection': modelSelection,
         'modeSelection': modeSelection,
         'authentication': authentication,
+        'hookSupported': hookSupported,
+        'hookInstalled': hookInstalled,
+        if (hookDescription != null) 'hookDescription': hookDescription,
       };
 }
 
