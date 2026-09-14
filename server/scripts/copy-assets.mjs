@@ -21,11 +21,14 @@ if (fs.existsSync(registrySrc)) {
 }
 
 // 3. Copy ambient integration assets
-const ompIntegrationSrc = path.join(serverDir, "assets", "integrations", "nexus-ambient-omp.ts");
-const ompIntegrationDst = path.join(integrationsDistDir, "nexus-ambient-omp.ts");
-if (fs.existsSync(ompIntegrationSrc)) {
-  fs.cpSync(ompIntegrationSrc, ompIntegrationDst, { dereference: true });
-  console.log("[build] copied nexus-ambient-omp.ts to dist/integrations/nexus-ambient-omp.ts");
+const integrationsSrcDir = path.join(serverDir, "assets", "integrations");
+if (fs.existsSync(integrationsSrcDir)) {
+  for (const file of fs.readdirSync(integrationsSrcDir)) {
+    const src = path.join(integrationsSrcDir, file);
+    const dst = path.join(integrationsDistDir, file);
+    fs.cpSync(src, dst, { dereference: true });
+    console.log(`[build] copied ${file} to dist/integrations/${file}`);
+  }
 }
 
 // 4. Ensure shebang and executable bit on dist/cli.mjs

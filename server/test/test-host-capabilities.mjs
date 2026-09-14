@@ -56,11 +56,25 @@ assert.equal(omp.herdr.authentication, false, "omp herdr has no authentication")
 // exists, no structured Herdr history either.
 const codex = caps.agents.find((a) => a.id === "codex");
 assert(codex, "codex must exist");
-assert.equal(codex.native.supported, false, "codex has no native ACP adapter");
+assert.equal(codex.native.supported, true, "codex supports native ACP via adapter");
+assert.equal(codex.native.adapterRequired, true, "codex requires an ACP adapter");
+assert.equal(codex.native.adapterPackage, "@agentclientprotocol/codex-acp", "codex adapter package");
+assert.equal(codex.native.adapterBinary, "codex-acp", "codex adapter binary");
 assert.equal(codex.herdr.structuredHistory, false, "codex herdr history is terminal-only");
+
+const claude = caps.agents.find((a) => a.id === "claude");
+assert(claude, "claude must exist");
+assert.equal(claude.native.supported, true, "claude supports native ACP via adapter");
+assert.equal(claude.native.adapterRequired, true, "claude requires an ACP adapter");
+assert.equal(claude.native.adapterPackage, "@agentclientprotocol/claude-agent-acp", "claude adapter package");
+assert.equal(claude.native.adapterBinary, "claude-agent-acp", "claude adapter binary");
 
 const pi = caps.agents.find((a) => a.id === "pi");
 assert(pi, "pi must exist");
 assert.equal(pi.herdr.kind, "pi", "pi herdr.kind must be pi");
+assert.equal(pi.native.supported, true, "pi supports native ACP via adapter");
+assert.equal(pi.native.adapterRequired, true, "pi requires an ACP adapter");
+assert.equal(pi.native.adapterPackage, "pi-acp", "pi adapter package");
+assert.equal(pi.native.adapterBinary, "pi-acp", "pi adapter binary");
 
 console.log("ALL HOST CAPABILITIES TESTS PASSED!");

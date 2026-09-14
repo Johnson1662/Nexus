@@ -16,6 +16,10 @@ void main() {
       'hookSupported': true,
       'hookInstalled': true,
       'hookDescription': 'Nexus Ambient Extension',
+      'adapterRequired': true,
+      'adapterInstalled': false,
+      'adapterPackage': '@agentclientprotocol/claude-agent-acp',
+      'adapterBinary': 'claude-agent-acp',
     });
 
     expect(cap.supported, true);
@@ -24,6 +28,10 @@ void main() {
     expect(cap.hookSupported, true);
     expect(cap.hookInstalled, true);
     expect(cap.hookDescription, 'Nexus Ambient Extension');
+    expect(cap.adapterRequired, true);
+    expect(cap.adapterInstalled, false);
+    expect(cap.adapterPackage, '@agentclientprotocol/claude-agent-acp');
+    expect(cap.adapterBinary, 'claude-agent-acp');
   });
 
   testWidgets('AgentManagePage in Native mode renders CLI detection and Hook install action', (tester) async {
@@ -186,9 +194,9 @@ void main() {
 
     provider.state.registryAgents = [
       RegistryAgentInfo.fromJson({
-        'id': 'claude',
-        'name': 'Claude Code',
-        'description': 'Claude Code agent',
+        'id': 'antigravity-cli',
+        'name': 'Antigravity CLI',
+        'description': 'Antigravity coding agent',
       }),
     ];
 
@@ -199,20 +207,20 @@ void main() {
       herdr: const HerdrCapability(available: false, transport: 'cli'),
       agents: [
         const AgentRuntimeCapability(
-          id: 'claude',
-          name: 'Claude Code',
+          id: 'antigravity-cli',
+          name: 'Antigravity CLI',
           enabled: false,
           native: AgentNativeCapability(
             supported: false,
             ready: false,
-            executable: '/usr/local/bin/claude',
+            executable: '/usr/local/bin/agy',
             hookSupported: false,
             hookInstalled: false,
           ),
           herdr: AgentHerdrCapability(
             supported: true,
             ready: false,
-            integrationId: 'claude',
+            integrationId: 'antigravity-cli',
           ),
         ),
       ],
@@ -229,10 +237,148 @@ void main() {
 
     // In Native mode:
     // Should clearly show that the CLI was detected
-    expect(find.textContaining('已检测到 CLI (/usr/local/bin/claude)'), findsOneWidget);
+    expect(find.textContaining('已检测到 CLI (/usr/local/bin/agy)'), findsOneWidget);
     // Should NOT say PC 未安装 CLI
     expect(find.textContaining('PC 未安装 CLI'), findsNothing);
     // Should indicate it runs only under Herdr
     expect(find.text('仅支持在 Herdr 模式下运行'), findsOneWidget);
+  });
+
+  testWidgets('AgentManagePage in Native mode renders ACP adapter reminder and action for Claude', (tester) async {
+    final ws = WSClient();
+    final provider = ChatProvider(ws);
+
+    ClientMessage? lastSent;
+    ws.onSendForTest = (msg) => lastSent = msg;
+
+    provider.state.registryAgents = [
+      RegistryAgentInfo.fromJson({
+        'id': 'claude',
+        'name': 'Claude Code',
+        'description': 'Anthropic Claude Code CLI',
+      }),
+    ];
+
+    provider.state.hostCapabilities = HostCapabilities(
+      platform: 'linux',
+      arch: 'x64',
+      git: const GitCapability(available: true),
+      herdr: const HerdrCapability(available: false, transport: 'cli'),
+      agents: [
+        const AgentRuntimeCapability(
+          id: 'claude',
+          name: 'Claude Code',
+          enabled: false,
+          native: AgentNativeCapability(
+            supported: true,
+            ready: false,
+            executable: '/usr/local/bin/claude',
+            adapterRequired: true,
+            adapterInstalled: false,
+            adapterPackage: '@agentclientprotocol/claude-agent-acp',
+            adapterBinary: 'claude-agent-acp',
+            hookSupported: true,
+            hookInstalled: false,
+            hookDescription: 'Claude Code 终端监控 Hook',
+          ),
+          herdr: AgentHerdrCapability(
+            supported: true,
+            ready: false,
+          ),
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ChangeNotifierProvider<ChatProvider>.value(
+          value: provider,
+          child: const AgentManagePage(),
+        ),
+      ),
+    );
+
+    // 1. Shows CLI detected
+    expect(find.textContaining('已检测到 CLI (/usr/local/bin/claude)'), findsOneWidget);
+
+    // 2. Shows ACP adapter not installed
+    expect(find.textContaining('ACP 适配器: 未安装 (@agentclientprotocol/claude-agent-acp)'), findsOneWidget);
+    final installAdapterBtn = find.text('安装 ACP 适配器');
+    expect(installAdapterBtn, findsOneWidget);
+
+    // 3. Shows Hook not installed
+    expect(find.textContaining('Hook: 未安装 (Claude Code 终端监控 Hook)'), findsOneWidget);
+    expect(find.text('安装 Hook'), findsOneWidget);
+
+    // 4. Tap "安装 ACP 适配器" sends install_acp_adapter
+    await tester.tap(installAdapterBtn);
+    await tester.pump();
+    expect(lastSent?.type, 'install_acp_adapter');
+    expect(lastSent?.agentId, 'claude');
+  });
+
+  testWidgets('AgentManagePage in Native mode renders ACP adapter ready and uninstall action', (tester) async {
+    final ws = WSClient();
+    final provider = ChatProvider(ws);
+
+    ClientMessage? lastSent;
+    ws.onSendForTest = (msg) => lastSent = msg;
+
+    provider.state.registryAgents = [
+      RegistryAgentInfo.fromJson({
+        'id': 'claude',
+        'name': 'Claude Code',
+        'description': 'Anthropic Claude Code CLI',
+      }),
+    ];
+
+    provider.state.hostCapabilities = HostCapabilities(
+      platform: 'linux',
+      arch: 'x64',
+      git: const GitCapability(available: true),
+      herdr: const HerdrCapability(available: false, transport: 'cli'),
+      agents: [
+        const AgentRuntimeCapability(
+          id: 'claude',
+          name: 'Claude Code',
+          enabled: false,
+          native: AgentNativeCapability(
+            supported: true,
+            ready: true,
+            executable: '/usr/local/bin/claude',
+            adapterRequired: true,
+            adapterInstalled: true,
+            adapterPackage: '@agentclientprotocol/claude-agent-acp',
+            adapterBinary: 'claude-agent-acp',
+            hookSupported: true,
+            hookInstalled: true,
+          ),
+          herdr: AgentHerdrCapability(
+            supported: true,
+            ready: false,
+          ),
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ChangeNotifierProvider<ChatProvider>.value(
+          value: provider,
+          child: const AgentManagePage(),
+        ),
+      ),
+    );
+
+    // Shows ACP adapter ready
+    expect(find.textContaining('ACP 适配器: 已就绪 (claude-agent-acp)'), findsOneWidget);
+    final uninstallAdapterBtn = find.text('卸载适配器');
+    expect(uninstallAdapterBtn, findsOneWidget);
+
+    // Tap "卸载适配器" sends uninstall_acp_adapter
+    await tester.tap(uninstallAdapterBtn);
+    await tester.pump();
+    expect(lastSent?.type, 'uninstall_acp_adapter');
+    expect(lastSent?.agentId, 'claude');
   });
 }

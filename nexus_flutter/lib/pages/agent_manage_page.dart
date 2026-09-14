@@ -54,6 +54,10 @@ class _AgentManagePageState extends State<AgentManagePage> {
       final nativeHookSupported = caps?.native.hookSupported ?? false;
       final nativeHookInstalled = caps?.native.hookInstalled ?? false;
       final nativeHookDesc = caps?.native.hookDescription ?? '';
+      final adapterRequired = caps?.native.adapterRequired ?? false;
+      final adapterInstalled = caps?.native.adapterInstalled ?? true;
+      final adapterPackage = caps?.native.adapterPackage ?? '';
+      final adapterBinary = caps?.native.adapterBinary ?? '';
 
       final integration = chatProvider.integrationFor(caps?.herdr.integrationId);
       final herdrIntegrationLabel = integration == null
@@ -84,6 +88,10 @@ class _AgentManagePageState extends State<AgentManagePage> {
         'nativeHookSupported': nativeHookSupported ? 'true' : 'false',
         'nativeHookInstalled': nativeHookInstalled ? 'true' : 'false',
         'nativeHookDesc': nativeHookDesc,
+        'adapterRequired': adapterRequired ? 'true' : 'false',
+        'adapterInstalled': adapterInstalled ? 'true' : 'false',
+        'adapterPackage': adapterPackage,
+        'adapterBinary': adapterBinary,
         'nativeSupported': (caps?.native.supported ?? false) ? 'true' : 'false',
       };
     }).toList();
@@ -235,18 +243,20 @@ class _AgentManagePageState extends State<AgentManagePage> {
     final id = agent['id']!;
     final name = agent['name']!;
     final desc = agent['desc']!;
-    final nativeReady = agent['nativeReady'] == 'true';
     final herdrReady = agent['herdrReady'] == 'true';
     final executable = agent['executable'] ?? '';
     final nativeHookSupported = agent['nativeHookSupported'] == 'true';
     final nativeHookInstalled = agent['nativeHookInstalled'] == 'true';
     final nativeHookDesc = agent['nativeHookDesc'] ?? '';
     final nativeSupported = agent['nativeSupported'] == 'true';
+    final adapterRequired = agent['adapterRequired'] == 'true';
+    final adapterInstalled = agent['adapterInstalled'] == 'true';
+    final adapterPackage = agent['adapterPackage'] ?? '';
+    final adapterBinary = agent['adapterBinary'] ?? '';
 
     final herdrIntegrationLabel = agent['herdrIntegration'] ?? '';
     final herdrIntegrationTarget = agent['herdrIntegrationTarget'] ?? '';
     final needsHerdrIntegration = agent['needsHerdrIntegration'] == 'true';
-    final isReady = agent['ready'] == 'true';
     final cliInstalled = executable.isNotEmpty;
     final fg = AppColors.foregroundCtx(context);
     final muted = AppColors.foregroundMutedCtx(context);
@@ -315,12 +325,62 @@ class _AgentManagePageState extends State<AgentManagePage> {
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
+            // ── Native Mode: ACP Adapter status & action ──
+            if (adapterRequired) ...[
+            const SizedBox(height: 2),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                    adapterInstalled
+                        ? 'ACP 适配器: 已就绪${adapterBinary.isNotEmpty ? ' ($adapterBinary)' : ''}'
+                        : 'ACP 适配器: 未安装${adapterPackage.isNotEmpty ? ' ($adapterPackage)' : ''}',
+                    style: TextStyle(
+                      fontSize: AppFontSize.xxs,
+                      color: adapterInstalled
+                          ? const Color(0xFF2DA44E)
+                          : Colors.orangeAccent,
+            ),
+                      overflow: TextOverflow.ellipsis,
+            ),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  if (adapterInstalled)
+                    TextButton(
+                      onPressed: () =>
+                          context.read<ChatProvider>().uninstallAcpAdapter(id),
+                      style: TextButton.styleFrom(
+                        padding: EdgeInsets.zero,
+                        minimumSize: const Size(0, 24),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+                      child: const Text('卸载适配器',
+                          style: TextStyle(
+                              fontSize: AppFontSize.xxs, color: Colors.redAccent)),
+                    )
+                  else
+                    TextButton(
+                      onPressed: () =>
+                          context.read<ChatProvider>().installAcpAdapter(id),
+                      style: TextButton.styleFrom(
+                        padding: EdgeInsets.zero,
+                        minimumSize: const Size(0, 24),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+                      child: const Text('安装 ACP 适配器',
+                          style: TextStyle(
+                              fontSize: AppFontSize.xxs, fontWeight: FontWeight.w600)),
+            ),
+                ],
+            ),
+            ],
             const SizedBox(height: 2),
             // ── Native Mode: Hook choice or protocol info ──
             if (nativeHookSupported) ...[
               Row(
         children: [
-          Text(
+                  Expanded(
+                    child: Text(
                     nativeHookInstalled
                         ? 'Hook: 已安装${nativeHookDesc.isNotEmpty ? ' ($nativeHookDesc)' : ''}'
                         : 'Hook: 未安装${nativeHookDesc.isNotEmpty ? ' ($nativeHookDesc)' : ''}',
@@ -329,6 +389,8 @@ class _AgentManagePageState extends State<AgentManagePage> {
                       color: nativeHookInstalled
                           ? const Color(0xFF2DA44E)
                           : muted,
+                    ),
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                   const SizedBox(width: AppSpacing.sm),

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, existsSync, writeFileSync, readFileSync } from "node:fs";
+import { mkdtempSync, rmSync, existsSync, writeFileSync, readFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -70,6 +70,59 @@ try {
   // Overwriting unmanaged file with installNativeHook must also fail to prevent data loss
   const installOverUnmanaged = await installNativeHook("omp", testHome);
   assert.equal(installOverUnmanaged.ok, false, "installing over unmanaged file must fail");
+
+  // 9. Claude hook test with settings.json management
+  const claudeDef = getNativeHookDefinition("claude");
+  assert(claudeDef !== null, "claude must have native hook definition");
+  assert.equal(claudeDef.isExecutable, true, "claude hook is executable");
+
+  const claudeInitial = checkNativeHookStatus("claude", testHome);
+  assert.equal(claudeInitial.supported, true);
+  assert.equal(claudeInitial.installed, false);
+
+  // Pre-populate settings.json with a user key
+  const claudeSettingsPath = join(testHome, ".claude", "settings.json");
+  mkdirSync(join(testHome, ".claude"), { recursive: true });
+  writeFileSync(claudeSettingsPath, JSON.stringify({ userKey: "keepMe" }, null, 2), "utf8");
+
+  const claudeInstall = await installNativeHook("claude", testHome);
+  assert.equal(claudeInstall.ok, true, `claude install should succeed: ${claudeInstall.error}`);
+  assert(existsSync(claudeInstall.path), "claude hook script exists");
+
+  const claudeSettingsAfter = JSON.parse(readFileSync(claudeSettingsPath, "utf8"));
+  assert.equal(claudeSettingsAfter.userKey, "keepMe", "user settings preserved");
+  assert(claudeSettingsAfter.hooks?.SessionStart?.length > 0, "SessionStart hook added");
+  assert(claudeSettingsAfter.hooks?.Stop?.length > 0, "Stop hook added");
+
+  const claudeAfterInstall = checkNativeHookStatus("claude", testHome);
+  assert.equal(claudeAfterInstall.installed, true, "claude hook detected as installed");
+
+  const claudeUninstall = await uninstallNativeHook("claude", testHome);
+  assert.equal(claudeUninstall.ok, true);
+  assert(!existsSync(claudeInstall.path), "claude hook script deleted");
+
+  const claudeSettingsCleaned = JSON.parse(readFileSync(claudeSettingsPath, "utf8"));
+  assert.equal(claudeSettingsCleaned.userKey, "keepMe", "user settings still preserved");
+  assert.equal(claudeSettingsCleaned.hooks, undefined, "empty hooks object cleaned up");
+
+  // 10. Codex hook test with hooks.json management
+  const codexDef = getNativeHookDefinition("codex");
+  assert(codexDef !== null, "codex must have native hook definition");
+
+  const codexInstall = await installNativeHook("codex", testHome);
+  assert.equal(codexInstall.ok, true, `codex install should succeed: ${codexInstall.error}`);
+  assert(existsSync(codexInstall.path), "codex hook script exists");
+
+  const codexHooksPath = join(testHome, ".codex", "hooks.json");
+  assert(existsSync(codexHooksPath), "hooks.json created");
+
+  const codexAfterInstall = checkNativeHookStatus("codex", testHome);
+  assert.equal(codexAfterInstall.installed, true, "codex hook detected as installed");
+
+  const codexUninstall = await uninstallNativeHook("codex", testHome);
+  assert.equal(codexUninstall.ok, true);
+  assert(!existsSync(codexInstall.path), "codex hook script deleted");
+  assert(!existsSync(codexHooksPath), "empty hooks.json file cleaned up");
 
   console.log("ALL NATIVE HOOK TESTS PASSED!");
 } finally {

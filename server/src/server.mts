@@ -43,6 +43,7 @@ import { handleListHerdrWorkspaces, handleCreateHerdrWorkspace, handleCreateHerd
 import { watchAmbientSessions, listAmbientSessions } from "./discovery/ambient-session.mjs";
 import { detectHostCapabilities, invalidateHostCapabilities } from "./discovery/host-capabilities.mjs";
 import { installNativeHook, uninstallNativeHook } from "./discovery/native-hooks.mjs";
+import { installAcpAdapter, uninstallAcpAdapter } from "./discovery/acp-adapters.mjs";
 
 const PORT = parseInt(process.env.PORT || "", 10) || 12138;
 const HOST_ID = getOrCreateHostId();
@@ -485,6 +486,40 @@ export function handleIncomingConnection(transport: any, hostId: string = HOST_I
           } catch (err: any) {
             console.log(`[server] uninstall_native_hook error: ${err.message}`);
             transport.send(JSON.stringify({ type: "uninstall_native_hook_done", agentId, ok: false, error: err.message }));
+          }
+        });
+        break;
+      }
+
+      case "install_acp_adapter": {
+        const agentId = String(sessionMsg.agentId || "");
+        console.log(`[server] install_acp_adapter: ${agentId}`);
+        sessionManager.enqueueWsOp(transport, async () => {
+          try {
+            const res = await installAcpAdapter(agentId);
+            if (!res.ok) throw new Error(res.error || "Adapter installation failed");
+            invalidateHostCapabilities();
+            transport.send(JSON.stringify({ type: "install_acp_adapter_done", agentId, ok: true, path: res.path }));
+          } catch (err: any) {
+            console.log(`[server] install_acp_adapter error: ${err.message}`);
+            transport.send(JSON.stringify({ type: "install_acp_adapter_done", agentId, ok: false, error: err.message }));
+          }
+        });
+        break;
+      }
+
+      case "uninstall_acp_adapter": {
+        const agentId = String(sessionMsg.agentId || "");
+        console.log(`[server] uninstall_acp_adapter: ${agentId}`);
+        sessionManager.enqueueWsOp(transport, async () => {
+          try {
+            const res = await uninstallAcpAdapter(agentId);
+            if (!res.ok) throw new Error(res.error || "Adapter uninstallation failed");
+            invalidateHostCapabilities();
+            transport.send(JSON.stringify({ type: "uninstall_acp_adapter_done", agentId, ok: true }));
+          } catch (err: any) {
+            console.log(`[server] uninstall_acp_adapter error: ${err.message}`);
+            transport.send(JSON.stringify({ type: "uninstall_acp_adapter_done", agentId, ok: false, error: err.message }));
           }
         });
         break;

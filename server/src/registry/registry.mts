@@ -13,6 +13,8 @@ export interface AgentNativeConfig {
   command?: string;
   args?: string[];
   env?: Record<string, string>;
+  adapterPackage?: string;
+  adapterBinary?: string;
   structuredHistory: boolean;
   modelSelection: boolean;
   modeSelection: boolean;
@@ -108,6 +110,8 @@ export function isValidNativeConfig(value: unknown): value is AgentNativeConfig 
   if (typeof config.enabled !== "boolean") return false;
   if (config.enabled && !validCommand(config.command)) return false;
   if (config.args !== undefined && !validArgs(config.args)) return false;
+  if (config.adapterPackage !== undefined && typeof config.adapterPackage !== "string") return false;
+  if (config.adapterBinary !== undefined && typeof config.adapterBinary !== "string") return false;
   return validBackendFeatures(config);
 }
 

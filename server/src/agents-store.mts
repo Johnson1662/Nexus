@@ -79,6 +79,14 @@ export function findExecutableDetailed(
   return null;
 }
 
+export function getNexusAdaptersDir(): string {
+  return path.join(homedir(), ".nexus", "adapters");
+}
+
+export function getNexusAdaptersBinDir(): string {
+  return path.join(getNexusAdaptersDir(), "node_modules", ".bin");
+}
+
 /**
  * Binary directories that exist regardless of how Nexus was launched.
  * Guards against a daemon started from a GUI/limited PATH.
@@ -87,6 +95,7 @@ function knownBinDirs(): string[] {
   const home = homedir();
   if (process.platform === "win32") {
     return [
+      getNexusAdaptersBinDir(),
       process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, "Programs") : "",
       process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, "Microsoft", "WindowsApps") : "",
       path.join(home, ".cargo", "bin"),
@@ -95,6 +104,7 @@ function knownBinDirs(): string[] {
     ];
   }
   return [
+    getNexusAdaptersBinDir(),
     path.join(home, ".local", "bin"),
     path.join(home, "bin"),
     "/usr/local/bin",
@@ -408,6 +418,14 @@ export function resolveAgentRuntime(agentId: string): AgentRuntime | null {
   const found = findAgentExecutable(agentId);
   const fallbackCmd = resolved?.cmd ?? native.command ?? "";
 
+  let nativeCmdPath: string | null = null;
+  if (native.command) {
+    const foundNative = findExecutableDetailed(native.command);
+    if (foundNative) {
+      nativeCmdPath = foundNative.path;
+    }
+  }
+
   return {
     agentId,
     displayName: getAgentDisplayName(agentId),
@@ -415,7 +433,7 @@ export function resolveAgentRuntime(agentId: string): AgentRuntime | null {
     installed,
     // Spawn exactly what was resolved; the bare command is only a fallback for
     // the message shown when nothing was found.
-    cmd: found?.path ?? fallbackCmd,
+    cmd: nativeCmdPath ?? found?.path ?? fallbackCmd,
     args: resolved?.args ?? native.args ?? [],
     env: { ...(resolved?.env || {}), ...(installedAgent?.customEnv || {}) },
     executablePath: found?.path ?? null,

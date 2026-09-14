@@ -865,6 +865,14 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
     _ws.send(ClientMessage(type: 'uninstall_native_hook', agentId: agentId));
   }
 
+  void installAcpAdapter(String agentId) {
+    _ws.send(ClientMessage(type: 'install_acp_adapter', agentId: agentId));
+  }
+
+  void uninstallAcpAdapter(String agentId) {
+    _ws.send(ClientMessage(type: 'uninstall_acp_adapter', agentId: agentId));
+  }
+
   /// Integration install state for a Herdr target, from the last list reply.
   Map<String, dynamic>? integrationFor(String? target) {
     if (target == null || target.isEmpty) return null;
@@ -1428,6 +1436,22 @@ class ChatProvider extends ChangeNotifier with WidgetsBindingObserver {
       case 'uninstall_native_hook_done':
         if (msg.ok == false) {
           _state.errorMessage = msg.error ?? 'Hook 卸载失败';
+        } else {
+          refreshHostCapabilities();
+        }
+        notifyListeners();
+        break;
+      case 'install_acp_adapter_done':
+        if (msg.ok == false) {
+          _state.errorMessage = msg.error ?? 'ACP 适配器安装失败';
+        } else {
+          refreshHostCapabilities();
+        }
+        notifyListeners();
+        break;
+      case 'uninstall_acp_adapter_done':
+        if (msg.ok == false) {
+          _state.errorMessage = msg.error ?? 'ACP 适配器卸载失败';
         } else {
           refreshHostCapabilities();
         }

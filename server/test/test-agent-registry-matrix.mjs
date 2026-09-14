@@ -26,10 +26,10 @@ const HERDR_INTEGRATIONS = new Set([
 // transcript parser exists in this repo (omp jsonl, codex rollout jsonl).
 const EXPECTED = {
   omp: { executables: ["omp"], kind: "omp", integration: "omp", native: "omp", nativeHistory: true, herdrHistory: true },
-  claude: { executables: ["claude"], kind: "claude", integration: "claude", native: null, nativeHistory: false, herdrHistory: false },
+  claude: { executables: ["claude"], kind: "claude", integration: "claude", native: "claude-agent-acp", nativeHistory: true, herdrHistory: false },
   // Codex rollouts are only resolvable through a Linux /proc scan plus an
   // omp-specific session search, so the Herdr backend is terminal-only for now.
-  codex: { executables: ["codex"], kind: "codex", integration: "codex", native: null, nativeHistory: false, herdrHistory: false },
+  codex: { executables: ["codex"], kind: "codex", integration: "codex", native: "codex-acp", nativeHistory: true, herdrHistory: false },
   opencode: { executables: ["opencode"], kind: "opencode", integration: "opencode", native: "opencode", nativeHistory: true, herdrHistory: false },
   cursor: { executables: ["agent", "cursor-agent"], kind: "cursor", integration: "cursor", native: "agent", nativeHistory: true, herdrHistory: false },
   copilot: { executables: ["copilot"], kind: "copilot", integration: "copilot", native: null, nativeHistory: false, herdrHistory: false },
@@ -38,7 +38,7 @@ const EXPECTED = {
   kimi: { executables: ["kimi"], kind: "kimi", integration: "kimi", native: "kimi", nativeHistory: true, herdrHistory: false },
   qwen: { executables: ["qwen"], kind: "qwen", integration: "qwen", native: null, nativeHistory: false, herdrHistory: false },
   grok: { executables: ["grok"], kind: "grok", integration: "grok", native: null, nativeHistory: false, herdrHistory: false },
-  pi: { executables: ["pi"], kind: "pi", integration: "pi", native: null, nativeHistory: false, herdrHistory: false },
+  pi: { executables: ["pi"], kind: "pi", integration: "pi", native: "pi-acp", nativeHistory: true, herdrHistory: false },
   kilo: { executables: ["kilo"], kind: "kilo", integration: "kilo", native: null, nativeHistory: false, herdrHistory: false },
   hermes: { executables: ["hermes"], kind: "hermes", integration: "hermes", native: null, nativeHistory: false, herdrHistory: false },
   qodercli: { executables: ["qodercli"], kind: "qodercli", integration: "qodercli", native: null, nativeHistory: false, herdrHistory: false },
@@ -79,7 +79,11 @@ for (const agent of registry.agents) {
   if (expected.native) {
     assert.equal(agent.native.enabled, true, `${agent.id}: native must be enabled`);
     assert.equal(agent.native.command, expected.native, `${agent.id}: native command`);
-    assert.deepEqual(agent.native.args, ["acp"], `${agent.id}: native args must be acp`);
+    if (agent.native.adapterPackage) {
+      assert.deepEqual(agent.native.args ?? [], [], `${agent.id}: adapter native args`);
+    } else {
+      assert.deepEqual(agent.native.args, ["acp"], `${agent.id}: native args must be acp`);
+    }
     assert.equal(agent.native.structuredHistory, true, `${agent.id}: native.structuredHistory`);
     assert.equal(agent.native.modelSelection, true, `${agent.id}: native.modelSelection`);
     assert.equal(agent.native.modeSelection, true, `${agent.id}: native.modeSelection`);

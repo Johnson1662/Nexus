@@ -51,11 +51,15 @@
         ]
       },
       "native": {
-        "enabled": false,
-        "structuredHistory": false,
-        "modelSelection": false,
-        "modeSelection": false,
-        "authentication": false
+        "enabled": true,
+        "command": "claude-agent-acp",
+        "args": [],
+        "adapterPackage": "@agentclientprotocol/claude-agent-acp",
+        "adapterBinary": "claude-agent-acp",
+        "structuredHistory": true,
+        "modelSelection": true,
+        "modeSelection": true,
+        "authentication": true
       },
       "herdr": {
         "enabled": true,
@@ -84,11 +88,15 @@
         ]
       },
       "native": {
-        "enabled": false,
-        "structuredHistory": false,
-        "modelSelection": false,
-        "modeSelection": false,
-        "authentication": false
+        "enabled": true,
+        "command": "codex-acp",
+        "args": [],
+        "adapterPackage": "@agentclientprotocol/codex-acp",
+        "adapterBinary": "codex-acp",
+        "structuredHistory": true,
+        "modelSelection": true,
+        "modeSelection": true,
+        "authentication": true
       },
       "herdr": {
         "enabled": true,
@@ -400,11 +408,15 @@
         ]
       },
       "native": {
-        "enabled": false,
-        "structuredHistory": false,
-        "modelSelection": false,
-        "modeSelection": false,
-        "authentication": false
+        "enabled": true,
+        "command": "pi-acp",
+        "args": [],
+        "adapterPackage": "pi-acp",
+        "adapterBinary": "pi-acp",
+        "structuredHistory": true,
+        "modelSelection": true,
+        "modeSelection": true,
+        "authentication": true
       },
       "herdr": {
         "enabled": true,

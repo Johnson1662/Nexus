@@ -2,6 +2,7 @@ import { findExecutable, resolveAgentRuntime, getInstalledAgents } from "../agen
 import { listRegistryAgents, loadRegistry, getNativeConfig, getHerdrConfig } from "../registry/registry.mjs";
 import { HerdrAdapter } from "./herdr-adapter.mjs";
 import { checkNativeHookStatus } from "./native-hooks.mjs";
+import { checkAcpAdapterStatus } from "./acp-adapters.mjs";
 
 export interface HostCapabilities {
   platform: "linux" | "darwin" | "win32";
@@ -39,6 +40,10 @@ export interface AgentRuntimeCapability {
     hookSupported: boolean;
     hookInstalled: boolean;
     hookDescription?: string;
+    adapterRequired: boolean;
+    adapterInstalled: boolean;
+    adapterPackage?: string;
+    adapterBinary?: string;
   };
   herdr: {
     supported: boolean;
@@ -97,7 +102,20 @@ export async function detectHostCapabilities(forceRefresh = false): Promise<Host
     const execPath = runtime?.executablePath ?? null;
     const execSource = runtime?.executableSource ?? undefined;
     const nativeSupported = Boolean(nativeCfg?.enabled);
-    const nativeReady = nativeSupported && execPath !== null;
+    const adapterStatus = checkAcpAdapterStatus(agent.id);
+    const adapterRequired = adapterStatus.required;
+    const adapterInstalled = adapterStatus.installed;
+    const nativeReady = nativeSupported && execPath !== null && (!adapterRequired || adapterInstalled);
+
+    let nativeReason: string | undefined;
+    if (!nativeSupported) {
+      nativeReason = "Native ACP not enabled for this agent";
+    } else if (execPath === null) {
+      nativeReason = "Executable not found in PATH or known locations";
+    } else if (adapterRequired && !adapterInstalled) {
+      nativeReason = `未安装 ACP 适配器 (${adapterStatus.package})`;
+    }
+
     const herdrSupported = Boolean(herdrCfg?.enabled);
     const herdrReady = herdrSupported && herdrAvailable && execPath !== null;
     const integrationId = runtime?.herdrIntegration ?? herdrCfg?.integration ?? undefined;
@@ -130,11 +148,11 @@ export async function detectHostCapabilities(forceRefresh = false): Promise<Host
         hookSupported: hookStatus.supported,
         hookInstalled: hookStatus.installed,
         hookDescription: hookStatus.description,
-        reason: !nativeSupported
-          ? "Native ACP not enabled for this agent"
-          : execPath === null
-            ? "Executable not found in PATH or known locations"
-            : undefined,
+        adapterRequired,
+        adapterInstalled,
+        adapterPackage: adapterStatus.package,
+        adapterBinary: adapterStatus.binary,
+        reason: nativeReason,
       },
       herdr: {
         supported: herdrSupported,
@@ -169,7 +187,7 @@ export async function detectHostCapabilities(forceRefresh = false): Promise<Host
     const execPath = runtime?.executablePath ?? null;
     agents.push({
       id: installed.agentId,
-      name: runtime?.displayName ?? installed.agentId,
+      name: installed.agentId,
       enabled: true,
       native: {
         supported: true,
@@ -182,7 +200,9 @@ export async function detectHostCapabilities(forceRefresh = false): Promise<Host
         authentication: true,
         hookSupported: false,
         hookInstalled: false,
-        reason: execPath === null ? "Executable not found in PATH or known locations" : undefined,
+        adapterRequired: false,
+        adapterInstalled: true,
+        reason: execPath === null ? "Executable not found in PATH" : undefined,
       },
       herdr: {
         supported: false,

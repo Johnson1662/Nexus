@@ -124,6 +124,7 @@ class ServerMessage {
   final String type;
   final String? text;
   final String? sessionId;
+  final String? agentId;
   final String? agent;
   final String? model;
   final String? title;
@@ -177,6 +178,7 @@ class ServerMessage {
     required this.type,
     this.text,
     this.sessionId,
+    this.agentId,
     this.agent,
     this.model,
     this.title,
@@ -353,6 +355,7 @@ class ServerMessage {
       type: json['type'] as String? ?? '',
       text: json['text'] as String?,
       sessionId: json['sessionId'] as String?,
+      agentId: json['agentId'] as String?,
       agent: json['agent'] as String?,
       model: json['model'] as String?,
       title: json['title'] as String?,
@@ -802,6 +805,10 @@ class AgentNativeCapability {
   final bool hookSupported;
   final bool hookInstalled;
   final String? hookDescription;
+  final bool adapterRequired;
+  final bool adapterInstalled;
+  final String? adapterPackage;
+  final String? adapterBinary;
 
   const AgentNativeCapability({
     required this.supported,
@@ -816,6 +823,10 @@ class AgentNativeCapability {
     this.hookSupported = false,
     this.hookInstalled = false,
     this.hookDescription,
+    this.adapterRequired = false,
+    this.adapterInstalled = true,
+    this.adapterPackage,
+    this.adapterBinary,
   });
 
   factory AgentNativeCapability.fromJson(Map<String, dynamic> json) =>
@@ -832,6 +843,10 @@ class AgentNativeCapability {
         hookSupported: json['hookSupported'] as bool? ?? false,
         hookInstalled: json['hookInstalled'] as bool? ?? false,
         hookDescription: json['hookDescription'] as String?,
+        adapterRequired: json['adapterRequired'] as bool? ?? false,
+        adapterInstalled: json['adapterInstalled'] as bool? ?? true,
+        adapterPackage: json['adapterPackage'] as String?,
+        adapterBinary: json['adapterBinary'] as String?,
       );
 
   Map<String, dynamic> toJson() => {
@@ -847,6 +862,10 @@ class AgentNativeCapability {
         'hookSupported': hookSupported,
         'hookInstalled': hookInstalled,
         if (hookDescription != null) 'hookDescription': hookDescription,
+        'adapterRequired': adapterRequired,
+        'adapterInstalled': adapterInstalled,
+        if (adapterPackage != null) 'adapterPackage': adapterPackage,
+        if (adapterBinary != null) 'adapterBinary': adapterBinary,
       };
 }
 

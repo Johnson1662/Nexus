@@ -20,6 +20,126 @@ export interface NativeHookDefinition {
   sourceAssetName: string;
   version: number;
   versionMarker: RegExp;
+  isExecutable?: boolean;
+  configHandler?: {
+    getConfigPath: (home: string) => string;
+    updateConfig: (existingContent: string | null, hookScriptPath: string) => string;
+    removeConfig: (existingContent: string | null, hookScriptPath: string) => string | null;
+    isConfigured: (content: string, hookScriptPath: string) => boolean;
+  };
+}
+
+function createJsonHookConfigHandler(options: {
+  getConfigPath: (home: string) => string;
+  matcher: string;
+}): NonNullable<NativeHookDefinition["configHandler"]> {
+  return {
+    getConfigPath: options.getConfigPath,
+    isConfigured: (content: string, hookScriptPath: string) => {
+      try {
+        const parsed = JSON.parse(content);
+        const hooks = parsed?.hooks;
+        if (!hooks || typeof hooks !== "object") return false;
+        const sessionHooks = hooks.SessionStart;
+        if (!Array.isArray(sessionHooks)) return false;
+        return sessionHooks.some((group: any) =>
+          Array.isArray(group?.hooks) &&
+          group.hooks.some((h: any) => typeof h?.command === "string" && h.command.includes("nexus-ambient"))
+        );
+      } catch {
+        return false;
+      }
+    },
+    updateConfig: (existingContent: string | null, hookScriptPath: string) => {
+      let root: Record<string, any> = {};
+      if (existingContent && existingContent.trim()) {
+        try {
+          root = JSON.parse(existingContent);
+        } catch {
+          root = {};
+        }
+      }
+      if (!root.hooks || typeof root.hooks !== "object" || Array.isArray(root.hooks)) {
+        root.hooks = {};
+      }
+
+      for (const event of ["SessionStart", "Stop"] as const) {
+        if (!Array.isArray(root.hooks[event])) {
+          root.hooks[event] = [];
+        }
+        const action = event === "Stop" ? "stop" : "session";
+        const command = `${hookScriptPath} ${action}`;
+        const existingGroup = root.hooks[event].find((g: any) =>
+          Array.isArray(g?.hooks) &&
+          g.hooks.some((h: any) => typeof h?.command === "string" && h.command.includes("nexus-ambient"))
+        );
+
+        if (existingGroup) {
+          existingGroup.hooks = [
+            {
+              type: "command",
+              command,
+              timeout: 30,
+            },
+          ];
+          existingGroup.matcher = options.matcher;
+        } else {
+          root.hooks[event].push({
+            matcher: options.matcher,
+            hooks: [
+              {
+                type: "command",
+                command,
+                timeout: 30,
+              },
+            ],
+          });
+        }
+      }
+
+      return JSON.stringify(root, null, 2) + "\n";
+    },
+    removeConfig: (existingContent: string | null, hookScriptPath: string) => {
+      if (!existingContent || !existingContent.trim()) return null;
+      let root: Record<string, any> = {};
+      try {
+        root = JSON.parse(existingContent);
+      } catch {
+        return null;
+      }
+
+      if (!root.hooks || typeof root.hooks !== "object" || Array.isArray(root.hooks)) {
+        return existingContent;
+      }
+
+      for (const event of ["SessionStart", "Stop"] as const) {
+        if (!Array.isArray(root.hooks[event])) continue;
+        root.hooks[event] = root.hooks[event]
+          .map((g: any) => {
+            if (!Array.isArray(g?.hooks)) return g;
+            const remaining = g.hooks.filter(
+              (h: any) => !(typeof h?.command === "string" && h.command.includes("nexus-ambient"))
+            );
+            return { ...g, hooks: remaining };
+          })
+          .filter((g: any) => Array.isArray(g.hooks) && g.hooks.length > 0);
+
+        if (root.hooks[event].length === 0) {
+          delete root.hooks[event];
+        }
+      }
+
+      if (Object.keys(root.hooks).length === 0) {
+        delete root.hooks;
+      }
+
+      if (Object.keys(root).length === 0) {
+        return null;
+      }
+
+      return JSON.stringify(root, null, 2) + "\n";
+    },
+  };
 }
 
 const NATIVE_HOOK_REGISTRY: Record<string, NativeHookDefinition> = {
@@ -32,6 +152,36 @@ const NATIVE_HOOK_REGISTRY: Record<string, NativeHookDefinition> = {
     sourceAssetName: "nexus-ambient-omp.ts",
     version: 1,
     versionMarker: /NEXUS_AMBIENT_INTEGRATION_VERSION=(\d+)/,
+  },
+  claude: {
+    agentId: "claude",
+    name: "Claude Code 终端监控 Hook",
+    description: "用于监听和同步终端中运行的 Claude Code 命令行会话",
+    targetDir: (home: string) => path.join(home, ".claude", "hooks"),
+    targetFileName: "nexus-ambient.sh",
+    sourceAssetName: "nexus-ambient-claude.sh",
+    version: 1,
+    versionMarker: /NEXUS_AMBIENT_INTEGRATION_VERSION=(\d+)/,
+    isExecutable: true,
+    configHandler: createJsonHookConfigHandler({
+      getConfigPath: (home) => path.join(home, ".claude", "settings.json"),
+      matcher: ".*",
+    }),
+  },
+  codex: {
+    agentId: "codex",
+    name: "Codex 终端监控 Hook",
+    description: "用于监听和同步终端中运行的 Codex CLI 命令行会话",
+    targetDir: (home: string) => path.join(home, ".codex", "hooks"),
+    targetFileName: "nexus-ambient.sh",
+    sourceAssetName: "nexus-ambient-codex.sh",
+    version: 1,
+    versionMarker: /NEXUS_AMBIENT_INTEGRATION_VERSION=(\d+)/,
+    isExecutable: true,
+    configHandler: createJsonHookConfigHandler({
+      getConfigPath: (home) => path.join(home, ".codex", "hooks.json"),
+      matcher: "",
+    }),
   },
 };
 
@@ -97,6 +247,36 @@ export function checkNativeHookStatus(agentId: string, customHome?: string): Nat
 
     const match = content.match(def.versionMarker);
     const version = match ? parseInt(match[1], 10) : def.version;
+
+    if (def.configHandler) {
+      const configPath = def.configHandler.getConfigPath(home);
+      if (!existsSync(configPath)) {
+        return {
+          supported: true,
+          installed: false,
+          path: targetPath,
+          description: def.description,
+        };
+      }
+      try {
+        const configContent = readFileSync(configPath, "utf8");
+        if (!def.configHandler.isConfigured(configContent, targetPath)) {
+          return {
+            supported: true,
+            installed: false,
+            path: targetPath,
+            description: def.description,
+          };
+        }
+      } catch {
+        return {
+          supported: true,
+          installed: false,
+          path: targetPath,
+          description: def.description,
+        };
+      }
+    }
 
     return {
       supported: true,
@@ -183,6 +363,21 @@ export async function installNativeHook(
       throw renameErr;
     }
 
+    if (def.isExecutable && process.platform !== "win32") {
+      try {
+        chmodSync(targetPath, 0o755);
+      } catch {}
+    }
+
+    if (def.configHandler) {
+      const configPath = def.configHandler.getConfigPath(home);
+      const configDir = path.dirname(configPath);
+      mkdirSync(configDir, { recursive: true });
+      const existingConfig = existsSync(configPath) ? readFileSync(configPath, "utf8") : null;
+      const updatedConfig = def.configHandler.updateConfig(existingConfig, targetPath);
+      writeFileSync(configPath, updatedConfig, "utf8");
+    }
+
     console.log(`[native-hooks] installed ${agentId} hook (v${def.version}) to ${targetPath}`);
     return { ok: true, path: targetPath };
   } catch (err: unknown) {
@@ -220,6 +415,20 @@ export async function uninstallNativeHook(
     }
 
     unlinkSync(targetPath);
+    if (def.configHandler) {
+      const configPath = def.configHandler.getConfigPath(home);
+      if (existsSync(configPath)) {
+        try {
+          const existingConfig = readFileSync(configPath, "utf8");
+          const cleaned = def.configHandler.removeConfig(existingConfig, targetPath);
+          if (cleaned === null) {
+            unlinkSync(configPath);
+          } else {
+            writeFileSync(configPath, cleaned, "utf8");
+          }
+        } catch {}
+      }
+    }
     console.log(`[native-hooks] uninstalled ${agentId} hook from ${targetPath}`);
     return { ok: true };
   } catch (err: unknown) {

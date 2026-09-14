@@ -322,14 +322,16 @@ opencode ACP 返回 session 时使用 `updatedAt`（ISO 8601 字符串）而非 
 
 | 方向 | 消息 |
 |------|------|
-| 客户端 → 服务端 | `list_agents`、`list_registry_agents`、`install_agent`、`uninstall_agent`、`install_custom_agent`、`start`、`input`、`list_models`、`list_sessions`、`switch_model`、`set_mode`、`load_session`、`cancel`、`permission_response` |
-| 服务端 → 客户端 | `server_info`、`session_started`、`agent_event`、`turn_ended`、`agent_list`、`registry_agents_list`、`install_agent_done`、`uninstall_agent_done`、`model_list`、`session_list`、`permission_request`、`session_closed` |
+| 客户端 → 服务端 | `list_agents`、`list_registry_agents`、`install_agent`、`uninstall_agent`、`install_custom_agent`、`install_native_hook`、`uninstall_native_hook`、`install_acp_adapter`、`uninstall_acp_adapter`、`start`、`input`、`list_models`、`list_sessions`、`switch_model`、`set_mode`、`load_session`、`cancel`、`permission_response` |
+| 服务端 → 客户端 | `server_info`、`session_started`、`agent_event`、`turn_ended`、`agent_list`、`registry_agents_list`、`install_agent_done`、`uninstall_agent_done`、`install_native_hook_done`、`uninstall_native_hook_done`、`install_acp_adapter_done`、`uninstall_acp_adapter_done`、`model_list`、`session_list`、`permission_request`、`session_closed` |
 
 **Agent 管理消息**：
 - `list_registry_agents` → server 返回 `registry_agents_list`（含所有 registry agent 元数据）
 - `install_agent { agentId }` → server 写入 installed 配置，返回 `install_agent_done { agentId, ok }`
 - `uninstall_agent { agentId }` → server 从 installed 移除，返回 `uninstall_agent_done { agentId, ok }`
 - `install_custom_agent { command, args, name }` → 安装自定义 agent（不在 registry 中的命令）
+- `install_native_hook { agentId }` / `uninstall_native_hook { agentId }` → 管理独立终端会话监控 Hook (OMP / Claude / Codex)
+- `install_acp_adapter { agentId }` / `uninstall_acp_adapter { agentId }` → 隔离安装/卸载 Native ACP 适配器（`~/.nexus/adapters/` 下的 `@agentclientprotocol/claude-agent-acp` / `@agentclientprotocol/codex-acp`）
 
 `AcpUpdate.sessionUpdate` 渲染类型：`agent_message_chunk`、`agent_thought_chunk`、`tool_call`、`tool_call_update`、`plan`、`user_message_chunk`。
 

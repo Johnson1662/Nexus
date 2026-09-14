@@ -48,17 +48,25 @@ assert.equal(ompNative.authentication, true, "omp native supports authentication
 assert.equal(getHerdrConfig("omp").structuredHistory, true, "omp herdr history is structured");
 
 const claudeNative = getNativeConfig("claude");
-assert.equal(claudeNative.enabled, false, "claude has no native ACP adapter");
+assert.equal(claudeNative.enabled, true, "claude enables native ACP via adapter");
+assert.equal(claudeNative.adapterPackage, "@agentclientprotocol/claude-agent-acp", "claude adapter package");
 assert.equal(getHerdrConfig("claude").enabled, true, "claude must be available through Herdr");
 
 const codexHerdr = getHerdrConfig("codex");
-assert.equal(getNativeConfig("codex").enabled, false, "codex has no native ACP adapter");
+const codexNative = getNativeConfig("codex");
+assert.equal(codexNative.enabled, true, "codex enables native ACP via adapter");
+assert.equal(codexNative.adapterPackage, "@agentclientprotocol/codex-acp", "codex adapter package");
 assert.equal(
   codexHerdr.structuredHistory,
   false,
   "codex has no cross-platform transcript resolver yet, so its Herdr backend is terminal-only",
 );
 assert.equal(codexHerdr.kind, "codex", "codex herdr kind");
+
+const piNative = getNativeConfig("pi");
+assert.equal(piNative.enabled, true, "pi enables native ACP via adapter");
+assert.equal(piNative.adapterPackage, "pi-acp", "pi adapter package");
+assert.equal(piNative.adapterBinary, "pi-acp", "pi adapter binary");
 
 // Cursor: structured natively, terminal-only through Herdr.
 assert.equal(getNativeConfig("cursor").structuredHistory, true, "cursor native history is structured");
