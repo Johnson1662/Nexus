@@ -14,18 +14,19 @@ import {
   type FSWatcher,
 } from "node:fs";
 import { getAmbientRuntimeDir } from "../path-utils.mjs";
-import { resolveAgentRuntime } from "../agents-store.mjs";
+import { resolveAgentRuntime, isAgentInstalled } from "../agents-store.mjs";
+import { getRegistryAgent } from "../registry/registry.mjs";
 
 export interface AmbientSessionInfo {
-  sessionId: string; // "ambient:omp:<uuid>"
+  sessionId: string; // "ambient:<agent>:<uuid>"
   realSessionId: string; // "<uuid>"
-  agent: "omp";
+  agent: string;
   pid: number;
   cwd: string;
   transcriptPath: string;
   status: "running" | "idle" | "waiting_input";
   updatedAt: number;
-  control: {
+  control?: {
     host: "127.0.0.1";
     port: number;
     token: string;
@@ -39,9 +40,10 @@ interface RawAmbientClaim {
   pid: number;
   cwd: string;
   transcriptPath: string;
-  status: "working" | "idle" | "blocked";
-  updatedAt: number;
-  control: {
+  status: "working" | "running" | "idle" | "blocked" | "waiting_input";
+  updatedAt?: number;
+  lastSeen?: number;
+  control?: {
     host: string;
     port: number;
     token: string;
@@ -56,9 +58,9 @@ function getSessionsDir(): string {
   return path.join(getAmbientRuntimeDir(), "sessions");
 }
 
-function normalizeStatus(raw: "working" | "idle" | "blocked"): "running" | "idle" | "waiting_input" {
-  if (raw === "working") return "running";
-  if (raw === "blocked") return "waiting_input";
+function normalizeStatus(raw?: string): "running" | "idle" | "waiting_input" {
+  if (raw === "working" || raw === "running") return "running";
+  if (raw === "blocked" || raw === "waiting_input") return "waiting_input";
   return "idle";
 }
 
@@ -78,9 +80,13 @@ function parseAndValidateClaim(filePath: string, now: number = Date.now()): Ambi
     const raw = readFileSync(filePath, "utf8");
     const data = JSON.parse(raw) as Partial<RawAmbientClaim>;
 
+    const agent = typeof data.agent === "string" && data.agent.trim() ? data.agent.trim().toLowerCase() : "";
+    const updatedAt = typeof data.updatedAt === "number" ? data.updatedAt : (typeof data.lastSeen === "number" ? data.lastSeen : 0);
+
     if (
       data.version !== 1 ||
-      data.agent !== "omp" ||
+      !agent ||
+      (!getRegistryAgent(agent) && !isAgentInstalled(agent)) ||
       typeof data.sessionId !== "string" ||
       !data.sessionId ||
       typeof data.pid !== "number" ||
@@ -89,20 +95,13 @@ function parseAndValidateClaim(filePath: string, now: number = Date.now()): Ambi
       typeof data.transcriptPath !== "string" ||
       !path.isAbsolute(data.transcriptPath) ||
       !existsSync(data.transcriptPath) ||
-      typeof data.updatedAt !== "number" ||
-      !data.control ||
-      data.control.host !== "127.0.0.1" ||
-      typeof data.control.port !== "number" ||
-      data.control.port <= 0 ||
-      data.control.port > 65535 ||
-      typeof data.control.token !== "string" ||
-      !data.control.token
+      updatedAt <= 0
     ) {
       try { unlinkSync(filePath); } catch {}
       return null;
     }
 
-    if (now - data.updatedAt > STALE_TIMEOUT_MS) {
+    if (now - updatedAt > STALE_TIMEOUT_MS) {
       try { unlinkSync(filePath); } catch {}
       return null;
     }
@@ -112,22 +111,34 @@ function parseAndValidateClaim(filePath: string, now: number = Date.now()): Ambi
       return null;
     }
 
-    const rawStatus = data.status === "working" || data.status === "blocked" ? data.status : "idle";
+    let control: AmbientSessionInfo["control"] = undefined;
+    if (data.control) {
+      if (
+        data.control.host === "127.0.0.1" &&
+        typeof data.control.port === "number" &&
+        data.control.port > 0 &&
+        data.control.port <= 65535 &&
+        typeof data.control.token === "string" &&
+        data.control.token.length > 0
+      ) {
+        control = {
+          host: "127.0.0.1",
+          port: data.control.port,
+          token: data.control.token,
+        };
+      }
+    }
 
     return {
-      sessionId: `ambient:omp:${data.sessionId}`,
+      sessionId: `ambient:${agent}:${data.sessionId}`,
       realSessionId: data.sessionId,
-      agent: "omp",
+      agent,
       pid: data.pid,
       cwd: data.cwd,
       transcriptPath: data.transcriptPath,
-      status: normalizeStatus(rawStatus),
-      updatedAt: data.updatedAt,
-      control: {
-        host: "127.0.0.1",
-        port: data.control.port,
-        token: data.control.token,
-      },
+      status: normalizeStatus(data.status),
+      updatedAt,
+      control,
     };
   } catch {
     try { unlinkSync(filePath); } catch {}
@@ -136,9 +147,6 @@ function parseAndValidateClaim(filePath: string, now: number = Date.now()): Ambi
 }
 
 export function listAmbientSessions(): AmbientSessionInfo[] {
-  const ompRuntime = resolveAgentRuntime("omp");
-  if (!ompRuntime?.installed) return [];
-
   const dir = getSessionsDir();
   if (!existsSync(dir)) return [];
   const entries = readdirSync(dir).filter((f) => f.endsWith(".json") && !f.startsWith("."));
@@ -149,7 +157,11 @@ export function listAmbientSessions(): AmbientSessionInfo[] {
     const fullPath = path.join(dir, entry);
     const session = parseAndValidateClaim(fullPath, now);
     if (session) {
-      sessions.push(session);
+      // Filter out ambient sessions whose agent is disabled/uninstalled
+      const runtime = resolveAgentRuntime(session.agent);
+      if (runtime?.installed) {
+        sessions.push(session);
+      }
     }
   }
 
@@ -159,14 +171,20 @@ export function listAmbientSessions(): AmbientSessionInfo[] {
 
 export function getAmbientSession(targetId: string): AmbientSessionInfo | null {
   if (!targetId) return null;
-  const ompRuntime = resolveAgentRuntime("omp");
-  if (!ompRuntime?.installed) return null;
+  let agent = "omp";
+  let realId = targetId;
+  if (targetId.startsWith("ambient:")) {
+    const parts = targetId.split(":");
+    if (parts.length >= 3) {
+      agent = parts[1];
+      realId = parts.slice(2).join(":");
+    } else {
+      realId = parts[1];
+    }
+  }
 
-  const realId = targetId.startsWith("ambient:omp:")
-    ? targetId.slice("ambient:omp:".length)
-    : targetId.startsWith("ambient:")
-      ? targetId.split(":").slice(2).join(":")
-      : targetId;
+  const runtime = resolveAgentRuntime(agent);
+  if (!runtime?.installed) return null;
 
   const claimFile = path.join(getSessionsDir(), `${realId}.json`);
   return parseAndValidateClaim(claimFile);
@@ -178,14 +196,19 @@ export async function sendAmbientCommand(
 ): Promise<void> {
   const session = getAmbientSession(sessionId);
   if (!session) {
-    throw new Error(`ambient session not found: ${sessionId}`);
+    throw new Error(`Ambient session not found: ${sessionId}`);
   }
+
+  if (!session.control) {
+    throw new Error(`Agent '${session.agent}' 的外部终端会话仅支持实时状态监控与日志查看，未启用交互控制通道。`);
+  }
+  const control = session.control;
 
   return new Promise<void>((resolve, reject) => {
     let settled = false;
     const socket = net.createConnection({
-      host: session.control.host,
-      port: session.control.port,
+      host: control.host,
+      port: control.port,
     });
 
     const timer = setTimeout(() => {
@@ -199,7 +222,7 @@ export async function sendAmbientCommand(
     socket.on("connect", () => {
       const payload = {
         ...command,
-        token: session.control.token,
+        token: control.token,
       };
       socket.write(JSON.stringify(payload) + "\n");
     });

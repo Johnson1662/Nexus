@@ -1,6 +1,7 @@
 import type { AcpClient } from "./acp/client.mjs";
 import { createTempClient } from "./temp-client.mjs";
 import { getInstalledAgents, installAgent as storeInstallAgent, uninstallAgent as storeUninstallAgent, resolveAgentRuntime, type InstalledAgent } from "./agents-store.mjs";
+import { resolveNativeAcpLaunch } from "./discovery/acp-adapters.mjs";
 import { extractModelList, queryModelListOnce, type ModelList } from "./model-list.mjs";
 import { resolveWorkspacePath, canonicalizeWorkspacePath, areWorkspacePathsEqual } from "./path-utils.mjs";
 
@@ -52,7 +53,9 @@ class AgentRegistryService {
       ? getInstalledAgents().filter((a) => a.agentId === agentFilter)
       : getInstalledAgents()).filter((item) => {
         const runtime = resolveAgentRuntime(item.agentId);
-        return runtime?.installed === true && runtime.native.enabled && runtime.executablePath !== null;
+        if (!runtime?.installed || !runtime.native.enabled) return false;
+        const launch = resolveNativeAcpLaunch(item.agentId);
+        return launch.ok;
       });
     const allSessions: any[] = [];
     const resolvedCwd = resolveWorkspacePath(cwd);
@@ -111,7 +114,11 @@ class AgentRegistryService {
     existingClient?: AcpClient,
   ): Promise<ModelList> {
     const runtime = resolveAgentRuntime(agent);
-    if (!runtime?.native.enabled || !runtime.native.modelSelection || !runtime.executablePath) {
+    if (!runtime?.native.enabled || !runtime.native.modelSelection) {
+      return { models: [], modes: [] };
+    }
+    const launch = resolveNativeAcpLaunch(agent);
+    if (!launch.ok) {
       return { models: [], modes: [] };
     }
     return await queryModelListOnce(agent, cwd, refresh, async () => {

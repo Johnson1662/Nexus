@@ -14,6 +14,9 @@ try {
     detectPackageManager,
     installAcpAdapter,
     uninstallAcpAdapter,
+    resolveNativeAcpLaunch,
+    resolveAdapterDirectJs,
+    checkNodeCompatibility,
   } = await import("../dist/discovery/acp-adapters.mjs");
 
   // 1. Adapter Info from Registry
@@ -70,6 +73,30 @@ try {
 
   const ompUninstall = await uninstallAcpAdapter("omp", { adaptersDir: testAdaptersDir });
   assert.equal(ompUninstall.ok, true);
+
+  // 6. resolveNativeAcpLaunch checks
+  const copilotLaunch = resolveNativeAcpLaunch("copilot");
+  assert.equal(copilotLaunch.ok, false);
+  assert.equal(copilotLaunch.code, "NOT_ENABLED");
+
+  // 7. Node compatibility per agent
+  const claudeCompat = checkNodeCompatibility("claude");
+  assert.equal(claudeCompat.minRequired, 22);
+  const ompCompat = checkNodeCompatibility("omp");
+  assert.equal(ompCompat.minRequired, 18);
+
+  // 8. resolveAdapterDirectJs
+  const mockPkgDir = join(testAdaptersDir, "node_modules", "mock-pkg");
+  mkdirSync(mockPkgDir, { recursive: true });
+  writeFileSync(join(mockPkgDir, "index.js"), "console.log(1);", "utf8");
+  writeFileSync(
+    join(mockPkgDir, "package.json"),
+    JSON.stringify({ name: "mock-pkg", bin: "index.js" }),
+    "utf8",
+  );
+  const directJs = resolveAdapterDirectJs(mockPkgDir);
+  assert(directJs !== null, "resolved direct JS entry");
+  assert(directJs.endsWith("index.js"), "points to index.js");
 
   console.log("ALL ACP ADAPTER TESTS PASSED!");
 } finally {

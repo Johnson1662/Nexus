@@ -5,6 +5,7 @@ import { mkdirSync, existsSync, realpathSync, statSync } from "node:fs";
 import type { RequestPermissionResponse } from "@agentclientprotocol/sdk";
 import { AcpClient } from "./acp/client.mjs";
 import { resolveAgentRuntime } from "./agents-store.mjs";
+import { resolveNativeAcpLaunch } from "./discovery/acp-adapters.mjs";
 import { resolveExplicitCwd } from "./path-utils.mjs";
 /**
  * Creates a temporary ACP client + agent process for one-shot listing operations.
@@ -14,18 +15,17 @@ export async function createTempClient(
   agent: string,
   cwd?: string,
 ): Promise<{ client: AcpClient; destroy: () => void }> {
-  const launch = resolveAgentRuntime(agent);
-  if (!launch || !launch.cmd || launch.args.some((arg: unknown) => typeof arg !== "string")) {
-    throw new Error(`invalid or unavailable agent: ${agent}`);
-  }
-  if (!launch.installed) {
+  const runtime = resolveAgentRuntime(agent);
+  if (!runtime || !runtime.installed) {
     throw new Error(`agent is not installed: ${agent}`);
   }
-  if (!launch.native.enabled) {
-    throw new Error(`agent does not provide native ACP transport: ${agent}`);
+  const launchRes = resolveNativeAcpLaunch(agent);
+  if (!launchRes.ok) {
+    throw new Error(launchRes.error);
   }
-  if (!launch.executablePath) {
-    throw new Error(`agent command not found in PATH: ${launch.cmd}`);
+  const launch = launchRes.launch;
+  if (!launch.cmd || launch.args.some((arg: unknown) => typeof arg !== "string")) {
+    throw new Error(`invalid or unavailable agent: ${agent}`);
   }
   const ANYWHERE_DIR = join(homedir(), ".nexus");
   mkdirSync(ANYWHERE_DIR, { recursive: true, mode: 0o700 });

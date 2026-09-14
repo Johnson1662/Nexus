@@ -46,14 +46,16 @@ function handlePayload() {
 
   const claimFile = path.join(sessionsDir, `${sessionId}.json`);
 
-  if (action === "stop" || action === "exit" || data.hookEventName === "SessionEnd" || data.hook_event_name === "SessionEnd") {
+  const isExit = action === "exit" || action === "session_end" || data.hookEventName === "SessionEnd" || data.hook_event_name === "SessionEnd";
+  if (isExit) {
     try {
       if (fs.existsSync(claimFile)) fs.unlinkSync(claimFile);
     } catch {}
     process.exit(0);
   }
 
-  const status = action === "stop" ? "idle" : "running";
+  const isStop = action === "stop" || data.hookEventName === "Stop" || data.hook_event_name === "Stop";
+  const status = isStop ? "idle" : "working";
   const transcriptPath = data.transcript_path || "";
   const cwd = data.cwd || process.cwd();
 
@@ -65,7 +67,7 @@ function handlePayload() {
     cwd,
     transcriptPath,
     status,
-    lastSeen: Date.now(),
+    updatedAt: Date.now(),
   };
 
   const tmpFile = `${claimFile}.tmp.${process.pid}`;

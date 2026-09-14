@@ -173,6 +173,43 @@ uninstallAgent("omp");
 assert.equal(listAmbientSessions().length, 0, "disabling omp must hide ambient sessions");
 assert.equal(getAmbientSession("ambient:omp:session-valid-001"), null, "getAmbientSession returns null when omp is disabled");
 
+// Test Claude ambient claim without control
+const { _resetInstalledForTest } = await import("../dist/agents-store.mjs");
+const storePath = path.join(testStoreDir, "installed-agents.json");
+fs.writeFileSync(storePath, JSON.stringify({
+  agents: [{ agentId: "claude", installedAt: Date.now(), source: "registry" }],
+}), "utf8");
+_resetInstalledForTest();
+
+const claudeClaim = {
+  version: 1,
+  agent: "claude",
+  sessionId: "session-claude-001",
+  pid: process.pid,
+  cwd: testDataDir,
+  transcriptPath,
+  status: "idle",
+  updatedAt: Date.now(),
+};
+fs.writeFileSync(path.join(sessionsDir, "session-claude-001.json"), JSON.stringify(claudeClaim));
+
+const listWithClaude = listAmbientSessions();
+const foundClaude = listWithClaude.find((s) => s.agent === "claude");
+assert.ok(foundClaude, "Claude ambient claim without control is discovered");
+assert.equal(foundClaude.sessionId, "ambient:claude:session-claude-001");
+assert.equal(foundClaude.control, undefined, "control is undefined for observation-only session");
+
+await assert.rejects(
+  async () => {
+    await sendAmbientCommand("ambient:claude:session-claude-001", { type: "prompt", text: "hello" });
+  },
+  /未启用交互控制通道/,
+  "Command on session without control must fail with informative error",
+);
+
+uninstallAgent("claude");
+assert.equal(listAmbientSessions().length, 0, "disabling claude must hide its ambient sessions");
+
 // Teardown
 mockServer.close();
 try {

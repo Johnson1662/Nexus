@@ -15,6 +15,7 @@ export interface AgentNativeConfig {
   env?: Record<string, string>;
   adapterPackage?: string;
   adapterBinary?: string;
+  minNodeMajor?: number;
   structuredHistory: boolean;
   modelSelection: boolean;
   modeSelection: boolean;
@@ -112,6 +113,7 @@ export function isValidNativeConfig(value: unknown): value is AgentNativeConfig 
   if (config.args !== undefined && !validArgs(config.args)) return false;
   if (config.adapterPackage !== undefined && typeof config.adapterPackage !== "string") return false;
   if (config.adapterBinary !== undefined && typeof config.adapterBinary !== "string") return false;
+  if (config.minNodeMajor !== undefined && typeof config.minNodeMajor !== "number") return false;
   return validBackendFeatures(config);
 }
 

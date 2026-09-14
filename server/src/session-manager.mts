@@ -9,6 +9,7 @@ import { AcpClient, type AcpClientCallbacks } from "./acp/client.mjs";
 import type { AuthMethod, RequestPermissionRequest, RequestPermissionResponse } from "@agentclientprotocol/sdk";
 import type { SessionState } from "./acp/types.mjs";
 import { resolveAgentRuntime } from "./agents-store.mjs";
+import { resolveNativeAcpLaunch } from "./discovery/acp-adapters.mjs";
 import { resolveWorkspacePath, resolveExplicitCwd } from "./path-utils.mjs";
 import { createAcpCallbacks } from "./acp-callbacks.mjs";
 import { getLastModel, setLastModel } from "./prefs.mjs";
@@ -73,19 +74,18 @@ export class AuthenticationRequiredError extends Error {
 
 function resolveAgentLaunch(agent: string): { cmd: string; args: string[]; env: Record<string, string> } {
   const runtime = resolveAgentRuntime(agent);
-  if (!runtime || !runtime.cmd || !Array.isArray(runtime.args) || runtime.args.some((arg: unknown) => typeof arg !== "string")) {
-    throw new Error(`invalid or unavailable agent: ${agent}`);
-  }
-  if (!runtime.installed) {
+  if (!runtime || !runtime.installed) {
     throw new Error(`agent is not installed: ${agent}`);
   }
-  if (!runtime.native.enabled) {
-    throw new Error(`agent does not provide native ACP transport: ${agent}`);
+  const launchRes = resolveNativeAcpLaunch(agent);
+  if (!launchRes.ok) {
+    throw new Error(launchRes.error);
   }
-  if (!runtime.executablePath) {
-    throw new Error(`agent command not found in PATH: ${runtime.cmd}`);
+  const { cmd, args, env } = launchRes.launch;
+  if (!cmd || !Array.isArray(args) || args.some((arg: unknown) => typeof arg !== "string")) {
+    throw new Error(`invalid or unavailable agent: ${agent}`);
   }
-  return { cmd: runtime.cmd, args: [...runtime.args], env: { ...runtime.env } };
+  return { cmd, args: [...args], env: { ...env } };
 }
 
 function spawnAgentProcess(agent: string, cwd: string): ChildProcess {

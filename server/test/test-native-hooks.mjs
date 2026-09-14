@@ -152,6 +152,27 @@ try {
   assert(cleanedHooks.some((h) => h.command === "my-custom-logger session"), "user custom hook still preserved after uninstall");
   assert(!cleanedHooks.some((h) => h.nexus === true), "nexus hook cleanly removed");
 
+  // 12. Fail-closed on malformed JSON: zero data loss
+  const malformedSettingsPath = join(testHome, ".claude", "settings.json");
+  const malformedContent = "{\n  \"invalid\": json,\n  \"user_comment\": \"keep this\"\n";
+  writeFileSync(malformedSettingsPath, malformedContent, "utf8");
+
+  const installMalformed = await installNativeHook("claude", testHome);
+  assert.equal(installMalformed.ok, false, "install must fail when config has invalid JSON");
+  assert(installMalformed.error.includes("HOOK_CONFIG_INVALID"), "reports HOOK_CONFIG_INVALID");
+  assert.equal(readFileSync(malformedSettingsPath, "utf8"), malformedContent, "config file preserved byte-for-byte on install error");
+
+  // Create dummy managed script to test uninstall with malformed config
+  const hookScriptDir = join(testHome, ".claude", "hooks");
+  mkdirSync(hookScriptDir, { recursive: true });
+  writeFileSync(join(hookScriptDir, "nexus-ambient.mjs"), "// installed by nexus\n// NEXUS_AMBIENT_INTEGRATION_VERSION=2\n", "utf8");
+
+  const uninstallMalformed = await uninstallNativeHook("claude", testHome);
+  assert.equal(uninstallMalformed.ok, false, "uninstall must fail when config has invalid JSON");
+  assert(uninstallMalformed.error.includes("HOOK_CONFIG_INVALID"), "reports HOOK_CONFIG_INVALID");
+  assert.equal(readFileSync(malformedSettingsPath, "utf8"), malformedContent, "config file preserved byte-for-byte on uninstall error");
+  assert(existsSync(malformedSettingsPath), "file must NOT be deleted");
+
   console.log("ALL NATIVE HOOK TESTS PASSED!");
 } finally {
   rmSync(testHome, { recursive: true, force: true });

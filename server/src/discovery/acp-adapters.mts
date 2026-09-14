@@ -1,7 +1,8 @@
 import { execFile } from "node:child_process";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync, readFileSync } from "node:fs";
 import path from "node:path";
-import { findExecutable, getNexusAdaptersDir } from "../agents-store.mjs";
+import { findExecutable, getNexusAdaptersDir, findAgentExecutable, getInstalledAgents } from "../agents-store.mjs";
+import { findExecutableDetailed } from "../agents-store.mjs";
 import { getNativeConfig } from "../registry/registry.mjs";
 
 export interface AcpAdapterInfo {
@@ -15,6 +16,7 @@ export type AcpAdapterSource = "managed" | "external" | "none";
 export interface AcpAdapterStatus extends AcpAdapterInfo {
   installed: boolean;
   source: AcpAdapterSource;
+  nodeCompatible: boolean;
   path?: string;
 }
 
@@ -24,12 +26,33 @@ export interface InstallAcpAdapterOptions {
   timeoutMs?: number;
 }
 
-export function checkNodeCompatibility(): { ok: boolean; version: string; minRequired: number } {
+const adapterMutexes = new Map<string, Promise<void>>();
+
+export async function withAdapterMutex<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  while (adapterMutexes.has(key)) {
+    try {
+      await adapterMutexes.get(key);
+    } catch {}
+  }
+  let resolveCurrent!: () => void;
+  const currentPromise = new Promise<void>((r) => (resolveCurrent = r));
+  adapterMutexes.set(key, currentPromise);
+  try {
+    return await fn();
+  } finally {
+    adapterMutexes.delete(key);
+    resolveCurrent();
+  }
+}
+
+export function checkNodeCompatibility(agentId?: string): { ok: boolean; version: string; minRequired: number } {
+  const native = agentId ? getNativeConfig(agentId) : null;
+  const minRequired = native?.minNodeMajor ?? 18;
   const major = parseInt(process.versions.node.split(".")[0], 10);
   return {
-    ok: major >= 22,
+    ok: major >= minRequired,
     version: process.version,
-    minRequired: 22,
+    minRequired,
   };
 }
 
@@ -48,9 +71,10 @@ export function getAcpAdapterInfo(agentId: string): AcpAdapterInfo {
 export function checkAcpAdapterStatus(agentId: string, customAdaptersDir?: string): AcpAdapterStatus {
   const info = getAcpAdapterInfo(agentId);
   if (!info.required) {
-    return { required: false, installed: true, source: "none" };
+    return { required: false, installed: true, source: "none", nodeCompatible: true };
   }
 
+  const nodeCompat = checkNodeCompatibility(agentId).ok;
   const binary = info.binary!;
   const adaptersDir = customAdaptersDir ?? getNexusAdaptersDir();
   const directBinPath = path.join(
@@ -65,6 +89,7 @@ export function checkAcpAdapterStatus(agentId: string, customAdaptersDir?: strin
       required: true,
       installed: true,
       source: "managed",
+      nodeCompatible: nodeCompat,
       package: info.package,
       binary,
       path: directBinPath,
@@ -77,6 +102,7 @@ export function checkAcpAdapterStatus(agentId: string, customAdaptersDir?: strin
       required: true,
       installed: true,
       source: "external",
+      nodeCompatible: nodeCompat,
       package: info.package,
       binary,
       path: execPath,
@@ -87,6 +113,7 @@ export function checkAcpAdapterStatus(agentId: string, customAdaptersDir?: strin
     required: true,
     installed: false,
     source: "none",
+    nodeCompatible: nodeCompat,
     package: info.package,
     binary,
   };
@@ -128,17 +155,18 @@ export async function installAcpAdapter(
   agentId: string,
   options: InstallAcpAdapterOptions = {},
 ): Promise<{ ok: boolean; path?: string; error?: string }> {
-  const nodeCheck = checkNodeCompatibility();
-  if (!nodeCheck.ok) {
-    return {
-      ok: false,
-      error: `当前 Node.js 版本 (${nodeCheck.version}) 低于 ACP 适配器所需的最低版本 (>= v${nodeCheck.minRequired}.0.0)，请先升级 Node.js`,
-    };
-  }
-
+  return withAdapterMutex(agentId, async () => {
   const info = getAcpAdapterInfo(agentId);
   if (!info.required || !info.package) {
     return { ok: true };
+  }
+
+  const nodeCheck = checkNodeCompatibility(agentId);
+  if (!nodeCheck.ok) {
+    return {
+      ok: false,
+      error: `当前 Node.js 版本 (${nodeCheck.version}) 低于 ${info.package} 所需的最低版本 (>= v${nodeCheck.minRequired}.0.0)，请先升级 Node.js`,
+    };
   }
 
   const adaptersDir = options.adaptersDir ?? getNexusAdaptersDir();
@@ -198,12 +226,14 @@ export async function installAcpAdapter(
       error: err instanceof Error ? err.message : String(err),
     };
   }
+  });
 }
 
 export async function uninstallAcpAdapter(
   agentId: string,
   options: InstallAcpAdapterOptions = {},
 ): Promise<{ ok: boolean; error?: string }> {
+  return withAdapterMutex(agentId, async () => {
   const info = getAcpAdapterInfo(agentId);
   if (!info.required || !info.package) {
     return { ok: true };
@@ -278,4 +308,148 @@ export async function uninstallAcpAdapter(
       error: err instanceof Error ? err.message : String(err),
     };
   }
+  });
+}
+
+export interface NativeAcpLaunch {
+  cmd: string;
+  args: string[];
+  env: Record<string, string>;
+  isAdapter: boolean;
+  adapterPackage?: string;
+}
+
+export type NativeAcpLaunchResult =
+  | { ok: true; launch: NativeAcpLaunch }
+  | { ok: false; error: string; code: "NOT_ENABLED" | "ADAPTER_MISSING" | "CLI_MISSING" | "NODE_INCOMPATIBLE" };
+
+export function resolveAdapterDirectJs(packageDir: string): string | null {
+  try {
+    const pkgJsonPath = path.join(packageDir, "package.json");
+    if (!existsSync(pkgJsonPath)) return null;
+    const raw = readFileSync(pkgJsonPath, "utf8");
+    const parsed = JSON.parse(raw);
+    const bin = parsed?.bin;
+    if (typeof bin === "string") {
+      const entry = path.resolve(packageDir, bin);
+      return existsSync(entry) ? entry : null;
+    }
+    if (typeof bin === "object" && bin !== null) {
+      const firstBin = Object.values(bin)[0];
+      if (typeof firstBin === "string") {
+        const entry = path.resolve(packageDir, firstBin);
+        return existsSync(entry) ? entry : null;
+      }
+    }
+    const main = parsed?.main;
+    if (typeof main === "string") {
+      const entry = path.resolve(packageDir, main);
+      return existsSync(entry) ? entry : null;
+    }
+  } catch {}
+  return null;
+}
+
+export function resolveNativeAcpLaunch(agentId: string): NativeAcpLaunchResult {
+  const installedAgent = getInstalledAgents().find((a) => a.agentId === agentId);
+  const customEnv = installedAgent?.customEnv || {};
+  const customArgs = installedAgent?.customArgs;
+
+  // Custom agents installed by user or tests with customCommand
+  if (installedAgent?.source === "custom") {
+    const cmd = installedAgent.customCommand;
+    if (!cmd) {
+      return {
+        ok: false,
+        error: `Custom agent '${agentId}' has no command specified`,
+        code: "CLI_MISSING",
+      };
+    }
+    const found = findExecutableDetailed(cmd);
+    return {
+      ok: true,
+      launch: {
+        cmd: found?.path ?? cmd,
+        args: customArgs || [],
+        env: customEnv,
+        isAdapter: false,
+      },
+    };
+  }
+
+  const native = getNativeConfig(agentId);
+  if (!native || !native.enabled) {
+    return {
+      ok: false,
+      error: `Native ACP not enabled for agent '${agentId}'`,
+      code: "NOT_ENABLED",
+    };
+  }
+
+  const adapterStatus = checkAcpAdapterStatus(agentId);
+
+  if (adapterStatus.required) {
+    if (!adapterStatus.installed || !adapterStatus.path) {
+      return {
+        ok: false,
+        error: `Agent '${agentId}' requires ACP adapter '${adapterStatus.package}', but it is not installed.`,
+        code: "ADAPTER_MISSING",
+      };
+    }
+    if (!adapterStatus.nodeCompatible) {
+      const nodeCheck = checkNodeCompatibility(agentId);
+      return {
+        ok: false,
+        error: `当前 Node.js 版本 (${nodeCheck.version}) 低于 ${adapterStatus.package} 所需的最低版本 (>= v${nodeCheck.minRequired}.0.0)`,
+        code: "NODE_INCOMPATIBLE",
+      };
+    }
+
+    let cmd = adapterStatus.path;
+    let args: string[] = customArgs ?? native.args ?? [];
+
+    if (process.platform === "win32" && (cmd.endsWith(".cmd") || cmd.endsWith(".bat"))) {
+      const adaptersDir = getNexusAdaptersDir();
+      const pkgDir = path.join(adaptersDir, "node_modules", adapterStatus.package!);
+      const directJs = resolveAdapterDirectJs(pkgDir);
+      if (directJs) {
+        cmd = process.execPath;
+        args = [directJs, ...args];
+      } else {
+        cmd = process.env.ComSpec || "cmd.exe";
+        args = ["/d", "/s", "/c", `"${adapterStatus.path}"`, ...args];
+      }
+    }
+
+    return {
+      ok: true,
+      launch: {
+        cmd,
+        args,
+        env: { ...(native.env || {}), ...customEnv },
+        isAdapter: true,
+        adapterPackage: adapterStatus.package,
+      },
+    };
+  }
+
+  // Non-adapter native agents (e.g. OMP, OpenCode, Cursor)
+  const found = findAgentExecutable(agentId);
+  if (!found) {
+    return {
+      ok: false,
+      error: `Agent command for '${agentId}' not found in PATH or known locations`,
+      code: "CLI_MISSING",
+    };
+  }
+
+  return {
+    ok: true,
+    launch: {
+      cmd: found.path,
+      args: customArgs ?? native.args ?? [],
+      env: { ...(native.env || {}), ...customEnv },
+      isAdapter: false,
+    },
+  };
 }

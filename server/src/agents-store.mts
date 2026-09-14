@@ -146,9 +146,10 @@ export function findAgentExecutable(agentId: string): ResolvedExecutable | null 
   }
 
   // 3. Registry candidates (detection aliases, then native command, then distribution)
+  const isAdapterRequired = Boolean(registryAgent?.native?.adapterPackage);
   const candidates = [
     ...(registryAgent?.detection?.executables ?? []),
-    ...(registryAgent?.native?.command ? [registryAgent.native.command] : []),
+    ...(!isAdapterRequired && registryAgent?.native?.command ? [registryAgent.native.command] : []),
     ...(registryAgent?.distribution?.direct?.cmd ? [registryAgent.distribution.direct.cmd] : []),
   ];
   for (const candidate of candidates) {

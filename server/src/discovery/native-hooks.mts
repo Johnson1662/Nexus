@@ -67,7 +67,7 @@ function createJsonHookConfigHandler(options: {
         try {
           root = JSON.parse(existingContent);
         } catch {
-          root = {};
+          throw new Error("HOOK_CONFIG_INVALID: 现有 Hook 配置文件包含非法 JSON，已中止操作以保护用户配置。");
         }
       }
       if (!root.hooks || typeof root.hooks !== "object" || Array.isArray(root.hooks)) {
@@ -115,7 +115,7 @@ function createJsonHookConfigHandler(options: {
       try {
         root = JSON.parse(existingContent);
       } catch {
-        return null;
+        throw new Error("HOOK_CONFIG_INVALID: 现有 Hook 配置文件包含非法 JSON，已中止操作以保护用户配置。");
       }
 
       if (!root.hooks || typeof root.hooks !== "object" || Array.isArray(root.hooks)) {
@@ -213,6 +213,36 @@ function resolveSourceAssetPath(assetName: string): string | null {
   return candidatePaths.find((p) => existsSync(p)) ?? null;
 }
 
+function safeWriteFileAtomic(filePath: string, content: string): void {
+  const dir = path.dirname(filePath);
+  mkdirSync(dir, { recursive: true });
+  const tmpPath = path.join(
+    dir,
+    `.${path.basename(filePath)}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2, 8)}.tmp`,
+  );
+  writeFileSync(tmpPath, content, "utf8");
+  renameSync(tmpPath, filePath);
+}
+
+const hookMutexes = new Map<string, Promise<void>>();
+
+export async function withHookMutex<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  while (hookMutexes.has(key)) {
+    try {
+      await hookMutexes.get(key);
+    } catch {}
+  }
+  let resolveCurrent!: () => void;
+  const currentPromise = new Promise<void>((r) => (resolveCurrent = r));
+  hookMutexes.set(key, currentPromise);
+  try {
+    return await fn();
+  } finally {
+    hookMutexes.delete(key);
+    resolveCurrent();
+  }
+}
+
 export interface NativeHookStatus {
   supported: boolean;
   installed: boolean;
@@ -307,6 +337,7 @@ export async function installNativeHook(
   agentId: string,
   customHome?: string,
 ): Promise<{ ok: boolean; path?: string; error?: string }> {
+  return withHookMutex(agentId, async () => {
   const def = getNativeHookDefinition(agentId);
   if (!def) {
     return { ok: false, error: `Agent ${agentId} 不支持 Native Hook` };
@@ -322,6 +353,15 @@ export async function installNativeHook(
   const targetPath = path.join(targetDir, def.targetFileName);
 
   try {
+    // Pre-validate config before any filesystem modification
+    let updatedConfigContent: string | null = null;
+    let configPath: string | null = null;
+    if (def.configHandler) {
+      configPath = def.configHandler.getConfigPath(home);
+      const existingConfig = existsSync(configPath) ? readFileSync(configPath, "utf8") : null;
+      updatedConfigContent = def.configHandler.updateConfig(existingConfig, targetPath);
+    }
+
     const sourceContent = readFileSync(sourcePath, "utf8");
 
     if (existsSync(targetPath)) {
@@ -377,13 +417,8 @@ export async function installNativeHook(
       } catch {}
     }
 
-    if (def.configHandler) {
-      const configPath = def.configHandler.getConfigPath(home);
-      const configDir = path.dirname(configPath);
-      mkdirSync(configDir, { recursive: true });
-      const existingConfig = existsSync(configPath) ? readFileSync(configPath, "utf8") : null;
-      const updatedConfig = def.configHandler.updateConfig(existingConfig, targetPath);
-      writeFileSync(configPath, updatedConfig, "utf8");
+    if (def.configHandler && configPath && updatedConfigContent !== null) {
+      safeWriteFileAtomic(configPath, updatedConfigContent);
     }
 
     console.log(`[native-hooks] installed ${agentId} hook (v${def.version}) to ${targetPath}`);
@@ -393,12 +428,14 @@ export async function installNativeHook(
     console.error(`[native-hooks] failed to install ${agentId} hook: ${message}`);
     return { ok: false, error: message };
   }
+  });
 }
 
 export async function uninstallNativeHook(
   agentId: string,
   customHome?: string,
 ): Promise<{ ok: boolean; error?: string }> {
+  return withHookMutex(agentId, async () => {
   const def = getNativeHookDefinition(agentId);
   if (!def) {
     return { ok: false, error: `Agent ${agentId} 不支持 Native Hook` };
@@ -413,6 +450,17 @@ export async function uninstallNativeHook(
   }
 
   try {
+    // Pre-validate config before any deletion
+    let cleanedConfigContent: string | null = null;
+    let configPath: string | null = null;
+    if (def.configHandler) {
+      configPath = def.configHandler.getConfigPath(home);
+      if (existsSync(configPath)) {
+        const existingConfig = readFileSync(configPath, "utf8");
+        cleanedConfigContent = def.configHandler.removeConfig(existingConfig, targetPath);
+      }
+    }
+
     const content = readFileSync(targetPath, "utf8");
     const isManaged = content.includes("installed by nexus") || def.versionMarker.test(content);
     if (!isManaged) {
@@ -423,18 +471,11 @@ export async function uninstallNativeHook(
     }
 
     unlinkSync(targetPath);
-    if (def.configHandler) {
-      const configPath = def.configHandler.getConfigPath(home);
-      if (existsSync(configPath)) {
-        try {
-          const existingConfig = readFileSync(configPath, "utf8");
-          const cleaned = def.configHandler.removeConfig(existingConfig, targetPath);
-          if (cleaned === null) {
-            unlinkSync(configPath);
-          } else {
-            writeFileSync(configPath, cleaned, "utf8");
-          }
-        } catch {}
+    if (def.configHandler && configPath && existsSync(configPath)) {
+      if (cleanedConfigContent === null) {
+        unlinkSync(configPath);
+      } else {
+        safeWriteFileAtomic(configPath, cleanedConfigContent);
       }
     }
     console.log(`[native-hooks] uninstalled ${agentId} hook from ${targetPath}`);
@@ -444,6 +485,7 @@ export async function uninstallNativeHook(
     console.error(`[native-hooks] failed to uninstall ${agentId} hook: ${message}`);
     return { ok: false, error: message };
   }
+  });
 }
 
 export function listNativeHooks(customHome?: string): Array<{
